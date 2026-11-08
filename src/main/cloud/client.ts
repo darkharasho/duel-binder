@@ -120,6 +120,11 @@ export interface CloudClient {
    * (anyone else: CloudNotFoundError). It works once, within a minute.
    */
   adminLink(): Promise<string>
+  /**
+   * An /admin/* JSON route as the signed-in admin: a GET, or with `body` a POST. Anyone else gets
+   * CloudNotFoundError. An answer with no body (204) resolves to undefined.
+   */
+  admin<T>(path: `/admin/${string}`, body?: unknown): Promise<T>
   /** Calls a portal RPC channel for `game` (default: none sent, which the server takes as Yu-Gi-Oh!). */
   rpc<T>(channel: PortalChannel, args: unknown[], game?: GameId): Promise<T>
   /** Sends one labelled training photo (idempotent per client id). Never throws. */
@@ -202,7 +207,7 @@ export function createCloudClient(opts: {
         const message = typeof error === 'string' ? error : `Request failed (${res.status})`
         throw res.status === 404 ? new CloudNotFoundError(message) : new Error(message)
       }
-      if (!parse) return undefined as T
+      if (!parse || res.status === 204) return undefined as T
       try {
         return (await res.json()) as T
       } catch (e) {
@@ -314,6 +319,8 @@ export function createCloudClient(opts: {
     usage: (report) => call<void>('/api/usage', 'POST', report, false),
     errorReport: (report) => call<void>('/api/errors', 'POST', report, false),
     adminLink: async () => (await call<{ url: string }>('/api/admin/handoff', 'POST')).url,
+    admin: <T>(path: `/admin/${string}`, body?: unknown) =>
+      call<T>(path, body === undefined ? 'GET' : 'POST', body),
     rpc: async <T>(channel: PortalChannel, args: unknown[], game?: GameId) =>
       (
         await call<{ result: T }>(

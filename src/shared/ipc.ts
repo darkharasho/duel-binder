@@ -1,3 +1,16 @@
+import type {
+  AdminErrorGroup,
+  AdminList,
+  AdminMerge,
+  AdminPhotos,
+  AdminSkippedSignIn,
+  AdminStats,
+  AdminTester,
+  AdminTesterBy,
+  AdminWorkflow,
+  GhJob,
+  GhRun
+} from './admin'
 import type { PlaceholderRequest } from './placeholders'
 import type { ErrorDetails } from './errorReports'
 import type { UsageCounts } from './usage'
@@ -282,6 +295,30 @@ export interface Api {
     /** `[local printing id, server id]` for those of these printings the server knows. */
     serverIds(printingIds: number[]): Promise<[number, number][]>
   }
+  /**
+   * The desktop only: the in-app admin pages, as the signed-in admin account (`Me.admin`). The web
+   * and phone open the portal's /admin page instead (`account.openAdmin`). Each rejects for anyone
+   * else, and like `account` calls when signed out or offline.
+   */
+  admin?: {
+    /** Counts every table on the portal, so only read when asked. */
+    stats(): Promise<AdminStats>
+    errors(): Promise<AdminErrorGroup[]>
+    /** A watched workflow's latest runs, newest first, from GitHub's public API. */
+    runs(workflow: AdminWorkflow, perPage: number): Promise<GhRun[]>
+    /** One run's jobs and their steps. */
+    jobs(runId: number): Promise<GhJob[]>
+    merges(): Promise<AdminMerge[]>
+    /** Undoes a merge; the sign-ins it couldn't give back. */
+    undoMerge(closedId: number): Promise<AdminSkippedSignIn[]>
+    testers(): Promise<AdminTester[]>
+    addTester(game: GameId, by: AdminTesterBy, name: string): Promise<void>
+    removeTester(id: number): Promise<void>
+    admins(): Promise<AdminList>
+    addAdmin(username: string): Promise<void>
+    removeAdmin(userId: number): Promise<void>
+    photos(): Promise<AdminPhotos>
+  }
   errors: {
     /** Sends an anonymous, scrubbed error report; never rejects, and drops it when signed out or offline. */
     report(details: ErrorDetails): Promise<void>
@@ -503,7 +540,20 @@ export const INVOKE_CHANNELS = [
   'account:changePassword',
   'account:changeEmail',
   'account:merge',
-  'account:openAdmin'
+  'account:openAdmin',
+  'admin:stats',
+  'admin:errors',
+  'admin:runs',
+  'admin:jobs',
+  'admin:merges',
+  'admin:undoMerge',
+  'admin:testers',
+  'admin:addTester',
+  'admin:removeTester',
+  'admin:admins',
+  'admin:addAdmin',
+  'admin:removeAdmin',
+  'admin:photos'
 ] as const
 
 export type InvokeChannel = (typeof INVOKE_CHANNELS)[number]

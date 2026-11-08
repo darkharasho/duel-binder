@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { vi } from 'vitest'
 import type { ScanSession, ScanSessionCard } from '@shared/scanSessions'
 import { SessionFeed } from '@/features/sessions/SessionFeed'
-import { replaySourceOfSession, sessionDate } from '@/features/sessions/sessionDate'
+import { replaySourceOfSession, sessionCardKey, sessionDate } from '@/features/sessions/sessionDate'
 import { createMockApi, renderWithProviders } from './mockApi'
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
@@ -75,6 +75,12 @@ describe('replaySourceOfSession', () => {
     const src = replaySourceOfSession(s)
     expect(src.header).toBe('Nov 2 · 2 cards · $7.00')
     expect(src.pulls).toHaveLength(2)
+  })
+
+  it("takes an unpriced chase rarity in the session's game", () => {
+    const sir = card(null, { rarity: 'Special Illustration Rare' })
+    const src = replaySourceOfSession(session([card(5), sir], { game: 'pkm' }))
+    expect(src.pulls.map((p) => p.key)).toEqual([sessionCardKey(sir), expect.any(String)])
   })
 })
 

@@ -1,6 +1,6 @@
 import { formatUsd } from '@/lib/format'
 import { plural } from '../scanText'
-import type { ReplayPull } from './pulls'
+import { REPLAY_MIN_PRICE, replayValue, type ReplayPull } from './pulls'
 import { frameAt, PULL_MS, type ReplayTimeline } from './timeline'
 
 /** The replay's frame: 4:5, large in Discord on a phone and on a desktop. */
@@ -465,11 +465,18 @@ function pullText(
   y += 42
   delay += 80
   const price = lineIn(local, delay)
-  const shown = pull.price * easeOut(ramp(local, delay, COUNT_MS))
-  ctx.globalAlpha = alpha * price.a
-  ctx.fillStyle = MUTED
-  const label = formatUsd(shown) + (pull.quantity > 1 ? ` · ×${pull.quantity}` : '')
-  centredText(ctx, label, REPLAY_W / 2, y + price.dy, 500, 26, REPLAY_W - 80)
+  // A pull its rarity earned shows no price: the rarity says what it is.
+  const parts = [
+    ...(pull.price !== null && pull.price >= REPLAY_MIN_PRICE
+      ? [formatUsd(pull.price * easeOut(ramp(local, delay, COUNT_MS)))]
+      : []),
+    ...(pull.quantity > 1 ? [`×${pull.quantity}`] : [])
+  ]
+  if (parts.length) {
+    ctx.globalAlpha = alpha * price.a
+    ctx.fillStyle = MUTED
+    centredText(ctx, parts.join(' · '), REPLAY_W / 2, y + price.dy, 500, 26, REPLAY_W - 80)
+  }
   ctx.restore()
 }
 
@@ -779,7 +786,7 @@ function endFrame(
   }
 
   const hits = scene.pulls.length
-  const total = scene.pulls.reduce((n, p) => n + p.price * p.quantity, 0)
+  const total = replayValue(scene.pulls)
   const line = lineIn(local, 300)
   if (local >= 300) {
     ctx.save()
@@ -788,7 +795,7 @@ function endFrame(
     const shown = total * easeOut(ramp(local, 300, 650))
     centredText(
       ctx,
-      `${plural(hits, 'hit', 'hits')} · ${formatUsd(shown)}`,
+      plural(hits, 'hit', 'hits') + (total > 0 ? ` · ${formatUsd(shown)}` : ''),
       REPLAY_W / 2,
       REPLAY_H * 0.815 + line.dy,
       700,

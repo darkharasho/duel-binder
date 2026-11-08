@@ -5,16 +5,16 @@ import { replayTimeline } from '@/features/scan/replay/timeline'
 import { formatUsd } from '@/lib/format'
 import { recordingContext, textsOf } from './replayCanvas'
 
-const pull = (price: number, over: Partial<ReplayPull> = {}): ReplayPull => ({
+const pull = (price: number | null, over: Partial<ReplayPull> = {}): ReplayPull => ({
   key: `k${price}`,
   name: `Card ${price}`,
-  imageId: price,
+  imageId: price ?? 0,
   photoId: null,
   rarity: 'Secret Rare',
   setCode: 'X',
   price,
   quantity: 1,
-  addedAt: price,
+  addedAt: price ?? 0,
   ...over
 })
 
@@ -68,6 +68,29 @@ describe('drawReplayFrame', () => {
     const { ctx, calls } = recordingContext()
     drawReplayFrame(ctx, s, middleOf(s, 2))
     expect(textsOf(calls).join('\n')).toContain(`2 hits · ${formatUsd(22)}`)
+  })
+
+  it('a pull its rarity earned shows its rarity and no price', () => {
+    const s = scene([pull(null, { name: 'Blue-Eyes', rarity: 'Ultra Rare (Overframe)' }), pull(6)])
+    const { ctx, calls } = recordingContext()
+    drawReplayFrame(ctx, s, middleOf(s, 0))
+    const texts = textsOf(calls).join('\n')
+    expect(texts).toContain('ULTRA RARE (OVERFRAME)')
+    expect(texts).toContain('Blue-Eyes')
+    // Only the header chip holds a price.
+    expect(textsOf(calls).filter((t) => t.includes('$'))).toEqual(['Nov 4 · 3 cards · $20.00'])
+  })
+
+  it('the end card leaves rarity pulls out of the value, and has none when nothing is priced', () => {
+    const mixed = scene([pull(null), pull(0.4), pull(10)])
+    let rec = recordingContext()
+    drawReplayFrame(rec.ctx, mixed, middleOf(mixed, 3))
+    expect(textsOf(rec.calls).join('\n')).toContain(`3 hits · ${formatUsd(10)}`)
+    const none = scene([pull(null), pull(null)])
+    rec = recordingContext()
+    drawReplayFrame(rec.ctx, none, middleOf(none, 2))
+    const texts = textsOf(rec.calls)
+    expect(texts).toContain('2 hits')
   })
 
   it('watermark on every frame', () => {

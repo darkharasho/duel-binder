@@ -35,7 +35,6 @@ export const sessionCardKey = (c: { cardId: number; pkey: string; addedAt: numbe
 export function replaySourceOfSession(s: ScanSession): ReplaySource {
   const candidates: PullCandidate[] = []
   for (const c of s.cards) {
-    if (c.price === null) continue
     candidates.push({
       key: sessionCardKey(c),
       name: c.name,
@@ -52,7 +51,7 @@ export function replaySourceOfSession(s: ScanSession): ReplaySource {
   const cards = s.cards.reduce((n, c) => n + c.quantity, 0)
   const date = dayOf(new Date(s.createdAt))
   return {
-    pulls: choosePulls(candidates),
+    pulls: choosePulls(candidates, s.game),
     header: `${date} · ${plural(cards, 'card', 'cards')} · ${formatUsd(sessionTotal(s.cards).value)}`
   }
 }

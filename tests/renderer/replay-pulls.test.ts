@@ -49,6 +49,18 @@ describe('pickReplayPulls', () => {
     )
   })
 
+  it('an unpriced chase rarity makes the replay; a version still to pick does not', () => {
+    const open = row(null, {
+      name: 'open',
+      game: 'pkm',
+      flag: 'pick-printing',
+      rarity: 'Ultra Rare'
+    })
+    const rows = [row(null, { name: 'ur', game: 'pkm', rarity: 'Ultra Rare' }), open]
+    expect(pickReplayPulls(rows).map((p) => p.name)).toEqual(['ur'])
+    expect(pickReplayPulls(rows)[0].price).toBeNull()
+  })
+
   it('empty list gives no pulls', () => {
     expect(pickReplayPulls([])).toEqual([])
   })
@@ -65,7 +77,7 @@ describe('replayHeader', () => {
   })
 })
 
-const cand = (price: number, o: Partial<PullCandidate> = {}): PullCandidate => ({
+const cand = (price: number | null, o: Partial<PullCandidate> = {}): PullCandidate => ({
   key: `k${price}-${o.name ?? ''}`,
   name: 'c',
   imageId: 1,
@@ -88,6 +100,44 @@ describe('choosePulls', () => {
   it('keeps the dearest 8 of 10 in play order', () => {
     const out = choosePulls([5, 1, 9, 3, 10, 2, 7, 4, 8, 6].map((p) => cand(p)))
     expect(out.map((p) => p.price)).toEqual([3, 4, 5, 6, 7, 8, 9, 10])
+  })
+
+  it('fills spare places with chase rarities that have no price, or under $1, before the priced', () => {
+    const out = choosePulls(
+      [
+        cand(null, { name: 'starlight', rarity: 'Starlight Rare', addedAt: 3 }),
+        cand(0.5, { name: 'secret', rarity: 'Secret Rare', addedAt: 1 }),
+        cand(null, { name: 'ultra', rarity: 'Ultra Rare' }),
+        cand(null, { name: 'guess', rarity: 'Starlight Rare', guess: true }),
+        cand(4, { name: 'four' })
+      ],
+      'ygo'
+    )
+    // The top rarity plays nearer the priced pulls; the dearest still comes last.
+    expect(out.map((p) => p.name)).toEqual(['secret', 'starlight', 'four'])
+  })
+
+  it('a rarity pull only takes a place no priced pull wants', () => {
+    const priced = Array.from({ length: 8 }, (_, i) => cand(i + 1))
+    const rare = cand(null, { name: 'rare', rarity: 'Starlight Rare' })
+    expect(choosePulls([...priced, rare], 'ygo').map((p) => p.name)).not.toContain('rare')
+    const seven = choosePulls([...priced.slice(1), rare], 'ygo')
+    expect(seven).toHaveLength(8)
+    expect(seven[0].name).toBe('rare')
+  })
+
+  it('the top rarities win the spare places, then the earliest pulled', () => {
+    const priced = Array.from({ length: 6 }, (_, i) => cand(i + 1))
+    const out = choosePulls(
+      [
+        ...priced,
+        cand(null, { name: 'ex late', rarity: 'Double Rare', addedAt: 9 }),
+        cand(null, { name: 'ex early', rarity: 'Double Rare', addedAt: 2 }),
+        cand(null, { name: 'sir', rarity: 'Special Illustration Rare', addedAt: 5 })
+      ],
+      'pkm'
+    )
+    expect(out.slice(0, 2).map((p) => p.name)).toEqual(['ex early', 'sir'])
   })
 })
 

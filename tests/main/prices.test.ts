@@ -335,3 +335,37 @@ test('candidates look printings up from what is owned or asked for, never scanni
     expect(plan.filter((d) => /^SCAN (p|e)\b/.test(d)), plan.join('\n')).toEqual([])
   }
 })
+
+test('client sends the rarity count only when the code has several', async () => {
+  const fetchFn = vi.fn(async () => ok({ price: 4, listingCount: 2, checkedAt: 'T' }))
+  const c = createPriceClient({
+    url: 'https://w.example',
+    fetchFn: fetchFn as unknown as typeof fetch
+  })
+  await c.lookup({ ...q, rarities: 3 })
+  await c.lookup({ ...q, rarities: 1 })
+  const sent = (fetchFn.mock.calls as unknown as [string][]).map(([u]) =>
+    new URL(u).searchParams.get('rarities')
+  )
+  expect(sent).toEqual(['3', null])
+})
+
+test('the refresh tells the price Worker how many rarities share the code in that language', async () => {
+  const ultra = owned('RV01-KR005', 'ko')
+  for (const r of ['Secret Rare', 'Prismatic Secret Rare'])
+    db.prepare(
+      `INSERT INTO card_printings (card_id, language, set_name, set_code, set_rarity)
+       VALUES (46986414, 'ko', 'LOB', 'rv01-kr005', ?)`
+    ).run(r)
+  // The Japanese twin's rarities don't count, and a code of its own counts 1.
+  db.prepare(
+    `INSERT INTO card_printings (card_id, language, set_name, set_code, set_rarity)
+     VALUES (46986414, 'ja', 'LOB', 'RV01-KR005', 'Secret Rare')`
+  ).run()
+  const solo = owned('RV01-KR006', 'ko')
+  const { client, lookup } = fakeClient()
+  await refreshIntlPrices(db, client, { now: NOW, printingIds: [ultra, solo] })
+  const by = new Map(lookup.mock.calls.map((c) => [c[0].code, c[0].rarities]))
+  expect(by.get('RV01-KR005')).toBe(3)
+  expect(by.get('RV01-KR006')).toBe(1)
+})

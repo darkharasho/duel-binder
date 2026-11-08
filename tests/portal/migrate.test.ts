@@ -131,7 +131,7 @@ function serverBefore12(): Database.Database {
   const db = freshDb()
   runSteps(db, [
     ...MIGRATIONS.filter((m) => m.version <= 18),
-    ...SERVER_STEPS.filter((s) => !['server-12', 'server-13', 'server-14', 'server-16', 'server-18', 'server-21', 'server-23', 'server-26', 'server-27', 'server-28', 'server-35', 'server-40'].includes(s.name))
+    ...SERVER_STEPS.filter((s) => !['server-12', 'server-13', 'server-14', 'server-16', 'server-18', 'server-21', 'server-23', 'server-26', 'server-27', 'server-28', 'server-35', 'server-40', 'server-41'].includes(s.name))
   ])
   db.exec(`
     INSERT INTO users (id, discord_id, username, created_at, updated_at) VALUES (1, 'd1', 'one', 'x', 'x');

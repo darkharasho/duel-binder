@@ -55,7 +55,14 @@ export async function refreshIntlPrices(
     if (opts.limit !== undefined) remaining = Math.max(0, countCandidates(db, now, opts.printingIds) - batch.length)
     for (const c of batch) {
       try {
-        const r = await client.lookup({ code: c.code, name: c.name, set: c.set, rarity: c.rarity, lang: c.lang })
+        const r = await client.lookup({
+          code: c.code,
+          name: c.name,
+          set: c.set,
+          rarity: c.rarity,
+          lang: c.lang,
+          rarities: c.rarities
+        })
         upsert.run(c.id, r.price, r.listingCount, r.checkedAt)
         updated++
       } catch (e) {

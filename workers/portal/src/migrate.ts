@@ -5,6 +5,7 @@ import {
   SCHEMA_V27,
   SCHEMA_V28,
   SCHEMA_V42,
+  SCHEMA_V43,
   SCHEMA_V36,
   type Migration
 } from '../../../src/main/db/schema'
@@ -727,7 +728,9 @@ CREATE TABLE admin_handoffs (code_hash TEXT PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, expires_at TEXT NOT NULL);
 `
   },
-  dexNumberStep()
+  dexNumberStep(),
+  // V43's cleanup, run here because on a fresh server card_printings.game comes from a server step.
+  { name: 'server-41', sql: SCHEMA_V43 }
 ]
 
 /**

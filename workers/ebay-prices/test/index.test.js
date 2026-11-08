@@ -202,6 +202,63 @@ describe('GET /v1/price', () => {
     expect(body).toMatchObject({ price: 11, listingCount: 2, rarityFallback: true })
   })
 
+  describe('a code with several rarities', () => {
+    const KR = (rarity, rarities) =>
+      `https://w.test/v1/price?code=RV01-KR005&name=Blue-Eyes%20Toon%20Ultimate%20Dragon&set=Revolution%20Booster&rarity=${encodeURIComponent(rarity)}&lang=ko${rarities ? `&rarities=${rarities}` : ''}`
+    const mk = (title, value) => ({ title, price: { value, currency: 'USD' } })
+
+    it('skips listings that name no rarity, in both searches', async () => {
+      const unnamed = () =>
+        json({
+          itemSummaries: [mk('RV01-KR005 Blue-Eyes Korean', '77'), mk('RV01-KR005 BETUD NM', '79')]
+        })
+      const f = makeFetch([unnamed(), unnamed()])
+      vi.stubGlobal('fetch', f)
+      const body = await (await worker.fetch(req(KR('Ultra Rare', 3)), env)).json()
+      expect(body).toMatchObject({ price: null, listingCount: 0 })
+      expect(f.calls.filter((u) => u.includes('item_summary'))).toHaveLength(2)
+    })
+
+    it('still prices one rarity from unnamed listings when the code has just that one', async () => {
+      const unnamed = json({
+        itemSummaries: [mk('RV01-KR005 Blue-Eyes Korean', '77'), mk('RV01-KR005 BETUD NM', '79')]
+      })
+      vi.stubGlobal('fetch', makeFetch([unnamed]))
+      const body = await (await worker.fetch(req(KR('Ultra Rare')), env)).json()
+      expect(body).toMatchObject({ price: 78, listingCount: 2, rarityFallback: false })
+    })
+
+    it('keeps listings naming the rarity, spelled out or abbreviated, and drops other rarities', async () => {
+      vi.stubGlobal(
+        'fetch',
+        makeFetch([
+          json({
+            itemSummaries: [
+              mk('RV01-KR005 Ultra Rare Korean', '4'),
+              mk('RV01-KR005 UR Blue-Eyes', '6'),
+              mk('RV01-KR005 Prismatic Secret Rare', '78'),
+              mk('RV01-KR005 PSER Blue-Eyes', '80'),
+              mk('RV01-KR005 Blue-Eyes', '77')
+            ]
+          })
+        ])
+      )
+      const body = await (await worker.fetch(req(KR('Ultra Rare', 3)), env)).json()
+      expect(body).toMatchObject({ price: 5, listingCount: 2, rarityFallback: false })
+    })
+
+    it('caches apart from the one-rarity lookup', async () => {
+      const f = makeFetch([
+        json({ itemSummaries: [mk('RV01-KR005 a', '77'), mk('RV01-KR005 b', '79')] }),
+        json({ itemSummaries: [mk('RV01-KR005 Ultra Rare', '4'), mk('RV01-KR005 UR', '6')] })
+      ])
+      vi.stubGlobal('fetch', f)
+      await worker.fetch(req(KR('Ultra Rare')), env)
+      const body = await (await worker.fetch(req(KR('Ultra Rare', 3)), env)).json()
+      expect(body).toMatchObject({ price: 5, listingCount: 2 })
+    })
+  })
+
   it('prices a Secret Rare from Secret Rare listings, not pricier Secret variants', async () => {
     const mk = (title, value) => ({ title, price: { value, currency: 'USD' } })
     vi.stubGlobal(

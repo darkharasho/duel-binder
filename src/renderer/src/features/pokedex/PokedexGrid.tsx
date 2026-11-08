@@ -9,7 +9,7 @@ const hideBroken = (e: React.SyntheticEvent<HTMLImageElement>): void => {
   e.currentTarget.style.visibility = 'hidden'
 }
 
-/** A species' pixel sprite: in colour once caught, a black silhouette while missing. */
+/** A species' pixel sprite: in colour once caught, a grey silhouette while missing. */
 export function DexSprite({
   dexNo,
   caught,
@@ -30,7 +30,7 @@ export function DexSprite({
       draggable={false}
       onError={hideBroken}
       style={{ imageRendering: 'pixelated' }}
-      className={cn('object-contain', !caught && 'opacity-30 brightness-0', className)}
+      className={cn('object-contain', !caught && 'opacity-25 brightness-0 invert', className)}
     />
   )
 }

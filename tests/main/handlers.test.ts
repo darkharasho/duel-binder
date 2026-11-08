@@ -42,6 +42,7 @@ const fakeAccount = (signedIn = false): FakeAccount => ({
   stop: vi.fn(),
   portal: vi.fn(),
   adminLink: vi.fn(async () => 'https://portal.test/admin/open?code=abc'),
+  admin: vi.fn(),
   updateUser: vi.fn(),
   requestPrices: vi.fn(async () => {}),
   reportUsage: vi.fn(async () => {}),

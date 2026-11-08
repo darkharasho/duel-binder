@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import logo from '@/assets/logo.svg'
 import { toast } from 'sonner'
-import { ADMIN_TABS } from '@shared/ipc'
+import type { AdminPageTab } from '@/features/admin/adminTabs'
 import { useAccountUser } from '@/lib/accountUser'
 import { api } from '@/lib/api'
 import { useFriendsAvailable, useFriendsOverview } from '@/lib/friends'
@@ -30,7 +30,8 @@ export type Page =
   | 'friends'
   | 'sets'
   | 'settings'
-export type NavigateFn = (page: Page, opts?: { entryId?: number }) => void
+  | 'admin'
+export type NavigateFn = (page: Page, opts?: { entryId?: number; adminTab?: AdminPageTab }) => void
 
 // Pages in groups, so the list reads as a few places rather than one long run. Settings sits at the
 // bottom with the other extras.
@@ -104,7 +105,9 @@ export function AppShell({
     scroll.set(0)
   }, [page, scroll])
   useEffect(() => trackOpen(), [])
-  useEffect(() => track(`page:${page}`), [page])
+  useEffect(() => {
+    if (page !== 'admin') track(`page:${page}`)
+  }, [page])
   // A switch to a game without this page (Scan) leaves it.
   useEffect(() => {
     if (!pageInGame(page, def)) onNavigate('dashboard')
@@ -166,33 +169,6 @@ export function AppShell({
                 </div>
               )
             })}
-            {/* Only the admin accounts see this. The web goes to /admin; the desktop signs in with a
-                token, not the page's cookie, so it opens the dashboard in its own window through a
-                one-time link. */}
-            {user?.admin && (
-              <div role="group" aria-label="Admin" className="flex flex-col">
-                <h2 className={GROUP_HEADING}>Admin</h2>
-                {ADMIN_TABS.map(({ tab, label }) => (
-                  <button
-                    key={tab}
-                    type="button"
-                    onClick={() =>
-                      void api.account
-                        .openAdmin(tab)
-                        .catch((e: unknown) =>
-                          toast.error(
-                            e instanceof Error ? e.message : "Couldn't open the dashboard"
-                          )
-                        )
-                    }
-                    className={ITEM}
-                  >
-                    <span aria-hidden className="size-1.5 rounded-full bg-transparent" />
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
           </nav>
           <button
             type="button"
@@ -218,6 +194,27 @@ export function AppShell({
                 <span aria-hidden className="size-1.5 rounded-full bg-transparent" />
                 Contribute photos
               </button>
+            )}
+            {/* Only the admin accounts see this. The desktop opens the admin page in the app, its
+                sections as tabs along the top; the web goes to the portal's /admin page instead. */}
+            {user?.admin && (
+              <div role="group" aria-label="Admin" className="flex flex-col">
+                <NavItem
+                  label="Admin"
+                  active={page === 'admin'}
+                  onClick={() =>
+                    api.admin
+                      ? onNavigate('admin')
+                      : void api.account
+                          .openAdmin()
+                          .catch((e: unknown) =>
+                            toast.error(
+                              e instanceof Error ? e.message : "Couldn't open the dashboard"
+                            )
+                          )
+                  }
+                />
+              </div>
             )}
             <NavItem
               label="Settings"

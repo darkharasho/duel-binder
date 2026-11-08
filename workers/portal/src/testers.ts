@@ -2,7 +2,7 @@ import type { SqlDb } from '../../../src/main/db/sql'
 import { GAMES, isGameId } from '../../../src/shared/games'
 import type { GameId } from '../../../src/shared/games'
 import type { AppDeps } from './app'
-import { fromPublicOrigin, isAdmin } from './auth'
+import { adminWriteAllowed, isAdmin } from './auth'
 
 /** The games this account is listed as a tester for (`game_testers`, server-36). */
 export function testerGames(db: SqlDb, userId: number): GameId[] {
@@ -64,7 +64,7 @@ export async function adminTestersRoute(req: Request, deps: AppDeps): Promise<Re
   }
   if (req.method !== 'POST' || (path !== '/admin/testers' && path !== '/admin/testers/remove'))
     return notFound
-  if (!fromPublicOrigin(req, deps)) return notFound
+  if (!adminWriteAllowed(req, deps)) return notFound
   const type = req.headers.get('content-type')
   if (type === null || type.split(';')[0].trim().toLowerCase() !== 'application/json')
     return json({ error: 'unsupported-media-type' }, 415)

@@ -75,9 +75,13 @@ export function CardDrawer({
   }
   return (
     <>
-      {/* Pinned under the sheet's back bar (2.75rem); the drawer scrolls up over it. */}
+      {/* Pinned under the sheet's back bar (2.75rem below the status bar); the drawer scrolls up
+          over it. */}
       {art && (
-        <div ref={artRef} className="card-drawer-art sticky top-11 z-0 origin-top px-4 pt-2">
+        <div
+          ref={artRef}
+          className="card-drawer-art sticky top-[calc(env(safe-area-inset-top)+2.75rem)] z-0 origin-top px-4 pt-2"
+        >
           {art}
         </div>
       )}

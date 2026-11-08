@@ -6,14 +6,20 @@ export type SwipeZone = 'edge' | 'body'
 export interface SwipeHandlers {
   /** No gestures are tracked while false. */
   enabled?: boolean
-  /** Width of the left-edge zone in px, from the viewport's left. Defaults to 32. */
+  /**
+   * Width of the left-edge zone in px, from the viewport's left. Defaults to 20, about iOS's own
+   * back-swipe zone: wider, and it takes the left edge of a card drawn near the screen's edge.
+   */
   edgeWidth?: number
   /** Which zones to track; a touch in another zone is left to the browser. */
   zones?: readonly SwipeZone[]
   /** The finger moved `dx` px sideways since the swipe locked horizontal. */
   onDrag?: (zone: SwipeZone, dx: number) => void
-  /** The finger lifted (or the touch was cancelled, with dx 0); velocity in px/ms, + is rightward. */
-  onRelease?: (zone: SwipeZone, dx: number, velocity: number) => void
+  /**
+   * The finger lifted (or the touch was cancelled, with dx and dy 0); velocity in px/ms, + is
+   * rightward. `dy` is how far it went up or down meanwhile, as a swipe can turn into a scroll.
+   */
+  onRelease?: (zone: SwipeZone, dx: number, velocity: number, dy: number) => void
 }
 
 /** Movement before a touch is judged a swipe or a scroll. */
@@ -84,7 +90,7 @@ export function useSwipe(el: HTMLElement | null, handlers: SwipeHandlers): void 
       const h = latest.current
       const zones = h.zones ?? ['edge', 'body']
       // Measured from the viewport, so the zone holds still while the element slides in.
-      const zone: SwipeZone = t.clientX <= (h.edgeWidth ?? 32) ? 'edge' : 'body'
+      const zone: SwipeZone = t.clientX <= (h.edgeWidth ?? 20) ? 'edge' : 'body'
       if (!zones.includes(zone)) return
       if (zone === 'body' && ownsHorizontalDrag(e.target, el)) return
       track = {
@@ -136,13 +142,14 @@ export function useSwipe(el: HTMLElement | null, handlers: SwipeHandlers): void 
       if (done.state !== 'locked') return
       const t = e.changedTouches[0]
       const x = t ? t.clientX : done.lastX
+      const y = t ? t.clientY : done.y
       // A finger that stopped before lifting isn't flicking.
       const stale = performance.now() - done.lastT > 100
-      latest.current.onRelease?.(done.zone, x - done.x, stale ? 0 : done.velocity)
+      latest.current.onRelease?.(done.zone, x - done.x, stale ? 0 : done.velocity, y - done.y)
     }
 
     const cancel = (): void => {
-      if (track?.state === 'locked') latest.current.onRelease?.(track.zone, 0, 0)
+      if (track?.state === 'locked') latest.current.onRelease?.(track.zone, 0, 0, 0)
       track = null
     }
 

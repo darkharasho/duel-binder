@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { ChevronLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
@@ -14,6 +15,11 @@ const STEP_SHARE = 0.25
 const FLICK = 0.5
 /** A flick still has to travel this far, so a tap's wobble isn't one. */
 const FLICK_MIN = 30
+/**
+ * A flick back from the edge has to travel further: a thumb starting a scroll near the edge often
+ * moves sideways first, and a short flick there closing the card is the worst misread.
+ */
+const BACK_FLICK_MIN = 80
 const SETTLE = 'transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 220ms ease-out'
 /** How long the swiped card takes to leave the rest of the way. */
 const EXIT_MS = 160
@@ -56,9 +62,15 @@ function slideAway(el: HTMLElement, width: number): void {
   el.style.transform = `translateX(${width}px)`
 }
 
-const passed = (dx: number, velocity: number, width: number, share: number): boolean =>
+const passed = (
+  dx: number,
+  velocity: number,
+  width: number,
+  share: number,
+  flickMin = FLICK_MIN
+): boolean =>
   Math.abs(dx) > width * share ||
-  (Math.abs(velocity) > FLICK && Math.abs(dx) > FLICK_MIN && Math.sign(velocity) === Math.sign(dx))
+  (Math.abs(velocity) > FLICK && Math.abs(dx) > flickMin && Math.sign(velocity) === Math.sign(dx))
 
 /**
  * The right-hand sheet a card panel renders into. Pages keep one mounted around whichever panel
@@ -90,7 +102,9 @@ export function CardSheet({
     },
     []
   )
-  // The back bar is clear over the card's glow, and frosts once the page scrolls under it.
+  // The back bar is clear over the card's glow, and frosts once the page scrolls under it, the
+  // same glass as the page headers. It reaches up under the status bar, so nothing scrolls by in a
+  // strip above it.
   const [scrolled, setScrolled] = useState(false)
   useEffect(() => {
     if (!sheet) return
@@ -111,10 +125,12 @@ export function CardSheet({
       if (zone === 'edge') place(sheet, Math.max(0, dx))
       else if (!stepping.current) place(page.current, stepFor(dx) ? dx : rubberBand(dx))
     },
-    onRelease: (zone, dx, velocity) => {
+    onRelease: (zone, dx, velocity, dy) => {
       const width = sheet?.clientWidth || window.innerWidth
       if (zone === 'edge') {
-        if (dx <= 0 || !passed(dx, velocity, width, BACK_SHARE)) return settle(sheet)
+        // A swipe that ended up more up-and-down than sideways was a scroll that started sideways.
+        const back = dx > Math.abs(dy) && passed(dx, velocity, width, BACK_SHARE, BACK_FLICK_MIN)
+        if (!back) return settle(sheet)
         if (prefersReducedMotion() || !sheet) return onClose()
         slideAway(sheet, width)
         setLeaving(true)
@@ -135,7 +151,9 @@ export function CardSheet({
       el.style.transform = `translateX(${side * width}px)`
       stepping.current = setTimeout(() => {
         stepping.current = undefined
-        step()
+        // Render the next card before it slides in, or the slide plays out on an empty panel
+        // while React catches up, and the card just appears at the end.
+        flushSync(step)
         enter(el, -side * width)
       }, EXIT_MS)
     }
@@ -151,11 +169,11 @@ export function CardSheet({
           // The sheet covers the page, so the page needn't be blurred behind it (iOS repaints that
           // blur every frame of the slide); and a quicker, eased-out slide feels lighter.
           overlayClassName="backdrop-blur-none"
-          className="inset-0 h-dvh data-[state=open]:duration-[240ms] data-[state=open]:ease-out w-full max-w-none touch-pan-y gap-0 overflow-x-hidden overflow-y-auto overscroll-contain border-0 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] sm:max-w-none"
+          className="inset-0 h-dvh data-[state=open]:duration-[240ms] data-[state=open]:ease-out w-full max-w-none touch-pan-y gap-0 overflow-x-hidden overflow-y-auto overscroll-y-none border-0 pb-[env(safe-area-inset-bottom)] sm:max-w-none"
         >
           <div
             data-scrolled={scrolled || undefined}
-            className="sticky top-0 z-10 px-2 py-1 transition-[background-color,backdrop-filter] duration-200 data-[scrolled]:bg-background/80 data-[scrolled]:backdrop-blur-xl"
+            className="sticky top-0 z-10 px-2 pt-[calc(env(safe-area-inset-top)+0.25rem)] pb-1 transition-[background-color,box-shadow,backdrop-filter] duration-200 data-[scrolled]:shadow-[0_1px_0_rgb(255_255_255/0.06)] data-[scrolled]:bg-background/60 data-[scrolled]:backdrop-blur-xl"
           >
             <Button variant="ghost" onClick={onClose}>
               <ChevronLeft />

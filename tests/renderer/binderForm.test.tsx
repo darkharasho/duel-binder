@@ -203,6 +203,63 @@ describe('saving', () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['binders'] })
   })
 
+  it('matches any rule when chosen, and keeps the order saved on the binder', async () => {
+    const save = vi.fn(async () => 'b1')
+    const preview = vi.fn(async () => ({ printings: 3, cards: 2, owned: 0, tooBroad: false }))
+    renderForm(
+      { binders: { save, preview } },
+      {
+        binder: {
+          uid: 'b1',
+          name: 'Mine',
+          goal: 'card',
+          languages: [],
+          friendsVisible: true,
+          rules: {
+            version: 1,
+            rules: [
+              { field: 'name', op: 'is', value: 'Dark Magician' },
+              { field: 'rarity', values: ['Secret Rare'] }
+            ],
+            order: { by: 'set', dir: 'desc' }
+          }
+        } as unknown as BinderDetail
+      }
+    )
+    const user = userEvent.setup()
+    await pick(user, 'Rules to match', 'Match any rule')
+    await waitFor(() =>
+      expect(preview).toHaveBeenLastCalledWith(
+        expect.objectContaining({ rules: expect.objectContaining({ version: 2, match: 'any' }) })
+      )
+    )
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          rules: {
+            version: 2,
+            match: 'any',
+            rules: [
+              { field: 'name', op: 'is', value: 'Dark Magician' },
+              { field: 'rarity', values: ['Secret Rare'] }
+            ],
+            order: { by: 'set', dir: 'desc' }
+          }
+        })
+      )
+    )
+  })
+
+  it('offers all or any only once there are two rules', async () => {
+    renderForm()
+    const user = userEvent.setup()
+    await pick(user, 'Add rule', 'Name')
+    expect(screen.queryByLabelText('Rules to match')).not.toBeInTheDocument()
+    await pick(user, 'Add rule', 'Rarity')
+    expect(screen.getByLabelText('Rules to match')).toHaveTextContent('Match all rules')
+  })
+
   it('edits a binder in place and deletes it only after confirming', async () => {
     const remove = vi.fn(async () => undefined)
     const onDone = vi.fn()

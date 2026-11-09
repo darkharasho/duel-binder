@@ -6,10 +6,12 @@ import {
   RULE_FIELDS,
   BINDER_RULES_VERSION,
   draftProblem,
+  normalizeRules,
   type BinderDraft,
   type BinderGoal,
   type BinderRule,
-  type RuleField
+  type RuleField,
+  type RuleMatch
 } from '@shared/binders'
 import { LANGUAGES, type Language } from '@shared/languages'
 import type { BinderDetail, BinderPreview } from '@shared/types'
@@ -129,6 +131,7 @@ export function BinderForm({
   const setNames = useSetNames('all')
   const [name, setName] = useState(binder?.name ?? '')
   const [rules, setRules] = useState<BinderRule[]>(binder?.rules.rules ?? [])
+  const [match, setMatch] = useState<RuleMatch>(binder?.rules.match ?? 'all')
   const [goal, setGoal] = useState<BinderGoal>(binder?.goal ?? 'none')
   const [languages, setLanguages] = useState<Language[]>(binder?.languages ?? [])
   const [friendsVisible, setFriendsVisible] = useState(binder?.friendsVisible ?? true)
@@ -138,7 +141,13 @@ export function BinderForm({
   const draft: BinderDraft = {
     ...(binder ? { uid: binder.uid } : {}),
     name: name.trim(),
-    rules: { version: BINDER_RULES_VERSION, rules },
+    // The page order is chosen on the binder's own page; editing keeps it.
+    rules: normalizeRules({
+      version: BINDER_RULES_VERSION,
+      rules,
+      match,
+      ...(binder?.rules.order && { order: binder.rules.order })
+    }),
     goal,
     languages,
     friendsVisible
@@ -147,17 +156,22 @@ export function BinderForm({
 
   // Preview only a rule set with every rule filled in; an incomplete one would be refused.
   const ready = rules.length > 0 && rules.every(complete)
-  const previewKey = JSON.stringify([rules, goal, languages])
+  const previewKey = JSON.stringify([rules, match, goal, languages])
   const [previewed, setPreviewed] = useState<{ key: string; preview: BinderPreview } | null>(null)
   useEffect(() => {
     if (!ready) return
     let live = true
     const timer = setTimeout(() => {
-      const [r, g, l] = JSON.parse(previewKey) as [BinderRule[], BinderGoal, Language[]]
+      const [r, m, g, l] = JSON.parse(previewKey) as [
+        BinderRule[],
+        RuleMatch,
+        BinderGoal,
+        Language[]
+      ]
       api.binders
         .preview({
           name: 'Preview',
-          rules: { version: BINDER_RULES_VERSION, rules: r },
+          rules: normalizeRules({ version: BINDER_RULES_VERSION, rules: r, match: m }),
           goal: g,
           languages: l,
           friendsVisible: true
@@ -215,7 +229,20 @@ export function BinderForm({
       </label>
 
       <section aria-label="Rules" className="space-y-3">
-        <h2 className="text-sm font-medium">Rules</h2>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-sm font-medium">Rules</h2>
+          {rules.length > 1 && (
+            <Select value={match} onValueChange={(m) => setMatch(m as RuleMatch)}>
+              <SelectTrigger aria-label="Rules to match" className="w-auto">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Match all rules</SelectItem>
+                <SelectItem value="any">Match any rule</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+        </div>
         {rules.map((r, i) => (
           <div key={i} className="space-y-1.5 rounded-lg border border-white/[0.08] p-3">
             <div className="flex items-center justify-between gap-2">

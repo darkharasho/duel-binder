@@ -1,28 +1,23 @@
-import type { BinderGoal } from '@shared/binders'
+import { BINDER_SORTS, type BinderOrder, type BinderRules, type BinderSort } from '@shared/binders'
 import type { GameId } from '@shared/games'
 import type { BinderCard } from '@shared/types'
 import { sortOptions, type SortOption } from '@/lib/filters'
 
-export type BinderSort = 'release' | 'name' | 'type' | 'number' | 'price'
-export type SortDir = 'asc' | 'desc'
-export interface BinderOrder {
-  by: BinderSort
-  dir: SortDir
-}
+export type { BinderOrder, BinderSort }
 
 export const DEFAULT_BINDER_ORDER: BinderOrder = { by: 'release', dir: 'asc' }
 
 const SORTS = [
   { value: 'release', label: 'Release date', kind: 'date', dir: 'asc' },
+  { value: 'set', label: 'Set', kind: 'text', dir: 'asc' },
   { value: 'name', label: 'Name', kind: 'text', dir: 'asc' },
   { value: 'type', label: 'Type', kind: 'text', dir: 'asc' },
   { value: 'number', label: 'Set number', kind: 'text', dir: 'asc' },
   { value: 'price', label: 'Price', kind: 'number', dir: 'desc' }
 ] as const
 
-/** Sort choices for a binder. Set number needs a printing per slot, so only a printing goal has it. */
-export const binderSorts = (goal: BinderGoal): SortOption<BinderSort>[] =>
-  sortOptions<BinderSort>(SORTS.filter((s) => s.value !== 'number' || goal === 'printing'))
+/** Sort choices for a binder. A card or art slot sorts by set as its card first came out. */
+export const binderSorts = (): SortOption<BinderSort>[] => sortOptions<BinderSort>([...SORTS])
 
 const rank = (order: readonly string[], v: string | null | undefined): number => {
   const i = v ? order.indexOf(v) : -1
@@ -91,8 +86,10 @@ function sortValue(c: BinderCard, by: BinderSort, game: GameId): string | number
       return c.card.name
     case 'type':
       return typeKey(c, game)
+    case 'set':
+      return (c.printing ? c.printing.setName : c.firstSet) || null
     case 'number':
-      return c.printing?.setCode || null
+      return (c.printing ? c.printing.setCode : c.firstSetCode) || null
     case 'price':
       return c.price ?? c.printing?.setPrice ?? null
   }
@@ -140,19 +137,25 @@ export function sortBinderCards(
 
 const KEY = (uid: string): string => `binder-sort:${uid}`
 
-/** The order this binder was last shown in on this device. */
-export function readBinderOrder(uid: string, goal: BinderGoal): BinderOrder {
+const known = (o: { by: string; dir: string } | null | undefined): o is BinderOrder =>
+  !!o && (BINDER_SORTS as readonly string[]).includes(o.by) && (o.dir === 'asc' || o.dir === 'desc')
+
+/**
+ * The order to show a binder in: the one saved on the binder (the same on every device), or else
+ * the one this device last showed it in before orders were saved on binders, or else the default.
+ */
+export function binderOrder(uid: string, rules: BinderRules): BinderOrder {
+  if (known(rules.order)) return rules.order
   try {
     const saved = JSON.parse(localStorage.getItem(KEY(uid)) ?? 'null') as BinderOrder | null
-    if (saved && binderSorts(goal).some((o) => o.value === saved.by && o.dir === saved.dir)) {
-      return saved
-    }
+    if (known(saved)) return saved
   } catch {
     /* storage unavailable or bad: the default order */
   }
   return DEFAULT_BINDER_ORDER
 }
 
+/** Remembers an order on this device only: for a binder that can't be saved, like a friend's. */
 export function saveBinderOrder(uid: string, order: BinderOrder): void {
   try {
     localStorage.setItem(KEY(uid), JSON.stringify(order))

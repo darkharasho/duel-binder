@@ -6,6 +6,7 @@ import { api } from '@/lib/api'
 import { ADMIN_PAGE_TABS, ADMIN_QUERY, adminKeys, type AdminPageTab } from './adminTabs'
 import { AdminsTab, ErrorsTab, MergesTab, PhotosTab, TestersTab } from './ListTabs'
 import { Failed } from './parts'
+import { RipCaptureTab } from './RipCaptureTab'
 import { POLL_MS, loadRuns } from './runs'
 import { LatestRuns, Pulse, RunsTab } from './RunsTab'
 import { OverviewTab, ScannerTab, StorageTab, UsageTab, UsersTab } from './StatsTabs'
@@ -159,6 +160,7 @@ export function AdminPage({
         />
       )}
       {tab === 'photos' && <Show q={photos} show={(p) => <PhotosTab photos={p} />} />}
+      {tab === 'capture' && <RipCaptureTab />}
     </div>
   )
 }

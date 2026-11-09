@@ -9,7 +9,8 @@ import type {
   AdminTesterBy,
   AdminWorkflow,
   GhJob,
-  GhRun
+  GhRun,
+  RipFrameInfo
 } from './admin'
 import type { PlaceholderRequest } from './placeholders'
 import type { ErrorDetails } from './errorReports'
@@ -318,6 +319,16 @@ export interface Api {
     addAdmin(username: string): Promise<void>
     removeAdmin(userId: number): Promise<void>
     photos(): Promise<AdminPhotos>
+    /**
+     * Rip capture: saves a key frame picked from a live pack opening under the app's data folder
+     * (`rip-capture/<session>/<name>`, names as `RIP_SESSION` / `RIP_FRAME` in main); its path.
+     */
+    captureSave(session: string, name: string, jpeg: ArrayBuffer, info: RipFrameInfo): Promise<string>
+    captureRemove(session: string, name: string): Promise<void>
+    /** The owner's note on a session, saved beside its frames as note.txt ('' clears it). */
+    captureNote(session: string, note: string): Promise<void>
+    /** Opens a session's folder, or the capture folder for null. */
+    captureOpenFolder(session: string | null): Promise<void>
   }
   errors: {
     /** Sends an anonymous, scrubbed error report; never rejects, and drops it when signed out or offline. */
@@ -553,7 +564,11 @@ export const INVOKE_CHANNELS = [
   'admin:admins',
   'admin:addAdmin',
   'admin:removeAdmin',
-  'admin:photos'
+  'admin:photos',
+  'admin:captureSave',
+  'admin:captureRemove',
+  'admin:captureNote',
+  'admin:captureOpenFolder'
 ] as const
 
 export type InvokeChannel = (typeof INVOKE_CHANNELS)[number]

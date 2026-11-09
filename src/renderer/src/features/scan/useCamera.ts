@@ -82,7 +82,12 @@ const errorOf = (e: unknown): CameraError => {
  */
 export function useCamera(
   deviceId: string | null,
-  facing?: CameraFacing
+  facing?: CameraFacing,
+  /**
+   * For cameras opened outside the scanner (admin Rip capture): `remember: false` leaves the
+   * scanner's remembered pick alone; `off` opens nothing until it's false.
+   */
+  { remember: rememberPick = true, off = false }: { remember?: boolean; off?: boolean } = {}
 ): {
   stream: MediaStream | null
   devices: MediaDeviceInfo[]
@@ -159,7 +164,7 @@ export function useCamera(
 
   useEffect(() => {
     const media = navigator.mediaDevices
-    if (!media?.getUserMedia) return
+    if (off || !media?.getUserMedia) return
     let live = true
     let current: MediaStream | null = null
     const open = async (): Promise<MediaStream> => {
@@ -181,7 +186,7 @@ export function useCamera(
           if (live) setOpened({ key, stream: null, error: 'lost' })
         })
         const id = track?.getSettings().deviceId
-        if (id) remember(id)
+        if (id && rememberPick) remember(id)
         setOpened({ key, stream: s, error: null })
       })
       .catch((e: unknown) => {
@@ -191,7 +196,7 @@ export function useCamera(
       live = false
       if (current) stop(current)
     }
-  }, [deviceId, facing, key])
+  }, [deviceId, facing, key, rememberPick, off])
 
   return { stream, devices, error, retry }
 }

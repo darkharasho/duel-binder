@@ -16,6 +16,7 @@ import {
 import icon from '../../resources/icon.png?asset'
 import { openDatabase } from './db/database'
 import { createCatalogService } from './catalog/service'
+import { createRipCapture } from './ripCapture'
 import { recordSnapshot } from './repo/stats'
 import {
   directCatalog,
@@ -519,7 +520,8 @@ async function bootstrap(): Promise<void> {
       errorReports,
       emitDataChanged,
       fingerprints,
-      ocr
+      ocr,
+      ripCapture: createRipCapture(join(userData, 'rip-capture'), (p) => shell.openPath(p))
     })
   )
 

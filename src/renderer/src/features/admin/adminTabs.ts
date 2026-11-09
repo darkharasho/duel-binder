@@ -1,4 +1,4 @@
-/** Every admin page tab, in the portal dashboard's order. */
+/** Every admin page tab, in the portal dashboard's order, then the desktop-only ones. */
 export const ADMIN_PAGE_TABS = [
   { value: 'overview', label: 'Overview' },
   { value: 'runs', label: 'Runs' },
@@ -10,7 +10,9 @@ export const ADMIN_PAGE_TABS = [
   { value: 'merges', label: 'Merges' },
   { value: 'testers', label: 'Testers' },
   { value: 'admins', label: 'Admins' },
-  { value: 'photos', label: 'Photos' }
+  { value: 'photos', label: 'Photos' },
+  // On this computer only: key frames from a live pack opening, for scanner work.
+  { value: 'capture', label: 'Rip capture' }
 ] as const satisfies readonly { value: string; label: string }[]
 
 export type AdminPageTab = (typeof ADMIN_PAGE_TABS)[number]['value']

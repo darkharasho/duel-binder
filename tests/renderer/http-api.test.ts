@@ -142,8 +142,9 @@ describe('createHttpApi', () => {
         expect(typeof (fn as (cb: () => void) => unknown)(() => {}), name).toBe('function')
       }
     }
-    expect(names).toHaveLength(8)
+    expect(names).toHaveLength(10)
     expect(names).toContain('images.onDownloads')
+    expect(names).toContain('ripWindow.onMessage')
   })
 
   it('account calls reject on the web without fetching', async () => {

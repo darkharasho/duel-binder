@@ -75,14 +75,27 @@ export function createScanWindowManager(deps: {
   /** Capture pixels per screen point where this window is. */
   scaleOf(win: ScanWindowLike): number
   now?(): number
+  /** The channels and message checks; the scan window's unless another window says. */
+  messages?: {
+    channel: string
+    openChannel: string
+    isFrom(m: unknown): boolean
+    isTo(m: unknown): boolean
+  }
 }): ScanWindowManager {
   const now = deps.now ?? Date.now
+  const msg = deps.messages ?? {
+    channel: SCAN_WINDOW_MESSAGE,
+    openChannel: SCAN_WINDOW_OPEN,
+    isFrom: isFromScanWindow,
+    isTo: isToScanWindow
+  }
   let win: ScanWindowLike | null = null
 
   const live = (w: ScanWindowLike | null): w is ScanWindowLike => !!w && !w.isDestroyed()
   const tellMain = (open: boolean): void => {
     const main = deps.mainWindow()
-    if (live(main)) main.webContents.send(SCAN_WINDOW_OPEN, open)
+    if (live(main)) main.webContents.send(msg.openChannel, open)
   }
 
   return {
@@ -136,10 +149,10 @@ export function createScanWindowManager(deps: {
     relay(senderId, message) {
       const main = deps.mainWindow()
       if (!live(main) || !live(win)) return
-      if (senderId === win.webContents.id && isFromScanWindow(message)) {
-        main.webContents.send(SCAN_WINDOW_MESSAGE, message)
-      } else if (senderId === main.webContents.id && isToScanWindow(message)) {
-        win.webContents.send(SCAN_WINDOW_MESSAGE, message)
+      if (senderId === win.webContents.id && msg.isFrom(message)) {
+        main.webContents.send(msg.channel, message)
+      } else if (senderId === main.webContents.id && msg.isTo(message)) {
+        win.webContents.send(msg.channel, message)
       }
     },
     close() {

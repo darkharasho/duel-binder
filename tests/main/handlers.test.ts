@@ -178,6 +178,13 @@ describe('createHandlers', () => {
     await expect(handlers['scanWindow:isOpen']()).resolves.toBe(true)
   })
 
+  it('ripWindow handlers do nothing without a rip window', async () => {
+    const { handlers } = await makeHandlers()
+    await expect(handlers['ripWindow:isOpen']()).resolves.toBe(false)
+    await expect(handlers['ripWindow:open']()).resolves.toBeUndefined()
+    await expect(handlers['ripWindow:toggleFullScreen']()).resolves.toBeUndefined()
+  })
+
   it('scan:printingsByCode is wired to the catalog', async () => {
     const { handlers } = await makeHandlers()
     const rows = (await handlers['scan:printingsByCode']('lob-en005')) as { name: string }[]

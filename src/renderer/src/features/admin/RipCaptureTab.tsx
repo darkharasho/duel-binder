@@ -10,36 +10,19 @@ import {
 } from '@/components/ui/select'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import {
+  isFromRipWindow,
+  type RipFrame,
+  type RipPickerState,
+  type RipWindowState
+} from '@shared/ripWindow'
+import { resolutionText } from '@shared/scanWindow'
 import { cameraResolution, useCamera } from '../scan/useCamera'
 import { errorText } from './adminTabs'
-import { KeyframePicker, PICK_H, PICK_W, toGrey, type PickerState } from './keyframes'
 import { Note, Panel } from './parts'
+import { sessionName, useRipCapture, type RipCapture } from './useRipCapture'
 
 const CAMERA_KEY = 'admin.ripCapture.camera'
-/** Samples a second: enough to catch a card held for about ¾ s (3 still samples). */
-const SAMPLE_MS = 250
-/** Full frames kept back, so the sharpest of a still stretch can still be saved. */
-const KEEP_BACK = 5
-const THUMB_W = 640
-const JPEG_QUALITY = 0.92
-
-interface Frame {
-  name: string
-  thumb: string
-  sharp: number
-  at: Date
-  width: number
-  height: number
-  /** Kept by hand rather than picked. */
-  manual: boolean
-}
-
-const pad = (n: number, w = 2): string => String(n).padStart(w, '0')
-
-/** A session's folder name: its local start time. */
-function sessionName(d: Date): string {
-  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`
-}
 
 function storedCamera(): string | null {
   try {
@@ -49,28 +32,84 @@ function storedCamera(): string | null {
   }
 }
 
-/** The page's CSP lets images load from data: URLs, not blob: ones. */
-function dataUrl(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = () => reject(reader.error)
-    reader.readAsDataURL(blob)
+/**
+ * The rip window, while it's open: it has the camera and runs the capture, and this tab drives
+ * it. Null while it's closed (or this isn't the desktop app).
+ */
+function useRipWindow(deviceId: string | null): {
+  remote: (RipCapture & { state: RipWindowState | null }) | null
+  /** The window's last session's frames, still listed after it closes. */
+  frames: RipFrame[]
+} {
+  const [open, setOpen] = useState(false)
+  const [state, setState] = useState<RipWindowState | null>(null)
+  const [frames, setFrames] = useState<RipFrame[]>([])
+  const rip = api.ripWindow
+  const device = useRef(deviceId)
+  useEffect(() => {
+    device.current = deviceId
   })
+
+  useEffect(() => {
+    if (!rip) return
+    let live = true
+    const hello = (): void => {
+      rip.send({ kind: 'camera', deviceId: device.current })
+      rip.send({ kind: 'sync' })
+    }
+    void rip.isOpen().then((o) => {
+      if (!live) return
+      setOpen(o)
+      if (o) hello()
+    })
+    const offOpen = rip.onOpenChange((o) => {
+      setOpen(o)
+      if (!o) setState(null)
+    })
+    const offMessage = rip.onMessage((m) => {
+      if (!isFromRipWindow(m)) return
+      if (m.kind === 'ready') hello()
+      else if (m.kind === 'state')
+        setState((prev) => {
+          // A new session starts an empty list.
+          if (m.state.session && m.state.session !== prev?.session) setFrames([])
+          return m.state
+        })
+      else if (m.kind === 'frame')
+        setFrames((f) => [m.frame, ...f.filter((x) => x.name !== m.frame.name)])
+      else if (m.kind === 'removed') setFrames((f) => f.filter((x) => x.name !== m.name))
+      else if (m.kind === 'frames') setFrames(m.frames)
+    })
+    return () => {
+      live = false
+      offOpen()
+      offMessage()
+    }
+  }, [rip])
+
+  useEffect(() => {
+    if (open) rip?.send({ kind: 'camera', deviceId })
+  }, [open, deviceId, rip])
+
+  if (!open || !rip) return { remote: null, frames }
+  const remote = {
+    state,
+    session: state?.session ?? null,
+    frames,
+    picker: state?.picker ?? 'moving',
+    error: state?.error ?? null,
+    start: (session: string) => {
+      setFrames([])
+      rip.send({ kind: 'start', session })
+    },
+    stop: () => rip.send({ kind: 'stop' }),
+    keepNow: async () => rip.send({ kind: 'keep' }),
+    remove: async (name: string) => rip.send({ kind: 'remove', name })
+  }
+  return { remote, frames }
 }
 
-async function jpegOf(
-  src: CanvasImageSource,
-  w: number,
-  h: number,
-  quality = JPEG_QUALITY
-): Promise<Blob> {
-  const canvas = new OffscreenCanvas(w, h)
-  canvas.getContext('2d')!.drawImage(src, 0, 0, w, h)
-  return canvas.convertToBlob({ type: 'image/jpeg', quality })
-}
-
-const STATE_TEXT: Record<PickerState, string> = {
+const STATE_TEXT: Record<RipPickerState, string> = {
   moving: 'Moving',
   settling: 'Settling…',
   held: 'Held'
@@ -83,27 +122,38 @@ const STATE_TEXT: Record<PickerState, string> = {
  */
 export function RipCaptureTab(): React.JSX.Element {
   const [deviceId, setDeviceId] = useState<string | null>(storedCamera)
-  const camera = useCamera(deviceId, undefined, { remember: false, off: deviceId === null })
-  const resolution = cameraResolution(camera.stream)
-  const [session, setSession] = useState<string | null>(null)
-  const [frames, setFrames] = useState<Frame[]>([])
-  const [state, setState] = useState<PickerState>('moving')
-  const [error, setError] = useState<string | null>(null)
-  const [open, setOpen] = useState<Frame | null>(null)
+  const { remote, frames: windowFrames } = useRipWindow(deviceId)
+  // With the rip window open it has the camera; this tab leaves it alone.
+  const camera = useCamera(deviceId, undefined, {
+    remember: false,
+    off: deviceId === null || remote !== null
+  })
+  const video = useRef<HTMLVideoElement>(null)
+  const local = useRipCapture(video, remote ? null : camera.stream)
+  const capture: RipCapture = remote ?? local
+  const { session } = capture
+  // A list the window captured stays up after it closes, until a session starts here.
+  const frames = remote || local.session || local.frames.length ? capture.frames : windowFrames
+  const resolution = remote ? (remote.state?.resolution ?? null) : cameraResolution(camera.stream)
+  const cameraError = remote ? (remote.state?.cameraError ?? null) : camera.error
+  const [uiError, setError] = useState<string | null>(null)
+  const error = uiError ?? capture.error
+  const [open, setOpen] = useState<RipFrame | null>(null)
   // The session running or last run: its note can still be written after Stop.
   const [last, setLast] = useState<string | null>(null)
   const [note, setNote] = useState('')
   const savedNote = useRef('')
 
-  const video = useRef<HTMLVideoElement>(null)
-  const picker = useRef(new KeyframePicker())
-  const recent = useRef<{ seq: number; bitmap: ImageBitmap; grey: Uint8Array }[]>([])
-  const count = useRef(0)
-  const saving = useRef(Promise.resolve())
-
   useEffect(() => {
-    if (video.current) video.current.srcObject = camera.stream
-  }, [camera.stream])
+    if (video.current) video.current.srcObject = remote ? null : camera.stream
+  }, [camera.stream, remote])
+
+  // A local session stops when the window opens: the window has the camera now.
+  const localSession = local.session
+  const stopLocal = local.stop
+  useEffect(() => {
+    if (remote && localSession) stopLocal()
+  }, [remote, localSession, stopLocal])
 
   const pickCamera = (id: string): void => {
     setDeviceId(id)
@@ -114,92 +164,7 @@ export function RipCaptureTab(): React.JSX.Element {
     }
   }
 
-  // Saves one full frame, in order, and lists it.
-  const keep = useCallback(
-    (bitmap: ImageBitmap, sharp: number, manual: boolean): void => {
-      if (!session || !api.admin) return
-      const admin = api.admin
-      const name = `k${pad(++count.current, 5)}.jpg`
-      const { width, height } = bitmap
-      saving.current = saving.current.then(async () => {
-        try {
-          const [full, thumb] = await Promise.all([
-            jpegOf(bitmap, width, height),
-            jpegOf(bitmap, THUMB_W, Math.round((THUMB_W * height) / width), 0.8)
-          ])
-          await admin.captureSave(session, name, await full.arrayBuffer(), {
-            sharp,
-            width,
-            height
-          })
-          const frame: Frame = {
-            name,
-            thumb: await dataUrl(thumb),
-            sharp: Math.round(sharp),
-            at: new Date(),
-            width,
-            height,
-            manual
-          }
-          setFrames((f) => [frame, ...f])
-          setError(null)
-        } catch (e) {
-          setError(errorText(e))
-        } finally {
-          bitmap.close()
-        }
-      })
-    },
-    [session]
-  )
-
-  // The sampling loop: a small grey copy for the picker, and the last few full frames.
-  useEffect(() => {
-    const v = video.current
-    if (!session || !camera.stream || !v) return
-    const pick = picker.current
-    const small = new OffscreenCanvas(PICK_W, PICK_H)
-    const ctx = small.getContext('2d', { willReadFrequently: true })!
-    let busy = false
-    const timer = setInterval(async () => {
-      if (busy || v.readyState < 2 || !v.videoWidth) return
-      busy = true
-      try {
-        const bitmap = await createImageBitmap(v)
-        ctx.drawImage(bitmap, 0, 0, PICK_W, PICK_H)
-        const grey = toGrey(ctx.getImageData(0, 0, PICK_W, PICK_H).data)
-        const { seq, pick: chosen } = pick.push(grey)
-        recent.current.push({ seq, bitmap, grey })
-        while (recent.current.length > KEEP_BACK) recent.current.shift()!.bitmap.close()
-        setState(pick.state)
-        if (chosen) {
-          const at = recent.current.find((r) => r.seq === chosen.seq)
-          // The kept copy outlives this buffer, which closes its own.
-          if (at) keep(await createImageBitmap(at.bitmap), chosen.sharp, false)
-        }
-      } catch {
-        // A frame that can't be read (camera switching) is skipped.
-      } finally {
-        busy = false
-      }
-    }, SAMPLE_MS)
-    return () => {
-      clearInterval(timer)
-      for (const r of recent.current) r.bitmap.close()
-      recent.current = []
-      pick.reset()
-    }
-  }, [session, camera.stream, keep])
-
-  const keepNow = useCallback(async (): Promise<void> => {
-    const v = video.current
-    if (!session || !v || v.readyState < 2) return
-    const bitmap = await createImageBitmap(v)
-    const last = recent.current.at(-1)
-    if (last) picker.current.markKept(last.grey)
-    keep(bitmap, 0, true)
-  }, [session, keep])
-
+  const keepNow = capture.keepNow
   // Space keeps the frame on screen while a session runs.
   useEffect(() => {
     if (!session) return
@@ -215,13 +180,11 @@ export function RipCaptureTab(): React.JSX.Element {
 
   const start = (): void => {
     const name = sessionName(new Date())
-    setFrames([])
-    count.current = 0
     setError(null)
     setNote('')
     savedNote.current = ''
     setLast(name)
-    setSession(name)
+    capture.start(name)
   }
 
   const saveNote = useCallback(
@@ -239,33 +202,38 @@ export function RipCaptureTab(): React.JSX.Element {
     return () => clearTimeout(t)
   }, [note, saveNote])
 
-  const remove = async (f: Frame): Promise<void> => {
-    if (!session || !api.admin) return
-    try {
-      await api.admin.captureRemove(session, f.name)
-      setFrames((all) => all.filter((x) => x !== f))
-      if (open === f) setOpen(null)
-    } catch (e) {
-      setError(errorText(e))
-    }
+  const remove = async (f: RipFrame): Promise<void> => {
+    await capture.remove(f.name)
+    if (open?.name === f.name) setOpen(null)
   }
 
   const openFolder = (): void => {
     api.admin?.captureOpenFolder(session ?? last).catch((e: unknown) => setError(errorText(e)))
   }
 
+  const openWindow = (): void => {
+    api.ripWindow.open().catch((e: unknown) => setError(errorText(e)))
+  }
+
+  // Whether there's a picture to capture from, here or in the window.
+  const live = remote ? !!remote.state?.openDeviceId && !cameraError : !!camera.stream
+  const retry = remote ? () => api.ripWindow.send({ kind: 'retryCamera' }) : camera.retry
   const cameraNote =
     deviceId === null
       ? 'Pick the camera or capture card the opening is on.'
-      : camera.error === 'busy'
+      : cameraError === 'busy'
         ? 'That camera is in use by another app (OBS, or the scan window). Close it and try again.'
-        : camera.error === 'denied'
+        : cameraError === 'denied'
           ? 'The app isn’t allowed to use the camera.'
-          : camera.error
+          : cameraError
             ? 'That camera isn’t there. Pick another, or plug it back in.'
-            : !camera.stream
-              ? 'Opening the camera…'
-              : null
+            : remote
+              ? live
+                ? 'Showing in the rip window. Double-click it (or press F11) for full screen.'
+                : 'Opening the camera in the rip window…'
+              : !camera.stream
+                ? 'Opening the camera…'
+                : null
 
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(320px,2fr)]">
@@ -285,18 +253,23 @@ export function RipCaptureTab(): React.JSX.Element {
                 ))}
             </SelectContent>
           </Select>
+          {!remote && (
+            <Button variant="outline" size="sm" onClick={openWindow}>
+              Pop out
+            </Button>
+          )}
           <span className="flex-1" />
           {session ? (
             <>
               <Button variant="outline" size="sm" onClick={() => void keepNow()}>
                 Keep this frame
               </Button>
-              <Button variant="destructive" size="sm" onClick={() => setSession(null)}>
+              <Button variant="destructive" size="sm" onClick={capture.stop}>
                 Stop
               </Button>
             </>
           ) : (
-            <Button size="sm" disabled={!camera.stream} onClick={start}>
+            <Button size="sm" disabled={!live} onClick={start}>
               Start capture
             </Button>
           )}
@@ -313,8 +286,8 @@ export function RipCaptureTab(): React.JSX.Element {
             <div className="absolute inset-0 grid place-items-center p-6 text-center text-sm text-muted-foreground">
               <div className="space-y-2">
                 <p>{cameraNote}</p>
-                {camera.error && (
-                  <Button variant="outline" size="sm" onClick={camera.retry}>
+                {cameraError && (
+                  <Button variant="outline" size="sm" onClick={retry}>
                     Try again
                   </Button>
                 )}
@@ -323,23 +296,22 @@ export function RipCaptureTab(): React.JSX.Element {
           )}
           {resolution && (
             <span className="absolute right-3 top-3 rounded-full bg-black/70 px-3 py-1 text-xs text-muted-foreground">
-              {resolution.width}×{resolution.height}
-              {resolution.frameRate ? ` · ${Math.round(resolution.frameRate)} fps` : ''}
+              {resolutionText(resolution)}
             </span>
           )}
-          {session && camera.stream && (
+          {session && live && (
             <div className="absolute left-3 top-3 flex items-center gap-2 rounded-full bg-black/70 px-3 py-1 text-xs">
               <span
                 className={cn(
                   'size-2 rounded-full',
-                  state === 'held'
+                  capture.picker === 'held'
                     ? 'bg-emerald-400'
-                    : state === 'settling'
+                    : capture.picker === 'settling'
                       ? 'bg-amber-400'
                       : 'bg-red-500 animate-pulse'
                 )}
               />
-              {STATE_TEXT[state]}
+              {STATE_TEXT[capture.picker]}
             </div>
           )}
         </div>
@@ -395,7 +367,7 @@ export function RipCaptureTab(): React.JSX.Element {
                 </button>
                 <div className="mt-1 flex items-center justify-between text-[11px] text-muted-foreground">
                   <span>
-                    {f.name.slice(1, 6)} · {f.at.toLocaleTimeString()}
+                    {f.name.slice(1, 6)} · {new Date(f.at).toLocaleTimeString()}
                     {f.manual ? ' · by hand' : ''}
                   </span>
                   <button

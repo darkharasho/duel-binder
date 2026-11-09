@@ -272,6 +272,14 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       onMessage: noUnsubscribe,
       onOpenChange: noUnsubscribe
     },
+    ripWindow: {
+      open: unavailable,
+      isOpen: async () => false,
+      toggleFullScreen: unavailable,
+      send: () => {},
+      onMessage: noUnsubscribe,
+      onOpenChange: noUnsubscribe
+    },
     stats: { get: call('stats:get') },
     pokedex: { summary: call('pokedex:summary'), species: call('pokedex:species') },
     // Not on the web (yet): the desktop and phone ask, by printing key, for what their screens show.

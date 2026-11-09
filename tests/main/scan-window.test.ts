@@ -5,6 +5,7 @@ import {
   type Rect,
   type ScanWindowLike
 } from '../../src/main/scanWindow'
+import { isFromRipWindow, isToRipWindow } from '../../src/shared/ripWindow'
 
 type Send = [string, unknown]
 interface Fake extends ScanWindowLike {
@@ -48,7 +49,11 @@ const draft = { cardId: 1 } as never
 const settings = { deviceId: null } as never
 
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-function setup(saved: unknown = null, scale = 1) {
+function setup(
+  saved: unknown = null,
+  scale = 1,
+  messages?: Parameters<typeof createScanWindowManager>[0]['messages']
+) {
   const main = fakeWindow(1)
   const scan = fakeWindow(2)
   const create = vi.fn<(bounds: Rect | null) => ScanWindowLike>(() => scan)
@@ -62,7 +67,8 @@ function setup(saved: unknown = null, scale = 1) {
     writeBounds,
     workAreas: () => [SCREEN],
     scaleOf: () => scale,
-    now: () => clock.now
+    now: () => clock.now,
+    messages
   })
   return { main, scan, create, writeBounds, manager, mainRef, clock }
 }
@@ -116,6 +122,26 @@ describe('scan window manager', () => {
     expect(scan.sends).toEqual([
       ['scanWindow:message', { kind: 'settings', settings }],
       ['scanWindow:message', { kind: 'retryCamera' }]
+    ])
+  })
+
+  it('relays the rip window’s own messages on its own channels, and no scan ones', () => {
+    const { manager, main, scan } = setup(null, 1, {
+      channel: 'ripWindow:message',
+      openChannel: 'ripWindow:openChanged',
+      isFrom: isFromRipWindow,
+      isTo: isToRipWindow
+    })
+    manager.open()
+    expect(main.sends).toEqual([['ripWindow:openChanged', true]])
+    main.sends.length = 0
+    manager.relay(2, { kind: 'removed', name: 'k00001.jpg' })
+    manager.relay(2, { kind: 'draft', draft })
+    manager.relay(1, { kind: 'start', session: '20261109-120000' })
+    manager.relay(1, { kind: 'settings', settings })
+    expect(main.sends).toEqual([['ripWindow:message', { kind: 'removed', name: 'k00001.jpg' }]])
+    expect(scan.sends).toEqual([
+      ['ripWindow:message', { kind: 'start', session: '20261109-120000' }]
     ])
   })
 

@@ -53,6 +53,7 @@ import type {
   WishlistItem,
   WishOwners
 } from './types'
+import type { RipWindowMessage } from './ripWindow'
 import type { ScanWindowMessage } from './scanWindow'
 import type { ScanRef } from './scan/fingerprintRefs'
 import type { FingerprintStatus, OcrBand, ScanPrinting } from './scan/types'
@@ -224,6 +225,15 @@ export interface Api {
     setSize(width: number, height: number): Promise<void>
     send(m: ScanWindowMessage): void
     onMessage(cb: (m: ScanWindowMessage) => void): () => void
+    onOpenChange(cb: (open: boolean) => void): () => void
+  }
+  /** The admin Rip capture tab's pop-out window: the camera alone, capturing; the tab drives it. */
+  ripWindow: {
+    open(): Promise<void>
+    isOpen(): Promise<boolean>
+    toggleFullScreen(): Promise<void>
+    send(m: RipWindowMessage): void
+    onMessage(cb: (m: RipWindowMessage) => void): () => void
     onOpenChange(cb: (open: boolean) => void): () => void
   }
   stats: {
@@ -497,6 +507,9 @@ export const INVOKE_CHANNELS = [
   'scanWindow:isOpen',
   'scanWindow:toggleFullScreen',
   'scanWindow:setSize',
+  'ripWindow:open',
+  'ripWindow:isOpen',
+  'ripWindow:toggleFullScreen',
   'pokedex:summary',
   'pokedex:species',
   'stats:get',
@@ -584,6 +597,9 @@ export const SCAN_WINDOW_MESSAGE = 'scanWindow:message' // payload: ScanWindowMe
 export const SCAN_WINDOW_OPEN = 'scanWindow:openChanged' // payload: boolean
 /** Renderer to main, via `ipcRenderer.send`; main relays it to the other window. */
 export const SCAN_WINDOW_SEND = 'scanWindow:send'
+export const RIP_WINDOW_MESSAGE = 'ripWindow:message' // payload: RipWindowMessage
+export const RIP_WINDOW_OPEN = 'ripWindow:openChanged' // payload: boolean
+export const RIP_WINDOW_SEND = 'ripWindow:send'
 
 // Compile-time check: INVOKE_CHANNELS must list exactly the invoke methods of Api.
 // Only methods returning a Promise count as invoke methods, so the event

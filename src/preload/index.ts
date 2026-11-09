@@ -4,6 +4,9 @@ import {
   DATA_CHANGED,
   IMAGE_DOWNLOADS,
   INVOKE_CHANNELS,
+  RIP_WINDOW_MESSAGE,
+  RIP_WINDOW_OPEN,
+  RIP_WINDOW_SEND,
   SCAN_WINDOW_MESSAGE,
   SCAN_WINDOW_OPEN,
   SCAN_WINDOW_SEND,
@@ -12,6 +15,7 @@ import {
   WINDOW_MAXIMIZED,
   type Api
 } from '../shared/ipc'
+import type { RipWindowMessage } from '../shared/ripWindow'
 import type { ScanWindowMessage } from '../shared/scanWindow'
 import type { AccountStatus, ImageDownloads, SyncStatus, UpdateStatus } from '../shared/types'
 
@@ -41,6 +45,9 @@ api.account.onChange = (cb: (s: AccountStatus) => void) => subscribe(ACCOUNT_CHA
 api.scanWindow.send = (m: ScanWindowMessage) => ipcRenderer.send(SCAN_WINDOW_SEND, m)
 api.scanWindow.onMessage = (cb: (m: ScanWindowMessage) => void) => subscribe(SCAN_WINDOW_MESSAGE, cb)
 api.scanWindow.onOpenChange = (cb: (open: boolean) => void) => subscribe(SCAN_WINDOW_OPEN, cb)
+api.ripWindow.send = (m: RipWindowMessage) => ipcRenderer.send(RIP_WINDOW_SEND, m)
+api.ripWindow.onMessage = (cb: (m: RipWindowMessage) => void) => subscribe(RIP_WINDOW_MESSAGE, cb)
+api.ripWindow.onOpenChange = (cb: (open: boolean) => void) => subscribe(RIP_WINDOW_OPEN, cb)
 api.window.platform = process.platform
 api.window.onMaximizedChange = (cb: (maximized: boolean) => void) => subscribe(WINDOW_MAXIMIZED, cb)
 

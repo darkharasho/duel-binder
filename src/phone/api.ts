@@ -322,6 +322,14 @@ export function createPhoneApi(deps: {
       onMessage: noUnsubscribe,
       onOpenChange: noUnsubscribe
     },
+    ripWindow: {
+      open: async () => {},
+      isOpen: async () => false,
+      toggleFullScreen: async () => {},
+      send: () => {},
+      onMessage: noUnsubscribe,
+      onOpenChange: noUnsubscribe
+    },
     stats: dataPart('stats'),
     pokedex: dataPart('pokedex'),
     prices: {

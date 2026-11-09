@@ -85,6 +85,8 @@ export interface HandlerDeps {
   app: AppDeps
   window: WindowDeps
   scanWindow: Pick<ScanWindowManager, 'open' | 'isOpen' | 'toggleFullScreen' | 'setSize'>
+  /** The admin Rip capture tab's pop-out window; none in tests that don't need it. */
+  ripWindow?: Pick<ScanWindowManager, 'open' | 'isOpen' | 'toggleFullScreen'>
   account: AccountService
   errorReports: Pick<MainErrorReports, 'setEnabled'>
   /** Tells every window that the data shown changed. */
@@ -153,6 +155,7 @@ export function createHandlers({
   app,
   window,
   scanWindow,
+  ripWindow,
   account,
   errorReports,
   emitDataChanged,
@@ -304,6 +307,9 @@ export function createHandlers({
     'scanWindow:open': async () => scanWindow.open(),
     'scanWindow:isOpen': async () => scanWindow.isOpen(),
     'scanWindow:toggleFullScreen': async () => scanWindow.toggleFullScreen(),
+    'ripWindow:open': async () => ripWindow?.open(),
+    'ripWindow:isOpen': async () => ripWindow?.isOpen() ?? false,
+    'ripWindow:toggleFullScreen': async () => ripWindow?.toggleFullScreen(),
     'scanWindow:setSize': async (width: number, height: number) => {
       if (Number.isFinite(width) && Number.isFinite(height)) scanWindow.setSize(width, height)
     },

@@ -8,6 +8,9 @@ import {
   ACCOUNT_CHANGED,
   DATA_CHANGED,
   IMAGE_DOWNLOADS,
+  RIP_WINDOW_MESSAGE,
+  RIP_WINDOW_OPEN,
+  RIP_WINDOW_SEND,
   SCAN_WINDOW_SEND,
   SYNC_PROGRESS,
   UPDATE_STATUS,
@@ -30,6 +33,7 @@ import { prepareLogo } from './images/prepareLogo'
 import { handleImageProtocol, registerImageScheme } from './images/protocol'
 import { createUpdater, updateMode, RELEASES_URL } from './updater'
 import { restrictPermissions } from './permissions'
+import { isFromRipWindow, isToRipWindow } from '@shared/ripWindow'
 import { createScanWindowManager, type Rect, type ScanWindowManager } from './scanWindow'
 import { createHandlers, registerIpc, type AppDeps } from './ipc/handlers'
 import { seedFakeCollection, seedFakePokemon, seedFakeSessions } from './dev/fakeData'
@@ -113,6 +117,7 @@ app.on('child-process-gone', (_, details) => {
 
 let mainWindow: BrowserWindow | null = null
 let scanWindows: ScanWindowManager | null = null
+let ripWindows: ScanWindowManager | null = null
 let windowShown: Promise<void> = Promise.resolve()
 let markSeeded: () => void = () => {}
 const seeded = new Promise<void>((r) => (markSeeded = r))
@@ -177,15 +182,22 @@ function openAdminWindow(url: string, portal: string): void {
   void win.loadURL(url)
 }
 
-/** The scan window: the camera and the pull overlays, in a window the owner can share. */
-function createScanBrowserWindow(bounds: Rect | null): BrowserWindow {
+/**
+ * A camera window the owner can share: the scan window (#scan, the camera and the pull
+ * overlays) or the admin Rip capture window (#rip, the camera alone).
+ */
+function createCameraBrowserWindow(
+  bounds: Rect | null,
+  hash: 'scan' | 'rip',
+  title: string
+): BrowserWindow {
   const win = new BrowserWindow({
     width: 1280,
     height: 720,
     ...(bounds ?? {}),
     minWidth: 480,
     minHeight: 270,
-    title: 'Duel Binder — Scan',
+    title,
     backgroundColor: '#000000',
     autoHideMenuBar: true,
     ...(process.platform === 'linux' ? { icon } : {}),
@@ -215,9 +227,9 @@ function createScanBrowserWindow(bounds: Rect | null): BrowserWindow {
   guardNavigation(win)
 
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    win.loadURL(process.env['ELECTRON_RENDERER_URL'] + '#scan')
+    win.loadURL(process.env['ELECTRON_RENDERER_URL'] + '#' + hash)
   } else {
-    win.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'scan' })
+    win.loadFile(join(__dirname, '../renderer/index.html'), { hash })
   }
   return win
 }
@@ -254,6 +266,7 @@ function createWindow(): void {
   win.on('closed', () => {
     if (mainWindow === win) mainWindow = null
     scanWindows?.close()
+    ripWindows?.close()
   })
   const sendMaximized = (): void => {
     if (!win.isDestroyed()) win.webContents.send(WINDOW_MAXIMIZED, win.isMaximized())
@@ -477,28 +490,51 @@ async function bootstrap(): Promise<void> {
     isMaximized: () => mainWindow?.isMaximized() ?? false
   }
 
-  const boundsFile = join(userData, 'scan-window.json')
-  const scanWindow = createScanWindowManager({
-    create: createScanBrowserWindow,
-    mainWindow: () => mainWindow,
-    readBounds: () => {
-      try {
-        return JSON.parse(readFileSync(boundsFile, 'utf8'))
-      } catch {
-        return null
-      }
-    },
-    writeBounds: (r) => {
-      try {
-        writeFileSync(boundsFile, JSON.stringify(r))
-      } catch {
-        // the window just opens at the default size next time
-      }
-    },
-    workAreas: () => screen.getAllDisplays().map((d) => d.workArea),
-    scaleOf: (win) => screen.getDisplayMatching((win as BrowserWindow).getBounds()).scaleFactor
-  })
+  // Each camera window opens where it was last closed.
+  const windowManager = (
+    file: string,
+    create: (bounds: Rect | null) => BrowserWindow,
+    messages?: Parameters<typeof createScanWindowManager>[0]['messages']
+  ): ScanWindowManager => {
+    const boundsFile = join(userData, file)
+    return createScanWindowManager({
+      create,
+      mainWindow: () => mainWindow,
+      readBounds: () => {
+        try {
+          return JSON.parse(readFileSync(boundsFile, 'utf8'))
+        } catch {
+          return null
+        }
+      },
+      writeBounds: (r) => {
+        try {
+          writeFileSync(boundsFile, JSON.stringify(r))
+        } catch {
+          // the window just opens at the default size next time
+        }
+      },
+      workAreas: () => screen.getAllDisplays().map((d) => d.workArea),
+      scaleOf: (win) => screen.getDisplayMatching((win as BrowserWindow).getBounds()).scaleFactor,
+      messages
+    })
+  }
+  const scanWindow = windowManager('scan-window.json', (b) =>
+    createCameraBrowserWindow(b, 'scan', 'Duel Binder — Scan')
+  )
   scanWindows = scanWindow
+  const ripWindow = windowManager(
+    'rip-window.json',
+    (b) => createCameraBrowserWindow(b, 'rip', 'Duel Binder — Rip capture'),
+    {
+      channel: RIP_WINDOW_MESSAGE,
+      openChannel: RIP_WINDOW_OPEN,
+      isFrom: isFromRipWindow,
+      isTo: isToRipWindow
+    }
+  )
+  ripWindows = ripWindow
+  ipcMain.on(RIP_WINDOW_SEND, (e, m) => ripWindow.relay(e.sender.id, m))
   ipcMain.on(SCAN_WINDOW_SEND, (e, m) => scanWindow.relay(e.sender.id, m))
 
   registerIpc(
@@ -509,6 +545,7 @@ async function bootstrap(): Promise<void> {
       app: appDeps,
       window: windowDeps,
       scanWindow,
+      ripWindow,
       account: fakeFriends
         ? {
             ...account,

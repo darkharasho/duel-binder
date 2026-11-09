@@ -19,6 +19,12 @@ const ScanWindowApp = lazy(() =>
   import('./features/scan/window/ScanWindowApp').then((m) => ({ default: m.ScanWindowApp }))
 )
 
+// The admin Rip capture window is the same bundle at #rip: the camera alone.
+// eslint-disable-next-line react-refresh/only-export-components -- an entry file, not hot-reloaded
+const RipWindowApp = lazy(() =>
+  import('./features/admin/RipWindowApp').then((m) => ({ default: m.RipWindowApp }))
+)
+
 // Data a page left stays for an hour, so going back shows it at once and refetches behind it.
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -37,6 +43,10 @@ createRoot(document.getElementById('root')!).render(
       {!isWeb() && location.hash === '#scan' ? (
         <Suspense fallback={null}>
           <ScanWindowApp />
+        </Suspense>
+      ) : !isWeb() && location.hash === '#rip' ? (
+        <Suspense fallback={null}>
+          <RipWindowApp />
         </Suspense>
       ) : (
         <App />

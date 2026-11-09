@@ -53,7 +53,11 @@ function adminApi(): NonNullable<Api['admin']> {
     admins: vi.fn(async () => ({ admins: [], you: 1 })),
     addAdmin: vi.fn(async () => {}),
     removeAdmin: vi.fn(async () => {}),
-    photos: vi.fn(async () => ({ games: [], testers: [], holders: [] }))
+    photos: vi.fn(async () => ({ games: [], testers: [], holders: [] })),
+    captureSave: vi.fn(async () => '/data/rip-capture/x/k00001.jpg'),
+    captureRemove: vi.fn(async () => undefined),
+    captureNote: vi.fn(async () => undefined),
+    captureOpenFolder: vi.fn(async () => undefined)
   }
 }
 

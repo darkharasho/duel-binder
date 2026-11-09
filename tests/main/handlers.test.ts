@@ -97,7 +97,8 @@ async function makeHandlers(opts: { signedIn?: boolean } = {}) {
       read: async () => [],
       readText: async () => ({ text: '', confidence: 0 }),
       dispose: async () => {}
-    }
+    },
+    ripCapture: { save: vi.fn(), remove: vi.fn(), note: vi.fn(), openFolder: vi.fn() }
   })
   return { db, handlers, account, catalog, scanWindow, images }
 }

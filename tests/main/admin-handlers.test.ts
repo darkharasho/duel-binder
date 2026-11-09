@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { adminHandlers } from '../../src/main/ipc/adminHandlers'
 import { createAdminRuns } from '../../src/main/adminRuns'
 
-function make() {
+function make(isAdmin = true) {
   const admin = vi.fn(async (path: string, _body?: unknown): Promise<unknown> => {
     if (path === '/admin/merges') return { merges: [{ closedId: 3 }] }
     if (path === '/admin/testers') return { testers: [{ id: 1 }] }
@@ -10,12 +10,20 @@ function make() {
     return { ok: true }
   })
   const runs = { runs: vi.fn(async () => []), jobs: vi.fn(async () => []) }
+
+  const capture = {
+    save: vi.fn(async () => '/x/k00001.jpg'),
+    remove: vi.fn(async () => undefined),
+    note: vi.fn(async () => undefined),
+    openFolder: vi.fn(async () => undefined)
+  }
+  const status = () => ({ user: isAdmin ? { admin: true } : {} })
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const h = adminHandlers({ admin: admin as any }, runs) as Record<
+  const h = adminHandlers({ admin: admin as any, status: status as any }, runs, capture) as Record<
     string,
     (...a: unknown[]) => Promise<unknown>
   >
-  return { h, admin, runs }
+  return { h, admin, runs, capture }
 }
 
 describe('admin handlers', () => {
@@ -96,5 +104,27 @@ describe('cloud client admin calls', () => {
       body: '{"closedId":3}',
       headers: { authorization: 'Bearer tok', 'content-type': 'application/json' }
     })
+  })
+
+  it('rip capture is for a signed-in admin only', async () => {
+    const yes = make()
+    const jpeg = new ArrayBuffer(4)
+    await yes.h['admin:captureSave']('20261109-081500', 'k00001.jpg', jpeg, { sharp: 1 })
+    expect(yes.capture.save).toHaveBeenCalledWith('20261109-081500', 'k00001.jpg', jpeg, {
+      sharp: 1
+    })
+    await yes.h['admin:captureOpenFolder']()
+    expect(yes.capture.openFolder).toHaveBeenCalledWith(null)
+    const no = make(false)
+    await expect(
+      no.h['admin:captureSave']('20261109-081500', 'k00001.jpg', jpeg, {})
+    ).rejects.toThrow('Not found')
+    await expect(no.h['admin:captureRemove']('20261109-081500', 'k00001.jpg')).rejects.toThrow(
+      'Not found'
+    )
+    await expect(no.h['admin:captureNote']('20261109-081500', 'good')).rejects.toThrow('Not found')
+    await yes.h['admin:captureNote']('20261109-081500', 'good data')
+    expect(yes.capture.note).toHaveBeenCalledWith('20261109-081500', 'good data')
+    expect(no.capture.save).not.toHaveBeenCalled()
   })
 })

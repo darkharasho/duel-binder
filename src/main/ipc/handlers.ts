@@ -43,6 +43,7 @@ import {
 } from '@shared/training'
 import { checkPrintingIds } from '../cloud/priceRequests'
 import { createAdminRuns, type AdminRuns } from '../adminRuns'
+import type { RipCapture } from '../ripCapture'
 import { adminHandlers } from './adminHandlers'
 import type { Me } from '@shared/cloud'
 import type { SignInProvider } from '@shared/account'
@@ -92,6 +93,8 @@ export interface HandlerDeps {
   ocr: Ocr
   /** The admin Runs tab's GitHub reads; a real one when not given. */
   adminRuns?: AdminRuns
+  /** The admin Rip capture tab's key frames on disk. */
+  ripCapture: RipCapture
 }
 
 /** A training photo from the renderer, checked as the portal would check it; null when it isn't one. */
@@ -155,7 +158,8 @@ export function createHandlers({
   emitDataChanged,
   fingerprints,
   ocr,
-  adminRuns = createAdminRuns()
+  adminRuns = createAdminRuns(),
+  ripCapture
 }: HandlerDeps): Handlers {
   const local = (serverIds: number[]): LocalPrintings => localPrintings(db, serverIds)
   return {
@@ -334,7 +338,7 @@ export function createHandlers({
     },
     'account:openAdmin': async (tab?: unknown) =>
       app.openAdmin(adminTabUrl(await account.adminLink(), tab)),
-    ...adminHandlers(account, adminRuns),
+    ...adminHandlers(account, adminRuns, ripCapture),
     'account:signIns': async () => account.portal('account:signIns', []),
     'account:setUsername': async (name: string) => {
       const me = await account.portal<Me>('account:setUsername', [name])

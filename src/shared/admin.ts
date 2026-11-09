@@ -114,3 +114,11 @@ export interface GhStep {
 export interface GhJob {
   steps?: GhStep[]
 }
+
+/** A Rip capture key frame's details, kept beside it in the session's keyframes.jsonl. */
+export interface RipFrameInfo {
+  /** How sharp the frame was when picked (variance of a Laplacian on a small grey copy). */
+  sharp: number
+  width: number
+  height: number
+}

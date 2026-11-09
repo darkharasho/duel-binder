@@ -7,12 +7,14 @@ import {
   type AdminSkippedSignIn,
   type AdminStats,
   type AdminTester,
-  type AdminWorkflow
+  type AdminWorkflow,
+  type RipFrameInfo
 } from '@shared/admin'
 import { isGameId } from '@shared/games'
 import type { InvokeChannel } from '@shared/ipc'
 import type { AdminRuns } from '../adminRuns'
 import type { AccountService } from '../cloud/account'
+import type { RipCapture } from '../ripCapture'
 
 const isId = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v > 0
 
@@ -32,13 +34,17 @@ function id(v: unknown): number {
  * so the renderer can only reach these routes with these shapes.
  */
 export function adminHandlers(
-  account: Pick<AccountService, 'admin'>,
-  runs: AdminRuns
+  account: Pick<AccountService, 'admin' | 'status'>,
+  runs: AdminRuns,
+  capture: RipCapture
 ): Record<
   Extract<InvokeChannel, `admin:${string}`>,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- as Handlers types them
   (...args: any[]) => Promise<unknown>
 > {
+  const mustBeAdmin = (): void => {
+    if (!account.status().user?.admin) throw new Error('Not found')
+  }
   return {
     'admin:stats': () => account.admin<AdminStats>('/admin/stats'),
     'admin:errors': () => account.admin<AdminErrorGroup[]>('/admin/errors'),
@@ -73,6 +79,28 @@ export function adminHandlers(
     'admin:removeAdmin': async (userId: unknown) => {
       await account.admin('/admin/admins/remove', { userId: id(userId) })
     },
-    'admin:photos': () => account.admin<AdminPhotos>('/admin/training')
+    'admin:photos': () => account.admin<AdminPhotos>('/admin/training'),
+    // Rip capture writes on this computer only, but only for a signed-in admin.
+    'admin:captureSave': async (session: unknown, file: unknown, jpeg: unknown, info: unknown) => {
+      mustBeAdmin()
+      return capture.save(
+        session as string,
+        file as string,
+        jpeg as ArrayBuffer,
+        (info ?? {}) as RipFrameInfo
+      )
+    },
+    'admin:captureRemove': async (session: unknown, file: unknown) => {
+      mustBeAdmin()
+      await capture.remove(session as string, file as string)
+    },
+    'admin:captureNote': async (session: unknown, note: unknown) => {
+      mustBeAdmin()
+      await capture.note(session as string, note as string)
+    },
+    'admin:captureOpenFolder': async (session: unknown) => {
+      mustBeAdmin()
+      await capture.openFolder((session ?? null) as string | null)
+    }
   }
 }

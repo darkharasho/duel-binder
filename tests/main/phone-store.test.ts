@@ -1026,12 +1026,16 @@ describe('phone store', () => {
     expect(await account).toEqual({ state: 'signed-in', user: me })
   })
 
-  it("fills the value chart with the account's history from the portal, once a day", async () => {
+  it("shares the value chart with the account's history on the portal, in full once a day", async () => {
     const snap = portal.serverDb.prepare(
       'INSERT INTO value_snapshots (user_id, date, total_value, total_cards) VALUES (?, ?, ?, ?)'
     )
     snap.run(userId, '2026-01-01', 10, 1)
     snap.run(userId, '2026-01-02', 20, 2)
+    // A day only this phone saw goes up to the portal.
+    db.prepare(
+      'INSERT INTO value_snapshots (owner_id, game, date, total_value, total_cards) VALUES (?, ?, ?, ?, ?)'
+    ).run(userId, 'ygo', '2025-12-31', 5, 1)
     await ready()
     const history = async (): Promise<{ date: string; totalValue: number }[]> =>
       (
@@ -1039,22 +1043,29 @@ describe('phone store', () => {
           valueHistory: { date: string; totalValue: number }[]
         }
       ).valueHistory
-    expect((await history()).slice(0, 2)).toEqual([
+    expect((await history()).slice(0, 3)).toEqual([
+      { date: '2025-12-31', totalValue: 5, totalCards: 1 },
       { date: '2026-01-01', totalValue: 10, totalCards: 1 },
       { date: '2026-01-02', totalValue: 20, totalCards: 2 }
     ])
+    expect(
+      portal.serverDb
+        .prepare(
+          "SELECT total_value AS v FROM value_snapshots WHERE user_id = ? AND date = '2025-12-31'"
+        )
+        .get(userId)
+    ).toEqual({ v: 5 })
 
-    // The phone's own day wins over the portal's; and the portal is asked once a day.
+    // A past day the portal has keeps the portal's value on every device; the full exchange is once a day.
     db.prepare('UPDATE value_snapshots SET total_value = 99 WHERE date = ?').run('2026-01-02')
     snap.run(userId, '2026-01-03', 30, 3)
-    const asked = (): number => requests.filter((r) => r.url.endsWith('/api/rpc/stats:get')).length
-    expect(asked()).toBe(1)
-    await store.sync()
-    expect(asked()).toBe(1)
+    const full = (): number => requests.filter((r) => r.url.includes('/api/sync/history')).length
+    const before = full()
+    expect(before).toBeGreaterThanOrEqual(1)
     clock = new Date(clock.getTime() + 86_400_000)
     await store.sync()
-    expect(asked()).toBe(2)
-    expect((await history()).slice(0, 3).map((p) => p.totalValue)).toEqual([10, 99, 30])
+    expect(full()).toBe(before + 1)
+    expect((await history()).slice(0, 4).map((p) => p.totalValue)).toEqual([5, 10, 20, 30])
   })
 
   /** Alice with both games on the portal, each with its own value history. */
@@ -1079,9 +1090,7 @@ describe('phone store', () => {
       .slice(0, 2)
       .map((p) => p.totalValue)
   const historyAsked = (game: string): number =>
-    requests.filter(
-      (r) => r.url.endsWith('/api/rpc/stats:get') && r.headers.get('x-duel-game') === game
-    ).length
+    requests.filter((r) => r.url.includes(`/api/sync/history?game=${game}`)).length
 
   it("fills each game's value chart with that game's history", async () => {
     await twoGames()
@@ -1095,8 +1104,7 @@ describe('phone store', () => {
     await twoGames()
     let pkmDown = true
     net = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      const game = new Headers(init?.headers).get('x-duel-game')
-      if (pkmDown && String(input).endsWith('/api/rpc/stats:get') && game === 'pkm')
+      if (pkmDown && String(input).includes('/api/sync/history?game=pkm'))
         return new Response('down', { status: 503 })
       return real(input, init)
     }) as typeof fetch
@@ -1106,22 +1114,6 @@ describe('phone store', () => {
     await store.sync()
     expect(historyAsked('ygo')).toBe(1)
     expect(historyAsked('pkm')).toBe(2)
-    await store.invoke('games:setActive', ['pkm'])
-    expect(await values()).toEqual([5, 7])
-  })
-
-  it('a phone that pulled today before Pokémon history was pulled still gets it today', async () => {
-    await twoGames()
-    await ready()
-    // As the Yu-Gi-Oh!-only version left it: today's mark, and no Pokémon days.
-    const mark = db.prepare("SELECT value FROM phone_state WHERE key = 'history_pulled'").get() as {
-      value: string
-    }
-    db.prepare("UPDATE phone_state SET value = ? WHERE key = 'history_pulled'").run(
-      mark.value.split(':').slice(0, 2).join(':')
-    )
-    db.prepare("DELETE FROM value_snapshots WHERE game = 'pkm'").run()
-    await store.sync()
     await store.invoke('games:setActive', ['pkm'])
     expect(await values()).toEqual([5, 7])
   })

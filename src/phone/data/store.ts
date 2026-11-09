@@ -37,7 +37,7 @@ import { parseFingerprintRefs, type ScanRef } from '../../shared/scan/fingerprin
 import { scanRefs } from '../../main/repo/scanRefs'
 import { readBody } from '../../shared/scan/readBody'
 import type { FingerprintStatus } from '../../shared/scan/types'
-import type { CollectionStats, UnsyncedEntry } from '../../shared/types'
+import type { UnsyncedEntry } from '../../shared/types'
 import {
   labelParams,
   trainingAnswer,
@@ -149,7 +149,6 @@ type StateKey =
   | 'catalog_filled'
   | 'catalog_latest'
   | 'catalog_needs_finish'
-  | 'history_pulled'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 /**
@@ -522,44 +521,7 @@ export function createPhoneStore(deps: {
     const owner = activeOwner(db)
     const { changed } = await syncOnce(db, owner, c, now)
     if (getState('catalog_loaded') !== null) setState('catalog_filled', '1')
-    const pulled = await pullValueHistory(c, owner)
-    return changed || pulled
-  }
-
-  /**
-   * The account's value history from the portal, each game at most once a day. The phone records
-   * only the days it's used, so on its own the value chart starts the day it was set up. The
-   * phone's own days win. Best effort: a game whose pull fails tries again on the next sync, and
-   * the others keep theirs. Resolves whether it added a day.
-   */
-  async function pullValueHistory(c: CloudClient, owner: number): Promise<boolean> {
-    // "owner:date:games pulled". A mark from before the games were listed matches no game.
-    const today = `${owner}:${now().toISOString().slice(0, 10)}:`
-    const mark = getState('history_pulled')
-    const done = new Set(mark?.startsWith(today) ? mark.slice(today.length).split(',') : [])
-    const pulled: [GameId, CollectionStats['valueHistory']][] = []
-    // Each game keeps its own history; the portal answers for the game the call names.
-    for (const game of games().filter((g) => !done.has(g))) {
-      try {
-        pulled.push([game, (await c.rpc<CollectionStats>('stats:get', [], game)).valueHistory])
-      } catch {
-        // Tried again next sync.
-      }
-    }
-    if (pulled.length === 0) return false
-    let added = 0
-    db.transaction(() => {
-      const insert = db.prepare(
-        'INSERT OR IGNORE INTO value_snapshots (owner_id, game, date, total_value, total_cards) VALUES (?, ?, ?, ?, ?)'
-      )
-      for (const [game, history] of pulled) {
-        done.add(game)
-        for (const p of history)
-          added += insert.run(owner, game, p.date, p.totalValue, p.totalCards).changes
-      }
-      setState('history_pulled', today + [...done].filter(Boolean).join(','))
-    })()
-    return added > 0
+    return changed
   }
 
   /** The fingerprint downloads under way, and their share arrived once it is known. */

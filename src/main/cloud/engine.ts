@@ -1,16 +1,18 @@
 import type { SqlDb } from '../db/sql'
 import { setMeta } from '../db/meta'
-import { recordSnapshot } from '../repo/stats'
+import { localDate, recordSnapshot } from '../repo/stats'
 import { MAX_CONTRIBUTE, type ContributeResult } from '../../shared/catalogFeed'
 import { settleWishlist } from '../repo/wishlist'
 import { localScope } from '../repo/scope'
 import {
+  MAX_HISTORY,
   MAX_PULL,
   MAX_PUSH,
   binderEditKey,
   editTime,
   gamesOf,
-  type WireEntry
+  type WireEntry,
+  type WireValuePoint
 } from '../../shared/cloud'
 import type { GameId } from '../../shared/games'
 import { CloudAuthError, CloudNotFoundError, CloudOfflineError, type CloudClient } from './client'
@@ -147,6 +149,60 @@ async function syncWishlist(
       console.warn('Wishlist sync failed; it stays queued', e)
   }
   return changed
+}
+
+/**
+ * Shares `owner`'s value history with the account's on the portal, so every device charts the
+ * same past. The first run of a local day sends every local day and takes the account's past days
+ * back (a day the portal has keeps the portal's value; this device's today replaces the portal's,
+ * and today is never taken back: it is each device's live reading of its own collection);
+ * later runs that day send only today, and only after a change. Best effort: a portal without the
+ * route (404) or a failure leaves the history for the next run. Resolves whether a local day changed.
+ */
+async function syncValueHistory(
+  db: SqlDb,
+  owner: number,
+  client: CloudClient,
+  games: GameId[],
+  now: () => Date,
+  changed: boolean
+): Promise<boolean> {
+  const today = localDate(now())
+  const day = Number(today.replaceAll('-', ''))
+  const rows = db.prepare(
+    `SELECT date, total_value AS totalValue, total_cards AS totalCards FROM value_snapshots
+     WHERE owner_id = ? AND game = ? ORDER BY date`
+  )
+  // Only real differences count, so an unchanged history doesn't refresh the page.
+  const upsert = db.prepare(
+    `INSERT INTO value_snapshots (owner_id, game, date, total_value, total_cards) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(owner_id, game, date) DO UPDATE SET total_value = excluded.total_value,
+       total_cards = excluded.total_cards
+     WHERE total_value <> excluded.total_value OR total_cards <> excluded.total_cards`
+  )
+  let updated = false
+  try {
+    for (const game of games) {
+      const full = gameCursor(db, owner, game, 'history') !== day
+      if (!full && !changed) continue
+      const local = rows.all(owner, game) as WireValuePoint[]
+      const points = full ? local.slice(-MAX_HISTORY) : local.filter((p) => p.date === today)
+      if (points.length === 0 && !full) continue
+      const history = await client.historyExchange({ points, today }, game)
+      db.transaction(() => {
+        // Today (and a portal's UTC day ahead of it) stays this device's own live reading.
+        for (const p of history.filter((h) => h.date < today))
+          if (upsert.run(owner, game, p.date, p.totalValue, p.totalCards).changes > 0)
+            updated = true
+        saveGameCursor(db, owner, game, 'history', day)
+      })()
+    }
+  } catch (e) {
+    if (e instanceof CloudAuthError) throw e
+    if (!(e instanceof CloudNotFoundError) && !(e instanceof CloudOfflineError))
+      console.warn('Value history sync failed; it tries again next run', e)
+  }
+  return updated
 }
 
 /**
@@ -535,6 +591,9 @@ export async function syncOnce(
     // recordSnapshot writes the active owner's (LOCAL) snapshot.
     if (changed && activeOwner(db) === owner) recordSnapshot(db, now())
   })()
+
+  // 8. Value history, after today's snapshot so the portal gets this run's value.
+  if (await syncValueHistory(db, owner, client, games, now, changed)) changed = true
 
   return {
     pushed,

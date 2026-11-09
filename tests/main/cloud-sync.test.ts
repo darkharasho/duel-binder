@@ -2,6 +2,7 @@ import type Database from 'better-sqlite3'
 import { getMeta, setMeta } from '../../src/main/db/meta'
 import {
   CloudAuthError,
+  CloudNotFoundError,
   CloudOfflineError,
   createCloudClient,
   type CloudClient
@@ -745,5 +746,110 @@ describe('createCloudClient', () => {
         )) as typeof fetch
     })
     await expect(hanging.me()).rejects.toBeInstanceOf(CloudOfflineError)
+  })
+})
+
+describe('value history sync', () => {
+  const put = (db: Database.Database, date: string, value: number, cards = 1): void =>
+    void db
+      .prepare(
+        `INSERT INTO value_snapshots (owner_id, game, date, total_value, total_cards) VALUES (?, 'ygo', ?, ?, ?)
+         ON CONFLICT(owner_id, game, date) DO UPDATE SET total_value = excluded.total_value`
+      )
+      .run(user, date, value, cards)
+  const chart = (db: Database.Database): [string, number][] =>
+    (
+      db
+        .prepare(
+          "SELECT date, total_value AS v FROM value_snapshots WHERE owner_id = ? AND game = 'ygo' ORDER BY date"
+        )
+        .all(user) as { date: string; v: number }[]
+    ).map((r) => [r.date, r.v])
+  const DAY = 86_400_000
+  let clock = new Date('2026-10-25T12:00:00')
+  const at = (): Date => clock
+  const syncAt = (db: Database.Database) => syncOnce(db, user, client(), at)
+
+  beforeEach(() => {
+    clock = new Date('2026-10-25T12:00:00')
+  })
+
+  it('two devices end up charting the same past', async () => {
+    const a = await desktop()
+    const b = await desktop()
+    put(a, '2026-10-20', 100)
+    put(a, '2026-10-21', 110)
+    put(b, '2026-10-21', 999)
+    put(b, '2026-10-22', 120)
+
+    await syncAt(a)
+    await syncAt(b)
+    // a's 10-21 reached the portal first, so it is the account's; b keeps its own today.
+    expect(chart(b)).toEqual([
+      ['2026-10-20', 100],
+      ['2026-10-21', 110],
+      ['2026-10-22', 120]
+    ])
+    clock = new Date(clock.getTime() + DAY)
+    const out = await syncAt(a)
+    expect(out.changed).toBe(true)
+    expect(chart(a)).toEqual(chart(b))
+  })
+
+  it("sends today's reading, which replaces the portal's, and never takes today back", async () => {
+    const a = await desktop()
+    const b = await desktop()
+    put(a, '2026-10-25', 50)
+    await syncAt(a)
+    put(b, '2026-10-25', 70)
+    await syncAt(b)
+    expect(chart(b)).toEqual([['2026-10-25', 70]])
+    await syncAt(a)
+    // Already exchanged today with nothing changed: not asked again, today stays a's own.
+    expect(chart(a)).toEqual([['2026-10-25', 50]])
+    clock = new Date(clock.getTime() + DAY)
+    await syncAt(a)
+    expect(chart(a)).toEqual([['2026-10-25', 70]])
+  })
+
+  it('a portal without the route leaves the history alone', async () => {
+    const a = await desktop()
+    put(a, '2026-10-20', 100)
+    const old: CloudClient = {
+      ...client(),
+      historyExchange: () => Promise.reject(new CloudNotFoundError())
+    }
+    await expect(syncOnce(a, user, old, at)).resolves.toBeTruthy()
+    expect(chart(a)).toEqual([['2026-10-20', 100]])
+  })
+
+  it('the portal refuses a malformed history', async () => {
+    const post = (body: unknown) =>
+      portal.fetch(`${PORTAL}/api/sync/history?game=ygo`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+    expect(
+      (await post({ points: [{ date: 'x', totalValue: 1, totalCards: 1 }], today: '2026-10-25' }))
+        .status
+    ).toBe(400)
+    expect(
+      (
+        await post({
+          points: [{ date: '2026-10-01', totalValue: -1, totalCards: 1 }],
+          today: '2026-10-25'
+        })
+      ).status
+    ).toBe(400)
+    expect((await post({ points: [], today: '2999-01-01' })).status).toBe(400)
+    expect(
+      (
+        await post({
+          points: Array(5000).fill({ date: '2026-10-01', totalValue: 1, totalCards: 1 }),
+          today: '2026-10-25'
+        })
+      ).status
+    ).toBe(413)
   })
 })

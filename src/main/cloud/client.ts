@@ -26,7 +26,10 @@ import type {
   WireFavourite,
   WireWish,
   WishPullResponse,
-  WishPushResult
+  WishPushResult,
+  HistoryExchange,
+  HistoryExchangeResponse,
+  WireValuePoint
 } from '../../shared/cloud'
 import { GAME_HEADER } from '../../shared/cloud'
 import type {
@@ -84,6 +87,11 @@ export interface CloudClient {
   binderEditsPush(entries: WireBinderEdit[]): Promise<BinderEditPushResult[]>
   /** One page of the account's binder edits of `game` after `cursor`; as `bindersPush` on an old portal. */
   binderEditsPull(cursor: number, game: GameId): Promise<BinderEditPullResponse>
+  /**
+   * Merges this device's value history of `game` into the account's and answers the account's
+   * whole history; an old portal rejects with CloudNotFoundError.
+   */
+  historyExchange(exchange: HistoryExchange, game: GameId): Promise<WireValuePoint[]>
   /** Pushes favourites; a portal without favourites rejects with CloudNotFoundError. */
   favouritesPush(entries: WireFavourite[]): Promise<FavouritePushResult[]>
   /** One page of the account's favourites of `game` after `cursor`; as `favouritesPush` on an old portal. */
@@ -278,6 +286,9 @@ export function createCloudClient(opts: {
         `/api/sync/binder-edits-pull?cursor=${cursor}&game=${game}`,
         'GET'
       ),
+    historyExchange: async (exchange, game) =>
+      (await call<HistoryExchangeResponse>(`/api/sync/history?game=${game}`, 'POST', exchange))
+        .history,
     favouritesPush: async (entries) =>
       (
         await call<{ results: FavouritePushResult[] }>('/api/sync/favourites-push', 'POST', {

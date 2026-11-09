@@ -97,7 +97,8 @@ export function getStats(db: SqlDb, scope: Scope = LOCAL): CollectionStats {
 }
 
 const pad = (n: number): string => String(n).padStart(2, '0')
-const localDate = (d: Date): string =>
+/** A date as the device's local YYYY-MM-DD: the key value history is stored under. */
+export const localDate = (d: Date): string =>
   `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 
 /** Upserts today's (local date) total value and card count. */

@@ -77,8 +77,16 @@ export function saveAccountState(
 }
 
 /** A per-game sync feed: the account's entries, wishlist, binders, binder edits, favourites or scan sessions, or the server's price changes. */
+/** `history` holds no cursor: the local day (YYYYMMDD) of the last full value-history exchange. */
 export type SyncStream =
-  'entries' | 'prices' | 'wishlist' | 'binders' | 'binderEdits' | 'favourites' | 'sessions'
+  | 'entries'
+  | 'prices'
+  | 'wishlist'
+  | 'binders'
+  | 'binderEdits'
+  | 'favourites'
+  | 'sessions'
+  | 'history'
 
 const hasLegacyCursor = (game: GameId, stream: SyncStream): boolean =>
   game === 'ygo' && (stream === 'entries' || stream === 'prices')

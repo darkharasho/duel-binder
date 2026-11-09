@@ -11,6 +11,31 @@ export const MAX_PULL = 1000
 export const MAX_NOTES = 2000
 /** How far in the future a client timestamp may be before the server clamps it to server time. */
 export const FUTURE_SKEW_MS = 600_000
+/** Most value-history days one exchange may send (about ten years). */
+export const MAX_HISTORY = 4000
+
+/** A day of an account's collection value, as `POST /api/sync/history` sends and answers it. */
+export interface WireValuePoint {
+  /** The device's local date, YYYY-MM-DD. */
+  date: string
+  totalValue: number
+  totalCards: number
+}
+
+/**
+ * Body of `POST /api/sync/history?game=…`: the device's days, and which of them is its today. The
+ * server keeps its own value for a day it already has, except `today`, which the device's replaces.
+ */
+export interface HistoryExchange {
+  points: WireValuePoint[]
+  today: string
+}
+
+/** The account's whole value history of the game after an exchange, oldest first. */
+export interface HistoryExchangeResponse {
+  history: WireValuePoint[]
+}
+
 /** The request header naming the game an RPC call is for; missing or empty means Yu-Gi-Oh!. */
 export const GAME_HEADER = 'x-duel-game'
 

@@ -88,7 +88,7 @@ export async function refreshCatalog(
   if (hasSetData(db) && shouldRefreshKonamiLogos(db, now())) {
     if ((await refreshKonamiLogos(db, { version, ...stamp() })) > 0) onChanged()
   }
-  const { n } = db.prepare('SELECT count(*) AS n FROM cards').get() as { n: number }
+  const { n } = db.prepare("SELECT count(*) AS n FROM cards WHERE +game = 'ygo'").get() as { n: number }
   if (n > 0 && shouldRefreshIntl(db, now())) {
     // Saved batches call onChanged now and then, so sets appear while a long first sync runs.
     await refreshIntlSets(db, yugipedia, now(), deps.onChanged)

@@ -2,7 +2,8 @@ import type Database from 'better-sqlite3'
 import { createLimiter } from '../pokemon/http'
 import type { TcPrice } from '../pokemon/types'
 import { isFrozen, refreshArt, type ArtBatch, type ArtPortal } from './art'
-import { openOpCache, type OpCache } from './cache'
+import { pricedShareProblems } from '../priceShare'
+import { openOpCache, type OpCache, type SetStatsRow } from './cache'
 import { donCards } from './don'
 import { matchSeries, type OpMatch } from './match'
 import { createOnePieceSources, dedupeEntries, readPackShots, type OnePieceSources } from './sources'
@@ -38,11 +39,6 @@ export interface OnePieceStepResult {
   problems: string[]
 }
 
-/** A set this size or larger whose priced share falls this much since last night, with fewer priced, is a problem. */
-const SHARE_SET_MIN = 20
-/** 20 points: a fifth. */
-const SHARE_DROP_PARTS = 5
-
 const seriesOrder = (a: string, b: string): number => a.localeCompare(b, 'en', { numeric: true })
 
 /** TCGCSV's `publishedOn` (`2026-08-28T00:00:00`, no zone) read as UTC; null when unreadable. */
@@ -53,8 +49,6 @@ function publishedMs(s: string | undefined): number | null {
 }
 
 const isPool = (s: BandaiSeries): boolean => s.kind === 'promo' || s.kind === 'other'
-const percent = (priced: number, printings: number): number =>
-  Math.round((priced / printings) * 100)
 
 /**
  * The nightly job's One Piece step: Bandai's English card list, matched to TCGplayer's products by
@@ -303,22 +297,13 @@ export async function runOnePieceStep(
     )
 
     // 7. Priced share against last night (Builder's call 14).
+    const oldStats = new Map<string, SetStatsRow>()
     for (const s of written.perSet) {
       const old = cache.getSetStats(s.setCode)
-      // A set that only grew (more printings, none of its prices lost) is the catalog filling in, not a drop.
-      if (old && old.printings > 0 && s.printings >= SHARE_SET_MIN && s.priced < old.priced) {
-        // old share - new share >= 1 / SHARE_DROP_PARTS, in whole numbers (1 - 0.8 is under 0.2 in floats).
-        const fell =
-          SHARE_DROP_PARTS * (old.priced * s.printings - s.priced * old.printings) >=
-          old.printings * s.printings
-        if (fell) {
-          problems.push(
-            `${s.setCode} priced share fell from ${percent(old.priced, old.printings)}% to ${percent(s.priced, s.printings)}%`
-          )
-        }
-      }
-      cache.putSetStats(s)
+      if (old) oldStats.set(s.setCode, old)
     }
+    problems.push(...pricedShareProblems(oldStats, written.perSet))
+    for (const s of written.perSet) cache.putSetStats(s)
 
     return {
       report: { ...written, notes: [...notes, ...written.notes], tcgOnly, donHeld: don.held },

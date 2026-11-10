@@ -110,11 +110,20 @@ export function createScryfall(o: {
   return {
     async bulkInfo() {
       const list = await api<{
-        data: { type: string; download_uri: string; updated_at: string }[]
+        data: {
+          type: string
+          download_uri?: string
+          jsonl_download_uri?: string
+          updated_at: string
+        }[]
       }>(`${API}/bulk-data`)
       const e = list.data.find((d) => d.type === 'default_cards')
       if (!e) throw new Error('Scryfall bulk-data has no default_cards entry')
-      return { downloadUri: e.download_uri, updatedAt: e.updated_at }
+      // Scryfall's live entry carries only `jsonl_download_uri` (one object per line, gzipped) now;
+      // parseBulkLines reads both layouts.
+      const downloadUri = e.download_uri ?? e.jsonl_download_uri
+      if (!downloadUri) throw new Error('Scryfall default_cards entry has no download link')
+      return { downloadUri, updatedAt: e.updated_at }
     },
     async *cards(downloadUri) {
       const res = await f(downloadUri, { headers: { 'User-Agent': userAgent, Accept: '*/*' } })

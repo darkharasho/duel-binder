@@ -80,6 +80,29 @@ describe('createScryfall', () => {
     expect(seen[0].headers.Accept).toBe('application/json')
   })
 
+  it('bulkInfo takes jsonl_download_uri when the entry has no download_uri', async () => {
+    const fake = (async () =>
+      jsonRes({
+        data: [
+          {
+            type: 'default_cards',
+            jsonl_download_uri: 'https://x/default.jsonl.gz',
+            updated_at: 'u'
+          }
+        ]
+      })) as unknown as typeof fetch
+    const s = createScryfall({ version: 'x', fetch: fake, gapMs: 0 })
+    expect(await s.bulkInfo()).toEqual({
+      downloadUri: 'https://x/default.jsonl.gz',
+      updatedAt: 'u'
+    })
+    const none = (async () =>
+      jsonRes({ data: [{ type: 'default_cards', updated_at: 'u' }] })) as unknown as typeof fetch
+    await expect(
+      createScryfall({ version: 'x', fetch: none, gapMs: 0 }).bulkInfo()
+    ).rejects.toThrow('no download link')
+  })
+
   it('cards() streams a gzipped body', async () => {
     const fake = (async () =>
       new Response(gzipSync(Buffer.from(FIXTURE)), { status: 200 })) as unknown as typeof fetch

@@ -59,7 +59,16 @@ import {
   shotsOf
 } from './copy'
 import { useNumberReader } from './numberReader'
-import { SNAP_BOX, grabSnap, readSnap, type SnapResult } from './numberSnap'
+import {
+  PHONE_SNAP_GROW,
+  SNAP_BOX,
+  createSharpnessGate,
+  createVote,
+  grabSnap,
+  readSnap,
+  sharpness,
+  type SnapResult
+} from './numberSnap'
 import { trainingOutbox, type DrainResult, type Outbox, type Sender } from './outbox'
 
 /**
@@ -93,6 +102,26 @@ function usePhoneDeps(given: TrainingDeps | undefined): TrainingDeps {
   }, [given, store, userId])
 }
 
+/** The phone's read timing, for admins: totals since the screen opened. */
+interface ReadTiming {
+  /** The last number's time to fill in, from its card's start. */
+  fillMs: number | null
+  reads: number
+  readMs: number
+  blurry: number
+}
+const NO_TIMING: ReadTiming = { fillMs: null, reads: 0, readMs: 0, blurry: 0 }
+
+/** "filled in 1.4 s · read 320 ms avg (12) · 3 blurry skipped" */
+function timingText(t: ReadTiming): string {
+  const parts = [
+    t.fillMs === null ? 'filled in –' : `filled in ${(t.fillMs / 1000).toFixed(1)} s`,
+    t.reads === 0 ? 'read –' : `read ${Math.round(t.readMs / t.reads)} ms avg (${t.reads})`,
+    `${t.blurry} blurry skipped`
+  ]
+  return parts.join(' · ')
+}
+
 const HOLDER_KEY = 'training.holder'
 const DRAIN_EVERY_MS = 30_000
 const SAVED_MS = 1200
@@ -102,6 +131,11 @@ const FLOURISH_MS = 650
 const SNAP_PROBLEM_MS = 3000
 /** The phone's pause between reads of the guide box. */
 const AUTO_SNAP_PAUSE_MS = 150
+/** The phone's pause after a frame skipped as blurred: the next one comes soon. */
+const AUTO_SNAP_BLURRY_PAUSE_MS = 30
+/** A number fills in once it is `NEED` of the last `OF` guide-box reads. */
+const AUTO_SNAP_NEED = 2
+const AUTO_SNAP_OF = 3
 /** Guide-box reads in a row with nothing before the card just done may be read again. */
 const AUTO_SNAP_SKIP_CLEARS_AFTER = 3
 /** Shots still encoding at once; past this the shutter waits, so 4K frames don't pile up. */
@@ -217,6 +251,7 @@ export function ContributeScreen({
 }): React.JSX.Element {
   const desktop = layout === 'desktop'
   const deps = usePhoneDeps(givenDeps)
+  const phone = useContext(PhoneContext)
   const userId = deps.userId
   const outbox = useMemo(() => given ?? trainingOutbox(), [given])
   const { settings, setSettings } = useScanHub()
@@ -296,9 +331,11 @@ export function ContributeScreen({
   const [resetKey, setResetKey] = useState(0)
   const reading =
     game === 'op' && camera.stream !== null && (text === '' || (!desktop && autoFilled))
+  // The whole-frame reader runs on the desktop only: on the phone the guide box's reader (below)
+  // gets the CPU and the OCR queue to itself.
   const read = useNumberReader({
     video: videoRef,
-    active: reading,
+    active: desktop && reading,
     game,
     engineFactory,
     prefixes: prefixes.data,
@@ -322,15 +359,22 @@ export function ContributeScreen({
     const t = setTimeout(() => setSnapProblem(null), SNAP_PROBLEM_MS)
     return () => clearTimeout(t)
   }, [snapProblem])
+  // The phone reads a box larger than the one drawn, so a wobbling hand keeps the number in it,
+  // and skips frames blurred next to the last few before their OCR.
+  const sharpGate = useRef<ReturnType<typeof createSharpnessGate> | null>(null)
+  sharpGate.current ??= createSharpnessGate()
   const snap =
     givenSnap ??
     (async (video: HTMLVideoElement): Promise<SnapResult> => {
-      const band = grabSnap(video)
+      const grow = desktop ? 1 : PHONE_SNAP_GROW
+      const band = grabSnap(video, grow)
       if (!band) return { problem: 'none' }
+      if (!desktop && !sharpGate.current?.pass(sharpness(band))) return { problem: 'blurry' }
       return readSnap(band, {
         ocr: (bands) => api.scan.ocr(bands, 'code'),
         prefixes: prefixes.data,
-        exists: numberExists
+        exists: numberExists,
+        grow
       })
     })
   const canSnap = game === 'op' && camera.stream !== null && !snapping
@@ -351,38 +395,63 @@ export function ContributeScreen({
   numberRef.current = number
   const doneRef = useRef(done)
   doneRef.current = done
-  useEffect(() => {
-    if (!desktop && read !== null && read !== numberRef.current) fillRef.current(read)
-  }, [desktop, read])
-  // The guide box, read over and over: a number that reads the same twice running and isn't the
-  // one shown (nor the card just done) fills in.
+  // How fast the phone reads, for admins to report: from a new card (reading starting, Next card,
+  // or the last number filled) to its number filling in, and a read's average time.
+  const showTiming = !desktop && phone?.user.admin === true
+  const showTimingRef = useRef(showTiming)
+  showTimingRef.current = showTiming
+  const [timing, setTiming] = useState<ReadTiming>(NO_TIMING)
+  // The guide box, read over and over: a number two of the last three reads agree on that isn't
+  // the one shown (nor the card just done) fills in. Blurred frames are skipped, not counted.
   const autoSnap = !desktop && reading
   useEffect(() => {
     if (!autoSnap) return
     let on = true
     let skip = doneRef.current
-    let last: string | null = null
+    const vote = createVote(AUTO_SNAP_NEED, AUTO_SNAP_OF)
+    sharpGate.current?.reset()
     let empty = 0
+    let since = performance.now()
+    const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
     void (async () => {
       while (on) {
         const video = videoRef.current
         let got: string | null = null
+        let blurry = false
+        const started = performance.now()
         if (video && !document.hidden) {
           try {
             const r = await snapRef.current(video)
             if ('number' in r) got = r.number
+            else blurry = r.problem === 'blurry'
           } catch {
             // Quiet: the next try, or typing.
           }
         }
         if (!on) return
+        const took = performance.now() - started
+        if (showTimingRef.current)
+          setTiming((t) =>
+            blurry
+              ? { ...t, blurry: t.blurry + 1 }
+              : { ...t, reads: t.reads + 1, readMs: t.readMs + took }
+          )
+        if (blurry) {
+          await sleep(readPauseMs ?? AUTO_SNAP_BLURRY_PAUSE_MS)
+          continue
+        }
         empty = got === null ? empty + 1 : 0
         if (skip && ((got !== null && got !== skip) || empty >= AUTO_SNAP_SKIP_CLEARS_AFTER))
           skip = null
         if (got === skip) got = null
-        if (got !== null && got === last && got !== numberRef.current) fillRef.current(got)
-        last = got
-        await new Promise((r) => setTimeout(r, readPauseMs ?? AUTO_SNAP_PAUSE_MS))
+        const agreed = vote.push(got)
+        if (agreed !== null && agreed !== numberRef.current) {
+          fillRef.current(agreed)
+          const now = performance.now()
+          if (showTimingRef.current) setTiming((t) => ({ ...t, fillMs: now - since }))
+          since = now
+        }
+        await sleep(readPauseMs ?? AUTO_SNAP_PAUSE_MS)
       }
     })()
     return () => {
@@ -402,7 +471,7 @@ export function ContributeScreen({
         setSelected(null)
         setFilled((n) => n + 1)
         navigator.vibrate?.(15)
-      } else setSnapProblem(r.problem)
+      } else setSnapProblem(r.problem === 'many' ? 'many' : 'none')
     } catch {
       if (live.current) setSnapProblem('none')
     } finally {
@@ -1100,6 +1169,14 @@ export function ContributeScreen({
       </header>
 
       {cameraBox}
+      {showTiming && game === 'op' && (
+        <p
+          aria-label="Read timing"
+          className="-mb-2 mt-1 shrink-0 text-center text-[11px] tabular-nums text-muted-foreground/70"
+        >
+          {timingText(timing)}
+        </p>
+      )}
 
       <div className="min-h-0 flex-1 space-y-4 overflow-auto overscroll-contain px-3 py-3">
         {numberSection}

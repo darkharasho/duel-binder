@@ -29,10 +29,11 @@ import {
 import { renderWithProviders } from './mockApi'
 import { SETO, fakeStore, installPhoneApi, setOnline } from './phoneFakes'
 import type { SnapResult } from '../../src/phone/training/numberSnap'
-import { NOTHING, fakeEngine, stubCamera, stubVideo, type FakeEngine } from './scanFakes'
+import { fakeEngine, stubCamera, stubVideo } from './scanFakes'
 import type { Mock } from 'vitest'
 import type { EngineFactory } from '@/features/scan/engine'
 import type { GameId } from '@shared/games'
+import type { Me } from '@shared/cloud'
 
 const CARD_ID = 2 ** 39 + 5
 const NOW = new Date('2026-11-04T12:00:00.000Z')
@@ -111,11 +112,12 @@ function renderScreen(
     engineFactory?: EngineFactory
     game?: GameId
     snap?: (v: HTMLVideoElement) => Promise<SnapResult>
+    user?: Me
   } = {}
 ): ReturnType<typeof renderWithProviders> {
   installPhoneApi(store)
   return renderWithProviders(
-    <PhoneContext.Provider value={{ store, user: SETO, signedOut: () => {} }}>
+    <PhoneContext.Provider value={{ store, user: o.user ?? SETO, signedOut: () => {} }}>
       <ScanHubProvider>
         <ContributeScreen
           game={o.game ?? 'op'}
@@ -132,18 +134,6 @@ function renderScreen(
     { api: window.api }
   )
 }
-
-/** An engine whose frames' number band reads texts(n) (n counts from 0). */
-function readingEngine(texts: (n: number) => string[]): {
-  engine: FakeEngine
-  factory: Mock<EngineFactory>
-} {
-  const engine = fakeEngine((n) => ({ ...NOTHING, found: true, codeTexts: texts(n) }))
-  return { engine, factory: vi.fn<EngineFactory>(() => engine) }
-}
-
-const suggestion = (n: string): HTMLElement | null =>
-  screen.queryByRole('button', { name: `Use ${n}` })
 
 const numberBox = (): HTMLElement => screen.getByRole('textbox', { name: 'Card number' })
 const shutter = (): HTMLElement => screen.getByRole('button', { name: 'Take photo' })
@@ -441,56 +431,40 @@ describe('contribute photos screen', () => {
   })
 })
 
+/** A guide-box reader that reads whatever `card()` says is held up (null: nothing). */
+function holding(card: () => string | null): Mock<(v: HTMLVideoElement) => Promise<SnapResult>> {
+  return vi.fn(async (): Promise<SnapResult> => {
+    const n = card()
+    return n === null ? { problem: 'none' } : { number: n }
+  })
+}
+
 describe('reading the number off the camera', () => {
-  it('fills in a number that reads twice running and is in the catalog', async () => {
-    const { engine, factory } = readingEngine(() => ['OP01-001L1', ''])
-    renderScreen(opStore(), undefined, { engineFactory: factory })
-    await waitFor(() => expect(numberBox()).toHaveValue('OP01-001'))
-    expect(factory).toHaveBeenCalledWith('op')
-    expect(engine.init).toHaveBeenCalledWith(null)
-    // Only the number band is read, off the live camera, as text.
-    expect(engine.analyze.mock.calls[0][1]).toEqual({
-      candidates: null,
-      wantText: true,
-      codesOnly: true
-    })
-    expect(await screen.findByRole('button', { name: 'L' })).toBeInTheDocument()
-    // The phone fills it in: no tap to use it.
-    expect(suggestion('OP01-001')).not.toBeInTheDocument()
-  })
-
-  it('a number read once, between misses, is not filled in', async () => {
-    const { engine, factory } = readingEngine((n) => (n % 2 === 0 ? ['OP01-001'] : ['HAT CREW']))
-    renderScreen(opStore(), undefined, { engineFactory: factory })
-    await waitFor(() => expect(engine.analyze.mock.calls.length).toBeGreaterThan(6))
-    expect(numberBox()).toHaveValue('')
-  })
-
-  it('a number the catalog does not have is not filled in', async () => {
-    const { engine, factory } = readingEngine(() => ['OP02-999'])
-    const store = opStore()
-    renderScreen(store, undefined, { engineFactory: factory })
-    await waitFor(() => expect(engine.analyze.mock.calls.length).toBeGreaterThan(4))
-    expect(numberBox()).toHaveValue('')
-    expect(store.invoke).toHaveBeenCalledWith('scan:printingsByCode', ['OP02-999'])
+  it('the phone runs only the guide box reader, not the whole-frame one', async () => {
+    const factory = vi.fn<EngineFactory>(() => fakeEngine())
+    const snap = holding(() => null)
+    renderScreen(opStore(), undefined, { engineFactory: factory, snap })
+    await waitFor(() => expect(snap.mock.calls.length).toBeGreaterThan(3))
+    expect(factory).not.toHaveBeenCalled()
   })
 
   it('never touches what the tester typed, and stops reading while there is text', async () => {
     const user = userEvent.setup()
-    const { engine, factory } = readingEngine(() => ['OP01-001'])
-    renderScreen(opStore(), undefined, { engineFactory: factory })
+    let card: string | null = null
+    const snap = holding(() => card)
+    renderScreen(opStore(), undefined, { snap })
     await user.type(numberBox(), 'OP0')
-    const calls = engine.analyze.mock.calls.length
+    card = 'OP01-001'
+    const calls = snap.mock.calls.length
     await new Promise((r) => setTimeout(r, 60))
-    expect(engine.analyze.mock.calls.length).toBeLessThanOrEqual(calls + 1)
+    expect(snap.mock.calls.length).toBeLessThanOrEqual(calls + 1)
     expect(numberBox()).toHaveValue('OP0')
   })
 
   it('keeps reading after a number it read: the next card replaces it, and shots go on between', async () => {
     const user = userEvent.setup()
     let card = 'OP01-001'
-    const { factory } = readingEngine(() => [card])
-    renderScreen(opStore(), undefined, { engineFactory: factory })
+    renderScreen(opStore(), undefined, { snap: holding(() => card) })
     await waitFor(() => expect(numberBox()).toHaveValue('OP01-001'))
     await user.click(await screen.findByRole('button', { name: 'L' }))
     await waitFor(() => expect(shutter()).toBeEnabled())
@@ -506,63 +480,48 @@ describe('reading the number off the camera', () => {
   })
 
   it('keeps the number it read once the card has gone', async () => {
-    let texts = ['OP01-001']
-    const { engine, factory } = readingEngine(() => texts)
-    renderScreen(opStore(), undefined, { engineFactory: factory })
+    let card: string | null = 'OP01-001'
+    const snap = holding(() => card)
+    renderScreen(opStore(), undefined, { snap })
     await waitFor(() => expect(numberBox()).toHaveValue('OP01-001'))
-    texts = []
-    const calls = engine.analyze.mock.calls.length
-    await waitFor(() => expect(engine.analyze.mock.calls.length).toBeGreaterThan(calls + 6))
+    card = null
+    const calls = snap.mock.calls.length
+    await waitFor(() => expect(snap.mock.calls.length).toBeGreaterThan(calls + 6))
     expect(numberBox()).toHaveValue('OP01-001')
   })
 
   it('after Next card, the card just done is not read again until another is seen', async () => {
     const user = userEvent.setup()
-    let card = 'OP01-001'
-    const { engine, factory } = readingEngine(() => [card])
-    renderScreen(opStore(), undefined, { engineFactory: factory })
+    let card: string | null = 'OP01-001'
+    const snap = holding(() => card)
+    renderScreen(opStore(), undefined, { snap })
     await waitFor(() => expect(numberBox()).toHaveValue('OP01-001'))
     await user.click(screen.getByRole('button', { name: 'Next card' }))
     expect(numberBox()).toHaveValue('')
-    const calls = engine.analyze.mock.calls.length
-    await waitFor(() => expect(engine.analyze.mock.calls.length).toBeGreaterThan(calls + 4))
+    const calls = snap.mock.calls.length
+    await waitFor(() => expect(snap.mock.calls.length).toBeGreaterThan(calls + 4))
     expect(numberBox()).toHaveValue('')
-    // Another card in the frame (not in the catalog), then the first one back again.
+    // Another card in the frame (not in the catalog: the reader finds nothing), then the first
+    // one back again.
     card = 'OP02-024'
-    const switched = engine.analyze.mock.calls.length
-    await waitFor(() => expect(engine.analyze.mock.calls.length).toBeGreaterThan(switched + 2))
+    const switched = snap.mock.calls.length
+    await waitFor(() => expect(snap.mock.calls.length).toBeGreaterThan(switched + 2))
     card = 'OP01-001'
     await waitFor(() => expect(numberBox()).toHaveValue('OP01-001'))
   })
 
-  it('an engine that fails says nothing, and typing still works', async () => {
-    const user = userEvent.setup()
-    const engine = fakeEngine(() => new Error('no worker'))
-    engine.init.mockRejectedValue(new Error('no OpenCV'))
-    renderScreen(opStore(), undefined, { engineFactory: () => engine })
-    await user.type(numberBox(), 'op01001')
-    expect(await screen.findByRole('button', { name: 'L' })).toBeInTheDocument()
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-  })
-
   it("other games' contribute screens don't read numbers", async () => {
     const factory = vi.fn<EngineFactory>(() => fakeEngine())
-    renderScreen(opStore(), undefined, { engineFactory: factory, game: 'pkm' })
+    const snap = holding(() => 'OP01-001')
+    renderScreen(opStore(), undefined, { engineFactory: factory, game: 'pkm', snap })
     await new Promise((r) => setTimeout(r, 30))
     expect(factory).not.toHaveBeenCalled()
-  })
-
-  it('stops the engine on close', async () => {
-    const { engine, factory } = readingEngine(() => [])
-    const view = renderScreen(opStore(), undefined, { engineFactory: factory })
-    await waitFor(() => expect(engine.analyze).toHaveBeenCalled())
-    view.unmount()
-    expect(engine.dispose).toHaveBeenCalled()
+    expect(snap).not.toHaveBeenCalled()
   })
 })
 
 describe('the guide box reads by itself', () => {
-  it('fills in the number held in the box twice running, with no button to press', async () => {
+  it('fills in a number two reads agree on, with no button to press', async () => {
     const snap = vi.fn(async (): Promise<SnapResult> => ({ number: 'OP01-001' }))
     renderScreen(opStore(), () => {}, { snap })
     await waitFor(() => expect(numberBox()).toHaveValue('OP01-001'))
@@ -571,20 +530,43 @@ describe('the guide box reads by itself', () => {
     expect(screen.queryByRole('button', { name: 'Read number' })).not.toBeInTheDocument()
   })
 
-  it('one read between misses is not enough', async () => {
+  it('a miss between two reads does not start the count over', async () => {
+    const results: SnapResult[] = [{ number: 'OP01-001' }, { problem: 'none' }]
+    let n = 0
+    const snap = vi.fn(async (): Promise<SnapResult> => results[n++ % results.length])
+    renderScreen(opStore(), () => {}, { snap })
+    await waitFor(() => expect(numberBox()).toHaveValue('OP01-001'))
+  })
+
+  it('one read among misses is not enough', async () => {
     let n = 0
     const snap = vi.fn(async (): Promise<SnapResult> =>
-      n++ % 2 === 0 ? { number: 'OP01-001' } : { problem: 'none' }
+      n++ % 3 === 0 ? { number: 'OP01-001' } : { problem: 'none' }
     )
     renderScreen(opStore(), () => {}, { snap })
-    await waitFor(() => expect(snap.mock.calls.length).toBeGreaterThan(6))
+    await waitFor(() => expect(snap.mock.calls.length).toBeGreaterThan(9))
     expect(numberBox()).toHaveValue('')
+  })
+
+  it('blurred frames are skipped, not counted as misses', async () => {
+    // Counted as misses these would never put two reads among three.
+    const results: SnapResult[] = [
+      { number: 'OP01-001' },
+      { problem: 'blurry' },
+      { problem: 'blurry' },
+      { problem: 'none' }
+    ]
+    let n = 0
+    const snap = vi.fn(async (): Promise<SnapResult> => results[n++ % results.length])
+    renderScreen(opStore(), () => {}, { snap })
+    await waitFor(() => expect(numberBox()).toHaveValue('OP01-001'))
   })
 
   it('nothing, several numbers, or a read that throws stay quiet', async () => {
     const results: (SnapResult | Error)[] = [
       { problem: 'none' },
       { problem: 'many' },
+      { problem: 'blurry' },
       new Error('ocr down')
     ]
     let n = 0
@@ -600,20 +582,31 @@ describe('the guide box reads by itself', () => {
     expect(screen.queryByText(SNAP_MANY)).not.toBeInTheDocument()
   })
 
-  it('stops while the tester types', async () => {
-    const user = userEvent.setup()
-    const snap = vi.fn(async (): Promise<SnapResult> => ({ problem: 'none' }))
-    renderScreen(opStore(), () => {}, { snap })
-    await user.type(numberBox(), 'OP0')
-    const calls = snap.mock.calls.length
-    await new Promise((r) => setTimeout(r, 60))
-    expect(snap.mock.calls.length).toBeLessThanOrEqual(calls + 1)
-  })
-
   it("other games' screens have no Read number", async () => {
     renderScreen(opStore(), () => {}, { game: 'pkm' })
     await screen.findByRole('textbox', { name: 'Card number' })
     expect(screen.queryByRole('button', { name: 'Read number' })).not.toBeInTheDocument()
+  })
+
+  it('admins see how fast it reads; others see nothing', async () => {
+    const results: SnapResult[] = [
+      { problem: 'blurry' },
+      { number: 'OP01-001' },
+      { number: 'OP01-001' }
+    ]
+    let n = 0
+    const snap = vi.fn(async (): Promise<SnapResult> => results[Math.min(n++, 2)])
+    const view = renderScreen(opStore(), () => {}, { snap, user: { ...SETO, admin: true } })
+    await waitFor(() => expect(numberBox()).toHaveValue('OP01-001'))
+    const timing = await screen.findByLabelText('Read timing')
+    await waitFor(() => expect(timing).toHaveTextContent(/filled in \d+\.\d s/))
+    expect(timing).toHaveTextContent(/read \d+ ms avg/)
+    expect(timing).toHaveTextContent('1 blurry skipped')
+    view.unmount()
+
+    renderScreen(opStore(), () => {}, { snap: holding(() => 'OP01-001') })
+    await waitFor(() => expect(numberBox()).toHaveValue('OP01-001'))
+    expect(screen.queryByLabelText('Read timing')).not.toBeInTheDocument()
   })
 })
 

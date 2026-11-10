@@ -27,6 +27,8 @@ export type MetaKey =
   | 'catalog_cursor:pkm'
   /** The same for One Piece. */
   | 'catalog_cursor:op'
+  /** The same for Magic. */
+  | 'catalog_cursor:mtg'
   /**
    * Seq of the last change downloaded into `catalog_staging`: the switch's snapshot until it's done,
    * then a delta pull not yet applied (Yu-Gi-Oh!).
@@ -36,6 +38,8 @@ export type MetaKey =
   | 'catalog_staging_cursor:pkm'
   /** The same for a One Piece delta pull. */
   | 'catalog_staging_cursor:op'
+  /** The same for a Magic delta pull. */
+  | 'catalog_staging_cursor:mtg'
   /** When this desktop switched to the server's catalog (ISO); absent means not yet. */
   | 'catalog_switched_at'
   /** Path of the database copy taken just before the switch. */

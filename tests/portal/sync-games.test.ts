@@ -182,7 +182,7 @@ describe('per-game sync', () => {
       expect(res.status, path).toBe(403)
       expect(await res.json()).toEqual({ error: 'game-not-allowed' })
     }
-    const res = await send('/api/sync/pull?cursor=0&game=mtg', OWNER)
+    const res = await send('/api/sync/pull?cursor=0&game=zzz', OWNER)
     expect(res.status).toBe(403)
     expect(await res.json()).toEqual({ error: 'game-not-allowed' })
   })

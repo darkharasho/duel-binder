@@ -340,7 +340,7 @@ describe('portal wishlists', () => {
       expect(check(wire())).toEqual([wire()])
       for (const bad of [
         wire({ pkey: '' }),
-        wire({ game: 'mtg' as never }),
+        wire({ game: 'zzz' as never }),
         wire({ quantity: 0 }),
         wire({ quantity: 1000 }),
         wire({ quantity: 1.5 }),

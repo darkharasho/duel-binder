@@ -8,7 +8,8 @@ import type { GameId } from '@shared/games'
 const GLOW: Record<GameId, string> = {
   ygo: 'radial-gradient(ellipse 75% 85% at 12% -10%, rgb(139 92 246 / 0.42), transparent 75%), radial-gradient(ellipse 60% 70% at 92% 0%, rgb(245 158 11 / 0.26), transparent 75%), radial-gradient(ellipse 50% 45% at 50% 70%, rgb(217 70 239 / 0.1), transparent 75%)',
   pkm: 'radial-gradient(ellipse 75% 85% at 12% -10%, rgb(37 99 235 / 0.46), transparent 75%), radial-gradient(ellipse 60% 70% at 92% 0%, rgb(250 204 21 / 0.26), transparent 75%), radial-gradient(ellipse 50% 45% at 50% 70%, rgb(239 68 68 / 0.1), transparent 75%)',
-  op: 'radial-gradient(ellipse 75% 85% at 12% -10%, rgb(59 130 196 / 0.46), transparent 75%), radial-gradient(ellipse 60% 70% at 92% 0%, rgb(234 179 8 / 0.26), transparent 75%), radial-gradient(ellipse 50% 45% at 50% 70%, rgb(220 38 38 / 0.1), transparent 75%)'
+  op: 'radial-gradient(ellipse 75% 85% at 12% -10%, rgb(59 130 196 / 0.46), transparent 75%), radial-gradient(ellipse 60% 70% at 92% 0%, rgb(234 179 8 / 0.26), transparent 75%), radial-gradient(ellipse 50% 45% at 50% 70%, rgb(220 38 38 / 0.1), transparent 75%)',
+  mtg: 'radial-gradient(ellipse 75% 85% at 12% -10%, rgb(194 65 12 / 0.46), transparent 75%), radial-gradient(ellipse 60% 70% at 92% 0%, rgb(245 158 11 / 0.22), transparent 75%), radial-gradient(ellipse 50% 45% at 50% 70%, rgb(120 53 15 / 0.12), transparent 75%)'
 }
 
 const FADE = '[mask-image:linear-gradient(180deg,#000_25%,transparent)]'

@@ -167,7 +167,7 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
 
   // Pokémon sets sit under their series ("Scarlet & Violet") while sorted by date; Yu-Gi-Oh! has
   // no series, and other sorts would split a series up anyway.
-  const bySeries = byGame(game, { ygo: false, pkm: true, op: false }) && sort === 'date'
+  const bySeries = byGame(game, { ygo: false, pkm: true, op: false, mtg: false }) && sort === 'date'
 
   const counts = useMemo(
     () => typeCounts(all, { filter, mode, language, game }),

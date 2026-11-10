@@ -18,7 +18,7 @@ describe('training shared', () => {
     expect(readLabel(labelParams(label), NOW)).toEqual(label)
   })
   test.each([
-    ['holder', 'binder'], ['card', '0'], ['printing', '1.5'], ['game', 'mtg'], ['app', 'v1'],
+    ['holder', 'binder'], ['card', '0'], ['printing', '1.5'], ['game', 'zzz'], ['app', 'v1'],
     ['device', ''], ['device', 'x'.repeat(101)], ['device', 'a\u0007b'],
     ['at', '2026-10-05T00:00:00.000Z'], ['at', '2026-11-06T03:00:00.000Z'], ['at', 'yesterday']
   ])('bad %s %j is refused', (k, v) => {

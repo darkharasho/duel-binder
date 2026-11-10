@@ -165,7 +165,9 @@ const SORT_WORDS = {
 export const HIDDEN_SORTS: Record<GameId, readonly string[]> = {
   ygo: ['hp', 'cost', 'power'],
   pkm: ['atk', 'def', 'level', 'cost', 'power'],
-  op: ['atk', 'def', 'level', 'hp']
+  op: ['atk', 'def', 'level', 'hp'],
+  // Cost and Power stay listed until Magic has the columns to sort on (they fall back to name).
+  mtg: ['atk', 'def', 'level', 'hp']
 }
 
 /** Each sort both ways, the way it starts in first: "Price: high to low", "Price: low to high". */

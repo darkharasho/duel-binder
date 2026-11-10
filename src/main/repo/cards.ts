@@ -74,7 +74,9 @@ export const onePieceRead = (game: GameId): { cols: string; join: string } =>
   byGame(game, {
     ygo: NO_ONEPIECE,
     pkm: NO_ONEPIECE,
-    op: { cols: `, ${ONEPIECE_COLS}`, join: 'LEFT JOIN onepiece_cards oc ON oc.card_id = c.id' }
+    op: { cols: `, ${ONEPIECE_COLS}`, join: 'LEFT JOIN onepiece_cards oc ON oc.card_id = c.id' },
+    // mtg_cards arrives with its table (Task 2); until then Magic has no game-table join.
+    mtg: NO_ONEPIECE
   })
 
 function parseTypes(json: string | null | undefined): string[] {

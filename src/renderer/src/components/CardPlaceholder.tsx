@@ -171,11 +171,45 @@ function OpPlaceholder({
   )
 }
 
+/** Magic's: a plain rounded card at its own aspect, with a thin inner border and no frame detail. */
+function MtgPlaceholder({
+  className,
+  label,
+  aspect
+}: Omit<CardPlaceholderProps, 'game'>): React.JSX.Element {
+  const { width: w, height: h } = aspect
+  return (
+    <svg
+      role="img"
+      aria-label={label}
+      data-testid="card-art-placeholder"
+      data-game="mtg"
+      viewBox={`0 0 ${w} ${h}`}
+      style={{ aspectRatio: cssAspect(aspect) }}
+      className={cn('rounded-[6px] shadow-sm', className)}
+    >
+      <rect width={w} height={h} fill="currentColor" className="text-zinc-300 dark:text-zinc-700" />
+      <rect
+        x="20"
+        y="20"
+        width={w - 40}
+        height={h - 40}
+        rx="10"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="5"
+        className={TONE}
+      />
+    </svg>
+  )
+}
+
 /** What shows where a card's art can't: a card-shaped stand-in in the card's game. */
 export function CardPlaceholder({ game, ...rest }: CardPlaceholderProps): React.JSX.Element {
   return byGame<() => React.JSX.Element>(game, {
     ygo: () => <YgoPlaceholder {...rest} />,
     pkm: () => <PkmPlaceholder {...rest} />,
-    op: () => <OpPlaceholder {...rest} />
+    op: () => <OpPlaceholder {...rest} />,
+    mtg: () => <MtgPlaceholder {...rest} />
   })()
 }

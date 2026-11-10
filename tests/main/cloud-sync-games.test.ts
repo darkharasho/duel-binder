@@ -228,6 +228,10 @@ describe('per-game syncOnce', () => {
     ])
   })
 
+  it('a me with mtg is read by gamesOf', () => {
+    expect(gamesOf({ games: ['ygo', 'mtg', 'xyz'] } as unknown as Me)).toEqual(['ygo', 'mtg'])
+  })
+
   it('a me with op is read by gamesOf', () => {
     expect(gamesOf({ games: ['ygo', 'op', 'xyz'] } as unknown as Me)).toEqual(['ygo', 'op'])
     setMeta(db, 'active_game', 'op')

@@ -701,8 +701,8 @@ export function SetChecklist({
                   unownedCard && `${englishSetName(data.set.setName)} · ${unownedCard.numberLabel}`
                 }
                 preferSet={{ setName: data.set.setName, language: data.set.language }}
-                // op: step 2 revisits; its cards, like Yu-Gi-Oh!'s, reappear across sets.
-                onlySet={byGame(game, { ygo: true, pkm: false, op: true })}
+                // op, mtg: step 2 revisits; its cards, like Yu-Gi-Oh!'s, reappear across sets.
+                onlySet={byGame(game, { ygo: true, pkm: false, op: true, mtg: true })}
                 onSelectEntry={
                   selected
                     ? (entryId) => setSelected({ cardId: selected.cardId, entryId })

@@ -43,9 +43,19 @@ const ONE_PIECE_COLORS: Record<string, string> = {
   P: '#a8a59f'
 }
 
+// Magic's rarities, matched on the word before any ' (' bracket ("Rare (Foil)" is Rare).
+const MAGIC_COLORS: Record<string, string> = {
+  Common: '#6d6b67',
+  Uncommon: '#b8c4cf',
+  Rare: '#d4a93c',
+  Mythic: '#e8590c',
+  Special: '#a78bfa',
+  Bonus: '#2dd4bf'
+}
+
 /** A game's rarity colours (exact labels). */
 export const rarityColors = (game: GameId): Record<string, string> =>
-  byGame(game, { ygo: RARITY_COLORS, pkm: POKEMON_COLORS, op: ONE_PIECE_COLORS })
+  byGame(game, { ygo: RARITY_COLORS, pkm: POKEMON_COLORS, op: ONE_PIECE_COLORS, mtg: MAGIC_COLORS })
 
 /** A Pokémon version with its subtype in front ("Shadowless Holofoil") takes its base version's colour. */
 function pokemonColor(version: string): string | undefined {
@@ -62,7 +72,8 @@ export function rarityColor(rarity: string, game: GameId = 'ygo'): string {
     ygo: () => RARITY_COLORS[rarity],
     pkm: () => pokemonColor(rarity),
     // A version label ("SR (Alternate Art)") takes its rarity code's colour.
-    op: () => ONE_PIECE_COLORS[rarity.split(' ')[0]]
+    op: () => ONE_PIECE_COLORS[rarity.split(' ')[0]],
+    mtg: () => MAGIC_COLORS[rarity.split(' (')[0]]
   })()
   return own ?? '#9ca3af'
 }

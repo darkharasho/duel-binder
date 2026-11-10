@@ -104,7 +104,9 @@ function sortSql(sort: string, game: GameId): string {
   const missing = byGame<(s: string) => boolean>(game, {
     ygo: (s) => s === 'hp' || OP_ONLY_SORTS.includes(s),
     pkm: (s) => YGO_ONLY_SORTS.includes(s) || OP_ONLY_SORTS.includes(s),
-    op: (s) => s === 'hp' || YGO_ONLY_SORTS.includes(s)
+    op: (s) => s === 'hp' || YGO_ONLY_SORTS.includes(s),
+    // No Magic sorts exist yet (step 2 adds them): every game-specific sort falls back to name.
+    mtg: (s) => s === 'hp' || YGO_ONLY_SORTS.includes(s) || OP_ONLY_SORTS.includes(s)
   })
   if (missing(sort)) return SORT_SQL.name
   return SORT_SQL[sort as BrowseFilters['sort']]

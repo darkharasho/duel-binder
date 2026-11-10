@@ -37,7 +37,7 @@ describe('checkTrainingUpload', () => {
   it('refuses bad ids, labels and sizes', () => {
     expect(checkTrainingUpload('nope', LABEL, JPEG, NOW)).toBeNull()
     expect(checkTrainingUpload(ID, { ...LABEL, holder: 'binder' }, JPEG, NOW)).toBeNull()
-    expect(checkTrainingUpload(ID, { ...LABEL, game: 'mtg' }, JPEG, NOW)).toBeNull()
+    expect(checkTrainingUpload(ID, { ...LABEL, game: 'zzz' }, JPEG, NOW)).toBeNull()
     expect(checkTrainingUpload(ID, null, JPEG, NOW)).toBeNull()
     expect(checkTrainingUpload(ID, LABEL, new ArrayBuffer(0), NOW)).toBeNull()
     expect(

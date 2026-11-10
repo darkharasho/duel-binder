@@ -18,7 +18,8 @@ export const SHOTS: Record<GameId, Shot[]> = {
     { file: 'collection-pokemon.png', clicks: ['Collection', 'Date added', 'Total value'] },
     { file: 'sets.png', clicks: ['Sets', 'Base Set'] }
   ],
-  op: []
+  op: [],
+  mtg: []
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))

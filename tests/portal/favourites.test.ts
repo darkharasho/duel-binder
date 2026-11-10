@@ -153,7 +153,7 @@ describe('portal favourites', () => {
         wire({ cardId: 0 }),
         wire({ cardId: 1.5 }),
         wire({ cardId: '1' as never }),
-        wire({ game: 'mtg' as never }),
+        wire({ game: 'zzz' as never }),
         wire({ updatedAt: 'nope' })
       ])
         expect(() => check(bad)).toThrow()

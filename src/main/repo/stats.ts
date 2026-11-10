@@ -72,7 +72,8 @@ export function getStats(db: SqlDb, scope: Scope = LOCAL): CollectionStats {
     byFrameType: byGame<() => [string, number][]>(scopeGame(db, scope), {
       ygo: () => [...frames],
       pkm: () => pokemonCategories(db, scope),
-      op: () => onePieceCardTypes(db, scope)
+      op: () => onePieceCardTypes(db, scope),
+      mtg: () => []
     })()
       .map(([frameType, count]) => ({ frameType, count }))
       .sort((a, b) => b.count - a.count),

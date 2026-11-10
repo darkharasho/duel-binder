@@ -905,6 +905,9 @@ describe('phone store', () => {
     db.prepare(
       "INSERT INTO cards (id, game, name, type, frame_type, race, \"desc\", updated_at) VALUES (?, 'op', 'Luffy', 'Leader', 'op', '', '', '2026-10-29')"
     ).run(2 ** 39 + 1)
+    db.prepare(
+      "INSERT INTO cards (id, game, name, type, frame_type, race, \"desc\", updated_at) VALUES (?, 'mtg', 'Bolt', 'Instant', 'mtg', '', '', '2026-10-29')"
+    ).run(2 ** 38 + 1)
 
     // Once it has rows, the daily limit holds again.
     requests = []
@@ -927,6 +930,10 @@ describe('phone store', () => {
         (db.prepare("SELECT COUNT(*) AS n FROM cards WHERE game = 'op'").get() as { n: number }).n
       )
     ).toBe(1)
+    // The owner also sees Magic, which has no catalog yet; a row keeps its emptiness from re-opening the limit.
+    db.prepare(
+      "INSERT INTO cards (id, game, name, type, frame_type, race, \"desc\", updated_at) VALUES (?, 'mtg', 'Bolt', 'Instant', 'mtg', '', '', '2026-10-29')"
+    ).run(2 ** 38 + 1)
 
     clock = new Date(SERVER_NOW.getTime() + 3_600_000)
     requests = []

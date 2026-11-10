@@ -448,7 +448,8 @@ describe('catalog service', () => {
       expect(asked).toEqual([
         { since: serverClock(), game: 'ygo' },
         { since: 0, game: 'pkm' },
-        { since: 0, game: 'op' } // the owner sees the hidden game too, with no rows yet
+        { since: 0, game: 'op' }, // the owner sees the hidden games too, with no rows yet
+        { since: 0, game: 'mtg' }
       ])
       expect(pkmCount('cards')).toBe(2)
       expect(pkmCount('card_images')).toBe(2)

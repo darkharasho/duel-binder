@@ -123,7 +123,11 @@ const tenObjects = (): ScryCard[] =>
 
 describe('writeMagic', () => {
   it('writes the fixture', () => {
-    const rows = mtgRows(OBJECTS, SETS)
+    // The writer stores English only until Task 5 teaches it languages.
+    const rows = mtgRows(
+      OBJECTS.filter((o) => o.lang === 'en'),
+      SETS
+    )
     const r = write(OBJECTS)
     const c = counts()
     expect(c.cards).toBe(rows.cards.size)

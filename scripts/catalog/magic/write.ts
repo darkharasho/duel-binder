@@ -58,9 +58,17 @@ function checkIds(pairs: Map<string, number>): void {
 
 export function writeMagic(
   work: Database.Database,
-  rows: MagicRows,
+  allRows: MagicRows,
   o: WriteMagicOpts
 ): MagicReport {
+  // Until the writer learns languages (next task) it stores the English rows alone.
+  const rows: MagicRows = {
+    ...allRows,
+    cards: new Map([...allRows.cards].filter(([, c]) => c.lang === 'en')),
+    images: allRows.images.filter((i) => allRows.cards.get(i.cardId)?.lang === 'en'),
+    printings: allRows.printings.filter((p) => p.language === 'en'),
+    sets: new Map([...allRows.sets].filter(([, s]) => s.language === 'en'))
+  }
   const cardIdOf = o.idOf?.card ?? ((s: string) => mtgCardId('en', s))
   const imageIdOf = o.idOf?.image ?? mtgImageId
   const report: MagicReport = {
@@ -249,7 +257,7 @@ export function writeMagic(
     const age = (scryfallId: string): [string, string] => {
       const code = codeOf.get(scryfallId) ?? ''
       const [setCode = '', ...num] = code.split(' ')
-      return [rows.sets.get(setCode)?.releasedAt ?? '9999-99-99', num.join(' ')]
+      return [rows.sets.get(`en|${setCode}`)?.releasedAt ?? '9999-99-99', num.join(' ')]
     }
     for (const list of byCard.values()) {
       list

@@ -58,7 +58,7 @@ function renderDesktop(
   onClose: () => void = () => {},
   grab: (v: HTMLVideoElement) => Promise<ArrayBuffer> | Grabbed = async () => JPEG(),
   o: { engineFactory?: EngineFactory; snap?: (v: HTMLVideoElement) => Promise<SnapResult> } = {}
-): void {
+): ReturnType<typeof renderWithProviders> {
   const api = createMockApi({
     scan: {
       numberPrefixes: vi.fn(async () => ['OP01']),
@@ -68,7 +68,7 @@ function renderDesktop(
     },
     cards: { get: vi.fn(async (id: number) => (id === CARD_ID ? DETAIL : null)) }
   })
-  renderWithProviders(
+  return renderWithProviders(
     <ScanHubProvider>
       <ContributeScreen
         game="op"
@@ -224,6 +224,26 @@ describe('desktop number reading: offered, and read on R', () => {
     expect(numberBox()).toHaveValue('')
     await user.click(use)
     expect(numberBox()).toHaveValue('OP01-002')
+  })
+
+  it('a number read once between misses, or one the catalog lacks, is not offered', async () => {
+    const engine = fakeEngine((n) => ({
+      ...NOTHING,
+      found: true,
+      codeTexts: n % 2 === 0 ? ['OP01-002'] : ['OP01-999']
+    }))
+    renderDesktop(undefined, undefined, { engineFactory: () => engine })
+    await waitFor(() => expect(engine.analyze.mock.calls.length).toBeGreaterThan(6))
+    expect(screen.queryByRole('button', { name: /^Use / })).not.toBeInTheDocument()
+  })
+
+  it('an engine that fails stays quiet, and it is stopped on close', async () => {
+    const engine = fakeEngine(() => new Error('no worker'))
+    const view = renderDesktop(undefined, undefined, { engineFactory: () => engine })
+    await waitFor(() => expect(engine.analyze).toHaveBeenCalled())
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    view.unmount()
+    expect(engine.dispose).toHaveBeenCalled()
   })
 
   it('Read number fills in the number in the box, or says what went wrong', async () => {

@@ -24,6 +24,7 @@ import {
   SEARCH_WIDTH,
   dist,
   edgeMap,
+  findCard,
   frameWidth,
   orderCorners,
   outlineQuad,
@@ -904,8 +905,8 @@ const LIVE_REGIONS = 1
  * With profile's holderSearch, a frame none of whose quads matched is looked at again
  * (lookAgain) unless holderPass is false (the live scanner skips it on some frames), and via is
  * 'holder' when that is what matched. So does the inner frame search of a profile with a holder
- * search, which costs as much. held is an earlier frame's outline: when art matches there, the
- * frame isn't searched at all. thorough false is a live frame's short holder search: see
+ * search, which costs as much. held is an earlier frame's outline: when art matches there, or at
+ * the outline finder's pick over it, the frame isn't searched at all. thorough false is a live frame's short holder search: see
  * LIVE_OUTLINES. For a game with card backs (cardBacks.ts), back is how close the card, or any
  * candidate outline over it, came to one: a back is often outlined with the desk around it, its
  * own outline a candidate that lost.
@@ -943,14 +944,24 @@ export function recognizeArt(
       return back === undefined ? {} : { back }
     }
     if (held) {
-      const still = ranked(held)
-      if (topDistance(still) <= ART_MAX_DISTANCE)
+      // A held card moves a little between frames, and its art may still match at the old outline:
+      // the outline finder's quick pick over it is matched too, and the closer kept (the pick on a
+      // tie), so the outline follows the card at a fraction of a search's cost.
+      const near = findCard(cv, frame)
+      const tries = near && overlapping(near, held) ? [held, near] : [held]
+      let best: Ranked | null = null
+      for (const quad of tries) {
+        const r = ranked(quad)
+        if (topDistance(r) <= ART_MAX_DISTANCE && (!best || topDistance(r) <= topDistance(best)))
+          best = r
+      }
+      if (best)
         return {
-          quad: held,
-          card: still.upsideDown ? rotate180(still.card) : still.card,
-          upsideDown: still.upsideDown,
-          matches: still.matches,
-          ...backAt(held, still.back)
+          quad: best.quad,
+          card: best.upsideDown ? rotate180(best.card) : best.card,
+          upsideDown: best.upsideDown,
+          matches: best.matches,
+          ...backAt(best.quad, best.back)
         }
     }
     const scored: { quad: Quad; distance: number }[] = []

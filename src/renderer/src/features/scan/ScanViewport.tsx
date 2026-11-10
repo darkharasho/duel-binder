@@ -113,7 +113,8 @@ export function ScanViewport({
               />
             )}
           </div>
-          <div className="absolute inset-x-0 bottom-0 flex items-center gap-3 bg-black/70 px-4 py-2 text-sm text-white">
+          {/* A fade, not a bar: a solid strip read as a black box over the picture on the phone. */}
+          <div className="absolute inset-x-0 bottom-0 flex items-end gap-3 bg-gradient-to-t from-black/75 via-black/45 to-transparent px-4 pb-2 pt-8 text-sm text-white [text-shadow:0_1px_2px_rgba(0,0,0,0.6)]">
             <p role="status">{status ?? statusText(loop.status)}</p>
             {status !== undefined ? null : loop.status.kind === 'stopped' ? (
               <Button variant="outline" size="xs" className="ml-auto" onClick={loop.retry}>

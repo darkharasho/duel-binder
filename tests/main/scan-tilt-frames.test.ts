@@ -80,10 +80,11 @@ describe('keepsForTilt', () => {
 })
 
 describe('keepsOutline', () => {
-  it("stays on a Yu-Gi-Oh card's outline only while it's tilted, and on a Pokémon card's always", () => {
+  it("stays on every game's card outline, tilted or not, and on any profile's while tilted", () => {
     expect(keepsOutline(scanProfile('ygo'), true)).toBe(true)
-    // A live Yu-Gi-Oh frame searches every time, as before tilts.
-    expect(keepsOutline(scanProfile('ygo'), false)).toBe(false)
+    expect(keepsOutline(scanProfile('ygo'), false)).toBe(true)
+    expect(keepsOutline({ keepOutline: false }, true)).toBe(true)
+    expect(keepsOutline({ keepOutline: false }, false)).toBe(false)
     expect(keepsOutline(scanProfile('pkm'), true)).toBe(true)
     expect(keepsOutline(scanProfile('pkm'), false)).toBe(true)
   })

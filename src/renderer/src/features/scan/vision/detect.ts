@@ -162,8 +162,8 @@ export function thicken(cv: CV, edges: Mat): Mat {
  * The card in a frame: the largest convex four-sided outline with a card's aspect ratio
  * (upright or sideways) covering at least MIN_AREA of the frame, or null when there is none.
  */
-export function findCard(cv: CV, img: RgbaImage): Quad | null {
-  const scale = Math.min(1, SEARCH_WIDTH / img.width)
+export function findCard(cv: CV, img: FrameSource): Quad | null {
+  const scale = Math.min(1, SEARCH_WIDTH / frameWidth(img))
   const small = searchImage(cv, img, scale)
   const thin = using([small], () => edgeMap(cv, small))
   const edges = using([thin], () => thicken(cv, thin))

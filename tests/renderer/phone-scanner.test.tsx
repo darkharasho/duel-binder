@@ -424,6 +424,23 @@ describe('phone scanner', () => {
       expect(saved.map((r) => r.printingId)).toEqual([101])
     })
 
+    it('tapping the last scan opens every printing to pick from', async () => {
+      const user = userEvent.setup()
+      localStorage.setItem(SESSION_KEY, JSON.stringify([row({ via: 'art', options: three })]))
+      const store = fakeStore()
+      installPhoneApi(store)
+      renderScanner(store)
+      const card = await screen.findByRole('region', { name: 'Last scan' })
+      await user.click(within(card).getByRole('combobox', { name: 'Rarity for Dark Magician' }))
+      const picker = screen.getByRole('dialog', { name: 'Printing' })
+      await user.click(within(picker).getByRole('option', { name: /Secret Rare/ }))
+      expect(screen.queryByRole('dialog', { name: 'Printing' })).not.toBeInTheDocument()
+      expect(card).toHaveTextContent('Secret Rare')
+      expect(
+        within(card).getByRole('button', { name: 'Next printing of Dark Magician' })
+      ).toHaveTextContent('3/3')
+    })
+
     it('words the cycle button as versions for a Pokémon card', async () => {
       localStorage.setItem(
         SESSION_KEY,

@@ -143,6 +143,12 @@ export interface ScanLoopOptions {
    * phone, aimed at the card, reads the crop alone.
    */
   wholeFrame?: boolean
+  /**
+   * Live frames wider than this come shrunk to it (photos never are): the phone's 4K camera gives
+   * frames over twice the desktop's, which cost the slower phone ~3x the time to look at, and a
+   * card held up to the phone fills enough of a 1080-wide frame to read.
+   */
+  maxFrameWidth?: number
   /** Measure where each frame's time goes, for a timing readout (ScanLoop's timing). */
   timings?: boolean
 }
@@ -269,17 +275,75 @@ async function keepDebugShot(
 /**
  * A live frame: the preview's centre crop, or with whole the whole picture and that crop as its
  * region, for the worker to read the crop first and the whole when the crop keeps missing
- * (framing.ts). width and height are the crop's, as the preview shows it.
+ * (framing.ts). width and height are the crop's, as the preview shows it, in the frame's pixels.
+ * With maxWidth, a wider crop comes shrunk to it (the GPU's shrink, as it's grabbed), the whole
+ * picture by the same scale.
  */
-async function grab(
+export async function grab(
   video: HTMLVideoElement,
-  whole = false
+  whole = false,
+  maxWidth?: number
 ): Promise<{ frame: ImageBitmap; width: number; height: number; region?: CropRect } | null> {
-  if (!video.videoWidth || !video.videoHeight) return null
-  const region = centreCrop(video.videoWidth, video.videoHeight)
-  const { x, y, width, height } = region
-  if (whole) return { frame: await createImageBitmap(video), width, height, region }
-  return { frame: await createImageBitmap(video, x, y, width, height), width, height }
+  const { videoWidth, videoHeight } = video
+  if (!videoWidth || !videoHeight) return null
+  const crop = centreCrop(videoWidth, videoHeight)
+  const scale = maxWidth && crop.width > maxWidth ? maxWidth / crop.width : 1
+  if (whole) {
+    const frame =
+      scale === 1
+        ? await createImageBitmap(video)
+        : await shrunk(video, 0, 0, videoWidth, videoHeight, scale)
+    // As shrunk, which may not be quite the scale asked for.
+    const s = frame.width / videoWidth
+    const region = {
+      x: Math.round(crop.x * s),
+      y: Math.round(crop.y * s),
+      width: Math.min(Math.round(crop.width * s), frame.width),
+      height: Math.min(Math.round(crop.height * s), frame.height)
+    }
+    return { frame, width: region.width, height: region.height, region }
+  }
+  const frame = await shrunk(video, crop.x, crop.y, crop.width, crop.height, scale)
+  return { frame, width: frame.width, height: frame.height }
+}
+
+/** Part of the video as a bitmap, shrunk by scale (the browser's resize, else a canvas's). */
+async function shrunk(
+  video: HTMLVideoElement,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  scale: number
+): Promise<ImageBitmap> {
+  if (scale === 1) return createImageBitmap(video, x, y, width, height)
+  const w = Math.max(1, Math.round(width * scale))
+  const h = Math.max(1, Math.round(height * scale))
+  const bitmap = await createImageBitmap(video, x, y, width, height, {
+    resizeWidth: w,
+    resizeHeight: h,
+    resizeQuality: 'medium'
+  })
+  if (bitmap.width === w && bitmap.height === h) return bitmap
+  // A browser that ignored the resize: drawn smaller instead.
+  bitmap.close()
+  const canvas = new OffscreenCanvas(w, h)
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return createImageBitmap(video, x, y, width, height)
+  ctx.drawImage(video, x, y, width, height, 0, 0, w, h)
+  return canvas.transferToImageBitmap()
+}
+
+/**
+ * The outline to draw as soon as the worker answers, before the card's text is read and looked
+ * up: only a card whose art matched outright (not on the holder search's second look, and not
+ * near a card back), which is a card whatever its text says. Anything else waits for the lookup.
+ */
+export function earlyOutline(seen: FrameSignals): Quad | null {
+  const top = seen.art[0]
+  if (!seen.found || !seen.quad || !top || top.distance > ART_MAX_DISTANCE) return null
+  if (seen.artVia || seen.artBack !== undefined) return null
+  return seen.quad
 }
 
 /** A quad in the whole frame, in the crop's pixels for drawing over the preview. */
@@ -897,7 +961,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
           return
         }
         const grabFrom = performance.now()
-        const grabbed = await grab(video, !!o.wholeFrame).catch(() => null)
+        const grabbed = await grab(video, !!o.wholeFrame, o.maxFrameWidth).catch(() => null)
         if (!grabbed) return
         if (!live) {
           grabbed.frame.close()
@@ -910,6 +974,8 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
         const started = performance.now()
         // A counted card being read: its frames are kept for the reading, as grabbed.
         const read = l.read
+        // When the outline was drawn early, off the art alone (earlyOutline).
+        let drawnAt: number | null = null
         let raw
         try {
           raw = await engine.analyze(frame, {
@@ -917,7 +983,14 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
             wantText: l.lastFound,
             wantLook: !!o.lookModel && profile.rarityLook,
             ...(read ? { tilt: read.imageIds, at: started } : {}),
-            ...(region ? { region } : {})
+            ...(region ? { region } : {}),
+            onVision: (seen) => {
+              const quad = earlyOutline(seen)
+              if (!quad || !live || engineRef.current !== engine) return
+              if (latest.current.setKey !== o.setKey) return
+              setOutline({ quad: inPreview(quad, region), width, height })
+              drawnAt = performance.now()
+            }
           })
         } catch {
           // An engine thrown away for another game owes nothing.
@@ -980,7 +1053,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
               ocr,
               wait: Math.max(0, analyzed - started - pixels - vision - ocr),
               lookup: resolved - analyzed,
-              outline: resolved - grabFrom,
+              outline: (drawnAt ?? resolved) - grabFrom,
               every: l.lastGrab === null ? 0 : grabFrom - l.lastGrab
             })
           )

@@ -33,7 +33,8 @@ export function useHubScan({
   onPull,
   wholeFrame = false,
   codeMode = false,
-  timings = false
+  timings = false,
+  maxFrameWidth
 }: {
   videoRef: RefObject<HTMLVideoElement | null>
   stream: MediaStream | null
@@ -50,6 +51,8 @@ export function useHubScan({
   codeMode?: boolean
   /** As useScanLoop's: measure each frame for a timing readout. */
   timings?: boolean
+  /** As useScanLoop's: live frames shrunk to at most this wide. */
+  maxFrameWidth?: number
   /** Hears each pull once it's counted: `pull.id` is the row key, `scanned` the copies on the list. */
   onPull?: (pull: Pull, scanned: number, draft: ScanDraft) => void
 }): {
@@ -98,6 +101,7 @@ export function useHubScan({
     onRarityRead: reread,
     onStalled,
     wholeFrame,
+    maxFrameWidth,
     timings
   })
 

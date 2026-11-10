@@ -142,6 +142,43 @@ describe('createScanEngine', () => {
     expect(worker.terminate).toHaveBeenCalled()
   })
 
+  it('tells onVision what the worker saw before the text is read', async () => {
+    const api = createMockApi().scan
+    const order: string[] = []
+    vi.mocked(api.ocr).mockImplementation(async () => {
+      order.push('ocr')
+      return ['LOB-EN005']
+    })
+    const signals: FrameSignals = {
+      ...NO_CARD,
+      found: true,
+      quad: [
+        [1, 2],
+        [30, 2],
+        [30, 44],
+        [1, 44]
+      ],
+      art: [{ imageId: 1, distance: 3 }],
+      codeBands: [band(10)]
+    }
+    const { worker } = fakeWorker(signals)
+    const engine = createScanEngine({ api, makeWorker: () => worker })
+    await engine.init(null)
+    const seen: FrameSignals[] = []
+    const read = await engine.analyze(frame(), {
+      candidates: null,
+      wantText: true,
+      onVision: (s) => {
+        order.push('vision')
+        seen.push(s)
+      }
+    })
+    expect(order).toEqual(['vision', 'ocr'])
+    expect(seen[0].quad).toEqual(signals.quad)
+    expect(read.codeTexts).toEqual(['LOB-EN005'])
+    engine.dispose()
+  })
+
   it('reads every name band, the card either way up when the worker sends both', async () => {
     const api = createMockApi().scan
     vi.mocked(api.ocr).mockImplementation(async (bands) =>

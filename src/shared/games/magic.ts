@@ -3,6 +3,36 @@ import type { GameDef } from './types'
 
 export const MTG_RARITIES = ['Common', 'Uncommon', 'Rare', 'Mythic', 'Special', 'Bonus'] as const
 
+/** Card types `mtg_cards.types` can hold, in the order they are listed; `cards.type` is the first present. */
+export const MTG_CARD_TYPES = [
+  'Artifact',
+  'Battle',
+  'Creature',
+  'Enchantment',
+  'Instant',
+  'Kindred',
+  'Land',
+  'Planeswalker',
+  'Sorcery',
+  'Tribal',
+  'Token',
+  'Emblem',
+  'Dungeon',
+  'Conspiracy',
+  'Plane',
+  'Phenomenon',
+  'Scheme',
+  'Vanguard'
+] as const
+
+export const MTG_COLOR_NAMES = {
+  W: 'White',
+  U: 'Blue',
+  B: 'Black',
+  R: 'Red',
+  G: 'Green'
+} as const
+
 export const MAGIC: GameDef = {
   id: 'mtg',
   name: 'Magic',

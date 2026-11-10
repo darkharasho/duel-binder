@@ -12,9 +12,10 @@ export interface ShowingTracker {
   push(now: number, outcome: ScanOutcome): ScanDraft | null
   /**
    * Nothing counts until the view clears, or settleMs pass (a hand swapping cards may never clear
-   * it): a card just counted some other way, which live frames may take for its twin.
+   * it): a card just counted some other way, which live frames may take for its twin. `cardId`,
+   * the card that counted, if any, is shown from then on, so it never counts again while held.
    */
-  settle(now: number): void
+  settle(now: number, cardId?: number | null): void
   reset(): void
 }
 
@@ -99,9 +100,9 @@ export function createShowingTracker(
       return outcome.item
     },
 
-    settle(now) {
+    settle(now, cardId = null) {
       clearStreak()
-      shown = null
+      shown = cardId
       settledUntil = now + settleMs
     },
 

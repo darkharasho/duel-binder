@@ -183,6 +183,14 @@ describe('createShowingTracker', () => {
     expect(t.push(140, seen(1))?.cardId).toBe(1)
   })
 
+  it('after settle for a counted card never counts that card again while it is held', () => {
+    const t = createShowingTracker({ stableFrames: 1, absentMs: 100, settleMs: 500 })
+    t.settle(0, 1)
+    expect(t.push(600, seen(1))).toBeNull()
+    expect(t.push(700, seen(1))).toBeNull()
+    expect(t.push(800, seen(2))?.cardId).toBe(2)
+  })
+
   it('after settle counts again once settleMs pass, for a view that never clears', () => {
     const t = createShowingTracker({ stableFrames: 1, absentMs: 100, settleMs: 500 })
     t.settle(0)

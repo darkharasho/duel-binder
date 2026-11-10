@@ -916,7 +916,10 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
         best ??= looked
       }
       if (stale() || (quiet && best === null)) return
-      tracker.current.settle(performance.now())
+      tracker.current.settle(
+        performance.now(),
+        best?.kind === 'recognized' ? best.item.cardId : null
+      )
       if (best?.kind === 'recognized') {
         counted(best.item, engine, o, null)
       } else {
@@ -1116,8 +1119,11 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
             void keepDebugShot(shot, o.game, raw, outcome, draft !== null, l.debugTimes)
             l.debugTimes = []
           }
-          if (draft) counted(draft, engine, o, raw.quad)
-          else show(outcome, null)
+          if (draft) {
+            // A photo asked for on its own while this frame was read is no longer needed.
+            if (l.photoQuiet) l.photoWanted = false
+            counted(draft, engine, o, raw.quad)
+          } else show(outcome, null)
         }
 
         // The worker is free once it has answered (or the frame failed): the next frame's art is

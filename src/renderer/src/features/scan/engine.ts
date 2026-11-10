@@ -396,6 +396,11 @@ export function createScanEngine(deps: {
           // Handed over rather than copied: it's a few MB, and the caller reads a fresh one each time.
           send({ type: 'init', fingerprints: fp, game: deps.game ?? 'ygo', refs }, fp ? [fp] : [])
           inits.push(watched({ resolve, reject }, initMs))
+          // A read of nothing starts the text reader now, so the first card held up doesn't wait
+          // for it to load (a second or so on a phone).
+          void Promise.resolve()
+            .then(() => deps.api.ocr([], deps.game === 'pkm' ? 'number' : 'code'))
+            .catch(() => {})
         } catch (e) {
           reject(e instanceof Error ? e : new Error(String(e)))
         }

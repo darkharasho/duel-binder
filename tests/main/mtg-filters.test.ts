@@ -211,6 +211,32 @@ describe('Magic filters, facets, stats and details', () => {
     expect(browse({ q: 'Serra' })).toEqual(['Serra Angel', 'Serra Angel'])
   })
 
+  it('search puts English first among same-named cards and labels each language', () => {
+    const add = (lang: string, localName: string | null): number => {
+      const id = mtgCardId(lang, 'serra-oracle')
+      db.prepare(
+        `INSERT INTO cards (id, game, name, type, frame_type, race, "desc", updated_at)
+         VALUES (?, 'mtg', 'Serra Angel', 'Creature', 'mtg', '', '', '2026-11-09')`
+      ).run(id)
+      db.prepare(
+        `INSERT INTO mtg_cards (card_id, oracle_id, layout, type_line, lang, local_name)
+         VALUES (?, 'serra-oracle', 'normal', 'Creature - Angel', ?, ?)`
+      ).run(id, lang, localName)
+      return id
+    }
+    // Inserted German, Japanese: the order out must not follow the table's.
+    const de = add('de', 'Serra-Engel')
+    const ja = add('ja', 'セラの天使')
+    db.exec(`INSERT INTO cards_fts(cards_fts) VALUES('rebuild')`)
+    const hits = searchCards(db, 'Serra Angel')
+    expect(hits.map((r) => r.id)).toEqual([mtg.cardIds[0], ja, de])
+    expect(hits.map((r) => [r.language, r.localName])).toEqual([
+      ['en', undefined],
+      ['ja', 'セラの天使'],
+      ['de', 'Serra-Engel']
+    ])
+  })
+
   it('gives artists in a fixed order, only on the details read', () => {
     db.prepare("UPDATE mtg_images SET artist = 'Zed' WHERE image_id = ?").run(mtg.imageIds[0])
     db.prepare("UPDATE mtg_images SET artist = 'Abe' WHERE image_id = ?").run(mtg.imageIds[1])

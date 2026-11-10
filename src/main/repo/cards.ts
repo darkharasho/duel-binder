@@ -12,7 +12,7 @@ import type {
 } from '../../shared/types'
 import { byGame, gameOfId, mtgImageId, type GameId } from '../../shared/games'
 import { opPrintingImageId } from '../../shared/games/onePiece'
-import { isLanguage } from '../../shared/languages'
+import { isLanguage, LANGUAGES } from '../../shared/languages'
 import { setPrice } from './priceRule'
 import { shownPrinting } from './shownPrinting'
 import { LOCAL, scopeGame, type Scope } from './scope'
@@ -328,7 +328,42 @@ export function searchCards(db: SqlDb, q: string, limit = 20, scope: Scope = LOC
       .all(`%${escapeLike(text)}%`, limit) as DbHit[]
     rows.forEach((r) => push(toResult(r)))
   }
-  return results
+  return scopeGame(db, scope) === 'mtg' ? withMagicLanguages(db, results) : results
+}
+
+const LANGUAGE_ORDER = new Map<string, number>(LANGUAGES.map((l, i) => [l.code, i]))
+
+/**
+ * Every language of a Magic card is its own card under the English name, so a name search finds
+ * them all at once: each gets its language and printed name, and same-named cards sit together
+ * where the first of them was found, English first, then in the language list's order.
+ */
+function withMagicLanguages(db: SqlDb, results: CardSearchResult[]): CardSearchResult[] {
+  if (results.length === 0) return results
+  const rows = db
+    .prepare(
+      `SELECT card_id, lang, local_name FROM mtg_cards WHERE card_id IN (${results.map(() => '?').join(',')})`
+    )
+    .all(...results.map((r) => r.id)) as { card_id: number; lang: string; local_name: string | null }[]
+  const facts = new Map(rows.map((r) => [r.card_id, r]))
+  const labelled = results.map((r): CardSearchResult => {
+    const f = facts.get(r.id)
+    if (!f || !isLanguage(f.lang)) return r
+    return { ...r, language: f.lang, ...(f.local_name ? { localName: f.local_name } : {}) }
+  })
+  const firstAt = new Map<string, number>()
+  labelled.forEach((r, i) => {
+    if (!firstAt.has(r.name)) firstAt.set(r.name, i)
+  })
+  const langAt = (r: CardSearchResult): number =>
+    r.language === undefined ? -1 : (LANGUAGE_ORDER.get(r.language) ?? LANGUAGES.length)
+  return labelled
+    .map((r, i) => ({ r, i }))
+    .sort(
+      (a, b) =>
+        firstAt.get(a.r.name)! - firstAt.get(b.r.name)! || langAt(a.r) - langAt(b.r) || a.i - b.i
+    )
+    .map(({ r }) => r)
 }
 
 interface DbHit {

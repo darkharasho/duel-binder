@@ -98,6 +98,10 @@ export interface CardSearchResult {
   type: string
   defaultImageId: number
   matchedSetCode: string | null
+  /** Magic only: the card row's language (each language is its own card of the same English name). */
+  language?: Language
+  /** Magic only: the printed name in that language, when it has one. */
+  localName?: string
 }
 
 export interface CardDetail {

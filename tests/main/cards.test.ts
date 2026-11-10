@@ -16,6 +16,14 @@ test('buildFtsQuery', () => {
 
 test('name prefix search', () =>
   expect(searchCards(db, 'dark mag').map((r) => r.id)).toEqual([46986414]))
+test("other games' results carry no language or printed name", () =>
+  expect(Object.keys(searchCards(db, 'dark mag')[0]).sort()).toEqual([
+    'defaultImageId',
+    'id',
+    'matchedSetCode',
+    'name',
+    'type'
+  ]))
 test('apostrophes and FTS syntax never throw', () => {
   expect(searchCards(db, "Harpie's").map((r) => r.id)).toEqual([18144506])
   for (const q of ['"', '*', '-', '(', 'NOT', 'a AND', '  ', 'pot"of']) expect(() => searchCards(db, q)).not.toThrow()

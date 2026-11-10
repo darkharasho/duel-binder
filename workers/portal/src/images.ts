@@ -16,7 +16,7 @@ import {
   isFallbackLogoUrl,
   type ImageSize
 } from '../../../src/shared/imageSources'
-import { gameOfId, isTokenId } from '../../../src/shared/games/ids'
+import { gameOfId, isTokenId, mtgBackImageId, mtgImageId } from '../../../src/shared/games/ids'
 import { POKEDEX_SIZE } from '../../../src/shared/pokedex'
 import { uprightJpeg } from '../../../src/shared/upright'
 import { findPokemonSetArtUrl, findSetImageUrl } from '../../../src/main/repo/sets'
@@ -463,6 +463,17 @@ function resolve(deps: AppDeps, path: string): Target | null {
             )
           : null
       if (url === null) return null
+      // Borrowed English art is a placeholder until Scryfall has this object's own scan: keep it
+      // under the lender's key (one copy shared with the English printing, and this object's own
+      // key stays free for the real scan) and let browsers and the edge keep it only briefly.
+      const lender = row?.art_from ?? null
+      if (lender !== null)
+        return {
+          key: cardArtKey(kind, front ? mtgImageId(lender) : mtgBackImageId(lender)),
+          source: fixed(url, { 'User-Agent': USER_AGENT }),
+          cache: FALLBACK_CACHE,
+          anonymous: true
+        }
       return {
         key: cardArtKey(kind, n),
         source: fixed(url, { 'User-Agent': USER_AGENT }),

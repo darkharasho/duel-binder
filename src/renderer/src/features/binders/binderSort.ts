@@ -1,5 +1,5 @@
 import { BINDER_SORTS, type BinderOrder, type BinderRules, type BinderSort } from '@shared/binders'
-import type { GameId } from '@shared/games'
+import { byGame, type GameId } from '@shared/games'
 import type { BinderCard } from '@shared/types'
 import { sortOptions, type SortOption } from '@/lib/filters'
 
@@ -66,13 +66,14 @@ const OP_COLORS = ['Red', 'Green', 'Blue', 'Purple', 'Black', 'Yellow']
  */
 function typeKey(c: BinderCard, game: GameId): number[] {
   const { card } = c
-  if (game === 'pkm') {
-    return [rank(PKM_CATEGORIES, card.type), rank(PKM_TYPES, card.pokemon?.types[0])]
-  }
-  if (game === 'op') {
-    return [rank(OP_TYPES, card.onePiece?.cardType), rank(OP_COLORS, card.onePiece?.colors[0])]
-  }
-  return [rank(YGO_FRAMES, card.frameType)]
+  // Thunks: only the shown game's key is worked out.
+  return byGame<() => number[]>(game, {
+    pkm: () => [rank(PKM_CATEGORIES, card.type), rank(PKM_TYPES, card.pokemon?.types[0])],
+    op: () => [rank(OP_TYPES, card.onePiece?.cardType), rank(OP_COLORS, card.onePiece?.colors[0])],
+    ygo: () => [rank(YGO_FRAMES, card.frameType)],
+    // Step 1: no Magic type order yet, so every card ties and release, number and name decide.
+    mtg: () => []
+  })()
 }
 
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })

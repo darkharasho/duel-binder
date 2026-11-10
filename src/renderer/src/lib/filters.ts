@@ -1,5 +1,5 @@
 import { LANGUAGES, type LanguageFilter } from '@shared/languages'
-import type { FilterDef, GameDef, GameId } from '@shared/games'
+import { byGame, type FilterDef, type GameDef, type GameId } from '@shared/games'
 import { englishSetName } from '@shared/setNames'
 import { DEFAULT_LANGUAGE } from '@/lib/languageFilter'
 import { RANGE_FIELDS, type RangeField, type RangeKey } from '@/lib/rangeFilters'
@@ -71,7 +71,9 @@ export function facetsFor(
       .map((f) => ({ key: f.key, label: LABELS[f.key] ?? f.label })),
     { key: 'setNames', label: 'Set' },
     // One Piece's rarity is its code facet (opRarities); a second Rarity of printing labels would repeat it.
-    ...(def.id === 'op' ? [] : [{ key: 'rarities' as const, label: def.vocab.rarity }])
+    ...(byGame(def.id, { ygo: true, pkm: true, op: false, mtg: true })
+      ? [{ key: 'rarities' as const, label: def.vocab.rarity }]
+      : [])
   ]
 }
 

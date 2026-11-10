@@ -351,6 +351,7 @@ export async function resolveSignals(raw: RawSignals, ctx: ResolveContext): Prom
   if (raw.found && cardBackInView(raw)) return { kind: 'none' }
   if (ctx.game === 'pkm') return resolvePokemonSignals(raw, ctx)
   if (ctx.game === 'op') return resolveOnePieceSignals(raw, ctx)
+  // mtg: scanner step (Magic has no scanner yet; it would fall into the Yu-Gi-Oh! path below).
   if (!raw.found) return { kind: 'none' }
   const artCard = await confidentArt(raw, ctx)
   const code = await byCode(raw, ctx)

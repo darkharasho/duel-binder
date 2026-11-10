@@ -21,7 +21,7 @@ export function CardDetails({
 }): React.JSX.Element | null {
   const { def } = useGame()
   if (!card) return null
-  // 'op' takes the def.details path below, like Pokémon, and gets the printing facts.
+  // 'op' and 'mtg' take the def.details path below, like Pokémon, and get the printing facts.
   const stats =
     def.id === 'ygo'
       ? [
@@ -32,7 +32,7 @@ export function CardDetails({
         ].filter(Boolean)
       : []
   // Only a Leader has a life, and an unset fact (a null block icon) is empty, so neither shows.
-  const gameFacts = (card.pokemon ?? card.onePiece) as object | undefined
+  const gameFacts = (card.pokemon ?? card.onePiece ?? card.magic) as object | undefined
   const own = def.details
     .map(({ key, label }) => ({ label, value: factText(gameFacts?.[key as never]) }))
     .filter((f) => f.value)

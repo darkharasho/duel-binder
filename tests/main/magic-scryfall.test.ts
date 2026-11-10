@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { gzipSync } from 'node:zlib'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createScryfall, isKept, parseBulkLines } from '../../scripts/catalog/magic/scryfall'
 import type { ScryCard } from '../../scripts/catalog/magic/types'
 
@@ -45,8 +45,11 @@ describe('isKept', () => {
     expect(isKept({ ...paper, games: ['paper', 'mtgo'], digital: true })).toBe(false)
   })
   it('judges the fixture objects', () => {
-    expect(OBJECTS.some((o) => o.lang !== 'en')).toBe(true)
-    expect(OBJECTS.some((o) => o.digital)).toBe(true)
+    const ja = OBJECTS.filter((o) => o.lang !== 'en')
+    const digital = OBJECTS.filter((o) => o.digital)
+    expect(ja.length).toBeGreaterThan(0)
+    expect(digital.length).toBeGreaterThan(0)
+    for (const o of [...ja, ...digital]) expect(isKept(o)).toBe(false)
   })
 })
 
@@ -108,14 +111,57 @@ describe('createScryfall', () => {
   })
 
   it('spaces api requests by gapMs', async () => {
-    const starts: number[] = []
-    const fake = (async (url: string) => {
-      starts.push(Date.now())
-      return url.endsWith('/sets')
-        ? jsonRes({ has_more: true, next_page: 'https://api.scryfall.com/sets?page=2', data: [] })
-        : jsonRes({ data: [] })
-    }) as unknown as typeof fetch
-    await createScryfall({ version: 'x', fetch: fake, gapMs: 60 }).sets()
-    expect(starts[1] - starts[0]).toBeGreaterThanOrEqual(55)
+    vi.useFakeTimers()
+    try {
+      const starts: number[] = []
+      const fake = (async (url: string) => {
+        starts.push(Date.now())
+        return url.endsWith('/sets')
+          ? jsonRes({ has_more: true, next_page: 'https://api.scryfall.com/sets?page=2', data: [] })
+          : jsonRes({ data: [] })
+      }) as unknown as typeof fetch
+      const p = createScryfall({ version: 'x', fetch: fake, gapMs: 60 }).sets()
+      await vi.advanceTimersByTimeAsync(200)
+      await p
+      expect(starts[1] - starts[0]).toBeGreaterThanOrEqual(60)
+    } finally {
+      vi.useRealTimers()
+    }
   })
+
+  it('cards() rejects on a failed response', async () => {
+    const fake = (async () => new Response('nope', { status: 503 })) as unknown as typeof fetch
+    const s = createScryfall({ version: 'x', fetch: fake, gapMs: 0 })
+    await expect(collect(s.cards('https://x/default.json'))).rejects.toThrow('returned 503')
+  })
+
+  it('cards() rejects a gzipped body cut in half', async () => {
+    const gz = gzipSync(Buffer.from(FIXTURE))
+    const fake = (async () =>
+      new Response(gz.subarray(0, gz.length >> 1), { status: 200 })) as unknown as typeof fetch
+    const s = createScryfall({ version: 'x', fetch: fake, gapMs: 0 })
+    await expect(collect(s.cards('https://x/default.json'))).rejects.toThrow()
+  }, 5000)
+
+  it.each([
+    ['gzipped', (b: Buffer) => gzipSync(b)],
+    ['plain', (b: Buffer) => b]
+  ])(
+    'cards() rejects when a %s body errors partway',
+    async (_n, enc) => {
+      const bytes = enc(Buffer.from(FIXTURE))
+      const body = new ReadableStream<Uint8Array>({
+        start(c) {
+          c.enqueue(bytes.subarray(0, bytes.length >> 1))
+        },
+        pull(c) {
+          c.error(new Error('connection reset'))
+        }
+      })
+      const fake = (async () => new Response(body, { status: 200 })) as unknown as typeof fetch
+      const s = createScryfall({ version: 'x', fetch: fake, gapMs: 0 })
+      await expect(collect(s.cards('https://x/default.json'))).rejects.toThrow('connection reset')
+    },
+    5000
+  )
 })

@@ -1,5 +1,5 @@
-import { createInterface } from 'node:readline'
-import { Readable } from 'node:stream'
+import { PassThrough, Readable, pipeline, type Transform } from 'node:stream'
+import { StringDecoder } from 'node:string_decoder'
 import { createGunzip } from 'node:zlib'
 import { createLimiter, getJson, REPO_URL } from '../pokemon/http'
 import type { ScryCard, ScryfallSource, ScrySet } from './types'
@@ -8,6 +8,47 @@ const API = 'https://api.scryfall.com'
 const DEFAULT_GAP_MS = 100
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
+
+/** The first chunk, put back, or undefined for an empty stream. Rejects if the stream errors first. */
+function peek(src: Readable): Promise<Buffer | undefined> {
+  return new Promise((resolve, reject) => {
+    const done = (fn: () => void): void => {
+      src.off('readable', onReadable)
+      src.off('end', onEnd)
+      src.off('error', onError)
+      fn()
+    }
+    const onReadable = (): void => {
+      const chunk = src.read() as Buffer | null
+      if (chunk === null) return
+      done(() => {
+        src.unshift(chunk)
+        resolve(chunk)
+      })
+    }
+    const onEnd = (): void => done(() => resolve(undefined))
+    const onError = (e: Error): void => done(() => reject(e))
+    src.on('readable', onReadable)
+    src.on('end', onEnd)
+    src.on('error', onError)
+  })
+}
+
+/** Lines of a byte stream; a stream error rejects the iteration. */
+async function* splitLines(input: AsyncIterable<Buffer>): AsyncIterable<string> {
+  const dec = new StringDecoder('utf8')
+  let rest = ''
+  for await (const chunk of input) {
+    rest += dec.write(chunk)
+    let i: number
+    while ((i = rest.indexOf('\n')) >= 0) {
+      yield rest.slice(0, i)
+      rest = rest.slice(i + 1)
+    }
+  }
+  rest += dec.end()
+  if (rest !== '') yield rest
+}
 
 /** What the job keeps: English, in paper, not digital-only. Everything else is dropped silently. */
 export function isKept(c: ScryCard): boolean {
@@ -78,20 +119,13 @@ export function createScryfall(o: {
     async *cards(downloadUri) {
       const res = await f(downloadUri, { headers: { 'User-Agent': userAgent, Accept: '*/*' } })
       if (!res.ok || !res.body) throw new Error(`GET ${downloadUri} returned ${res.status}`)
-      let body: AsyncIterable<Uint8Array> = Readable.fromWeb(res.body as never)
-      const it = body[Symbol.asyncIterator]()
-      const first = await it.next()
-      const head = first.done ? undefined : first.value
-      const rest: AsyncIterable<Uint8Array> = (async function* () {
-        if (head) yield head
-        for (let r = await it.next(); !r.done; r = await it.next()) yield r.value
-      })()
-      body =
-        head && head[0] === 0x1f && head[1] === 0x8b
-          ? Readable.from(rest).pipe(createGunzip())
-          : Readable.from(rest)
-      const rl = createInterface({ input: body as Readable, crlfDelay: Infinity })
-      yield* parseBulkLines(rl)
+      const src = Readable.fromWeb(res.body as never)
+      const head = await peek(src)
+      const body: Transform =
+        head && head[0] === 0x1f && head[1] === 0x8b ? createGunzip() : new PassThrough()
+      // pipeline destroys `body` with the source's error, so a dropped download rejects the iteration.
+      pipeline(src, body, () => {})
+      yield* parseBulkLines(splitLines(body))
     },
     async sets() {
       const out: ScrySet[] = []

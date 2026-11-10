@@ -12,21 +12,19 @@ export const isMarketOnly = `+p.game IN (${MARKET_ONLY_GAMES})`
 /**
  * Chinese Pokémon and Japanese One Piece have no TCGplayer market, so the portal's eBay set sweeps
  * (workers/portal/src/pokemonSweep.ts, onePieceSweep.ts) are their price: that language's listings
- * only, always USD, never another language's card. Japanese is by game: Pokémon Japanese is not swept.
+ * only, always USD, never another language's card. By game: Pokémon Japanese is not swept, and
+ * nothing sweeps Magic, so a stray eBay row never prices a Chinese Magic card.
  */
-const SWEPT_LANGUAGES = ['zh-hans', 'zh-hant']
-const SWEPT_LANGUAGE_SQL = SWEPT_LANGUAGES.map((l) => `'${l}'`).join(',')
-/** Languages swept for one game only. */
-const SWEPT_BY_GAME: Record<string, string[]> = { op: ['ja'] }
+const SWEPT_BY_GAME: Record<string, string[]> = { pkm: ['zh-hans', 'zh-hant'], op: ['ja'] }
 
 /** True when a market-price-only game's printing in this language may use its swept eBay price. */
 export const sweptPrinting = (game: unknown, language: string): boolean =>
-  SWEPT_LANGUAGES.includes(language) || (typeof game === 'string' && (SWEPT_BY_GAME[game] ?? []).includes(language))
+  typeof game === 'string' && (SWEPT_BY_GAME[game] ?? []).includes(language)
 
 /** SQL condition: the printing alias `p` is in a swept language (sweptPrinting). */
-const SWEPT_SQL = `(p.language IN (${SWEPT_LANGUAGE_SQL})${Object.entries(SWEPT_BY_GAME)
-  .map(([g, ls]) => ` OR (p.game = '${g}' AND p.language IN (${ls.map((l) => `'${l}'`).join(',')}))`)
-  .join('')})`
+const SWEPT_SQL = `(${Object.entries(SWEPT_BY_GAME)
+  .map(([g, ls]) => `(p.game = '${g}' AND p.language IN (${ls.map((l) => `'${l}'`).join(',')}))`)
+  .join(' OR ')})`
 
 /** A market-price-only game's price, for a query that has `p` and `ip` (intl_prices). */
 export const MARKET_ONLY_PRICE = `CASE WHEN ${SWEPT_SQL} THEN COALESCE(p.market_price, ip.price) ELSE p.market_price END`

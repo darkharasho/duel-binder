@@ -334,6 +334,10 @@ describe('Magic Chinese printings keep the market-only price rule', () => {
       )
     const unpriced = insert('TST 1', null)
     const priced = insert('TST 2', 2.5)
+    // A stray eBay row (nothing sweeps Magic) must not price it either.
+    db.prepare(
+      'INSERT INTO intl_prices (printing_id, price, listing_count, checked_at) VALUES (?, 7.5, 3, ?)'
+    ).run(unpriced, '2026-11-09T12:00:00.000Z')
     const read = (id: number): { price: number | null; setPrice: number | null } =>
       db
         .prepare(

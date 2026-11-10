@@ -10,6 +10,7 @@ import type { Quad } from './vision/detect'
 import type { CropRect } from './crop'
 import type { TiltReading } from '@shared/scan/tiltFeatures'
 import type { TiltReply, TiltRequest } from './vision/tilt.worker'
+import { createEnginePool } from './enginePool'
 
 export type { ArtMatch } from '@shared/scan/fingerprintFile'
 
@@ -180,6 +181,11 @@ export interface ScanEngine {
   tiltReset?(): void
   /** Stops the worker and rejects pending calls; init and analyze reject afterwards. */
   dispose(): void
+  /**
+   * How many frames it analyses at once (enginePool.ts); 1 when left out. The scan loop keeps
+   * that many live frames in it.
+   */
+  lanes?: number
 }
 
 interface Waiter<T> {
@@ -549,3 +555,10 @@ export type EngineFactory = (game: GameId) => ScanEngine
 /** The real engine: the vision worker, with the main process's scan lookups. */
 export const defaultEngine: EngineFactory = (game) =>
   createScanEngine({ api: window.api.scan, makeWorker: makeVisionWorker, game })
+
+/**
+ * The phone's engine: two vision workers, so a frame's art is matched while the one before it
+ * still is. A phone's image step takes 160–330 ms, longer than the loop's frame gap.
+ */
+export const pairedEngine: EngineFactory = (game) =>
+  createEnginePool([defaultEngine(game), defaultEngine(game)])

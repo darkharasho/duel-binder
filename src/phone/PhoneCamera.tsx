@@ -6,7 +6,7 @@ import type { TiltModel } from '@shared/scan/tilt'
 import { TILT_MODELS } from '@shared/scan/tiltModel'
 import type { GameId } from '@shared/games/types'
 import { scanProfile } from '@shared/scan/profiles'
-import { defaultEngine, type EngineFactory } from '@/features/scan/engine'
+import { pairedEngine, type EngineFactory } from '@/features/scan/engine'
 import { useScanHub } from '@/features/scan/ScanHub'
 import { ArtDataNotice } from '@/features/scan/ArtDataNotice'
 import { ScanViewport } from '@/features/scan/ScanViewport'
@@ -123,7 +123,7 @@ function AimBox({ added }: { added: boolean }): React.JSX.Element {
  * without them (Pokémon) scans without it. `lookModel` and `tiltModels` are for tests.
  */
 export function PhoneCamera({
-  engineFactory = defaultEngine,
+  engineFactory = pairedEngine,
   lookModel = LOOK_MODEL,
   tiltModels = TILT_MODELS,
   className,

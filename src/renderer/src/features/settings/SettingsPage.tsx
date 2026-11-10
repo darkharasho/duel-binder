@@ -6,6 +6,7 @@ import { useUpdateStatus } from './useUpdateToasts'
 import { api, queryKeys } from '@/lib/api'
 import { formatRelative } from '@/lib/format'
 import { useGame } from '@/lib/game'
+import { MAGIC_FAN_CONTENT, SCRYFALL_CREDIT } from '@shared/legal'
 import { useContribute } from '@/features/training/contributeContext'
 import { GAMES } from '@shared/games'
 import { isWeb } from '@/lib/platform'
@@ -64,6 +65,7 @@ function describeUpdate(s: UpdateStatus | undefined): string {
 }
 
 function AboutSection(): React.JSX.Element {
+  const { available } = useGame()
   return (
     <Section title="About">
       <p className="text-sm text-muted-foreground">
@@ -91,6 +93,12 @@ function AboutSection(): React.JSX.Element {
         and TCGplayer; set logos from TCGdex and the Pokémon TCG API. Pokémon images © The Pokémon
         Company.
       </p>
+      {available.includes('mtg') && (
+        <>
+          <p className="text-sm text-muted-foreground">{MAGIC_FAN_CONTENT}</p>
+          <p className="text-sm text-muted-foreground">{SCRYFALL_CREDIT}</p>
+        </>
+      )}
     </Section>
   )
 }

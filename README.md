@@ -6,6 +6,8 @@ Card data and images come from [YGOPRODeck](https://ygoprodeck.com). This projec
 
 Pokémon card data comes from [TCGdex](https://tcgdex.dev). This project is not affiliated with or endorsed by The Pokémon Company, Nintendo, Creatures or GAME FREAK, who own Pokémon.
 
+Duel Binder is unofficial Fan Content permitted under the Fan Content Policy. Not approved/endorsed by Wizards. Portions of the materials used are property of Wizards of the Coast. ©Wizards of the Coast LLC. Card data and images from Scryfall.
+
 ## Install notes
 
 Release builds are not code-signed by a paid certificate, so the OS warns on first launch:

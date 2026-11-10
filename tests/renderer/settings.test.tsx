@@ -3,6 +3,9 @@ import userEvent from '@testing-library/user-event'
 import { toast } from 'sonner'
 import { SettingsPage } from '@/features/settings/SettingsPage'
 import type { UnsyncedEntry } from '@shared/types'
+import { MAGIC_FAN_CONTENT, SCRYFALL_CREDIT } from '@shared/legal'
+import type { GameId } from '@shared/games'
+import { GameProvider } from '@/lib/game'
 import { createMockApi, renderWithProviders } from './mockApi'
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() }, Toaster: () => null }))
@@ -44,6 +47,29 @@ describe('SettingsPage', () => {
       'href',
       'https://yugipedia.com/'
     )
+  })
+
+  it('shows the Fan Content notice and Scryfall credit only with Magic allowed', async () => {
+    const without = renderWithProviders(<SettingsPage />, { api: createMockApi() })
+    await screen.findByText(/Non-English set lists from/)
+    expect(screen.queryByText(MAGIC_FAN_CONTENT)).not.toBeInTheDocument()
+    expect(screen.queryByText(SCRYFALL_CREDIT)).not.toBeInTheDocument()
+    without.unmount()
+
+    const api = createMockApi({
+      games: {
+        available: vi.fn(async (): Promise<GameId[]> => ['ygo', 'mtg']),
+        active: vi.fn(async (): Promise<GameId> => 'ygo')
+      }
+    })
+    renderWithProviders(
+      <GameProvider>
+        <SettingsPage />
+      </GameProvider>,
+      { api }
+    )
+    expect(await screen.findByText(MAGIC_FAN_CONTENT)).toBeInTheDocument()
+    expect(screen.getByText(SCRYFALL_CREDIT)).toBeInTheDocument()
   })
 
   it('says prices come from the account', async () => {

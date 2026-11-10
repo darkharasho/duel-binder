@@ -1,4 +1,5 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { MAGIC_FAN_CONTENT, SCRYFALL_CREDIT } from '@shared/legal'
 import userEvent from '@testing-library/user-event'
 import { App } from '../../src/phone/App'
 import {
@@ -539,6 +540,24 @@ describe('phone app', () => {
       typeof fakeStore
     > & { active: string }
   }
+
+  it('About shows the Fan Content notice and Scryfall credit only with Magic allowed', async () => {
+    const user = userEvent.setup()
+    const store = gamesStore(['ygo', 'pkm'])
+    installPhoneApi(store)
+    const { unmount } = renderApp(store)
+    await openSettings(user)
+    expect(screen.queryByText(MAGIC_FAN_CONTENT)).not.toBeInTheDocument()
+    expect(screen.queryByText(SCRYFALL_CREDIT)).not.toBeInTheDocument()
+    unmount()
+
+    const mtg = gamesStore(['ygo', 'pkm', 'mtg'])
+    installPhoneApi(mtg)
+    renderApp(mtg)
+    await openSettings(user)
+    expect(await screen.findByText(MAGIC_FAN_CONTENT)).toBeInTheDocument()
+    expect(screen.getByText(SCRYFALL_CREDIT)).toBeInTheDocument()
+  })
 
   it('contribute row only for tester games', async () => {
     const user = userEvent.setup()

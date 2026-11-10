@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { detectOs, isAndroid } from '../../workers/portal/src/site/os'
 import { formatSize, renderPage } from '../../workers/portal/src/site/page'
 import { renderPrivacy } from '../../workers/portal/src/site/privacy'
+import { MAGIC_FAN_CONTENT, SCRYFALL_CREDIT } from '../../src/shared/legal'
 import { renderTerms } from '../../workers/portal/src/site/terms'
 import { pickDownloads, RELEASES_FALLBACK } from '../../workers/portal/src/site/releases'
 import { releaseV021 } from './fixtures/release'
@@ -190,7 +191,22 @@ describe('renderPrivacy', () => {
   })
 })
 
+describe('marketing home page and Magic', () => {
+  it('stays free of the Magic notice while Magic is not open to everyone', () => {
+    const html = page()
+    expect(html).not.toContain(MAGIC_FAN_CONTENT)
+    expect(html).not.toContain(SCRYFALL_CREDIT)
+  })
+})
+
 describe('renderTerms', () => {
+  it('carries the Wizards Fan Content notice and the Scryfall credit', () => {
+    const html = renderTerms({ appUrl })
+    expect(html).toContain(MAGIC_FAN_CONTENT)
+    expect(html).toContain(SCRYFALL_CREDIT)
+    expect(html).toContain('©Wizards of the Coast LLC.')
+  })
+
   it('terms page renders, links the privacy policy and has the footer links', () => {
     const html = renderTerms({ appUrl })
     expect(html).toContain('<h1>Terms of Service</h1>')

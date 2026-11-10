@@ -3,6 +3,7 @@ export interface ScryFace {
   name: string
   oracle_id?: string
   mana_cost?: string
+  cmc?: number
   type_line?: string
   oracle_text?: string
   colors?: string[]

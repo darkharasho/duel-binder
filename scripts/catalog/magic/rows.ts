@@ -130,6 +130,30 @@ function cardRow(o: ScryCard, oracleId: string): MtgCardRow {
   }
 }
 
+/**
+ * An object with no top-level oracle id (a reversible card, a double-faced token) as one
+ * single-faced card made of face 0 alone, never a doubled "X // X" card.
+ */
+function faceZeroView(o: ScryCard): ScryCard {
+  const f = o.card_faces?.[0]
+  if (!f) return o
+  return {
+    ...o,
+    name: f.name,
+    layout: 'normal',
+    mana_cost: f.mana_cost,
+    cmc: f.cmc ?? o.cmc,
+    type_line: f.type_line,
+    oracle_text: f.oracle_text,
+    colors: f.colors ?? o.colors,
+    power: f.power,
+    toughness: f.toughness,
+    loyalty: f.loyalty,
+    defense: f.defense,
+    card_faces: undefined
+  }
+}
+
 /** Maps kept Scryfall objects (see `isKept`) to the Magic catalog rows. */
 export function mtgRows(objects: Iterable<ScryCard>, sets: ScrySet[]): MagicRows {
   const out: MagicRows = {
@@ -141,6 +165,7 @@ export function mtgRows(objects: Iterable<ScryCard>, sets: ScrySet[]): MagicRows
   }
   const byCode = new Map(sets.map((s) => [s.code.toLowerCase(), s]))
   const seen = new Set<string>()
+  const faceOnly = new Set<number>()
 
   for (const o of objects) {
     const rarity = rarityLabel(o.rarity)
@@ -177,7 +202,16 @@ export function mtgRows(objects: Iterable<ScryCard>, sets: ScrySet[]): MagicRows
     }
     if (printings.length === 0) continue
 
-    if (!out.cards.has(cardId)) out.cards.set(cardId, cardRow(o, oracleId))
+    // A row from an object with its own oracle id wins over one from the face-0 fallback
+    // (reversible cards, double-faced tokens), whatever order the file lists them in.
+    const fromFace = o.oracle_id === undefined
+    if (!out.cards.has(cardId)) {
+      out.cards.set(cardId, cardRow(fromFace ? faceZeroView(o) : o, oracleId))
+      if (fromFace) faceOnly.add(cardId)
+    } else if (!fromFace && faceOnly.has(cardId)) {
+      out.cards.set(cardId, cardRow(o, oracleId))
+      faceOnly.delete(cardId)
+    }
     const face0 = o.card_faces?.[0]
     out.images.push({
       imageId: mtgImageId(o.id),

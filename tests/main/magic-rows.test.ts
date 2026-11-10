@@ -96,6 +96,70 @@ describe('mtgRows', () => {
     expect(rows.images.find((i) => i.scryfallId === o.id)?.imageId).toBe(mtgImageId(o.id))
   })
 
+  describe('reversible card and its normal printing', () => {
+    const normalOf = (rev: ScryCard): ScryCard => ({
+      ...structuredClone(rev),
+      id: '00000000-0000-4000-8000-0000000000aa',
+      oracle_id: rev.card_faces![0].oracle_id,
+      name: 'Adrix and Nev, Twincasters',
+      layout: 'normal',
+      collector_number: '901',
+      mana_cost: '{2}{G}{U}',
+      cmc: 4,
+      type_line: 'Legendary Creature - Merfolk Druid',
+      oracle_text: 'Normal rules text.',
+      card_faces: undefined
+    })
+
+    it('the normal printing names the card whichever comes first', async () => {
+      const { objects, sets } = await load()
+      const rev = byName(objects, 'Adrix')
+      const normal = normalOf(rev)
+      for (const order of [
+        [rev, normal],
+        [normal, rev]
+      ]) {
+        const rows = mtgRows(order, sets)
+        const card = rows.cards.get(mtgCardId('en', normal.oracle_id as string))!
+        expect(rows.cards.size).toBe(1)
+        expect(card.name).toBe('Adrix and Nev, Twincasters')
+        expect(card.oracleText).toBe('Normal rules text.')
+        expect(card.desc).toBe('Normal rules text.')
+        expect(card.manaValue).toBe(4)
+        expect(card.manaCost).toBe('{2}{G}{U}')
+        expect(card.layout).toBe('normal')
+        expect(card.faces).toBeNull()
+      }
+    })
+
+    it('a reversible object alone is a card of face 0, not a doubled one', async () => {
+      const { objects, sets } = await load()
+      const rev = structuredClone(byName(objects, 'Adrix'))
+      rev.card_faces![0].oracle_text = 'Face zero text.'
+      rev.card_faces![0].mana_cost = '{3}'
+      rev.card_faces![0].cmc = 3
+      const card = [...mtgRows([rev], sets).cards.values()][0]
+      expect(card.name).toBe(rev.card_faces![0].name)
+      expect(card.name).not.toContain('//')
+      expect(card.oracleText).toBe('Face zero text.')
+      expect(card.desc).toBe('Face zero text.')
+      expect(card.manaCost).toBe('{3}')
+      expect(card.manaValue).toBe(3)
+      expect(card.faces).toBeNull()
+      expect(card.layout).not.toBe('reversible_card')
+    })
+
+    it('a double-faced token without an oracle id is face 0 too', async () => {
+      const { objects, sets } = await load()
+      const tok = structuredClone(byName(objects, 'Adrix'))
+      tok.layout = 'double_faced_token'
+      tok.name = 'Soldier // Spirit'
+      tok.card_faces![0].name = 'Soldier'
+      const card = [...mtgRows([tok], sets).cards.values()][0]
+      expect(card.name).toBe('Soldier')
+    })
+  })
+
   it('token types', async () => {
     const { objects, sets } = await load()
     const rows = mtgRows(objects, sets)

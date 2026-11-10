@@ -741,8 +741,9 @@ const ART_PATCH = 128
 /**
  * How many of the cards placed round inner frames are matched in full first (shortlist): those
  * whose art, where it would lie, comes closest. Only when none of them matches are the rest. For a
- * profile with art windows (windowArt) only: a held Pokémon card's cards round its art window
- * number dozens (one for each layout, each way up), a Yu-Gi-Oh card's round its inner frame two.
+ * profile with art windows (windowArt) or several inner frames: a held Pokémon card's cards round
+ * its art window number dozens (one for each layout, each way up), a One Piece card's six per
+ * outline, a Yu-Gi-Oh card's round its inner frame two.
  */
 const SHORTLIST = 4
 
@@ -1002,7 +1003,7 @@ export function recognizeArt(
         ...(short ? windows.slice(0, LIVE_WINDOWS) : windows)
       ].flatMap((q) => aroundInnerFrame(q, profile.innerFrames))
       const sure = profile.holderSearch ? INNER_SURE_DISTANCE : -1
-      const first = profile.windowArt ? shortlist(placed) : placed
+      const first = profile.windowArt || profile.innerFrames.length > 1 ? shortlist(placed) : placed
       let around = closest(first, sure)
       if (!around || around.distance > ART_MAX_DISTANCE) {
         const rest = closest(

@@ -122,7 +122,16 @@ const OP_PROFILE: ScanProfile = {
   // Cards are full art with no printed window, so outlines are scored by their own edges alone.
   windows: [],
   windowArt: false,
-  innerFrames: [],
+  // Printed lines a held card's outline is taken for, measured on the testers' Contribute photos
+  // (in the card the art matched): the art panel, edge to edge between the cost and power bar and
+  // the effect text; the white border's inside edge; and the card down to its name bar, whose
+  // edge fingers on a held card's sides leave as the likeliest bottom. Each found one more card
+  // of the 84 (78 to 81 right, no new wrong).
+  innerFrames: [
+    [0, 0.08, 1, 0.61],
+    [0.04, 0.035, 0.955, 0.967],
+    [0.03, 0, 0.98, 0.85]
+  ],
   windowShape: null,
   codeBands: [
     // The number with room either way for an outline a few percent off (outlines found without

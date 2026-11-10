@@ -126,9 +126,16 @@ describe('scan profiles', () => {
         holderSearch: false,
         keepOutline: false,
         windowArt: false,
-        windowShape: null,
-        innerFrames: []
+        windowShape: null
       })
+    })
+
+    it('tries a held card round its printed frames, each inside the card', () => {
+      expect(op().innerFrames.length).toBeGreaterThan(0)
+      for (const [x0, y0, x1, y1] of op().innerFrames) {
+        expect(0 <= x0 && x0 < x1 && x1 <= 1 && 0 <= y0 && y0 < y1 && y1 <= 1).toBe(true)
+        expect((x1 - x0) * (y1 - y0)).toBeLessThan(1)
+      }
     })
   })
 })

@@ -130,6 +130,103 @@ export function slimCard(c: ScryCard): ScryCard {
   return out as unknown as ScryCard
 }
 
+/**
+ * A function that returns a copy of a slimmed object with every repeated value shared with the
+ * objects before it: strings (a non-English object's game text is its English card's oracle text,
+ * and set names, artists, frames repeat across languages), string lists, prices. The values are
+ * the same, only stored once, and every copy is built from one object literal, so V8 gives them all
+ * one compact shape (an object filled key by key past a dozen keys turns into a hash table several
+ * times the size). Absent fields are `undefined`. That is how ~540k kept objects fit in memory.
+ * The objects and what they share are read-only from here on.
+ */
+export function createCompactor(): (c: ScryCard) => ScryCard {
+  const strings = new Map<string, string>()
+  const lists = new Map<string, string[]>()
+  const priceSets = new Map<string, ScryCard['prices']>()
+  const EMPTY_URIS: Record<string, string> = Object.freeze({}) as Record<string, string>
+  const str = <T extends string | undefined>(v: T): T => {
+    if (v === undefined) return v
+    const have = strings.get(v)
+    if (have !== undefined) return have as T
+    strings.set(v, v)
+    return v
+  }
+  const list = <T extends string[] | undefined>(a: T): T => {
+    if (a === undefined) return a
+    const key = `${a.length}\u0001${a.join('\u0000')}`
+    const have = lists.get(key)
+    if (have !== undefined) return have as T
+    const shared = a.map((x) => str(x))
+    lists.set(key, shared)
+    return shared as T
+  }
+  const prices = (p: ScryCard['prices'] | undefined): ScryCard['prices'] | undefined => {
+    if (!p) return undefined
+    const key = `${p.usd}\u0000${p.usd_foil}\u0000${p.usd_etched}`
+    let shared = priceSets.get(key)
+    if (shared === undefined) {
+      shared = { usd: p.usd, usd_foil: p.usd_foil, usd_etched: p.usd_etched }
+      priceSets.set(key, shared)
+    }
+    return shared
+  }
+  const face = (f: ScryFace): ScryFace => ({
+    name: str(f.name),
+    printed_name: str(f.printed_name),
+    oracle_id: str(f.oracle_id),
+    mana_cost: str(f.mana_cost),
+    cmc: f.cmc,
+    type_line: str(f.type_line),
+    oracle_text: str(f.oracle_text),
+    colors: list(f.colors),
+    power: str(f.power),
+    toughness: str(f.toughness),
+    loyalty: str(f.loyalty),
+    defense: str(f.defense),
+    illustration_id: str(f.illustration_id),
+    artist: str(f.artist),
+    image_uris: f.image_uris ? EMPTY_URIS : undefined
+  })
+  return (c) => ({
+    // The id is the one value no other object has: kept as is, never in the map.
+    id: c.id,
+    oracle_id: str(c.oracle_id),
+    name: str(c.name),
+    printed_name: str(c.printed_name),
+    image_status: str(c.image_status),
+    lang: str(c.lang),
+    layout: str(c.layout),
+    set: str(c.set),
+    set_name: str(c.set_name),
+    collector_number: str(c.collector_number),
+    rarity: str(c.rarity),
+    released_at: str(c.released_at),
+    games: list(c.games),
+    digital: c.digital,
+    finishes: list(c.finishes),
+    prices: prices(c.prices)!,
+    mana_cost: str(c.mana_cost),
+    cmc: c.cmc,
+    type_line: str(c.type_line),
+    oracle_text: str(c.oracle_text),
+    colors: list(c.colors),
+    color_identity: list(c.color_identity),
+    power: str(c.power),
+    toughness: str(c.toughness),
+    loyalty: str(c.loyalty),
+    defense: str(c.defense),
+    keywords: list(c.keywords),
+    card_faces: c.card_faces?.map(face),
+    illustration_id: str(c.illustration_id),
+    artist: str(c.artist),
+    frame: str(c.frame),
+    border_color: str(c.border_color),
+    full_art: c.full_art,
+    promo_types: list(c.promo_types),
+    image_uris: c.image_uris ? EMPTY_URIS : undefined
+  })
+}
+
 /** What the job keeps: a supported language, in paper, not digital-only. Everything else is dropped silently. */
 export function isKept(c: ScryCard): boolean {
   return mtgLanguageOf(c.lang) !== null && c.games.includes('paper') && c.digital !== true

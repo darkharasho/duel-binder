@@ -85,6 +85,33 @@ describe('runMagicStep', () => {
     expect(again.problems).toEqual([])
   })
 
+  it('a non-English object with no English twin keeps its own game text', async () => {
+    const en = OBJECTS.find((o) => o.lang === 'en' && !o.card_faces && o.oracle_text)!
+    const ja: ScryCard = {
+      ...en,
+      id: '00000000-0000-4000-8000-00000000000a',
+      oracle_id: '00000000-0000-4000-8000-0000000000aa',
+      lang: 'ja',
+      printed_name: '日本語の名前',
+      oracle_text: 'Only this object has this text.',
+      type_line: 'Creature — Test',
+      mana_cost: '{9}'
+    }
+    const out = await run(source([en, ja]))
+    expect(out.error).toBeNull()
+    const row = work
+      .prepare(
+        'SELECT oracle_text, type_line, mana_cost, local_name FROM mtg_cards WHERE oracle_id = ?'
+      )
+      .get(ja.oracle_id) as Record<string, string>
+    expect(row).toEqual({
+      oracle_text: 'Only this object has this text.',
+      type_line: 'Creature — Test',
+      mana_cost: '{9}',
+      local_name: '日本語の名前'
+    })
+  })
+
   it('a throwing source writes nothing', async () => {
     const bad: ScryfallSource = {
       ...source(OBJECTS),

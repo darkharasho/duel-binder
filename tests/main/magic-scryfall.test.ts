@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { gzipSync } from 'node:zlib'
 import { describe, expect, it, vi } from 'vitest'
 import {
+  createCompactor,
   createScryfall,
   isKept,
   parseBulkLines,
@@ -87,6 +88,33 @@ describe('slimCard', () => {
       { name: 'A', printed_name: 'Ä', image_uris: {} },
       { name: 'B', printed_name: 'B2' }
     ])
+  })
+})
+
+describe('createCompactor', () => {
+  it('keeps every value slimCard keeps', () => {
+    const compact = createCompactor()
+    for (const o of OBJECTS) expect(compact(o)).toEqual(slimCard(o))
+    for (const o of OBJECTS) expect(compact(slimCard(o))).toEqual(slimCard(o))
+  })
+
+  it('shares repeated lists and prices between objects', () => {
+    const compact = createCompactor()
+    const en = OBJECTS.find((o) => o.lang === 'en' && !o.card_faces)!
+    const a = compact({ ...en, colors: ['W', 'U'], keywords: ['Flying'] })
+    const b = compact({
+      ...en,
+      id: 'other',
+      lang: 'ja',
+      colors: ['W', 'U'],
+      keywords: ['Flying'],
+      prices: { ...en.prices }
+    })
+    expect(b.colors).toBe(a.colors)
+    expect(b.keywords).toBe(a.keywords)
+    expect(b.prices).toBe(a.prices)
+    expect(b.id).toBe('other')
+    expect(compact({ ...en, colors: ['U', 'W'] }).colors).toEqual(['U', 'W'])
   })
 })
 

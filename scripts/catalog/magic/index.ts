@@ -2,9 +2,9 @@ import type Database from 'better-sqlite3'
 import { MTG_LANGUAGES } from '../../../src/shared/games/magic'
 import { pricedShareProblems, type SetStat } from '../priceShare'
 import { openMagicCache, type MagicCache } from './cache'
-import { mtgRows } from './rows'
-import { createScryfall, isKept } from './scryfall'
-import type { ScryCard, ScryfallSource } from './types'
+import { mtgRows, type MagicRows } from './rows'
+import { createCompactor, createScryfall, isKept } from './scryfall'
+import type { ScryCard, ScryfallSource, ScrySet } from './types'
 import { writeMagic, type MagicReport } from './write'
 
 export interface MagicStepOpts {
@@ -42,9 +42,7 @@ export async function runMagicStep(
 
     const info = await source.bulkInfo()
     const sets = await source.sets()
-    const kept: ScryCard[] = []
-    for await (const c of source.cards(info.downloadUri)) if (isKept(c)) kept.push(c)
-    const rows = mtgRows(kept, sets)
+    const rows = await readRows(source, info.downloadUri, sets)
     const written = writeMagic(work, rows, {
       now: date.getTime(),
       nowIso: date.toISOString(),
@@ -70,6 +68,21 @@ export async function runMagicStep(
   } finally {
     opened?.close()
   }
+}
+
+/**
+ * Tonight's rows from the bulk file. The kept objects are compacted as they arrive (repeated
+ * values shared) and live only in here, so they can be freed before writeMagic runs.
+ */
+async function readRows(
+  source: ScryfallSource,
+  downloadUri: string,
+  sets: ScrySet[]
+): Promise<MagicRows> {
+  const compact = createCompactor()
+  const kept: ScryCard[] = []
+  for await (const c of source.cards(downloadUri)) if (isKept(c)) kept.push(compact(c))
+  return mtgRows(kept, sets)
 }
 
 /** Below this share priced, a set is worth a log line (all ~950 would bury the log). */

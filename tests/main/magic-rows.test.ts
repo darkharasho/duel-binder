@@ -332,4 +332,24 @@ describe('mtgRows languages, back faces and borrowed art', () => {
     expect(img(rows, 'l1').artFrom).toBeNull()
     expect(img(rows, 'e1').artFrom).toBeNull()
   })
+
+  it("never borrows art from a different card at the same set and number", () => {
+    const de = base({ id: 'd1', lang: 'de', image_status: 'placeholder' })
+    const other = base({ id: 'e9', oracle_id: 'o-other', name: 'Other' })
+    expect(img(mtgRows([de, other], []), 'd1').artFrom).toBe('none')
+    expect(img(mtgRows([de, other, en], []), 'd1').artFrom).toBe('e1')
+  })
+
+  it('takes the printed name from the newest object, whatever the file order', () => {
+    const old = base({ id: 'j0', lang: 'ja', printed_name: '古い稲妻', released_at: '2010-01-01', set: 'm11', collector_number: '1' })
+    const a = base({ id: 'j1', lang: 'ja', printed_name: '稲妻A', released_at: '2024-06-14', collector_number: '20' })
+    const b = base({ id: 'j2', lang: 'ja', printed_name: '稲妻B', released_at: '2024-06-14', collector_number: '3' })
+    const names = [
+      [old, a, b, en],
+      [b, en, a, old],
+      [en, a, old, b]
+    ].map((objs) => mtgRows(objs, []).cards.get(mtgCardId('ja', 'o-1'))!.localName)
+    // Newest first, then the lower collector number (3 before 20).
+    expect(names).toEqual(['稲妻B', '稲妻B', '稲妻B'])
+  })
 })

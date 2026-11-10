@@ -181,6 +181,18 @@ function localNameOf(o: ScryCard, fromFace: boolean, english: string): string | 
   return printed && printed !== english ? printed : null
 }
 
+/**
+ * Which of two objects of one card and language a printed name is taken from, so it doesn't
+ * follow the file's order: the newest release, then the lower collector number, then the id.
+ */
+function printedNameFirst(a: ScryCard, b: ScryCard): number {
+  return (
+    (b.released_at ?? '').localeCompare(a.released_at ?? '') ||
+    a.collector_number.localeCompare(b.collector_number, 'en', { numeric: true }) ||
+    a.id.localeCompare(b.id)
+  )
+}
+
 /** Maps kept Scryfall objects (see `isKept`) to the Magic catalog rows. */
 export function mtgRows(input: Iterable<ScryCard>, sets: ScrySet[]): MagicRows {
   const objects = [...input]
@@ -196,7 +208,8 @@ export function mtgRows(input: Iterable<ScryCard>, sets: ScrySet[]): MagicRows {
   const faceOnly = new Set<number>()
 
   // First pass: the English object each oracle card's game text comes from (one with its own
-  // oracle id beats the face-0 fallback, as below) and the English art by set + number.
+  // oracle id beats the face-0 fallback, as below) and the English art by oracle id + set + number
+  // (the oracle id so a placeholder never borrows another card's art at the same number).
   const englishOf = new Map<string, { o: ScryCard; fromFace: boolean }>()
   const englishArt = new Map<string, string>()
   for (const o of objects) {
@@ -207,9 +220,12 @@ export function mtgRows(input: Iterable<ScryCard>, sets: ScrySet[]): MagicRows {
       const have = englishOf.get(oid)
       if (!have || (have.fromFace && !fromFace)) englishOf.set(oid, { o, fromFace })
     }
-    const key = `${o.set.toLowerCase()}|${o.collector_number}`
-    if (!unfinished(o.image_status) && !englishArt.has(key)) englishArt.set(key, o.id.toLowerCase())
+    const key = `${oid}|${o.set.toLowerCase()}|${o.collector_number}`
+    if (oid && !unfinished(o.image_status) && !englishArt.has(key))
+      englishArt.set(key, o.id.toLowerCase())
   }
+  /** Per non-English card, the object its printed name comes from: see `printedNameFirst`. */
+  const printedFrom = new Map<number, { o: ScryCard; name: string }>()
 
   for (const o of objects) {
     const lang = mtgLanguageOf(o.lang)
@@ -260,8 +276,21 @@ export function mtgRows(input: Iterable<ScryCard>, sets: ScrySet[]): MagicRows {
       const base = en ? en.o : o
       const baseFromFace = en ? en.fromFace : fromFace
       const row = cardRow(baseFromFace ? faceZeroView(base) : base, oracleId, lang)
-      if (lang !== 'en') row.localName = localNameOf(o, fromFace, row.name)
+      if (lang !== 'en') row.localName = printedFrom.get(cardId)?.name ?? null
       return row
+    }
+    if (lang !== 'en') {
+      const english = englishOf.get(oracleId)
+      const englishName = english
+        ? (english.fromFace ? faceZeroView(english.o) : english.o).name
+        : (fromFace ? faceZeroView(o) : o).name
+      const name = localNameOf(o, fromFace, englishName)
+      const have = printedFrom.get(cardId)
+      if (name !== null && (!have || printedNameFirst(o, have.o) < 0)) {
+        printedFrom.set(cardId, { o, name })
+        const row = out.cards.get(cardId)
+        if (row) row.localName = name
+      }
     }
     if (!out.cards.has(cardId)) {
       out.cards.set(cardId, buildRow())
@@ -277,7 +306,8 @@ export function mtgRows(input: Iterable<ScryCard>, sets: ScrySet[]): MagicRows {
       artFrom =
         lang === 'en'
           ? 'none'
-          : (englishArt.get(`${o.set.toLowerCase()}|${o.collector_number}`) ?? 'none')
+          : (englishArt.get(`${oracleId}|${o.set.toLowerCase()}|${o.collector_number}`) ??
+            'none')
     out.images.push({
       imageId: mtgImageId(o.id),
       cardId,

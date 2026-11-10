@@ -78,7 +78,25 @@ const summary = (scope: Scope): string => {
  * bonus cards. Its artwork identifies the set better than a pack photo. Pokémon keeps its rarity on
  * the card; its printings' set_rarity is the finish.
  */
-const coversSql = (scope: Scope): string => `
+/**
+ * How a Sets query names the printing's game: `p.game`, so the desktop's ix_printings_game_set
+ * (SCHEMA_V46) reads only that game's printings, where that index exists; else `+p.game`, as the
+ * portal needs, whose `(game, catalog_seq)` feed indexes a bare `p.game = ?` would walk instead.
+ */
+function gameTerm(db: SqlDb): string {
+  try {
+    const row = db
+      .prepare(
+        "SELECT 1 AS ok FROM sqlite_master WHERE type = 'index' AND name = 'ix_printings_game_set'"
+      )
+      .get()
+    return row ? 'p.game' : '+p.game'
+  } catch {
+    return '+p.game'
+  }
+}
+
+const coversSql = (scope: Scope, game = '+p.game'): string => `
   WITH per_card AS (
     SELECT p.language, p.set_name, p.card_id, MIN(p.set_code) AS code,
       MAX(CASE WHEN ${isMarketOnly} THEN ${MARKET_ONLY_PRICE}
@@ -123,7 +141,7 @@ const coversSql = (scope: Scope): string => `
     FROM card_printings p
     LEFT JOIN intl_prices ip ON ip.printing_id = p.id AND ${scope.ebayPrices}
     LEFT JOIN pokemon_cards pc ON pc.card_id = p.card_id AND p.game = 'pkm'
-    WHERE +p.game = ${scope.game} AND p.missing_from_api = 0 AND p.contributed = 0 %WHERE%
+    WHERE ${game} = ${scope.game} AND p.missing_from_api = 0 AND p.contributed = 0 %WHERE%
     GROUP BY p.language, p.set_name, p.card_id),
   ranked AS (
     SELECT *, ROW_NUMBER() OVER (PARTITION BY language, set_name
@@ -139,7 +157,7 @@ function coverImages(
   scope: Scope,
   only?: { language: Language; setName: string }
 ): Map<string, number> {
-  const sql = coversSql(scope).replace('%WHERE%', only ? 'AND p.language = ? AND p.set_name = ?' : '')
+  const sql = coversSql(scope, gameTerm(db)).replace('%WHERE%', only ? 'AND p.language = ? AND p.set_name = ?' : '')
   const rows = (only
     ? db.prepare(sql).all(only.language, only.setName)
     : db.prepare(sql).all()) as { language: string; set_name: string; image_id: number | null }[]
@@ -212,7 +230,7 @@ function catalogSets(db: SqlDb, scope: Scope): SetSummary[] {
            COUNT(DISTINCT p.card_id) AS total_cards,
            COUNT(DISTINCT p.card_id || '|' || p.set_rarity) AS total_rarities
          FROM card_printings p
-         WHERE +p.game = ${scope.game} AND p.contributed = 0 AND (p.game <> 'pkm' OR p.missing_from_api = 0)
+         WHERE ${gameTerm(db)} = ${scope.game} AND p.contributed = 0 AND (p.game <> 'pkm' OR p.missing_from_api = 0)
          GROUP BY p.language, p.set_name)
        SELECT p.language, p.set_name, p.min_code, ${SET_ART}, p.total_cards, 0 AS owned_cards,
          p.total_rarities, 0 AS owned_rarities

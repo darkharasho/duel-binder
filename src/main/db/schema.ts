@@ -658,6 +658,17 @@ CREATE INDEX ix_mtg_images_back ON mtg_images(back_image_id);
 export const RARITY_LABEL = "p.set_rarity || COALESCE(' (' || p.variant || ')', '')"
 
 /** Ordered schema steps. Append new versions to the end; never edit a shipped step. */
+/**
+ * A game's printings by set, for the Sets list and its cover pick (sets.ts catalogSets, coversSql):
+ * every other index starts with language or set name, so each game's list read every game's
+ * printings, a random read each to check its game. With Magic's 900k printings, Magic's list took
+ * 11 s and froze the app (2026-11-10); 2.8 s with this, and Yu-Gi-Oh!'s and Pokémon's no longer
+ * read Magic's rows. Desktop and phone only: the portal runs the same queries and, without this
+ * index, keeps its old plan (building it over the Durable Object's printings is a later call).
+ */
+export const SCHEMA_V46 =
+  'CREATE INDEX ix_printings_game_set ON card_printings(game, language, set_name, card_id, set_rarity);'
+
 export const MIGRATIONS: Migration[] = [
   { version: 1, sql: SCHEMA_V1 },
   { version: 2, sql: SCHEMA_V2 },
@@ -703,5 +714,6 @@ export const MIGRATIONS: Migration[] = [
   { version: 42, sql: SCHEMA_V42, server: false },
   { version: 43, sql: SCHEMA_V43, server: false },
   { version: 44, sql: SCHEMA_V44, server: SCHEMA_V44_SERVER },
-  { version: 45, sql: SCHEMA_V45, server: false }
+  { version: 45, sql: SCHEMA_V45, server: false },
+  { version: 46, sql: SCHEMA_V46, server: false }
 ]

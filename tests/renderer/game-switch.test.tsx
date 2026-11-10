@@ -121,6 +121,13 @@ describe('desktop game switch', () => {
       expect(radios.map((r) => r.getAttribute('aria-checked'))).toEqual(['false', 'false', 'true'])
     )
     expect(radios[2]).toHaveTextContent('One Piece')
+    // Three games keep the single-row layout, exactly as before Magic.
+    for (const r of radios) {
+      expect(r).toHaveClass('h-10')
+      expect(r).not.toHaveClass('h-12')
+      expect(r).not.toHaveClass('flex-col')
+      expect(r.querySelector('.truncate')).toBeNull()
+    }
   })
 
   it('four games in the sidebar menu, Magic among them', async () => {
@@ -152,7 +159,10 @@ describe('desktop game switch', () => {
       ])
     )
     expect(radios[3]).toHaveTextContent('Magic')
-    for (const r of radios) expect(r.querySelector('.truncate')).not.toBeNull()
+    for (const r of radios) {
+      expect(r).toHaveClass('h-12', 'flex-col')
+      expect(r.querySelector('.truncate')).not.toBeNull()
+    }
   })
 
   it('Magic hides Scan and the Pokédex', async () => {

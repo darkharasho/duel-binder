@@ -99,12 +99,10 @@ describe('games', () => {
     expect(new Set(Object.values(GAMES).map((g) => g.color)).size).toBe(4)
   })
   test('gameOfId boundaries', () => {
+    expect(gameOfId(2 ** 31)).toBe('ygo')
     expect(gameOfId(2 ** 38 - 1)).toBe('ygo')
     expect(gameOfId(2 ** 38)).toBe('mtg')
     expect(gameOfId(2 ** 39 - 1)).toBe('mtg')
-    expect(gameOfId(2 ** 39 - 1)).not.toBe('ygo')
-    expect(gameOfId(2 ** 39 - 1)).toBe('mtg')
-    expect(gameOfId(2 ** 39)).toBe('op')
     expect(gameOfId(2 ** 39)).toBe('op')
     expect(gameOfId(2 ** 40 - 1)).toBe('op')
     expect(gameOfId(2 ** 40)).toBe('pkm')

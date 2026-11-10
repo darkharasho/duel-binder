@@ -159,6 +159,8 @@ export function GameSegments(): React.JSX.Element {
   const { available } = useGame()
   const { game, loading } = useShownGame()
   const choose = useSwitch()
+  // Four names need the stacked layout to fit a 320 px phone; fewer keep the single row.
+  const stacked = available.length > 3
   return (
     <div
       role="radiogroup"
@@ -174,13 +176,15 @@ export function GameSegments(): React.JSX.Element {
           aria-busy={(loading && g === game) || undefined}
           onClick={() => choose(g)}
           className={cn(
-            // Dot over name, so four names fit a 320 px phone; a longer one is cut, not wrapped.
-            'flex h-12 min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1 text-[12px] font-semibold transition-colors',
+            stacked
+              ? // Dot over name; a longer name is cut, not wrapped.
+                'flex h-12 min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1 text-[12px] font-semibold transition-colors'
+              : 'flex h-10 items-center justify-center gap-2 rounded-lg text-sm font-semibold transition-colors',
             g === game ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'
           )}
         >
           <GameMark game={g} loading={loading && g === game} />
-          <span className="max-w-full truncate">{GAMES[g].name}</span>
+          {stacked ? <span className="max-w-full truncate">{GAMES[g].name}</span> : GAMES[g].name}
         </button>
       ))}
     </div>

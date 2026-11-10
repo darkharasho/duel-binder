@@ -656,9 +656,33 @@ describe('the Pokémon profile', () => {
     expect(moved.via).toBe('holder')
   }, 60_000)
 
-  it('keeps outlines only for Pokémon', () => {
+  it('follows a kept card that moved a little, without searching the frame', () => {
+    const pkmIndex = decodeFingerprints(
+      encodeFingerprints([
+        { imageId: PKM_IMAGE, hash: artHash(fingerprintSource(reference(), 'pokemon', pkm)) }
+      ])
+    )
+    const { img, quad } = framed(reference(), 600)
+    // The same frame with everything 10 px to the right: the card moved, the last outline didn't.
+    const dx = 10
+    const moved = emptyFrame(3)
+    for (let y = 0; y < 720; y++)
+      moved.data.set(
+        img.data.subarray(y * 1280 * 4, ((y + 1) * 1280 - dx) * 4),
+        (y * 1280 + dx) * 4
+      )
+    const found = recognizeArt(cv, moved, pkmIndex, undefined, undefined, pkm, true, quad)!
+    expect(found.matches[0].imageId).toBe(PKM_IMAGE)
+    expect(found.via).toBeUndefined()
+    for (let i = 0; i < 4; i++)
+      expect(
+        Math.hypot(found.quad[i][0] - (quad[i][0] + dx), found.quad[i][1] - quad[i][1])
+      ).toBeLessThan(8)
+  }, 60_000)
+
+  it('keeps outlines for the games matched by art', () => {
     expect(pkm.keepOutline).toBe(true)
-    expect(scanProfile('ygo').keepOutline).toBe(false)
+    expect(scanProfile('ygo').keepOutline).toBe(true)
   })
 
   it('looks again only for Pokémon: Yu-Gi-Oh keeps its one search', () => {

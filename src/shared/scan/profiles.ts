@@ -151,6 +151,7 @@ const OP_PROFILE: ScanProfile = {
   rarityLook: false,
   foil: null,
   holderSearch: false,
+  // No fingerprints, so no art match to keep an outline by.
   keepOutline: false
 }
 
@@ -171,7 +172,7 @@ export const SCAN_PROFILES: Record<'ygo' | 'pkm', ScanProfile> &
     rarityLook: true,
     foil: null,
     holderSearch: false,
-    keepOutline: false
+    keepOutline: true
   },
   pkm: {
     game: 'pkm',

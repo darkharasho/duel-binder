@@ -125,8 +125,7 @@ async function handle(msg: WorkerRequest): Promise<void> {
     }
     // The upright card stays in the worker: it's a few MB, and the UI thread has no use for it.
     // A frame kept for a rarity read is still a whole live frame: it resolves and counts like any
-    // other. A Yu-Gi-Oh frame keeps its outline only while kept for a read, and a live frame after
-    // one neither tries that outline nor keeps one of its own.
+    // other. Games matched by art keep the outline it matched on (keepsOutline).
     const keep = keepsOutline(profile, !!msg.tilt)
     // Read at the centre crop, and wider when the card runs off it (framing.ts); the quad is told
     // in whole-frame pixels.

@@ -58,7 +58,9 @@ export function isKept(c: ScryCard): boolean {
 /**
  * Reads the bulk file line by line. Accepts Scryfall's array layout (`{…},` per line) and plain
  * JSONL; `[`, `]` and blank lines are skipped. A line that is not JSON, or an array that never
- * closes, throws so a cut-off download fails the night.
+ * closes, throws. A cut-off JSONL file has no `[` to check, so it is caught elsewhere: by gunzip
+ * (a truncated gzip stream errors), by a truncated last line failing to parse, or by the fetch
+ * body's length.
  */
 export async function* parseBulkLines(lines: AsyncIterable<string>): AsyncIterable<ScryCard> {
   let n = 0

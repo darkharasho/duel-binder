@@ -432,8 +432,14 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
     if (on('magic') && !opts.skipMagic) {
       const step =
         opts.magic ??
-        ((w: Database.Database) =>
-          runMagicStep(w, { cachePath: join(opts.dir, 'magic-src.sqlite'), version, log }))
+        ((w: Database.Database) => {
+          // Not async, so this rejects the whole job: a test that forgot to stub `magic` would
+          // otherwise download Scryfall's entire bulk file.
+          if (process.env['VITEST']) {
+            throw new Error('The default Magic step would download live Scryfall data; pass `magic` in tests')
+          }
+          return runMagicStep(w, { cachePath: join(opts.dir, 'magic-src.sqlite'), version, log })
+        })
       // Whatever the step does, the other games still upload.
       const out = await step(work).catch((e: unknown) => ({
         report: null,

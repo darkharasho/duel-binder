@@ -50,13 +50,18 @@ export async function runMagicStep(
       updatedAt: info.updatedAt
     })
 
-    const old = new Map<string, SetStat>()
-    for (const s of written.perSet) {
-      const prev = cache.getSetStats(s.setCode)
-      if (prev) old.set(s.setCode, prev)
+    // The rows are committed by now: a failure from here on is a problem, not a skipped night.
+    try {
+      const old = new Map<string, SetStat>()
+      for (const s of written.perSet) {
+        const prev = cache.getSetStats(s.setCode)
+        if (prev) old.set(s.setCode, prev)
+      }
+      problems.push(...pricedShareProblems(old, written.perSet))
+      for (const s of written.perSet) cache.putSetStats(s)
+    } catch (e) {
+      problems.push(`Magic set stats not saved: ${e instanceof Error ? e.message : String(e)}`)
     }
-    problems.push(...pricedShareProblems(old, written.perSet))
-    for (const s of written.perSet) cache.putSetStats(s)
 
     return { report: written, error: null, problems }
   } catch (e) {

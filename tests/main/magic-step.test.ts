@@ -130,6 +130,24 @@ describe('runMagicStep', () => {
   })
 })
 
+describe('runMagicStep after the write', () => {
+  it('a set-stats failure keeps the report and is a problem', async () => {
+    const { default: Database } = await import('better-sqlite3')
+    const path = join(dir, 'magic-src.sqlite')
+    const seed = new Database(path)
+    // A trigger makes every stats write fail, after writeMagic has committed.
+    seed.exec(
+      "CREATE TABLE set_stats (set_code TEXT PRIMARY KEY, printings INTEGER NOT NULL, priced INTEGER NOT NULL); CREATE TRIGGER no_put BEFORE INSERT ON set_stats BEGIN SELECT RAISE(ABORT, 'disk full'); END"
+    )
+    seed.close()
+    const out = await run(source(OBJECTS))
+    expect(out.error).toBeNull()
+    expect(out.report!.printings).toBeGreaterThan(0)
+    expect(out.problems).toEqual([expect.stringMatching(/^Magic set stats not saved: .*disk full/)])
+    expect(mtgCount('card_printings')).toBe(out.report!.printings)
+  })
+})
+
 describe('pricedShareProblems', () => {
   it('ignores small sets, growth and new sets', () => {
     const old = new Map([

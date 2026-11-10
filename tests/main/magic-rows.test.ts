@@ -218,8 +218,8 @@ describe('mtgRows', () => {
     const abolish = byName(objects, 'Abolish')
     expect(rows.notes).toContain(`unknown Magic rarity masterpiece: ${abolish.id}`)
     expect(rows.printings.some((p) => p.scryfallId === abolish.id)).toBe(false)
-    expect(rows.notes).toContain('duplicate Magic printing MH3 150 nonfoil: dup-id-1')
-    expect(rows.notes).toContain('duplicate Magic printing MH3 150 foil: dup-id-1')
+    expect(rows.notes).toContain('duplicate Magic printing en MH3 150 nonfoil: dup-id-1')
+    expect(rows.notes).toContain('duplicate Magic printing en MH3 150 foil: dup-id-1')
     expect(rows.images.some((i) => i.scryfallId === 'dup-id-1')).toBe(false)
     expect(rows.notes.some((n) => n.includes(byName(objects, 'Eldrazi').id))).toBe(false)
   })
@@ -309,6 +309,15 @@ describe('mtgRows languages, back faces and borrowed art', () => {
     expect(img(rows, 't1').backImageId).toBe(mtgBackImageId('t1'))
     expect(img(rows, 'a1').backImageId).toBeNull()
     expect(rows.cards.get(mtgCardId('de', 'o-3'))!.localName).toBe('Aa // Bb')
+  })
+
+  it('stores the borrowed art id lowercase and skips unsupported languages', () => {
+    const upper = base({ id: 'ABCDEF01-0000-4000-8000-000000000000' })
+    const de = base({ id: 'd1', lang: 'de', image_status: 'placeholder' })
+    const xx = base({ id: 'x1', lang: 'xx' })
+    const rows = mtgRows([upper, de, xx], [])
+    expect(img(rows, 'd1').artFrom).toBe('abcdef01-0000-4000-8000-000000000000')
+    expect(rows.notes).toEqual(['unsupported Magic language xx: x1'])
   })
 
   it('borrows art from an English twin for placeholders', () => {

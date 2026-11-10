@@ -208,11 +208,15 @@ export function mtgRows(input: Iterable<ScryCard>, sets: ScrySet[]): MagicRows {
       if (!have || (have.fromFace && !fromFace)) englishOf.set(oid, { o, fromFace })
     }
     const key = `${o.set.toLowerCase()}|${o.collector_number}`
-    if (!unfinished(o.image_status) && !englishArt.has(key)) englishArt.set(key, o.id)
+    if (!unfinished(o.image_status) && !englishArt.has(key)) englishArt.set(key, o.id.toLowerCase())
   }
 
   for (const o of objects) {
-    const lang = mtgLanguageOf(o.lang) ?? 'en'
+    const lang = mtgLanguageOf(o.lang)
+    if (!lang) {
+      out.notes.push(`unsupported Magic language ${o.lang}: ${o.id}`)
+      continue
+    }
     const rarity = rarityLabel(o.rarity)
     if (!rarity) {
       out.notes.push(`unknown Magic rarity ${o.rarity}: ${o.id}`)
@@ -231,7 +235,7 @@ export function mtgRows(input: Iterable<ScryCard>, sets: ScrySet[]): MagicRows {
       if (!o.finishes.includes(f.finish)) continue
       const key = `${lang}\u0000${code}\u0000${f.finish}`
       if (seen.has(key)) {
-        out.notes.push(`duplicate Magic printing ${code} ${f.finish}: ${o.id}`)
+        out.notes.push(`duplicate Magic printing ${lang} ${code} ${f.finish}: ${o.id}`)
         continue
       }
       seen.add(key)

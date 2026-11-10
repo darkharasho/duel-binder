@@ -30,7 +30,7 @@ import type { PokemonLanguage, ScanStatus } from '@shared/scanWindow'
 import { api } from '@/lib/api'
 import { centreCrop, type CropRect } from './crop'
 import { shiftQuad } from './vision/framing'
-import type { EngineFactory, FrameSignals, ScanEngine } from './engine'
+import type { EngineFactory, FrameSignals, RawSignals, ScanEngine } from './engine'
 import {
   describeLook,
   readChoicesFor,
@@ -1012,7 +1012,8 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
           .then(
             (raw) => {
               analyzed = performance.now()
-              return raw
+              // The worker's whole frame comes back (timings and all), as the read and readout use.
+              return raw as RawSignals & FrameSignals
             },
             () => null
           )

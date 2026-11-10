@@ -154,7 +154,7 @@ const entry = (id: number, name: string, language: 'en' | 'ja' = 'en'): EntryVie
 
 describe('dashboard most valuable', () => {
   // The Collection page filters to English by default; the dashboard ranks every language.
-  it('opens the clicked card in the Collection page, even outside the language filter', async () => {
+  it('opens the clicked card over the dashboard, even outside the language filter', async () => {
     const dm = entry(1, 'Dark Magician')
     const bew = entry(2, 'Blue-Eyes White Dragon', 'ja')
     const entries = [dm, bew]
@@ -193,7 +193,8 @@ describe('dashboard most valuable', () => {
     await userEvent.click(within(most).getByRole('button', { name: /Blue-Eyes White Dragon/ }))
     const dialog = await screen.findByRole('dialog')
     expect(await within(dialog).findByText('Blue-Eyes White Dragon')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Collection', hidden: true })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Collection', hidden: true })).toBeNull()
+    expect(screen.getByRole('heading', { name: 'Dashboard', hidden: true })).toBeInTheDocument()
   })
 })
 

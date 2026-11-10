@@ -4,12 +4,14 @@ import type { CollectionStats, EntryView } from '@shared/types'
 import type { NavigateFn } from '@/components/AppShell'
 import { cardArtUrl, useArtWash } from '@/components/artWashContext'
 import { CardArt } from '@/components/CardArt'
+import { CardSheet } from '@/components/CardSheet'
 import { GameChip } from '@/components/GameSwitch'
 import { TiltCard } from '@/components/TiltCard'
 import { scanFor } from '@/components/scanFor'
 import { Button } from '@/components/ui/button'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { UnderlineTabs } from '@/components/UnderlineTabs'
+import { CardPanel } from '@/features/card/CardPanel'
 import { EntryValue, StaleBadge } from '@/features/collection/EntryValue'
 import { displayTotal } from '@/features/collection/displayTotal'
 import { api, queryKeys } from '@/lib/api'
@@ -109,13 +111,13 @@ function Breakdown({ title, segments }: { title: string; segments: Segment[] }):
   )
 }
 
-/** The newest additions, each opening in the collection. */
+/** The newest additions, each opening its card in place. */
 function RecentlyAdded({
   entries,
   onOpen
 }: {
   entries: EntryView[]
-  onOpen: (entryId: number) => void
+  onOpen: (entry: EntryView) => void
 }): React.JSX.Element {
   return (
     <section className="lg:col-span-2 xl:col-span-1">
@@ -131,7 +133,7 @@ function RecentlyAdded({
             <li key={e.id} className="min-w-0 max-md:w-56 max-md:shrink-0 max-md:snap-start">
               <button
                 type="button"
-                onClick={() => onOpen(e.id)}
+                onClick={() => onOpen(e)}
                 className="flex w-full items-center gap-3 rounded-md px-1.5 py-1 text-left text-[13px] hover:bg-white/5 focus-visible:outline-2 focus-visible:outline-ring"
               >
                 <CardArt
@@ -220,7 +222,7 @@ export function MostValuable({
   onSeeAll
 }: {
   stats: CollectionStats
-  onOpen: (entryId: number) => void
+  onOpen: (entry: EntryView) => void
   onSeeAll: () => void
 }): React.JSX.Element | null {
   // Most valuable by an entry's total (price × copies) or by one copy's price.
@@ -263,7 +265,7 @@ export function MostValuable({
           <li key={e.id} className="min-w-0 max-md:w-28 max-md:shrink-0 max-md:snap-start">
             <button
               type="button"
-              onClick={() => onOpen(e.id)}
+              onClick={() => onOpen(e)}
               className="group flex w-full flex-col gap-2 rounded-md p-1 text-left focus-visible:outline-2 focus-visible:outline-ring"
             >
               <TiltCard>
@@ -303,7 +305,7 @@ export function Breakdowns({
   onOpen
 }: {
   stats: CollectionStats
-  onOpen: (entryId: number) => void
+  onOpen: (entry: EntryView) => void
 }): React.JSX.Element {
   const { def } = useGame()
   return (
@@ -339,6 +341,10 @@ function Content({
   onNavigate: NavigateFn
 }): React.JSX.Element {
   const stale = isStale(stats.pricesUpdatedAt)
+  // A card opens over Home, as on every other page, rather than taking you to the collection.
+  const [open, setOpen] = useState<{ cardId: number; entryId: number } | null>(null)
+  const openEntry = (e: EntryView): void => setOpen({ cardId: e.card.id, entryId: e.id })
+  const close = (): void => setOpen(null)
   return (
     <>
       <div className="grid gap-x-12 gap-y-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
@@ -373,13 +379,19 @@ function Content({
         <ValueChart history={stats.valueHistory} />
       </div>
 
-      <MostValuable
-        stats={stats}
-        onOpen={(entryId) => onNavigate('collection', { entryId })}
-        onSeeAll={() => onNavigate('collection')}
-      />
+      <MostValuable stats={stats} onOpen={openEntry} onSeeAll={() => onNavigate('collection')} />
 
-      <Breakdowns stats={stats} onOpen={(entryId) => onNavigate('collection', { entryId })} />
+      <Breakdowns stats={stats} onOpen={openEntry} />
+      {open && (
+        <CardSheet onClose={close}>
+          <CardPanel
+            cardId={open.cardId}
+            entryId={open.entryId}
+            onSelectEntry={(entryId) => setOpen({ cardId: open.cardId, entryId })}
+            onClose={close}
+          />
+        </CardSheet>
+      )}
     </>
   )
 }

@@ -228,10 +228,11 @@ describe('DashboardPage', () => {
     localStorage.removeItem('dashboard.mostValuableBy')
   })
 
-  it('top entry click navigates', async () => {
+  it('a top entry opens its card over the dashboard, without leaving it', async () => {
     const { onNavigate } = setup(stats())
     await userEvent.click(await screen.findByRole('button', { name: /Blue-Eyes White Dragon/ }))
-    expect(onNavigate).toHaveBeenCalledWith('collection', { entryId: 2 })
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
+    expect(onNavigate).not.toHaveBeenCalled()
   })
 
   it('value chart shows the change since the first recorded day', async () => {
@@ -256,7 +257,7 @@ describe('DashboardPage', () => {
     expect(within(chart).getByText(/one point a day/)).toBeInTheDocument()
   })
 
-  it('recently added lists entries newest first and navigates', async () => {
+  it('recently added lists entries newest first and opens one in place', async () => {
     const { onNavigate } = setup(
       stats({
         recentEntries: [
@@ -270,7 +271,8 @@ describe('DashboardPage', () => {
     expect(items[0]).toHaveTextContent('Kuriboh')
     expect(items[0]).toHaveTextContent('just now')
     await userEvent.click(items[1])
-    expect(onNavigate).toHaveBeenCalledWith('collection', { entryId: 4 })
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
+    expect(onNavigate).not.toHaveBeenCalled()
   })
 
   it('empty state', async () => {

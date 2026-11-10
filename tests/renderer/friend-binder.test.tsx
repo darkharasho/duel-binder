@@ -110,13 +110,13 @@ describe("a friend's binder", () => {
     expect(onBack).toHaveBeenCalled()
   })
 
-  it('opens a dashboard card in the Collection tab, read-only', async () => {
+  it('opens a dashboard card over the dashboard, read-only', async () => {
     open()
     const [pick] = await screen.findAllByRole('button', { name: /Alpha Dragon/ })
     await userEvent.click(pick)
     const sheet = await screen.findByRole('dialog')
     expect(within(sheet).getByRole('region', { name: 'Their copies' })).toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: 'Collection', hidden: true })).toBeChecked()
+    expect(screen.getByRole('radio', { name: 'Dashboard', hidden: true })).toBeChecked()
   })
 
   it('says so when they have no cards in this game', async () => {

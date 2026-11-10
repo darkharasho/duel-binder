@@ -312,13 +312,16 @@ export function searchCards(db: SqlDb, q: string, limit = 20, scope: Scope = LOC
       .all(fts, text, limit) as DbHit[]
     rows.forEach((r) => push(toResult(r)))
   }
-  const localNames = byGame<{ table: string; col: string; text: string } | null>(scopeGame(db, scope), {
-    ygo: null,
-    pkm: { table: 'pokemon_cards', col: 'local_name', text },
-    op: null,
-    // Magic matches a lowercased copy: SQLite folds ASCII case only (magicNameSearchKey).
-    mtg: { table: 'mtg_cards', col: 'local_name_search', text: magicNameSearchKey(text) }
-  })
+  const localNames = byGame<{ table: string; col: string; text: string } | null>(
+    scopeGame(db, scope),
+    {
+      ygo: null,
+      pkm: { table: 'pokemon_cards', col: 'local_name', text },
+      op: null,
+      // Magic matches a lowercased copy: SQLite folds ASCII case only (magicNameSearchKey).
+      mtg: { table: 'mtg_cards', col: 'local_name_search', text: magicNameSearchKey(text) }
+    }
+  )
   if (localNames) {
     // A card's printed (local) name: Pokémon's Japanese name, a Magic printing's own language's.
     const rows = db
@@ -346,7 +349,11 @@ function withMagicLanguages(db: SqlDb, results: CardSearchResult[]): CardSearchR
     .prepare(
       `SELECT card_id, lang, local_name FROM mtg_cards WHERE card_id IN (${results.map(() => '?').join(',')})`
     )
-    .all(...results.map((r) => r.id)) as { card_id: number; lang: string; local_name: string | null }[]
+    .all(...results.map((r) => r.id)) as {
+    card_id: number
+    lang: string
+    local_name: string | null
+  }[]
   const facts = new Map(rows.map((r) => [r.card_id, r]))
   const labelled = results.map((r): CardSearchResult => {
     const f = facts.get(r.id)

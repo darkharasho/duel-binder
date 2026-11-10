@@ -1,5 +1,10 @@
 import type { SqlDb } from '../db/sql'
-import { magicNameSearchKey, MTG_CARD_TYPES, MTG_COLOR_NAMES, mtgFinishSql } from '../../shared/games/magic'
+import {
+  magicNameSearchKey,
+  MTG_CARD_TYPES,
+  MTG_COLOR_NAMES,
+  mtgFinishSql
+} from '../../shared/games/magic'
 import type { Scope } from './scope'
 
 export interface MagicFilterFields {

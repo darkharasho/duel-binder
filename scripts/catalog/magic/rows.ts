@@ -306,8 +306,7 @@ export function mtgRows(input: Iterable<ScryCard>, sets: ScrySet[]): MagicRows {
       artFrom =
         lang === 'en'
           ? 'none'
-          : (englishArt.get(`${oracleId}|${o.set.toLowerCase()}|${o.collector_number}`) ??
-            'none')
+          : (englishArt.get(`${oracleId}|${o.set.toLowerCase()}|${o.collector_number}`) ?? 'none')
     out.images.push({
       imageId: mtgImageId(o.id),
       cardId,

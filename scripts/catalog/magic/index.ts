@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3'
+import { MTG_LANGUAGES } from '../../../src/shared/games/magic'
 import { pricedShareProblems, type SetStat } from '../priceShare'
 import { openMagicCache, type MagicCache } from './cache'
 import { mtgRows } from './rows'
@@ -74,11 +75,15 @@ export async function runMagicStep(
 /** Below this share priced, a set is worth a log line (all ~950 would bury the log). */
 const LOW_SHARE_PERCENT = 80
 
-/** The step's summary line, a line per poorly priced set, then every note. */
+/** The step's summary line, a line per language tonight, a line per poorly priced English set, then every note. */
 export function logMagic(r: MagicReport, log: (line: string) => void): void {
   log(
-    `Magic en (${r.updatedAt}): ${r.sets} sets, ${r.cards} cards, ${r.images} images, ${r.printings} printings (${r.priced} priced), ${r.missing} missing, ${r.notes.length} notes`
+    `Magic (${r.updatedAt}): ${r.sets} sets, ${r.cards} cards, ${r.images} images, ${r.printings} printings (${r.priced} priced), ${r.missing} missing, ${r.notes.length} notes`
   )
+  for (const lang of new Set(Object.values(MTG_LANGUAGES))) {
+    const t = r.byLanguage[lang]
+    if (t) log(`Magic ${lang}: ${t.cards} cards, ${t.printings} printings (${t.priced} priced)`)
+  }
   for (const s of r.perSet) {
     if (s.printings > 0 && s.priced * 100 < LOW_SHARE_PERCENT * s.printings)
       log(`Magic en ${s.setCode}: ${s.priced}/${s.printings} priced`)

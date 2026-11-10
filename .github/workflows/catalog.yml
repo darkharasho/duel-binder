@@ -141,7 +141,7 @@ jobs:
       # Reads Scryfall's whole default_cards file (about 500 MB). Bounded and never blocks the upload.
       - name: Refresh Magic
         id: magic
-        timeout-minutes: 60
+        timeout-minutes: 90
         continue-on-error: true
         run: npm run catalog:job -- --stage magic
       - name: Flag a failed Magic step

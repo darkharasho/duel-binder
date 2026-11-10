@@ -343,6 +343,9 @@ export function writeMagic(
       }
     }
     const seen = new Set<string>()
+    // Tonight's listed printings, for the takeover's "is the holder still listed" check.
+    const listed = new Set<string>()
+    for (const q of rows.printings) listed.add(`${q.scryfallId}|${q.finish}`)
     for (const p of rows.printings) {
       const key = `${p.scryfallId}|${p.finish}`
       const old = existing.get(key)
@@ -365,10 +368,7 @@ export function writeMagic(
         // listed tonight) passes to the new id, keeping its printing id and any collection entries.
         const gone =
           holder.missing_from_api !== 0 ||
-          !rows.printings.some(
-            (q) =>
-              q.scryfallId === holder.set_rarity_code && finishOf(holder.set_rarity) === q.finish
-          )
+          !listed.has(`${holder.set_rarity_code}|${finishOf(holder.set_rarity)}`)
         if (!gone) {
           report.notes.push(`Magic printing key taken: ${p.code} ${p.rarity}`)
           continue

@@ -180,13 +180,20 @@ describe('logMagic', () => {
           { setCode: 'AAA', printings: 5, priced: 5 },
           { setCode: 'BBB', printings: 5, priced: 1 }
         ],
-        byLanguage: {},
+        byLanguage: {
+          ru: { cards: 1, printings: 2, priced: 0 },
+          en: { cards: 3, printings: 10, priced: 6 },
+          ja: { cards: 1, printings: 1, priced: 1 }
+        },
         notes: ['n1']
       },
       (l) => out.push(l)
     )
     expect(out).toEqual([
-      'Magic en (U): 2 sets, 3 cards, 4 images, 10 printings (6 priced), 1 missing, 1 notes',
+      'Magic (U): 2 sets, 3 cards, 4 images, 10 printings (6 priced), 1 missing, 1 notes',
+      'Magic en: 3 cards, 10 printings (6 priced)',
+      'Magic ja: 1 cards, 1 printings (1 priced)',
+      'Magic ru: 1 cards, 2 printings (0 priced)',
       'Magic en BBB: 1/5 priced',
       'Magic en: n1'
     ])

@@ -57,7 +57,8 @@ export function ScanViewport({
   videoKey?: string
   /**
    * Give the preview a new video element, keeping its stream, when its box settles at a new size,
-   * when the page comes back from the background, or when the picture's own size changes. iOS
+   * when the page comes back from the background, when the picture's own size changes, or when a
+   * new stream's picture starts on it. iOS
    * keeps drawing a camera's picture at a stale size, a small box in black, in each case (the
    * phone's preview is sized by the room left around it; iOS restarts the camera after another
    * app had the screen).
@@ -107,19 +108,30 @@ export function ScanViewport({
     document.addEventListener('visibilitychange', shown)
     return () => document.removeEventListener('visibilitychange', shown)
   }, [freshVideo, freshen])
-  // The picture's own size changing (a camera restart, the phone turned) after it first showed.
+  // The stream whose picture the preview last showed, across its elements.
+  const shownStream = useRef<MediaProvider | null>(null)
+  // The picture's own size changing (a camera restart, the phone turned) after it first showed,
+  // or a new stream's picture starting on the element that showed the last one (back from
+  // another app with the camera muted, useCamera opens the camera again).
   useEffect(() => {
     const video = videoRef.current
     if (!video || !freshVideo) return
     let last: string | null = null
     const resized = (): void => {
-      if (!video.videoWidth || !video.videoHeight) return
+      const stream = video.srcObject
+      if (!stream || !video.videoWidth || !video.videoHeight) return
       const size = `${video.videoWidth}x${video.videoHeight}`
-      if (last !== null && size !== last) freshen()
+      const reopened = shownStream.current !== null && stream !== shownStream.current
+      if (reopened || (last !== null && size !== last)) freshen()
       last = size
+      shownStream.current = stream
     }
+    video.addEventListener('loadedmetadata', resized)
     video.addEventListener('resize', resized)
-    return () => video.removeEventListener('resize', resized)
+    return () => {
+      video.removeEventListener('loadedmetadata', resized)
+      video.removeEventListener('resize', resized)
+    }
   }, [freshVideo, freshen, videoRef, resizes, videoKey])
   // The new element takes the old one's stream before it paints.
   useLayoutEffect(() => {

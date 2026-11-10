@@ -10,8 +10,10 @@ import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { openDatabase } from '../../src/main/db/database'
 import type { SqlDb } from '../../src/main/db/sql'
+import { GAME_IDS } from '../../src/shared/games'
 
-const GAMES = ['ygo', 'pkm', 'op']
+// Every game, Magic included: each is reported, with nothing missing as an empty list.
+const GAMES: readonly string[] = GAME_IDS
 const PAGE_SIZE = 5000
 const SHOW = 50
 

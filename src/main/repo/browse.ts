@@ -150,33 +150,40 @@ function whereClause(
     }
     where.push(`(${parts.join(' OR ')})`)
   }
-  if (pkm) {
-    const p = pokemonWhere(f)
-    where.push(...p.where)
-    params.push(...p.params)
-  } else if (game === 'op') {
-    const o = onePieceWhere(f)
-    where.push(...o.where)
-    params.push(...o.params)
-    // Rarity and version are a printing's: one printing has to match both.
-    const labels = [
-      opRarityWhere(f.opRarities, 'set_rarity'),
-      opVersionWhere(f.opVersions, 'set_rarity')
-    ].filter((l) => l !== null)
-    if (labels.length) {
-      where.push(
-        `c.id IN (SELECT card_id FROM card_printings WHERE +game = ${scope.game} AND contributed = 0${lang} AND ${labels
-          .map((l) => l.sql)
-          .join(' AND ')})`
-      )
-      params.push(...labels.flatMap((l) => l.params))
-    }
-  } else {
-    inList('c.type', f.cardTypes)
-    inList('c.attribute', f.attributes)
-    inList('c.race', f.races)
-    inList('c.archetype', f.archetypes)
-  }
+  // Each game has its own card filters; another game's are ignored.
+  byGame<() => void>(game, {
+    pkm: () => {
+      const p = pokemonWhere(f)
+      where.push(...p.where)
+      params.push(...p.params)
+    },
+    op: () => {
+      const o = onePieceWhere(f)
+      where.push(...o.where)
+      params.push(...o.params)
+      // Rarity and version are a printing's: one printing has to match both.
+      const labels = [
+        opRarityWhere(f.opRarities, 'set_rarity'),
+        opVersionWhere(f.opVersions, 'set_rarity')
+      ].filter((l) => l !== null)
+      if (labels.length) {
+        where.push(
+          `c.id IN (SELECT card_id FROM card_printings WHERE +game = ${scope.game} AND contributed = 0${lang} AND ${labels
+            .map((l) => l.sql)
+            .join(' AND ')})`
+        )
+        params.push(...labels.flatMap((l) => l.params))
+      }
+    },
+    ygo: () => {
+      inList('c.type', f.cardTypes)
+      inList('c.attribute', f.attributes)
+      inList('c.race', f.races)
+      inList('c.archetype', f.archetypes)
+    },
+    // Step 1: Magic has only the shared filters below (set, rarity, language…); step 2 adds its own.
+    mtg: () => {}
+  })()
   const printingFilter = (col: string, values?: string[]): void => {
     if (!values?.length) return
     where.push(
@@ -203,12 +210,14 @@ function whereClause(
       `c.id IN (SELECT card_id FROM card_printings WHERE +game = ${scope.game} AND contributed = 0${lang})`
     )
   }
-  // Level is a Yu-Gi-Oh filter; 'op' sends none, so the extra clause never fires for it.
-  if (!pkm && f.levelMin !== undefined) {
+  // Level is a Yu-Gi-Oh filter; 'op' sends none, so the extra clause never fires for it, and
+  // 'mtg' (no level column) ignores it.
+  const level = byGame(game, { ygo: true, pkm: false, op: true, mtg: false })
+  if (level && f.levelMin !== undefined) {
     where.push('COALESCE(c.level, c.linkval) >= ?')
     params.push(f.levelMin)
   }
-  if (!pkm && f.levelMax !== undefined) {
+  if (level && f.levelMax !== undefined) {
     where.push('COALESCE(c.level, c.linkval) <= ?')
     params.push(f.levelMax)
   }
@@ -232,7 +241,8 @@ export function browseCards(db: SqlDb, f: BrowseFilters, scope: Scope = LOCAL): 
     ? `(${rarityLabel('p')}) NOT IN (${rarities.map(() => '?').join(',')}), `
     : ''
   // Art and the default printing are looked up only for the page, after sorting and limiting. With
-  // every language, an English printing is preselected over the rest.
+  // every language, an English printing is preselected over the rest. Only a flagged Pokémon
+  // printing goes after the others; One Piece and Magic ones are listed like any (see shownPrinting).
   const rows = db
     .prepare(
       `SELECT page.*,
@@ -315,7 +325,7 @@ export function browseFacets(db: SqlDb, scope: Scope = LOCAL, language?: Languag
     )
   const game = scopeGame(db, scope)
   const pkm = game === 'pkm'
-  // These four are Yu-Gi-Oh columns; 'op' has its own facets below.
+  // These four are Yu-Gi-Oh columns; 'pkm' and 'op' have their own facets below, 'mtg' none yet.
   const ygo = game === 'ygo'
   return {
     cardTypes: ygo ? col('type') : [],

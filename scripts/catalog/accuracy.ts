@@ -100,6 +100,7 @@ export async function checkAccuracy(
   const { loadCv } = await import('../../src/renderer/src/features/scan/vision/cv')
   const cv = await loadCv()
   const index = decodeFingerprints(fingerprints)
+  // mtg: scanner step (build.ts never gates Magic; here it would read the Yu-Gi-Oh! scope).
   const scope = game === 'pkm' ? localScope("'pkm'") : undefined
   const lookups = {
     printingsByCode: async (code: string) => printingsByCode(work, code, scope),

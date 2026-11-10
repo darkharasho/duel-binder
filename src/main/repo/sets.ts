@@ -54,7 +54,8 @@ const SET_JOINS = `LEFT JOIN sets s ON s.game = p.game AND s.language = p.langua
 // A (card, rarity) pair is keyed as "<card_id>|<rarity>"; card_id is an integer, so the first "|"
 // always ends it. Yu-Gi-Oh! pack art and logos are English only, keyed by set name alone; Pokémon
 // pack art and fallback logos come from pokemon_set_art, per language; a One Piece set's pack shot
-// is its own sets.image_key (an 'ob-' key).
+// is its own sets.image_key (an 'ob-' key). A Magic set has no pack or logo key in step 1: every
+// art join above is keyed to its own game, so it can't pick up a Yu-Gi-Oh! row by set name.
 // Ownership is an uncorrelated IN list (built once, then a keyed lookup per printing). A LEFT JOIN
 // to the owned printings made SQLite scan them for every printing (~1 s on a full catalog).
 const summary = (scope: Scope): string => {
@@ -97,6 +98,17 @@ const coversSql = (scope: Scope): string => `
           WHEN pc.rarity LIKE '%Holo%' THEN 9
           WHEN pc.rarity LIKE '%Rare%' THEN 10
           ELSE 11 END
+        -- Magic, by the word before a ' (' (Rare (Foil) is a Rare): Bonus, Special, Mythic, Rare, Uncommon, Common.
+        WHEN p.game = 'mtg' THEN CASE
+          CASE WHEN instr(p.set_rarity, ' (') > 0 THEN substr(p.set_rarity, 1, instr(p.set_rarity, ' (') - 1)
+            ELSE p.set_rarity END
+          WHEN 'Bonus' THEN 1
+          WHEN 'Special' THEN 2
+          WHEN 'Mythic' THEN 3
+          WHEN 'Rare' THEN 4
+          WHEN 'Uncommon' THEN 5
+          WHEN 'Common' THEN 6
+          ELSE 7 END
         WHEN p.set_rarity LIKE '%Starlight%' THEN 1
         WHEN p.set_rarity LIKE '%Quarter Century%' THEN 2
         WHEN p.set_rarity LIKE '%Ghost%' THEN 3

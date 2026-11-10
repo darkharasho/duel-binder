@@ -168,6 +168,8 @@ export async function buildFingerprints(opts: FingerprintOptions): Promise<Finge
   const game = opts.game ?? 'ygo'
   const pkm = game === 'pkm'
   const op = game === 'op'
+  // mtg: scanner step. scanProfile throws for Magic (no profile yet), so it stops here before the
+  // Yu-Gi-Oh! hash version and YGOPRODeck image URLs below.
   const profile = game === 'ygo' ? undefined : scanProfile(game)
   const hashVersion = pkm ? PKM_HASH_VERSION : op ? OP_HASH_VERSION : HASH_VERSION
   const cache = new Database(opts.cachePath)
@@ -290,6 +292,7 @@ export async function buildFingerprints(opts: FingerprintOptions): Promise<Finge
       while (next < todo.length) {
         const id = todo[next++]
         try {
+          // mtg: scanner step (it would need its Scryfall URLs here, not YGOPRODeck's).
           const url = pkm || op ? urls.get(id) : imageUrl('cropped', id)
           if (!url) throw new Error('no image URL')
           const hash = await hashImage(fetchFn, url, frames.get(id)!, profile)

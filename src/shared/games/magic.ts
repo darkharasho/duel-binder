@@ -78,6 +78,7 @@ export const MAGIC: GameDef = {
   // Keys mirror the mtg_cards columns; the printing's Set & number comes from the printing itself.
   details: [
     { key: 'typeLine', label: 'Type' },
+    { key: 'localName', label: 'Printed name' },
     { key: 'manaCost', label: 'Mana cost' },
     { key: 'manaValue', label: 'Mana value' },
     { key: 'colors', label: 'Color' },

@@ -31,6 +31,9 @@ test('getCardDetail', () => {
   const d = getCardDetail(db, 46986414)!
   expect(d.printings.map((p) => p.setCode)).toEqual(['LOB-EN005', 'SDY-006'])
   expect(d.images).toHaveLength(2)
+  // Only a Magic image can have a back face; the others keep exactly this shape.
+  for (const i of d.images)
+    expect(Object.keys(i).sort()).toEqual(['cardId', 'imageId', 'sortOrder'])
   expect(d.card.name).toBe('Dark Magician')
   expect(getCardDetail(db, 1)).toBeNull()
 })

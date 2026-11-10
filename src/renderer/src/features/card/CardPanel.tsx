@@ -132,7 +132,7 @@ export function CardPanel({
 
   const entry = selected?.entry
   const shown = selected?.printing
-  const art = entry
+  const frontArt = entry
     ? { imageId: entry.imageId, printingId: scanFor(entry) }
     : shown
       ? {
@@ -146,6 +146,14 @@ export function CardPanel({
             printingId: seed.defaultPrintingId
           }
         : undefined
+  // A two-faced Magic card's art flips to its back. Showing another card, row or art turns it back
+  // to the front, and so does coming back to this one.
+  const backImageId = detail.data?.images.find((i) => i.imageId === frontArt?.imageId)?.backImageId
+  const flipKey = `${cardId}:${selected?.key ?? ''}:${frontArt?.imageId ?? ''}`
+  const [flip, setFlip] = useState({ key: flipKey, back: false })
+  if (flip.key !== flipKey) setFlip({ key: flipKey, back: false })
+  const flipped = backImageId !== undefined && flip.key === flipKey && flip.back
+  const art = flipped ? { imageId: backImageId, printingId: null } : frontArt
   // Keep the last art up while a stepped-to card loads, so the floated card stays put.
   const [lastArt, setLastArt] = useState(art)
   if (
@@ -212,6 +220,11 @@ export function CardPanel({
             printingId={panelArt.printingId}
             alt={name ?? ''}
             nav={nav}
+            flip={
+              backImageId !== undefined && panelArt === art
+                ? { back: flipped, onFlip: () => setFlip({ key: flipKey, back: !flipped }) }
+                : undefined
+            }
           />
         )
       }

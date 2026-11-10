@@ -16,7 +16,7 @@ import type {
 import { getMeta } from '../db/meta'
 import { LOCAL, favouriteSql, scopeGame, type Scope } from './scope'
 import { pokemonFacets, pokemonSearch, pokemonWhere } from './pkmFilters'
-import { magicFacets, magicWhere, mtgFinishWhere } from './mtgFilters'
+import { magicFacets, magicLocalName, magicWhere, mtgFinishWhere } from './mtgFilters'
 import { mtgBaseRaritySql } from '../../shared/games/magic'
 import { onePieceFacets, onePieceWhere, opRarityWhere, opVersionWhere } from './opFilters'
 import { twinPrice } from './enTwin'
@@ -285,6 +285,11 @@ export function listEntries(db: SqlDb, f: CollectionFilters, scope: Scope = LOCA
     const own = pkm ? pokemonSearch(text, { game: scope.game, printingCol: 'p.set_code' }) : null
     const parts: string[] = own ? [...own.parts] : []
     if (own) params.push(...own.params)
+    if (game === 'mtg') {
+      const local = magicLocalName(text)
+      parts.push(local.sql)
+      params.push(...local.params)
+    }
     if (!own?.numeric) {
       const fts = buildFtsQuery(text)
       parts.push(`p.set_code LIKE ? ESCAPE '\\'`)

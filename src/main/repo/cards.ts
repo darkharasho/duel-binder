@@ -10,7 +10,7 @@ import type {
   PokemonFacts,
   Printing
 } from '../../shared/types'
-import { byGame, gameOfId, type GameId } from '../../shared/games'
+import { byGame, gameOfId, mtgImageId, type GameId } from '../../shared/games'
 import { opPrintingImageId } from '../../shared/games/onePiece'
 import { isLanguage } from '../../shared/languages'
 import { setPrice } from './priceRule'
@@ -67,6 +67,7 @@ export interface CardDbRow {
   mtg_loyalty?: string | null
   mtg_defense?: string | null
   mtg_artist?: string | null
+  mtg_local_name?: string | null
 }
 
 /** The pokemon_cards columns rowToCard reads, from a `LEFT JOIN pokemon_cards pc ON pc.card_id = c.id`. */
@@ -84,7 +85,7 @@ const NO_ONEPIECE = { cols: '', join: '' }
 export const MTG_COLS = `mc.oracle_id AS mtg_oracle_id, mc.type_line AS mtg_type_line, mc.types AS mtg_types,
   mc.mana_cost AS mtg_mana_cost, mc.mana_value AS mtg_mana_value, mc.colors AS mtg_colors,
   mc.oracle_text AS mtg_oracle_text, mc.power AS mtg_power, mc.toughness AS mtg_toughness,
-  mc.loyalty AS mtg_loyalty, mc.defense AS mtg_defense`
+  mc.loyalty AS mtg_loyalty, mc.defense AS mtg_defense, mc.local_name AS mtg_local_name`
 
 /**
  * What a card query adds to read a game's own facts: `, ONEPIECE_COLS` (One Piece) or `, MTG_COLS`
@@ -150,6 +151,7 @@ function magicFacts(row: CardDbRow): MagicFacts | undefined {
     toughness: row.mtg_toughness ?? null,
     loyalty: row.mtg_loyalty ?? null,
     defense: row.mtg_defense ?? null,
+    localName: row.mtg_local_name ?? null,
     // Only the details read fills the artist (see getCardDetail); list rows leave it out.
     ...(row.mtg_artist !== undefined ? { artist: row.mtg_artist } : {})
   }
@@ -174,14 +176,18 @@ export interface PrintingDbRow {
 }
 
 /**
- * A One Piece printing's own art image, from its Bandai id; null for other games and for a
- * contributed printing, whose `set_rarity_code` is client-chosen and so never names art.
+ * A printing's own art image: a One Piece version's from its Bandai id, a Magic printing's from its
+ * Scryfall id (its `set_rarity_code`). Null for other games, for a Magic printing without a Scryfall
+ * id, and for a contributed printing, whose `set_rarity_code` is client-chosen and so never names art.
  */
 export function printingArtImageId(
   row: Pick<PrintingDbRow, 'card_id' | 'language' | 'set_rarity_code' | 'contributed'>
 ): number | null {
-  if (gameOfId(row.card_id) !== 'op' || row.contributed === 1) return null
-  return opPrintingImageId(row.language, row.set_rarity_code ?? '')
+  if (row.contributed === 1) return null
+  const game = gameOfId(row.card_id)
+  if (game === 'op') return opPrintingImageId(row.language, row.set_rarity_code ?? '')
+  if (game === 'mtg') return row.set_rarity_code ? mtgImageId(row.set_rarity_code) : null
+  return null
 }
 
 export function rowToCard(row: CardDbRow): CardRow {
@@ -305,12 +311,19 @@ export function searchCards(db: SqlDb, q: string, limit = 20, scope: Scope = LOC
       .all(fts, text, limit) as DbHit[]
     rows.forEach((r) => push(toResult(r)))
   }
-  if (scopeGame(db, scope) === 'pkm') {
+  const localNames = byGame<string | null>(scopeGame(db, scope), {
+    ygo: null,
+    pkm: 'pokemon_cards',
+    op: null,
+    mtg: 'mtg_cards'
+  })
+  if (localNames) {
+    // A card's printed (local) name: Pokémon's Japanese name, a Magic printing's own language's.
     const rows = db
       .prepare(
         `SELECT c.id, c.name, c.type, ${defaultImage} AS default_image_id, NULL AS matched
-         FROM pokemon_cards pc JOIN cards c ON c.id = pc.card_id AND +c.game = ${scope.game}
-         WHERE pc.local_name LIKE ? ESCAPE '\\' ORDER BY c.name LIMIT ?`
+         FROM ${localNames} lc JOIN cards c ON c.id = lc.card_id AND +c.game = ${scope.game}
+         WHERE lc.local_name LIKE ? ESCAPE '\\' ORDER BY c.name LIMIT ?`
       )
       .all(`%${escapeLike(text)}%`, limit) as DbHit[]
     rows.forEach((r) => push(toResult(r)))
@@ -376,6 +389,14 @@ export function traditionalArt(db: SqlDb): [number, number][] {
   return artLinks(db, 'traditional_twin_id')
 }
 
+interface ImageDbRow {
+  image_id: number
+  card_id: number
+  sort_order: number
+  /** Selected for a Magic card only. */
+  back_image_id?: number | null
+}
+
 export function getCardDetail(db: SqlDb, cardId: number, scope: Scope = LOCAL): CardDetail | null {
   const op = gameFactsRead(scopeGame(db, scope))
   const row = db
@@ -406,13 +427,21 @@ export function getCardDetail(db: SqlDb, cardId: number, scope: Scope = LOCAL): 
       )
       .all(cardId) as PrintingDbRow[]
   ).map(rowToPrinting)
+  // A Magic image may have a back face (a two-faced card); no other game's image has one.
+  const magic = gameOfId(cardId) === 'mtg'
   const images = (
     db
       .prepare(
-        `SELECT image_id, card_id, sort_order FROM card_images WHERE card_id = ? AND +game = ${scope.game}
-         ORDER BY sort_order`
+        `SELECT ci.image_id, ci.card_id, ci.sort_order${magic ? ', mi.back_image_id' : ''}
+         FROM card_images ci ${magic ? 'LEFT JOIN mtg_images mi ON mi.image_id = ci.image_id' : ''}
+         WHERE ci.card_id = ? AND +ci.game = ${scope.game} ORDER BY ci.sort_order`
       )
-      .all(cardId) as { image_id: number; card_id: number; sort_order: number }[]
-  ).map((i): CardImage => ({ imageId: i.image_id, cardId: i.card_id, sortOrder: i.sort_order }))
+      .all(cardId) as ImageDbRow[]
+  ).map((i): CardImage => ({
+    imageId: i.image_id,
+    cardId: i.card_id,
+    sortOrder: i.sort_order,
+    ...(i.back_image_id != null ? { backImageId: i.back_image_id } : {})
+  }))
   return { card: rowToCard(row), printings, images }
 }

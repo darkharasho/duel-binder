@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Repeat2 } from 'lucide-react'
 import { CardArt } from '@/components/CardArt'
 import { usePanelNavKeys, useSwipeNav, type PanelNav } from '@/components/panelNav'
 import { TiltCard } from '@/components/TiltCard'
@@ -15,6 +15,8 @@ interface PanelCardArtProps {
   alt: string
   /** Previous/next card arrows (and arrow keys; swipes on the phone); none when omitted. */
   nav?: PanelNav
+  /** A two-faced card's flip control, on the art; none when omitted. `back`: the back is shown. */
+  flip?: { back: boolean; onFlip: () => void }
 }
 
 function NavArrow({
@@ -48,6 +50,30 @@ function NavArrow({
   )
 }
 
+/** Turns the card over: a small round button on the art's top right corner, tilting with it. */
+function FlipButton({
+  flip,
+  large
+}: {
+  flip: NonNullable<PanelCardArtProps['flip']>
+  large?: boolean
+}): React.JSX.Element {
+  const label = flip.back ? 'Show front face' : 'Show back face'
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size={large ? 'icon' : 'icon-sm'}
+      aria-label={label}
+      title={label}
+      onClick={flip.onFlip}
+      className="pointer-events-auto absolute right-[4%] top-[3%] z-10 rounded-full bg-background/80 shadow-md backdrop-blur-sm"
+    >
+      <Repeat2 />
+    </Button>
+  )
+}
+
 /**
  * A side panel's card: floated large over the blurred page to the panel's left, or at the top of
  * the panel when the window is too narrow for that, small on desktop and as wide as a phone allows.
@@ -56,7 +82,8 @@ export function PanelCardArt({
   imageId,
   printingId,
   alt,
-  nav
+  nav,
+  flip
 }: PanelCardArtProps): React.JSX.Element {
   usePanelNavKeys(nav)
   useSwipeNav(nav)
@@ -110,6 +137,7 @@ export function PanelCardArt({
             alt={alt}
             className="w-full"
           />
+          {flip && <FlipButton flip={flip} />}
         </TiltCard>
         {arrows && <NavArrow dir="next" step={arrows.next} />}
       </div>
@@ -135,6 +163,7 @@ export function PanelCardArt({
                 alt=""
                 className="w-full rounded-[14px] shadow-[0_30px_80px_rgb(0_0_0/0.65)]"
               />
+              {flip && <FlipButton flip={flip} large />}
             </TiltCard>
             {arrows && <NavArrow dir="next" step={arrows.next} large />}
           </div>

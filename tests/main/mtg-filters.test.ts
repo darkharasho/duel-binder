@@ -2,10 +2,10 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import type Database from 'better-sqlite3'
 import { seededDb } from './helpers'
 import { seedMagic } from '../fixtures/magic'
-import { mtgCardId, mtgImageId } from '../../src/shared/games'
+import { mtgBackImageId, mtgCardId, mtgImageId } from '../../src/shared/games'
 import { addEntry, getFacets, listEntries } from '../../src/main/repo/collection'
 import { browseCards, browseFacets } from '../../src/main/repo/browse'
-import { getCardDetail } from '../../src/main/repo/cards'
+import { getCardDetail, searchCards } from '../../src/main/repo/cards'
 import { getStats } from '../../src/main/repo/stats'
 import { magicFacets } from '../../src/main/repo/mtgFilters'
 import { LOCAL } from '../../src/main/repo/scope'
@@ -136,6 +136,79 @@ describe('Magic filters, facets, stats and details', () => {
     ).run(mtg.cardIds[0])
     expect(browseFacets(db, LOCAL, 'ja').mtgFinishes).toEqual(['Etched Foil'])
     expect(browseFacets(db, LOCAL, 'en').mtgFinishes).toEqual(['Nonfoil', 'Foil'])
+  })
+
+  it("shows each Magic printing's own Scryfall object's art", () => {
+    const scry = ['6e5e1c1b-0d4e-4c6e-9d2a-1d1f2b6a7c01', '6e5e1c1b-0d4e-4c6e-9d2a-1d1f2b6a7c02']
+    const set = db.prepare('UPDATE card_printings SET set_rarity_code = ? WHERE id = ?')
+    set.run(scry[0], mtg.printingIds[0])
+    set.run(scry[0], mtg.printingIds[1])
+    set.run(scry[1], mtg.printingIds[2])
+    const art = Object.fromEntries(
+      getCardDetail(db, mtg.cardIds[0])!.printings.map((p) => [p.id, p.artImageId])
+    )
+    expect(art).toEqual({
+      [mtg.printingIds[0]]: mtgImageId(scry[0]),
+      [mtg.printingIds[1]]: mtgImageId(scry[0]),
+      [mtg.printingIds[2]]: mtgImageId(scry[1])
+    })
+    expect(mtgImageId(scry[0])).toBe(mtg.imageIds[0])
+    expect(mtgImageId(scry[1])).toBe(mtg.imageIds[1])
+  })
+
+  it('gives a Magic image its back face, and only one that has a back', () => {
+    const back = mtgBackImageId('6e5e1c1b-0d4e-4c6e-9d2a-1d1f2b6a7c02')
+    db.prepare('UPDATE mtg_images SET back_image_id = ? WHERE image_id = ?').run(
+      back,
+      mtg.imageIds[1]
+    )
+    expect(getCardDetail(db, mtg.cardIds[0])!.images).toEqual([
+      { imageId: mtg.imageIds[0], cardId: mtg.cardIds[0], sortOrder: 0 },
+      { imageId: mtg.imageIds[1], cardId: mtg.cardIds[0], sortOrder: 1, backImageId: back }
+    ])
+  })
+
+  it('shows and searches the printed name of a Japanese card', () => {
+    const ja = mtgCardId('ja', 'serra-oracle')
+    db.prepare(
+      `INSERT INTO cards (id, game, name, type, frame_type, race, "desc", updated_at)
+       VALUES (?, 'mtg', 'Serra Angel', 'Creature', 'mtg', '', '', '2026-11-09')`
+    ).run(ja)
+    db.prepare(
+      `INSERT INTO mtg_cards (card_id, oracle_id, layout, type_line, types, mana_cost, mana_value, colors,
+         color_identity, oracle_text, power, toughness, keywords, lang, local_name)
+       VALUES (?, 'serra-oracle', 'normal', 'Creature - Angel', '["Creature"]', '{3}{W}{W}', 5, '["W"]',
+         '["W"]', '', '4', '4', '[]', 'ja', 'セラの天使')`
+    ).run(ja)
+    const p = Number(
+      db
+        .prepare(
+          `INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity)
+           VALUES ('mtg', ?, 'ja', 'Magic 2015', 'M15 33', 'Rare')`
+        )
+        .run(ja).lastInsertRowid
+    )
+    db.prepare(
+      "INSERT INTO card_images (image_id, game, card_id, sort_order) VALUES (?, 'mtg', ?, 0)"
+    ).run(mtgImageId('ja-img'), ja)
+    addEntry(db, { printingId: p, imageId: mtgImageId('ja-img'), quantity: 1 }, now)
+    db.exec(`INSERT INTO cards_fts(cards_fts) VALUES('rebuild')`)
+
+    expect(getCardDetail(db, ja)!.card.magic?.localName).toBe('セラの天使')
+    expect(getCardDetail(db, mtg.cardIds[0])!.card.magic?.localName).toBeNull()
+    expect(searchCards(db, 'セラの').map((r) => r.id)).toEqual([ja])
+    expect(
+      searchCards(db, 'Serra Angel')
+        .map((r) => r.id)
+        .sort()
+    ).toEqual([mtg.cardIds[0], ja].sort())
+    expect(
+      browseCards(db, { sort: 'name', dir: 'asc', q: 'の天使' }).cards.map((c) => c.id)
+    ).toEqual([ja])
+    expect(
+      listEntries(db, { sort: 'name', dir: 'asc', q: 'の天使' }).map((e) => e.card.id)
+    ).toEqual([ja])
+    expect(browse({ q: 'Serra' })).toEqual(['Serra Angel', 'Serra Angel'])
   })
 
   it('gives artists in a fixed order, only on the details read', () => {

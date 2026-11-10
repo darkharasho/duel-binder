@@ -34,6 +34,19 @@ const pokemonCategories = (db: SqlDb, scope: Scope): [string, number][] =>
 const onePieceCardTypes = (db: SqlDb, scope: Scope): [string, number][] =>
   copiesBy(db, scope, 'onepiece_cards', 'card_type')
 
+/** Owned copies per Magic card type (cards.type: Creature/Instant/Land/…). */
+const magicCardTypes = (db: SqlDb, scope: Scope): [string, number][] =>
+  (
+    db
+      .prepare(
+        `SELECT c.type AS v, SUM(e.quantity) AS n FROM collection_entries e
+         JOIN card_printings p ON p.id = e.printing_id AND +p.game = ${scope.game}
+         JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
+         WHERE ${scope.where('e')} GROUP BY c.type`
+      )
+      .all() as { v: string; n: number }[]
+  ).map((r) => [r.v, r.n])
+
 export function getStats(db: SqlDb, scope: Scope = LOCAL): CollectionStats {
   const entries = listEntries(db, { sort: 'value', dir: 'desc' }, scope)
   const cardIds = new Set<number>()
@@ -73,7 +86,7 @@ export function getStats(db: SqlDb, scope: Scope = LOCAL): CollectionStats {
       ygo: () => [...frames],
       pkm: () => pokemonCategories(db, scope),
       op: () => onePieceCardTypes(db, scope),
-      mtg: () => []
+      mtg: () => magicCardTypes(db, scope)
     })()
       .map(([frameType, count]) => ({ frameType, count }))
       .sort((a, b) => b.count - a.count),

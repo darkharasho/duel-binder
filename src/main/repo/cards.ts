@@ -43,7 +43,7 @@ export interface CardDbRow {
   pk_rarity?: string | null
   pk_illustrator?: string | null
   pk_local_name?: string | null
-  /** Set when the query reads onepiece_cards as `oc` (see onePieceRead); absent on the other games. */
+  /** Set when the query reads onepiece_cards as `oc` (see gameFactsRead); absent on the other games. */
   op_number?: string | null
   op_card_type?: string | null
   op_colors?: string | null
@@ -54,7 +54,7 @@ export interface CardDbRow {
   op_attribute?: string | null
   op_traits?: string | null
   op_block_icon?: number | null
-  /** Set when the query reads mtg_cards as `mc` (see onePieceRead); absent on the other games. */
+  /** Set when the query reads mtg_cards as `mc` (see gameFactsRead); absent on the other games. */
   mtg_oracle_id?: string | null
   mtg_type_line?: string | null
   mtg_types?: string | null
@@ -66,6 +66,7 @@ export interface CardDbRow {
   mtg_toughness?: string | null
   mtg_loyalty?: string | null
   mtg_defense?: string | null
+  mtg_artist?: string | null
 }
 
 /** The pokemon_cards columns rowToCard reads, from a `LEFT JOIN pokemon_cards pc ON pc.card_id = c.id`. */
@@ -83,14 +84,16 @@ const NO_ONEPIECE = { cols: '', join: '' }
 export const MTG_COLS = `mc.oracle_id AS mtg_oracle_id, mc.type_line AS mtg_type_line, mc.types AS mtg_types,
   mc.mana_cost AS mtg_mana_cost, mc.mana_value AS mtg_mana_value, mc.colors AS mtg_colors,
   mc.oracle_text AS mtg_oracle_text, mc.power AS mtg_power, mc.toughness AS mtg_toughness,
-  mc.loyalty AS mtg_loyalty, mc.defense AS mtg_defense`
+  mc.loyalty AS mtg_loyalty, mc.defense AS mtg_defense,
+  (SELECT GROUP_CONCAT(DISTINCT mi.artist) FROM card_images ci JOIN mtg_images mi ON mi.image_id = ci.image_id
+    WHERE ci.card_id = c.id) AS mtg_artist`
 
 /**
  * What a card query adds to read a game's own facts: `, ONEPIECE_COLS` (One Piece) or `, MTG_COLS`
  * (Magic) after its last column, and the matching join after the join of `c`. Nothing on the
  * other games, so their reads skip the join.
  */
-export const onePieceRead = (game: GameId): { cols: string; join: string } =>
+export const gameFactsRead = (game: GameId): { cols: string; join: string } =>
   byGame(game, {
     ygo: NO_ONEPIECE,
     pkm: NO_ONEPIECE,
@@ -148,7 +151,8 @@ function magicFacts(row: CardDbRow): MagicFacts | undefined {
     power: row.mtg_power ?? null,
     toughness: row.mtg_toughness ?? null,
     loyalty: row.mtg_loyalty ?? null,
-    defense: row.mtg_defense ?? null
+    defense: row.mtg_defense ?? null,
+    artist: row.mtg_artist ? row.mtg_artist.split(',').join(', ') : null
   }
 }
 
@@ -374,7 +378,7 @@ export function traditionalArt(db: SqlDb): [number, number][] {
 }
 
 export function getCardDetail(db: SqlDb, cardId: number, scope: Scope = LOCAL): CardDetail | null {
-  const op = onePieceRead(scopeGame(db, scope))
+  const op = gameFactsRead(scopeGame(db, scope))
   const row = db
     .prepare(
       `SELECT c.*, ${POKEMON_COLS}${op.cols} FROM cards c LEFT JOIN pokemon_cards pc ON pc.card_id = c.id

@@ -36,7 +36,7 @@ import {
   type SlotResult
 } from './binderSlots'
 import {
-  onePieceRead,
+  gameFactsRead,
   POKEMON_COLS,
   rowToCard,
   rowToPrinting,
@@ -456,7 +456,7 @@ const CARD_COLS = `c.id, c.name, c.type, c.frame_type, c.race, c.attribute, c.le
 function binderCards(db: SqlDb, slots: Slot[], scope: Scope): BinderCard[] {
   if (slots.length === 0) return []
   const cardIds = [...new Set(slots.map((s) => s.cardId))]
-  const op = onePieceRead(scopeGame(db, scope))
+  const op = gameFactsRead(scopeGame(db, scope))
   const cardRows = db
     .prepare(
       `SELECT ${CARD_COLS}${op.cols},

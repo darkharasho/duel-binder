@@ -144,8 +144,8 @@ describe('string branches on game, Magic decided explicitly', () => {
     addEntry(db, { printingId: mtg.printingIds[0], imageId: mtg.imageIds[0], quantity: 3 }, now)
   })
 
-  it("stats: byFrameType is empty on 'mtg'", () => {
-    expect(getStats(db).byFrameType).toEqual([])
+  it("stats: byFrameType counts copies by card type on 'mtg'", () => {
+    expect(getStats(db).byFrameType).toEqual([{ frameType: 'Creature', count: 3 }])
   })
 
   it("facets: 'mtg' has no Yu-Gi-Oh, Pokémon or One Piece facets", () => {

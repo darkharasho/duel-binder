@@ -16,12 +16,14 @@ import type {
 import { getMeta } from '../db/meta'
 import { LOCAL, favouriteSql, scopeGame, type Scope } from './scope'
 import { pokemonFacets, pokemonSearch, pokemonWhere } from './pkmFilters'
+import { magicFacets, magicWhere, mtgFinishWhere } from './mtgFilters'
+import { mtgBaseRaritySql } from '../../shared/games/magic'
 import { onePieceFacets, onePieceWhere, opRarityWhere, opVersionWhere } from './opFilters'
 import { twinPrice } from './enTwin'
 import { marketOnlyGame, setPrice, sweptPrinting } from './priceRule'
 import {
   buildFtsQuery,
-  onePieceRead,
+  gameFactsRead,
   POKEMON_COLS,
   rowToCard,
   rowToPrinting,
@@ -49,7 +51,7 @@ interface EntryDbRow {
 
 /**
  * The card, printing and price columns `entryPrice` and rowToCard read; `c`, `p`, `ip` and `pc`
- * joined as below, and `oc` when `opCols` (onePieceRead's `cols`) is given.
+ * joined as below, and `oc` when `opCols` (gameFactsRead's `cols`) is given.
  */
 export const cardPriceColumns = (scope: Scope, opCols = ''): string => `
          c.id AS id, c.name, c.type, c.frame_type, c.race, c.attribute, c.level, c.linkval, c.atk, c.def,
@@ -60,7 +62,7 @@ export const cardPriceColumns = (scope: Scope, opCols = ''): string => `
          ip.printing_id AS ip_id, ip.price AS ip_price, ip.checked_at AS ip_checked_at,
          ip.listing_count AS ip_listing_count`
 
-/** The entry query; `op` is onePieceRead of the scope's game. */
+/** The entry query; `op` is gameFactsRead of the scope's game. */
 const select = (scope: Scope, op: { cols: string; join: string }): string => `
   SELECT e.id AS e_id, e.quantity AS e_quantity, e.notes AS e_notes, e.created_at AS e_created_at,
          e.updated_at AS e_updated_at, e.image_id AS e_image_id,
@@ -162,7 +164,7 @@ function toView(r: EntryDbRow, priceStatus: string | null): EntryView {
 }
 
 export function getEntry(db: SqlDb, id: number, scope: Scope = LOCAL): EntryView | null {
-  const op = onePieceRead(scopeGame(db, scope))
+  const op = gameFactsRead(scopeGame(db, scope))
   const row = db.prepare(`${select(scope, op)} WHERE e.id = ? AND ${scope.where('e')}`).get(id) as EntryDbRow | undefined
   return row ? toView(row, getMeta(db, 'price_service_status')) : null
 }
@@ -324,18 +326,29 @@ export function listEntries(db: SqlDb, f: CollectionFilters, scope: Scope = LOCA
         params.push(f.levelMax)
       }
     },
-    // Step 1: Magic has only the shared filters below (set, rarity, language…); step 2 adds its own.
-    mtg: () => {}
+    mtg: () => {
+      const m = magicWhere(f)
+      if (m) {
+        where.push(m.sql)
+        params.push(...m.args)
+      }
+      const fin = mtgFinishWhere(f.mtgFinishes, 'p.set_rarity')
+      if (fin) {
+        where.push(fin.sql)
+        params.push(...fin.args)
+      }
+    }
   })()
   inList('p.set_name', f.setNames)
-  inList('p.set_rarity', f.rarities)
+  // Magic's rarity is the base rarity: Rare also takes the foil and etched printings.
+  inList(game === 'mtg' ? mtgBaseRaritySql('p.set_rarity') : 'p.set_rarity', f.rarities)
   if (f.language) {
     where.push('p.language = ?')
     params.push(f.language)
   }
   if (f.favourites === true) where.push(favouriteSql(scope))
   const status = getMeta(db, 'price_service_status')
-  const sql = `${select(scope, onePieceRead(game))} WHERE ${where.join(' AND ')}`
+  const sql = `${select(scope, gameFactsRead(game))} WHERE ${where.join(' AND ')}`
   const entries = (db.prepare(sql).all(...params) as EntryDbRow[]).map((r) => toView(r, status))
 
   const dir = f.dir === 'desc' ? -1 : 1
@@ -376,7 +389,7 @@ export function listEntries(db: SqlDb, f: CollectionFilters, scope: Scope = LOCA
 
 export function entriesForCard(db: SqlDb, cardId: number, scope: Scope = LOCAL): EntryView[] {
   const status = getMeta(db, 'price_service_status')
-  const op = onePieceRead(scopeGame(db, scope))
+  const op = gameFactsRead(scopeGame(db, scope))
   return (
     db.prepare(`${select(scope, op)} WHERE c.id = ? AND ${scope.where('e')} ORDER BY p.set_code, e.id`).all(cardId) as EntryDbRow[]
   ).map((r) => toView(r, status))
@@ -397,7 +410,7 @@ export function getFacets(db: SqlDb, scope: Scope = LOCAL): Facets {
   const owned = new Set(distinct('p.language'))
   const game = scopeGame(db, scope)
   const pkm = game === 'pkm'
-  // These three are Yu-Gi-Oh columns; 'pkm' and 'op' have their own facets below, 'mtg' none yet.
+  // These three are Yu-Gi-Oh columns; 'pkm', 'op' and 'mtg' have their own facets below.
   const ygo = game === 'ygo'
   const ownedCards = `SELECT p.card_id FROM collection_entries e JOIN card_printings p ON p.id = e.printing_id AND +p.game = ${scope.game} WHERE ${scope.where('e')}`
   return {
@@ -405,9 +418,16 @@ export function getFacets(db: SqlDb, scope: Scope = LOCAL): Facets {
     attributes: ygo ? distinct('c.attribute') : [],
     archetypes: ygo ? distinct('c.archetype') : [],
     setNames: distinct('p.set_name'),
-    rarities: distinct('p.set_rarity'),
+    rarities: distinct(game === 'mtg' ? mtgBaseRaritySql('p.set_rarity') : 'p.set_rarity'),
     languages: LANGUAGES.map((l) => l.code).filter((code) => owned.has(code)),
     ...(pkm ? pokemonFacets(db, scope, ownedCards) : {}),
-    ...(game === 'op' ? onePieceFacets(db, scope, ownedCards) : {})
+    ...(game === 'op' ? onePieceFacets(db, scope, ownedCards) : {}),
+    ...(game === 'mtg'
+      ? magicFacets(
+          db,
+          scope,
+          (db.prepare(ownedCards).all() as { card_id: number }[]).map((r) => r.card_id)
+        )
+      : {})
   }
 }

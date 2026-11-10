@@ -6,7 +6,10 @@ export const RANGE_FIELDS = {
   hp: { min: 'hpMin', max: 'hpMax' },
   cost: { min: 'costMin', max: 'costMax' },
   power: { min: 'powerMin', max: 'powerMax' },
-  counter: { min: 'counterMin', max: 'counterMax' }
+  counter: { min: 'counterMin', max: 'counterMax' },
+  manaValue: { min: 'manaValueMin', max: 'manaValueMax' },
+  mtgPower: { min: 'mtgPowerMin', max: 'mtgPowerMax' },
+  mtgToughness: { min: 'mtgToughnessMin', max: 'mtgToughnessMax' }
 } as const
 
 export type RangeKey = keyof typeof RANGE_FIELDS

@@ -60,6 +60,8 @@ export interface MagicFacts {
   toughness: string | null
   loyalty: string | null
   defense: string | null
+  /** The artist(s) of the card's art, joined with ', '. */
+  artist: string | null
 }
 
 export interface Printing {
@@ -188,6 +190,16 @@ export interface CollectionFilters {
   /** The version part of a printing's label ('Base', 'Alternate Art', a product name). */
   opVersions?: string[]
   opBlocks?: string[]
+  /** Magic only. */
+  mtgColors?: string[]
+  mtgTypes?: string[]
+  mtgFinishes?: string[]
+  manaValueMin?: number
+  manaValueMax?: number
+  mtgPowerMin?: number
+  mtgPowerMax?: number
+  mtgToughnessMin?: number
+  mtgToughnessMax?: number
   costMin?: number
   costMax?: number
   powerMin?: number
@@ -238,6 +250,16 @@ export interface BrowseFilters {
   /** The version part of a printing's label ('Base', 'Alternate Art', a product name). */
   opVersions?: string[]
   opBlocks?: string[]
+  /** Magic only. */
+  mtgColors?: string[]
+  mtgTypes?: string[]
+  mtgFinishes?: string[]
+  manaValueMin?: number
+  manaValueMax?: number
+  mtgPowerMin?: number
+  mtgPowerMax?: number
+  mtgToughnessMin?: number
+  mtgToughnessMax?: number
   costMin?: number
   costMax?: number
   powerMin?: number
@@ -300,6 +322,10 @@ export interface BrowseFacets {
   /** The version part of a printing's label ('Base', 'Alternate Art', a product name). */
   opVersions?: string[]
   opBlocks?: string[]
+  /** Magic only. */
+  mtgColors?: string[]
+  mtgTypes?: string[]
+  mtgFinishes?: string[]
 }
 
 export interface Facets {
@@ -323,6 +349,10 @@ export interface Facets {
   /** The version part of a printing's label ('Base', 'Alternate Art', a product name). */
   opVersions?: string[]
   opBlocks?: string[]
+  /** Magic only. */
+  mtgColors?: string[]
+  mtgTypes?: string[]
+  mtgFinishes?: string[]
 }
 
 export interface CollectionStats {

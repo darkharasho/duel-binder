@@ -2,7 +2,7 @@ import Database from 'better-sqlite3'
 import { migrate } from '../../src/main/db/database'
 import { PHONE_TABLES } from '../../src/shared/catalogFeed'
 import { getMeta, setMeta } from '../../src/main/db/meta'
-import { onePieceRead, rowToCard, type CardDbRow } from '../../src/main/repo/cards'
+import { gameFactsRead, rowToCard, type CardDbRow } from '../../src/main/repo/cards'
 import { CATALOG_TABLES } from '../../src/shared/catalogTables'
 import { mtgCardId } from '../../src/shared/games'
 import { seedMagic } from '../fixtures/magic'
@@ -14,7 +14,7 @@ const names = (db: Database.Database, type: string): string[] =>
     (r) => r.name
   )
 
-const mtgRead = onePieceRead('mtg')
+const mtgRead = gameFactsRead('mtg')
 
 describe('migration V44 (mtg_cards and mtg_images)', () => {
   it('creates both tables with their indexes, keeps every pkey, and takes the Magic fixture', async () => {

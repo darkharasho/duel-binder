@@ -1,5 +1,10 @@
 import type { SqlDb } from '../db/sql'
-import { MTG_CARD_TYPES, MTG_COLOR_NAMES, mtgFinishSql } from '../../shared/games/magic'
+import {
+  magicNameSearchKey,
+  MTG_CARD_TYPES,
+  MTG_COLOR_NAMES,
+  mtgFinishSql
+} from '../../shared/games/magic'
 import type { Scope } from './scope'
 
 export interface MagicFilterFields {
@@ -14,6 +19,7 @@ export interface MagicFilterFields {
 }
 
 const marks = (v: readonly unknown[]): string => v.map(() => '?').join(',')
+const escapeLike = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\${c}`)
 
 const COLORLESS = 'Colorless'
 const CODE_OF = new Map<string, string>(
@@ -74,6 +80,17 @@ export function magicWhere(f: MagicFilterFields): { sql: string; args: unknown[]
   return {
     sql: `c.id IN (SELECT mc.card_id FROM mtg_cards mc WHERE ${parts.join(' AND ')})`,
     args
+  }
+}
+
+/**
+ * A Magic search's match on the printed (local) name, against a cards alias `c`, as Pokémon's
+ * Japanese name is matched (pokemonSearch). The caller adds its own name and set-code matches.
+ */
+export function magicLocalName(text: string): { sql: string; params: unknown[] } {
+  return {
+    sql: `c.id IN (SELECT card_id FROM mtg_cards WHERE local_name_search LIKE ? ESCAPE '\\')`,
+    params: [`%${escapeLike(magicNameSearchKey(text))}%`]
   }
 }
 

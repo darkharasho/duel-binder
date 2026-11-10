@@ -7,6 +7,7 @@ export type Language =
   | 'it'
   | 'es'
   | 'pt'
+  | 'ru'
   | 'zh-hans'
   | 'zh-hant'
   | 'ae'
@@ -37,6 +38,7 @@ export const LANGUAGES: readonly LanguageInfo[] = [
   { code: 'it', tag: 'IT', label: 'Italian', yugipediaSuffix: 'TCG-IT', ebayWord: 'Italian' },
   { code: 'es', tag: 'ES', label: 'Spanish', yugipediaSuffix: 'TCG-SP', ebayWord: 'Spanish' },
   { code: 'pt', tag: 'PT', label: 'Portuguese', yugipediaSuffix: 'TCG-PT', ebayWord: 'Portuguese' },
+  { code: 'ru', tag: 'RU', label: 'Russian', yugipediaSuffix: null, ebayWord: 'Russian' },
   { code: 'zh-hans', tag: 'SC', label: 'Simplified Chinese', yugipediaSuffix: 'OCG-SC', ebayWord: 'Chinese' },
   { code: 'zh-hant', tag: 'TC', label: 'Traditional Chinese', yugipediaSuffix: 'OCG-TC', ebayWord: 'Chinese' },
   { code: 'ae', tag: 'AE', label: 'Asian-English', yugipediaSuffix: 'OCG-AE', ebayWord: 'Asian English' },

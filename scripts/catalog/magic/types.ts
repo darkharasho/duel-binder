@@ -1,6 +1,7 @@
 /** The subset of Scryfall's card object the Magic job reads, with Scryfall's own field names. */
 export interface ScryFace {
   name: string
+  printed_name?: string
   oracle_id?: string
   mana_cost?: string
   cmc?: number
@@ -20,6 +21,8 @@ export interface ScryCard {
   id: string
   oracle_id?: string
   name: string
+  printed_name?: string
+  image_status?: string
   lang: string
   layout: string
   set: string
@@ -62,7 +65,7 @@ export interface ScrySet {
 
 export interface ScryfallSource {
   bulkInfo(): Promise<{ downloadUri: string; updatedAt: string }>
-  /** Every object in the bulk file, unfiltered. */
+  /** Every object in the bulk file, unfiltered, slimmed (see `slimCard`). */
   cards(downloadUri: string): AsyncIterable<ScryCard>
   sets(): Promise<ScrySet[]>
 }

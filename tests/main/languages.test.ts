@@ -1,4 +1,4 @@
-import { LANGUAGES, isLanguage, languageForSuffix } from '../../src/shared/languages'
+import { LANGUAGES, isLanguage, languageForSuffix, languageInfo } from '../../src/shared/languages'
 
 test('languageForSuffix maps Yugipedia suffixes', () => {
   expect(languageForSuffix('OCG-JP')).toBe('ja')
@@ -16,4 +16,15 @@ test('isLanguage accepts only known codes', () => {
 test('LANGUAGES starts with English and has unique codes', () => {
   expect(LANGUAGES[0].code).toBe('en')
   expect(new Set(LANGUAGES.map((l) => l.code)).size).toBe(LANGUAGES.length)
+})
+
+test('Russian is listed after Portuguese and has no Yugipedia list', () => {
+  expect(languageInfo('ru')).toEqual({ code: 'ru', tag: 'RU', label: 'Russian', yugipediaSuffix: null, ebayWord: 'Russian' })
+  expect(LANGUAGES.map((l) => l.code)).toEqual([
+    'en', 'ja', 'ko', 'de', 'fr', 'it', 'es', 'pt', 'ru', 'zh-hans', 'zh-hant', 'ae', 'ja-asia'
+  ])
+  for (const l of LANGUAGES) {
+    if (l.yugipediaSuffix) expect(languageForSuffix(l.yugipediaSuffix)).toBe(l.code)
+  }
+  expect(LANGUAGES.filter((l) => languageForSuffix(l.yugipediaSuffix ?? '') === 'ru')).toHaveLength(0)
 })

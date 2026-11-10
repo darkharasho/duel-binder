@@ -16,7 +16,7 @@ import {
   isFallbackLogoUrl,
   type ImageSize
 } from '../../../src/shared/imageSources'
-import { gameOfId, isTokenId } from '../../../src/shared/games/ids'
+import { gameOfId, isTokenId, mtgBackImageId, mtgImageId } from '../../../src/shared/games/ids'
 import { POKEDEX_SIZE } from '../../../src/shared/pokedex'
 import { uprightJpeg } from '../../../src/shared/upright'
 import { findPokemonSetArtUrl, findSetImageUrl } from '../../../src/main/repo/sets'
@@ -444,11 +444,36 @@ function resolve(deps: AppDeps, path: string): Target | null {
     }
     if (game === 'mtg') {
       // Magic art is shown whole (never cropped), so `cropped` is the small copy as in cardArtKey.
-      const row = deps.db
-        .prepare('SELECT scryfall_id FROM mtg_images WHERE image_id = ?')
-        .get(n) as { scryfall_id: string } | undefined
-      const url = row ? scryfallArtUrl(row.scryfall_id, kind === 'full' ? 'full' : 'small') : null
+      type ArtRow = { scryfall_id: string; art_from: string | null }
+      const front = deps.db
+        .prepare('SELECT scryfall_id, art_from FROM mtg_images WHERE image_id = ?')
+        .get(n) as ArtRow | undefined
+      // A back face has no row of its own: it is found through its front's back_image_id.
+      const row =
+        front ??
+        (deps.db
+          .prepare('SELECT scryfall_id, art_from FROM mtg_images WHERE back_image_id = ?')
+          .get(n) as ArtRow | undefined)
+      const url =
+        row && row.art_from !== 'none'
+          ? scryfallArtUrl(
+              row.art_from ?? row.scryfall_id,
+              kind === 'full' ? 'full' : 'small',
+              front ? 'front' : 'back'
+            )
+          : null
       if (url === null) return null
+      // Borrowed English art is a placeholder until Scryfall has this object's own scan: keep it
+      // under the lender's key (one copy shared with the English printing, and this object's own
+      // key stays free for the real scan) and let browsers and the edge keep it only briefly.
+      const lender = row?.art_from ?? null
+      if (lender !== null)
+        return {
+          key: cardArtKey(kind, front ? mtgImageId(lender) : mtgBackImageId(lender)),
+          source: fixed(url, { 'User-Agent': USER_AGENT }),
+          cache: FALLBACK_CACHE,
+          anonymous: true
+        }
       return {
         key: cardArtKey(kind, n),
         source: fixed(url, { 'User-Agent': USER_AGENT }),

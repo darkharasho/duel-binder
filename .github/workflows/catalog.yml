@@ -138,10 +138,10 @@ jobs:
       - name: Flag a failed One Piece step
         if: steps.onepiece.outcome == 'failure'
         run: echo "CATALOG_PROBLEMS=1" >> "$GITHUB_ENV"
-      # Reads Scryfall's whole default_cards file (about 500 MB). Bounded and never blocks the upload.
+      # Streams Scryfall's whole all_cards file (every language, about 400 MB gzipped). Bounded and never blocks the upload.
       - name: Refresh Magic
         id: magic
-        timeout-minutes: 60
+        timeout-minutes: 90
         continue-on-error: true
         run: npm run catalog:job -- --stage magic
       - name: Flag a failed Magic step

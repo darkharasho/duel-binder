@@ -9,6 +9,7 @@ import {
   mtgCardId,
   mtgId,
   mtgImageId,
+  mtgBackImageId,
   onePieceCardId,
   onePieceId,
   onePieceImageId,
@@ -88,6 +89,14 @@ describe('games', () => {
     expect(mtgCardId('en', 'e3285e6b-3e79-4d7c-bf96-d920f973b122')).toBe(
       mtgId('en/e3285e6b-3e79-4d7c-bf96-d920f973b122')
     )
+  })
+  test('mtgBackImageId', () => {
+    const id = '77C6FA74-5543-42AC-9EAD-0E890B188E99'
+    expect(mtgBackImageId(id)).toBe(mtgId(`${id.toLowerCase()}#back`))
+    expect(mtgBackImageId(id)).toBe(mtgBackImageId(id.toLowerCase()))
+    expect(mtgBackImageId(id)).toBeGreaterThanOrEqual(2 ** 38)
+    expect(mtgBackImageId(id)).toBeLessThan(2 ** 39)
+    expect(mtgBackImageId(id)).not.toBe(mtgImageId(id))
   })
   test('GAMES.mtg', () => {
     const m = gameDef('mtg')

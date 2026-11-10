@@ -258,6 +258,7 @@ const DATE_FIELDS: Record<Language, string[]> = {
   it: ['it_release_date', 'fr/de/it/sp_release_date', 'eu_release_date'],
   es: ['sp_release_date', 'fr/de/it/sp_release_date', 'eu_release_date'],
   pt: ['pt_release_date', 'eu_release_date'],
+  ru: [],
   'zh-hans': ['sc_release_date'],
   'zh-hant': ['tc_release_date'],
   ae: ['ae_release_date'],

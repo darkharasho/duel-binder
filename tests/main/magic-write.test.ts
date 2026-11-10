@@ -11,7 +11,7 @@ import { openDatabase } from '../../src/main/db/database'
 import { runSync } from '../../src/main/sync/sync'
 import type { YgoClient } from '../../src/main/ygo/client'
 import type { ApiCard } from '../../src/main/ygo/mapCard'
-import { mtgCardId, mtgImageId } from '../../src/shared/games/ids'
+import { mtgBackImageId, mtgCardId, mtgImageId } from '../../src/shared/games/ids'
 import { finishOf } from '../../src/shared/games/magic'
 import fixture from '../fixtures/cardinfo.sample.json'
 import { seedOnePiece } from '../fixtures/onePiece'
@@ -216,7 +216,7 @@ describe('writeMagic', () => {
     const b = OBJECTS.find((o) => o.oracle_id !== a.oracle_id)!
     const shared = mtgCardId('en', a.oracle_id as string)
     const idOf = {
-      card: (s: string) => (s === b.oracle_id ? shared : mtgCardId('en', s)),
+      card: (lang: string, s: string) => (s === b.oracle_id ? shared : mtgCardId(lang, s)),
       image: mtgImageId
     }
     const before = mtgHash()
@@ -367,5 +367,165 @@ describe('writeMagic', () => {
     const start = total()
     write(OBJECTS)
     expect(total() - start).toBe(0)
+  })
+
+  describe('languages', () => {
+    const EN_ID = '37f79ba7-7b65-4387-b498-f770816ce8dd'
+    const JA_ID = '7dd45e88-c36c-468c-b8dc-3459871a075c'
+    const DELVER_ID = '11bf83bb-c95b-4b4f-9a56-ce7a1816307a'
+    const en = (): ScryCard => clone(OBJECTS.find((o) => o.id === EN_ID)!)
+    const ja = (patch: Partial<ScryCard> = {}): ScryCard =>
+      clone(
+        OBJECTS.find((o) => o.id === JA_ID)!,
+        {
+          printed_name: 'エルドラージの再利用者',
+          prices: { usd: '0.50', usd_foil: null, usd_etched: null },
+          ...patch
+        }
+      )
+    const delver = (): ScryCard => clone(OBJECTS.find((o) => o.id === DELVER_ID)!)
+    const total = (): number => (db.prepare('SELECT total_changes() AS n').get() as { n: number }).n
+    const byLang = (lang: string): Printing[] =>
+      db
+        .prepare(
+          "SELECT * FROM card_printings WHERE game = 'mtg' AND language = ? ORDER BY set_rarity"
+        )
+        .all(lang) as Printing[]
+
+    it('writes an English and a Japanese object of one oracle card as two cards', () => {
+      const oracle = en().oracle_id as string
+      const r = write([en(), ja()])
+      const enId = mtgCardId('en', oracle)
+      const jaId = mtgCardId('ja', oracle)
+      expect(db.prepare("SELECT id, name FROM cards WHERE game = 'mtg' ORDER BY id").all()).toEqual(
+        [enId, jaId].sort((a, b) => a - b).map((id) => ({ id, name: 'Eldrazi Repurposer' }))
+      )
+      expect(
+        db
+          .prepare(
+            'SELECT card_id, lang, local_name, local_name_search, oracle_id FROM mtg_cards ORDER BY lang'
+          )
+          .all()
+      ).toEqual([
+        { card_id: enId, lang: 'en', local_name: null, local_name_search: null, oracle_id: oracle },
+        {
+          card_id: jaId,
+          lang: 'ja',
+          local_name: 'エルドラージの再利用者',
+          local_name_search: 'エルドラージの再利用者',
+          oracle_id: oracle
+        }
+      ])
+      expect(
+        db
+          .prepare(
+            "SELECT game, language, set_name, set_code FROM sets WHERE game = 'mtg' ORDER BY language"
+          )
+          .all()
+      ).toEqual([
+        { game: 'mtg', language: 'en', set_name: 'Modern Horizons 3', set_code: 'MH3' },
+        { game: 'mtg', language: 'ja', set_name: 'Modern Horizons 3', set_code: 'MH3' }
+      ])
+      const jaRows = byLang('ja')
+      expect(jaRows.map((x) => [x.card_id, x.set_name, x.set_code, x.set_rarity_code])).toEqual([
+        [jaId, 'Modern Horizons 3', 'MH3 150', JA_ID],
+        [jaId, 'Modern Horizons 3', 'MH3 150', JA_ID]
+      ])
+      expect(jaRows.map((x) => x.set_rarity)).toEqual(['Common', 'Common (Foil)'])
+      expect(jaRows[0].pkey).toBe(`ja|${jaId}|Modern Horizons 3|MH3 150|Common`)
+      expect(
+        db.prepare('SELECT card_id FROM card_images WHERE image_id = ?').get(mtgImageId(JA_ID))
+      ).toEqual({ card_id: jaId })
+      expect(r.byLanguage).toEqual({
+        en: { cards: 1, printings: 2, priced: 2 },
+        ja: { cards: 1, printings: 2, priced: 1 }
+      })
+    })
+
+    it('a Japanese printing of the same set, number and finish never takes the English row', () => {
+      write([en()])
+      const before = byLang('en')
+      expect(before).toHaveLength(2)
+      const r = write([en(), ja()])
+      expect(r.notes.join()).not.toMatch(/key taken/)
+      expect(byLang('en')).toEqual(before)
+      const jaRows = byLang('ja')
+      expect(jaRows).toHaveLength(2)
+      expect(jaRows.every((x) => !before.some((b) => b.id === x.id))).toBe(true)
+      expect(jaRows.every((x) => x.set_rarity_code === JA_ID)).toBe(true)
+    })
+
+    it('a Japanese printing never takes over a missing English row', () => {
+      write([en()])
+      const before = byLang('en')
+      const r = write([ja()])
+      expect(r.notes.join()).not.toMatch(/key taken/)
+      expect(byLang('en')).toEqual(before.map((x) => ({ ...x, missing_from_api: 1 })))
+      expect(byLang('ja').map((x) => [x.set_rarity_code, x.missing_from_api])).toEqual([
+        [JA_ID, 0],
+        [JA_ID, 0]
+      ])
+      expect(r.missing).toBe(2)
+    })
+
+    it('a second identical night with every language changes nothing', () => {
+      const night = (): ScryCard[] => [
+        en(),
+        ja(),
+        delver(),
+        ja({
+          id: '00000000-0000-4000-8000-0000000000c1',
+          collector_number: '151',
+          image_status: 'placeholder'
+        })
+      ]
+      write(night())
+      const before = mtgHash()
+      const start = total()
+      write(night())
+      expect(total() - start).toBe(0)
+      expect(mtgHash()).toBe(before)
+    })
+
+    it('writes back_image_id and art_from, and clears art_from once the art arrives', () => {
+      const lent = clone(en(), {
+        id: '00000000-0000-4000-8000-0000000000c0',
+        collector_number: '151'
+      })
+      const borrower = (status: string): ScryCard =>
+        ja({
+          id: '00000000-0000-4000-8000-0000000000c1',
+          collector_number: '151',
+          image_status: status
+        })
+      write([lent, borrower('placeholder'), delver()])
+      const img = (id: string): unknown =>
+        db.prepare('SELECT back_image_id, art_from FROM mtg_images WHERE scryfall_id = ?').get(id)
+      expect(img(DELVER_ID)).toEqual({ back_image_id: mtgBackImageId(DELVER_ID), art_from: null })
+      expect(img(borrower('x').id)).toEqual({ back_image_id: null, art_from: lent.id })
+      write([lent, borrower('highres_scan'), delver()])
+      expect(img(borrower('x').id)).toEqual({ back_image_id: null, art_from: null })
+    })
+
+    it('a back image id colliding with another image id throws and writes nothing', () => {
+      const d = delver()
+      const a = en()
+      const idOf = {
+        card: mtgCardId,
+        image: (s: string) => (s === a.id ? mtgBackImageId(d.id) : mtgImageId(s))
+      }
+      const before = mtgHash()
+      expect(() => write([a, d], SETS, idOf)).toThrow(
+        `Magic id collision: ${d.id}#back and ${a.id} → ${mtgBackImageId(d.id)}`
+      )
+      expect(mtgHash()).toBe(before)
+    })
+
+    it('byLanguage counts every language, perSet English only', () => {
+      const r = write([delver(), ja()])
+      expect(r.byLanguage.ja.printings).toBe(2)
+      expect(r.byLanguage.en.printings).toBe(2)
+      expect(r.perSet.map((s) => s.setCode)).toEqual(['ISD'])
+    })
   })
 })

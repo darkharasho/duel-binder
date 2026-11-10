@@ -321,9 +321,12 @@ export function AddCardDialog({
                         className="w-9 shrink-0"
                       />
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate font-medium">{c.name}</span>
+                        <span className="flex items-center gap-1.5">
+                          <span className="truncate font-medium">{c.name}</span>
+                          {c.language && <LanguageTag language={c.language} className="shrink-0" />}
+                        </span>
                         <span className="block truncate text-xs text-muted-foreground">
-                          {c.type}
+                          {c.localName ? `${c.localName} · ${c.type}` : c.type}
                         </span>
                       </span>
                       {c.matchedSetCode && (

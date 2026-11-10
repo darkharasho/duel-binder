@@ -635,6 +635,25 @@ ${rollupTriggers('mtg_cards', ['card_id', 'types', 'colors', 'mana_value'])}
 /** The server keeps rollups out, as V24 does. */
 export const SCHEMA_V44_SERVER = MTG_TABLES
 
+/**
+ * Magic languages and faces: `lang` is the card row's language ('en' for every row so far),
+ * `local_name` the printed name in that language (NULL on English), `local_name_search` its
+ * lowercased copy that searches match (magicNameSearchKey: SQLite folds ASCII case only),
+ * `back_image_id` the image row of a two-faced card's back face, `art_from` where a row's art comes
+ * from: NULL for its own, the lowercase Scryfall id of the English object it borrows art from, or
+ * 'none' when there is no art to show. Desktop and phone only: server-43 repeats this SQL and
+ * recreates the seq triggers over the new columns.
+ */
+export const SCHEMA_V45 = `
+ALTER TABLE mtg_cards ADD COLUMN lang TEXT NOT NULL DEFAULT 'en';
+ALTER TABLE mtg_cards ADD COLUMN local_name TEXT;
+ALTER TABLE mtg_cards ADD COLUMN local_name_search TEXT;
+ALTER TABLE mtg_images ADD COLUMN back_image_id INTEGER;
+ALTER TABLE mtg_images ADD COLUMN art_from TEXT;
+CREATE INDEX ix_mtg_cards_local_name ON mtg_cards(local_name COLLATE NOCASE);
+CREATE INDEX ix_mtg_images_back ON mtg_images(back_image_id);
+`
+
 /** A printing's rarity as shown: "Starlight Rare (Extended Art)" for a labelled variant. */
 export const RARITY_LABEL = "p.set_rarity || COALESCE(' (' || p.variant || ')', '')"
 
@@ -683,5 +702,6 @@ export const MIGRATIONS: Migration[] = [
   { version: 41, sql: SCHEMA_V41, server: false },
   { version: 42, sql: SCHEMA_V42, server: false },
   { version: 43, sql: SCHEMA_V43, server: false },
-  { version: 44, sql: SCHEMA_V44, server: SCHEMA_V44_SERVER }
+  { version: 44, sql: SCHEMA_V44, server: SCHEMA_V44_SERVER },
+  { version: 45, sql: SCHEMA_V45, server: false }
 ]

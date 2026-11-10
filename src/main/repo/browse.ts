@@ -6,7 +6,7 @@ import { buildFtsQuery, escapeLike } from './cards'
 import { LOCAL, favouriteSql, scopeGame, type Scope } from './scope'
 import { pokemonFacets, pokemonSearch, pokemonWhere } from './pkmFilters'
 import { onePieceFacets, onePieceWhere, opRarityWhere, opVersionWhere } from './opFilters'
-import { magicFacets, magicWhere, mtgFinishWhere } from './mtgFilters'
+import { magicFacets, magicLocalName, magicWhere, mtgFinishWhere } from './mtgFilters'
 import { mtgBaseRaritySql } from '../../shared/games/magic'
 import { catalogRollup } from './rollup'
 
@@ -139,6 +139,11 @@ function whereClause(
     const own = pkm ? pokemonSearch(text, { game: scope.game }) : null
     const parts: string[] = own ? [...own.parts] : []
     if (own) params.push(...own.params)
+    if (game === 'mtg') {
+      const local = magicLocalName(text)
+      parts.push(local.sql)
+      params.push(...local.params)
+    }
     if (!own?.numeric) {
       const fts = buildFtsQuery(text)
       parts.push(

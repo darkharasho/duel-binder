@@ -1,11 +1,15 @@
-import { mtgCardId, mtgImageId } from '../../../src/shared/games/ids'
-import { MTG_CARD_TYPES, MTG_RARITIES } from '../../../src/shared/games/magic'
+import { mtgBackImageId, mtgCardId, mtgImageId } from '../../../src/shared/games/ids'
+import { MTG_CARD_TYPES, MTG_RARITIES, mtgLanguageOf } from '../../../src/shared/games/magic'
+import type { Language } from '../../../src/shared/languages'
 import type { ScryCard, ScryFace, ScrySet } from './types'
 
 export interface MtgCardRow {
   id: number
   oracleId: string
+  lang: Language
   name: string
+  /** The printed name in this card's language; null for English or when it equals `name`. */
+  localName: string | null
   type: string
   desc: string
   layout: string
@@ -34,12 +38,17 @@ export interface MtgImageRow {
   borderColor: string
   fullArt: boolean
   promoTypes: string[]
+  /** The back face image's id for a two-faced card whose faces both have images. */
+  backImageId: number | null
+  /** Scryfall id of the English printing whose art stands in for a placeholder or missing image; 'none' when there is none; null when the image is fine. */
+  artFrom: string | null
 }
 
 export type MtgFinish = 'nonfoil' | 'foil' | 'etched'
 
 export interface MtgPrintingRow {
   cardId: number
+  language: Language
   scryfallId: string
   finish: MtgFinish
   setCode: string
@@ -49,6 +58,7 @@ export interface MtgPrintingRow {
 }
 
 export interface MtgSetRow {
+  language: Language
   code: string
   name: string
   series: string
@@ -59,6 +69,7 @@ export interface MagicRows {
   cards: Map<number, MtgCardRow>
   images: MtgImageRow[]
   printings: MtgPrintingRow[]
+  /** Keyed `${language}|${code}`. */
   sets: Map<string, MtgSetRow>
   notes: string[]
 }
@@ -82,7 +93,7 @@ function priceOf(s: string | null | undefined): number | null {
 
 const orNull = (s: string | undefined): string | null => (s === undefined || s === '' ? null : s)
 
-function cardRow(o: ScryCard, oracleId: string): MtgCardRow {
+function cardRow(o: ScryCard, oracleId: string, lang: Language = 'en'): MtgCardRow {
   const faces: ScryFace[] = o.card_faces ?? []
   const face0 = faces[0]
   const typeLines = faces.length > 0 ? faces.map((f) => f.type_line ?? '') : [o.type_line ?? '']
@@ -94,9 +105,11 @@ function cardRow(o: ScryCard, oracleId: string): MtgCardRow {
   const oracleText = o.oracle_text ?? (faces.length > 0 ? texts.join('\n//\n') : undefined)
   const colors = o.colors ?? WUBRG.filter((c) => faces.some((f) => (f.colors ?? []).includes(c)))
   return {
-    id: mtgCardId('en', oracleId),
+    id: mtgCardId(lang, oracleId),
     oracleId,
+    lang,
     name: o.name,
+    localName: null,
     type: types[0] ?? 'Other',
     desc: oracleText ?? '',
     layout: o.layout,
@@ -154,8 +167,35 @@ function faceZeroView(o: ScryCard): ScryCard {
   }
 }
 
+const unfinished = (status: string | undefined): boolean =>
+  status === 'placeholder' || status === 'missing'
+
+/** The name printed on a non-English object, or null when it has none or it equals `english`. */
+function localNameOf(o: ScryCard, fromFace: boolean, english: string): string | null {
+  const faces = o.card_faces ?? []
+  let printed: string | undefined
+  if (fromFace) printed = faces[0]?.printed_name
+  else if (o.printed_name) printed = o.printed_name
+  else if (faces.length > 0 && faces.every((f) => f.printed_name))
+    printed = faces.map((f) => f.printed_name).join(' // ')
+  return printed && printed !== english ? printed : null
+}
+
+/**
+ * Which of two objects of one card and language a printed name is taken from, so it doesn't
+ * follow the file's order: the newest release, then the lower collector number, then the id.
+ */
+function printedNameFirst(a: ScryCard, b: ScryCard): number {
+  return (
+    (b.released_at ?? '').localeCompare(a.released_at ?? '') ||
+    a.collector_number.localeCompare(b.collector_number, 'en', { numeric: true }) ||
+    a.id.localeCompare(b.id)
+  )
+}
+
 /** Maps kept Scryfall objects (see `isKept`) to the Magic catalog rows. */
-export function mtgRows(objects: Iterable<ScryCard>, sets: ScrySet[]): MagicRows {
+export function mtgRows(input: Iterable<ScryCard>, sets: ScrySet[]): MagicRows {
+  const objects = [...input]
   const out: MagicRows = {
     cards: new Map(),
     images: [],
@@ -167,7 +207,32 @@ export function mtgRows(objects: Iterable<ScryCard>, sets: ScrySet[]): MagicRows
   const seen = new Set<string>()
   const faceOnly = new Set<number>()
 
+  // First pass: the English object each oracle card's game text comes from (one with its own
+  // oracle id beats the face-0 fallback, as below) and the English art by oracle id + set + number
+  // (the oracle id so a placeholder never borrows another card's art at the same number).
+  const englishOf = new Map<string, { o: ScryCard; fromFace: boolean }>()
+  const englishArt = new Map<string, string>()
   for (const o of objects) {
+    if (o.lang !== 'en') continue
+    const oid = o.oracle_id ?? o.card_faces?.[0]?.oracle_id
+    if (oid && rarityLabel(o.rarity)) {
+      const fromFace = o.oracle_id === undefined
+      const have = englishOf.get(oid)
+      if (!have || (have.fromFace && !fromFace)) englishOf.set(oid, { o, fromFace })
+    }
+    const key = `${oid}|${o.set.toLowerCase()}|${o.collector_number}`
+    if (oid && !unfinished(o.image_status) && !englishArt.has(key))
+      englishArt.set(key, o.id.toLowerCase())
+  }
+  /** Per non-English card, the object its printed name comes from: see `printedNameFirst`. */
+  const printedFrom = new Map<number, { o: ScryCard; name: string }>()
+
+  for (const o of objects) {
+    const lang = mtgLanguageOf(o.lang)
+    if (!lang) {
+      out.notes.push(`unsupported Magic language ${o.lang}: ${o.id}`)
+      continue
+    }
     const rarity = rarityLabel(o.rarity)
     if (!rarity) {
       out.notes.push(`unknown Magic rarity ${o.rarity}: ${o.id}`)
@@ -180,18 +245,19 @@ export function mtgRows(objects: Iterable<ScryCard>, sets: ScrySet[]): MagicRows
     }
     const setCode = o.set.toUpperCase()
     const code = `${setCode} ${o.collector_number}`
-    const cardId = mtgCardId('en', oracleId)
+    const cardId = mtgCardId(lang, oracleId)
     const printings: MtgPrintingRow[] = []
     for (const f of FINISHES) {
       if (!o.finishes.includes(f.finish)) continue
-      const key = `${code}\u0000${f.finish}`
+      const key = `${lang}\u0000${code}\u0000${f.finish}`
       if (seen.has(key)) {
-        out.notes.push(`duplicate Magic printing ${code} ${f.finish}: ${o.id}`)
+        out.notes.push(`duplicate Magic printing ${lang} ${code} ${f.finish}: ${o.id}`)
         continue
       }
       seen.add(key)
       printings.push({
         cardId,
+        language: lang,
         scryfallId: o.id,
         finish: f.finish,
         setCode,
@@ -205,14 +271,42 @@ export function mtgRows(objects: Iterable<ScryCard>, sets: ScrySet[]): MagicRows
     // A row from an object with its own oracle id wins over one from the face-0 fallback
     // (reversible cards, double-faced tokens), whatever order the file lists them in.
     const fromFace = o.oracle_id === undefined
+    const buildRow = (): MtgCardRow => {
+      const en = englishOf.get(oracleId)
+      const base = en ? en.o : o
+      const baseFromFace = en ? en.fromFace : fromFace
+      const row = cardRow(baseFromFace ? faceZeroView(base) : base, oracleId, lang)
+      if (lang !== 'en') row.localName = printedFrom.get(cardId)?.name ?? null
+      return row
+    }
+    if (lang !== 'en') {
+      const english = englishOf.get(oracleId)
+      const englishName = english
+        ? (english.fromFace ? faceZeroView(english.o) : english.o).name
+        : (fromFace ? faceZeroView(o) : o).name
+      const name = localNameOf(o, fromFace, englishName)
+      const have = printedFrom.get(cardId)
+      if (name !== null && (!have || printedNameFirst(o, have.o) < 0)) {
+        printedFrom.set(cardId, { o, name })
+        const row = out.cards.get(cardId)
+        if (row) row.localName = name
+      }
+    }
     if (!out.cards.has(cardId)) {
-      out.cards.set(cardId, cardRow(fromFace ? faceZeroView(o) : o, oracleId))
+      out.cards.set(cardId, buildRow())
       if (fromFace) faceOnly.add(cardId)
     } else if (!fromFace && faceOnly.has(cardId)) {
-      out.cards.set(cardId, cardRow(o, oracleId))
+      out.cards.set(cardId, buildRow())
       faceOnly.delete(cardId)
     }
-    const face0 = o.card_faces?.[0]
+    const faces = o.card_faces ?? []
+    const face0 = faces[0]
+    let artFrom: string | null = null
+    if (unfinished(o.image_status))
+      artFrom =
+        lang === 'en'
+          ? 'none'
+          : (englishArt.get(`${oracleId}|${o.set.toLowerCase()}|${o.collector_number}`) ?? 'none')
     out.images.push({
       imageId: mtgImageId(o.id),
       cardId,
@@ -222,15 +316,22 @@ export function mtgRows(objects: Iterable<ScryCard>, sets: ScrySet[]): MagicRows
       frame: o.frame,
       borderColor: o.border_color,
       fullArt: o.full_art === true,
-      promoTypes: o.promo_types ?? []
+      promoTypes: o.promo_types ?? [],
+      backImageId:
+        faces.length >= 2 && faces.every((f) => f.image_uris !== undefined)
+          ? mtgBackImageId(o.id)
+          : null,
+      artFrom
     })
     out.printings.push(...printings)
 
-    if (!out.sets.has(setCode)) {
+    const setKey = `${lang}|${setCode}`
+    if (!out.sets.has(setKey)) {
       const s = byCode.get(o.set.toLowerCase())
       const name = s?.name ?? o.set_name
       const parent = s?.parent_set_code ? byCode.get(s.parent_set_code.toLowerCase()) : undefined
-      out.sets.set(setCode, {
+      out.sets.set(setKey, {
+        language: lang,
         code: setCode,
         name,
         series: parent?.name ?? name,

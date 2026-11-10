@@ -132,7 +132,7 @@ function serverBefore12(): Database.Database {
   const db = freshDb()
   runSteps(db, [
     ...MIGRATIONS.filter((m) => m.version <= 18),
-    ...SERVER_STEPS.filter((s) => !['server-12', 'server-13', 'server-14', 'server-16', 'server-18', 'server-21', 'server-23', 'server-26', 'server-27', 'server-28', 'server-35', 'server-40', 'server-41', 'server-42'].includes(s.name))
+    ...SERVER_STEPS.filter((s) => !['server-12', 'server-13', 'server-14', 'server-16', 'server-18', 'server-21', 'server-23', 'server-26', 'server-27', 'server-28', 'server-35', 'server-40', 'server-41', 'server-42', 'server-43'].includes(s.name))
   ])
   db.exec(`
     INSERT INTO users (id, discord_id, username, created_at, updated_at) VALUES (1, 'd1', 'one', 'x', 'x');
@@ -373,7 +373,7 @@ describe('server-40 (pokemon_cards dex_no / dex_extra)', () => {
     const fresh = freshDb()
     migrateServer(fresh)
     const old = freshDb()
-    runSteps(old, [...MIGRATIONS.filter((m) => m.version <= 41), ...SERVER_STEPS.filter((s) => s.name !== 'server-40' && s.name !== 'server-42')])
+    runSteps(old, [...MIGRATIONS.filter((m) => m.version <= 41), ...SERVER_STEPS.filter((s) => s.name !== 'server-40' && s.name !== 'server-42' && s.name !== 'server-43')])
     expect(cols(old)).not.toContain('dex_no')
     seedPokemon(old)
     migrateServer(old)
@@ -417,7 +417,7 @@ describe('server-14 (pokemon_set_art in the change feed)', () => {
     const old = freshDb()
     runSteps(old, [
       ...MIGRATIONS.filter((m) => m.version <= 22),
-      ...SERVER_STEPS.filter((s) => s.name !== 'server-14' && s.name !== 'server-35' && s.name !== 'server-40' && s.name !== 'server-42')
+      ...SERVER_STEPS.filter((s) => s.name !== 'server-14' && s.name !== 'server-35' && s.name !== 'server-40' && s.name !== 'server-42' && s.name !== 'server-43')
     ])
     migrateServer(old)
     for (const db of [fresh, old]) {
@@ -584,7 +584,45 @@ describe('server-42 feeds mtg_cards', () => {
     ])
     expect(
       (db.prepare('SELECT name FROM server_migrations ORDER BY rowid DESC LIMIT 1').get() as { name: string }).name
-    ).toBe('server-42')
+    ).toBe('server-43')
+    db.close()
+  })
+})
+
+describe('server-43 (mtg language and face columns)', () => {
+  const cols = (db: Database.Database, t: string): string[] =>
+    (db.prepare(`PRAGMA table_info(${t})`).all() as { name: string }[]).map((c) => c.name)
+
+  it('an upgraded server keeps its rows and gains the columns', () => {
+    const old = freshDb()
+    runSteps(old, [...MIGRATIONS.filter((m) => m.version <= 44), ...SERVER_STEPS.filter((s) => s.name !== 'server-43')])
+    expect(cols(old, 'mtg_cards')).not.toContain('lang')
+    seedMagic(old)
+    migrateServer(old)
+    expect(cols(old, 'mtg_cards')).toEqual(expect.arrayContaining(['lang', 'local_name', 'local_name_search']))
+    expect(cols(old, 'mtg_images')).toEqual(expect.arrayContaining(['back_image_id', 'art_from']))
+    expect(rows(old, 'SELECT DISTINCT lang, local_name FROM mtg_cards')).toEqual([{ lang: 'en', local_name: null }])
+    old.close()
+  })
+
+  it('a change to a new column alone raises the row catalog_seq', () => {
+    const db = freshDb()
+    migrateServer(db)
+    const { cardIds, imageIds } = seedMagic(db)
+    const seqOf = (t: string, k: string, id: number): number =>
+      (db.prepare(`SELECT catalog_seq AS s FROM ${t} WHERE ${k} = ?`).get(id) as { s: number }).s
+    let last = seqOf('mtg_cards', 'card_id', cardIds[0])
+    db.prepare('UPDATE mtg_cards SET local_name = ? WHERE card_id = ?').run('Ange', cardIds[0])
+    expect(seqOf('mtg_cards', 'card_id', cardIds[0])).toBeGreaterThan(last)
+    last = seqOf('mtg_cards', 'card_id', cardIds[0])
+    db.prepare('UPDATE mtg_cards SET local_name_search = ? WHERE card_id = ?').run('ange', cardIds[0])
+    expect(seqOf('mtg_cards', 'card_id', cardIds[0])).toBeGreaterThan(last)
+    last = seqOf('mtg_images', 'image_id', imageIds[0])
+    db.prepare('UPDATE mtg_images SET back_image_id = ? WHERE image_id = ?').run(imageIds[1], imageIds[0])
+    expect(seqOf('mtg_images', 'image_id', imageIds[0])).toBeGreaterThan(last)
+    last = seqOf('mtg_images', 'image_id', imageIds[0])
+    db.prepare('UPDATE mtg_images SET art_from = ? WHERE image_id = ?').run('en', imageIds[0])
+    expect(seqOf('mtg_images', 'image_id', imageIds[0])).toBeGreaterThan(last)
     db.close()
   })
 })

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import type Database from 'better-sqlite3'
-import { mtgImageId, onePieceImageId, tokenId } from '../../src/shared/games/ids'
+import { mtgBackImageId, mtgImageId, onePieceImageId, tokenId } from '../../src/shared/games/ids'
 import {
   BULBAGARDEN_IMAGE_PREFIX,
   HAND_ART_PREFIX,
@@ -1363,6 +1363,69 @@ describe('mtg art', () => {
       expect((await get(`${size}/${unknown}`)).status).toBe(404)
     }
     expect(upstream).not.toHaveBeenCalled()
+  })
+
+  describe('backs and borrowed art', () => {
+    const BORROW = '9a9a9a9a-0d4e-4c6e-9d2a-1d1f2b6a7c01'
+    const backId = mtgBackImageId(SCRY)
+
+    it('a back image id fetches the back face and stores under its own id', async () => {
+      db.prepare('UPDATE mtg_images SET back_image_id = ? WHERE image_id = ?').run(backId, ids[0])
+      expect((await get(`small/${backId}`)).status).toBe(200)
+      expect(upstream.mock.calls[0][0]).toBe(
+        `https://cards.scryfall.io/normal/back/6/e/${SCRY}.jpg`
+      )
+      expect(bucket.store.has(`card/small/${backId}`)).toBe(true)
+      expect((await get(`full/${backId}`)).status).toBe(200)
+      expect(upstream.mock.calls[1][0]).toBe(`https://cards.scryfall.io/large/back/6/e/${SCRY}.jpg`)
+    })
+
+    it('an art_from uuid fetches that object instead, same face', async () => {
+      db.prepare('UPDATE mtg_images SET art_from = ?, back_image_id = ? WHERE image_id = ?').run(
+        BORROW,
+        backId,
+        ids[0]
+      )
+      expect((await get(`small/${ids[0]}`)).status).toBe(200)
+      expect(upstream.mock.calls[0][0]).toBe(
+        `https://cards.scryfall.io/normal/front/9/a/${BORROW}.jpg`
+      )
+      expect((await get(`small/${backId}`)).status).toBe(200)
+      expect(upstream.mock.calls[1][0]).toBe(
+        `https://cards.scryfall.io/normal/back/9/a/${BORROW}.jpg`
+      )
+    })
+
+    it("borrowed art is kept under the lender's key, briefly cached, and gives way to the object's own", async () => {
+      db.prepare('UPDATE mtg_images SET art_from = ?, back_image_id = ? WHERE image_id = ?').run(
+        BORROW,
+        backId,
+        ids[0]
+      )
+      const res = await get(`small/${ids[0]}`)
+      expect(res.status).toBe(200)
+      expect(res.headers.get('cache-control')).toBe('public, max-age=3600')
+      expect(bucket.store.has(`card/small/${mtgImageId(BORROW)}`)).toBe(true)
+      expect(bucket.store.has(`card/small/${ids[0]}`)).toBe(false)
+      const back = await get(`small/${backId}`)
+      expect(back.headers.get('cache-control')).toBe('public, max-age=3600')
+      expect(bucket.store.has(`card/small/${mtgBackImageId(BORROW)}`)).toBe(true)
+      expect(bucket.store.has(`card/small/${backId}`)).toBe(false)
+
+      // Scryfall uploads the real scan; the job clears art_from.
+      db.prepare('UPDATE mtg_images SET art_from = NULL WHERE image_id = ?').run(ids[0])
+      const own = await get(`small/${ids[0]}`)
+      expect(own.status).toBe(200)
+      expect(own.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
+      expect(upstream.mock.calls[2][0]).toBe(`https://cards.scryfall.io/normal/front/6/e/${SCRY}.jpg`)
+      expect(bucket.store.has(`card/small/${ids[0]}`)).toBe(true)
+    })
+
+    it("art_from 'none' is a 404 with no fetch", async () => {
+      db.prepare("UPDATE mtg_images SET art_from = 'none' WHERE image_id = ?").run(ids[0])
+      expect((await get(`small/${ids[0]}`)).status).toBe(404)
+      expect(upstream).not.toHaveBeenCalled()
+    })
   })
 
   it('anonymous Magic art is served within the per-IP quota', async () => {

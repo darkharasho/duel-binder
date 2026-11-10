@@ -5,6 +5,7 @@ import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { ReadableStream as WebReadableStream } from 'node:stream/web'
 import { createLimiter, type Limiter } from './limiter'
+import { gameOfId } from '../../shared/games/ids'
 import { POKEDEX_SIZE } from '../../shared/pokedex'
 import { setImageKey } from '../../shared/setImages'
 import {
@@ -76,6 +77,12 @@ export function parseSmallPrintingImageUrl(url: string): number | null {
 
 /** A photo the server had no small copy of is asked about again after this. */
 export const SMALL_RETRY_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Magic art the portal serves without `immutable` (English art a printing borrows until Scryfall
+ * has its own scan) is kept with a `.brief` marker beside it and asked for again after this.
+ */
+export const BRIEF_ART_RECHECK_MS = 24 * 60 * 60 * 1000
 
 export interface ImageCache {
   /** `priority` downloads it ahead of what's already queued (an image someone's waiting on). */
@@ -200,7 +207,8 @@ export function createImageCache(opts: {
     source: ImageSource,
     finalPath: string | ((contentType: string) => string | null),
     prepare?: (file: string) => Promise<void>,
-    notFound?: () => void
+    notFound?: () => void,
+    brief?: string
   ): Promise<string | null> {
     const tmpBase =
       typeof finalPath === 'string'
@@ -227,6 +235,11 @@ export function createImageCache(opts: {
       if ((await fs.stat(tmpPath)).size === 0) throw new Error('empty image body')
       await prepare?.(tmpPath)
       await fs.rename(tmpPath, target)
+      if (brief !== undefined) {
+        if (/\bimmutable\b/.test(res.headers.get('cache-control') ?? ''))
+          await fs.rm(brief, { force: true })
+        else await fs.writeFile(brief, '')
+      }
       return target
     } catch {
       await fs.rm(tmpPath, { force: true }).catch(() => undefined)
@@ -240,14 +253,15 @@ export function createImageCache(opts: {
     finalPath: string | ((contentType: string) => string | null),
     prepare?: (file: string) => Promise<void>,
     notFound?: () => void,
-    priority = false
+    priority = false,
+    brief?: string
   ): Promise<string | null> {
     let pending = inFlight.get(key)
     if (!pending) {
       const kind = key.startsWith('set/') ? 'sets' : 'cards'
       downloads = { ...downloads, [kind]: { ...downloads[kind], total: downloads[kind].total + 1 } }
       report()
-      pending = limit(() => download(source, finalPath, prepare, notFound), {
+      pending = limit(() => download(source, finalPath, prepare, notFound, brief), {
         priority,
         key
       }).finally(() => {
@@ -268,16 +282,25 @@ export function createImageCache(opts: {
     key: string,
     finalPath: string,
     prepare?: (file: string) => Promise<void>,
-    priority = false
+    priority = false,
+    /** Marker path for art that may be short-lived (see BRIEF_ART_RECHECK_MS). */
+    brief?: string
   ): Promise<string | null> => {
-    if (await exists(finalPath)) return finalPath
+    let kept = false
+    if (await exists(finalPath)) {
+      const marked = brief === undefined ? null : await fs.stat(brief).catch(() => null)
+      if (!marked || now() - marked.mtimeMs < BRIEF_ART_RECHECK_MS) return finalPath
+      kept = true // short-lived art due a re-check: asked again, kept if that fails
+    }
     let src: ImageSource | null
     try {
       src = source()
     } catch {
-      return null // e.g. the database is closed or busy; never reject the protocol handler
+      return kept ? finalPath : null // e.g. the database is closed or busy; never reject the protocol handler
     }
-    return src === null ? null : cached(key, src, finalPath, prepare, undefined, priority)
+    if (src === null) return kept ? finalPath : null
+    const got = await cached(key, src, finalPath, prepare, undefined, priority, brief)
+    return got ?? (kept ? finalPath : null)
   }
 
   /** A printing photo already kept on disk under `key`, in whichever format it arrived. */
@@ -313,14 +336,17 @@ export function createImageCache(opts: {
   }
 
   return {
-    get: (size, id, { priority = false } = {}) =>
-      fromSource(
+    get: (size, id, { priority = false } = {}) => {
+      const file = path.join(opts.dir, size, `${id}.jpg`)
+      return fromSource(
         () => opts.sources.card(size, id),
         `${size}/${id}`,
-        path.join(opts.dir, size, `${id}.jpg`),
+        file,
         undefined,
-        priority
-      ),
+        priority,
+        gameOfId(id) === 'mtg' ? `${file}.brief` : undefined
+      )
+    },
 
     async getSet(key, { priority = false } = {}) {
       if (!SET_KEY_RE.test(key)) return null

@@ -60,6 +60,8 @@ export interface MagicFacts {
   toughness: string | null
   loyalty: string | null
   defense: string | null
+  /** The printed name in the card's language (face names joined with ' // '); null on English. */
+  localName: string | null
   /** The artist(s) of the card's art, joined with ', '. Only the card details fill it. */
   artist?: string | null
 }
@@ -86,6 +88,8 @@ export interface CardImage {
   imageId: number
   cardId: number
   sortOrder: number
+  /** A two-faced Magic card's back face image; absent when the image has no back (and on other games). */
+  backImageId?: number
 }
 
 export interface CardSearchResult {
@@ -94,6 +98,10 @@ export interface CardSearchResult {
   type: string
   defaultImageId: number
   matchedSetCode: string | null
+  /** Magic only: the card row's language (each language is its own card of the same English name). */
+  language?: Language
+  /** Magic only: the printed name in that language, when it has one. */
+  localName?: string
 }
 
 export interface CardDetail {

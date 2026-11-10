@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { mtgRows } from '../../scripts/catalog/magic/rows'
 import { isKept, parseBulkLines } from '../../scripts/catalog/magic/scryfall'
 import type { ScryCard, ScrySet } from '../../scripts/catalog/magic/types'
-import { mtgCardId, mtgImageId } from '../../src/shared/games/ids'
+import { mtgBackImageId, mtgCardId, mtgImageId } from '../../src/shared/games/ids'
 
 async function* lines(text: string): AsyncIterable<string> {
   for (const l of text.split('\n')) yield l
@@ -191,21 +191,21 @@ describe('mtgRows', () => {
   it('series from parent set', async () => {
     const { objects, sets } = await load()
     const rows = mtgRows(objects, sets)
-    expect(rows.sets.get('TMH3')).toMatchObject({
+    expect(rows.sets.get('en|TMH3')).toMatchObject({
       name: 'Modern Horizons 3 Tokens',
       series: 'Modern Horizons 3'
     })
-    expect(rows.sets.get('MH3')).toMatchObject({
+    expect(rows.sets.get('en|MH3')).toMatchObject({
       series: 'Modern Horizons 3',
       releasedAt: '2024-06-14'
     })
-    expect(rows.sets.has('CMR')).toBe(true)
+    expect(rows.sets.has('en|CMR')).toBe(true)
   })
 
   it('a set missing from the list is named after the object', async () => {
     const { objects } = await load()
     const rows = mtgRows([byName(objects, 'Eldrazi')], [])
-    expect(rows.sets.get('MH3')).toMatchObject({
+    expect(rows.sets.get('en|MH3')).toMatchObject({
       name: 'Modern Horizons 3',
       series: 'Modern Horizons 3'
     })
@@ -218,9 +218,138 @@ describe('mtgRows', () => {
     const abolish = byName(objects, 'Abolish')
     expect(rows.notes).toContain(`unknown Magic rarity masterpiece: ${abolish.id}`)
     expect(rows.printings.some((p) => p.scryfallId === abolish.id)).toBe(false)
-    expect(rows.notes).toContain('duplicate Magic printing MH3 150 nonfoil: dup-id-1')
-    expect(rows.notes).toContain('duplicate Magic printing MH3 150 foil: dup-id-1')
+    expect(rows.notes).toContain('duplicate Magic printing en MH3 150 nonfoil: dup-id-1')
+    expect(rows.notes).toContain('duplicate Magic printing en MH3 150 foil: dup-id-1')
     expect(rows.images.some((i) => i.scryfallId === 'dup-id-1')).toBe(false)
     expect(rows.notes.some((n) => n.includes(byName(objects, 'Eldrazi').id))).toBe(false)
+  })
+})
+
+describe('mtgRows languages, back faces and borrowed art', () => {
+  const base = (o: Partial<ScryCard> & { id: string }): ScryCard => ({
+    oracle_id: 'o-1',
+    name: 'Bolt',
+    lang: 'en',
+    layout: 'normal',
+    set: 'mh3',
+    set_name: 'Modern Horizons 3',
+    collector_number: '1',
+    rarity: 'common',
+    released_at: '2024-06-14',
+    games: ['paper'],
+    digital: false,
+    finishes: ['nonfoil'],
+    prices: { usd: '1', usd_foil: null, usd_etched: null },
+    type_line: 'Instant',
+    oracle_text: 'Deal 3.',
+    color_identity: ['R'],
+    keywords: [],
+    frame: '2015',
+    border_color: 'black',
+    full_art: false,
+    image_status: 'highres_scan',
+    image_uris: {},
+    ...o
+  })
+  const en = base({ id: 'e1' })
+  const ja = base({ id: 'j1', lang: 'ja', name: '稲妻', printed_name: '稲妻', oracle_text: 'x' })
+  const img = (rows: ReturnType<typeof mtgRows>, id: string) =>
+    rows.images.find((i) => i.scryfallId === id)!
+
+  it('builds a card, printings and set per language, English twin or not', () => {
+    for (const objs of [
+      [en, ja],
+      [ja, en]
+    ]) {
+      const rows = mtgRows(objs, [])
+      const c = rows.cards.get(mtgCardId('ja', 'o-1'))!
+      expect([c.lang, c.name, c.localName, c.desc]).toEqual(['ja', 'Bolt', '稲妻', 'Deal 3.'])
+      expect(rows.cards.get(mtgCardId('en', 'o-1'))!.localName).toBeNull()
+      expect(rows.printings.find((p) => p.scryfallId === 'j1')!.language).toBe('ja')
+      expect([...rows.sets.keys()].sort()).toEqual(['en|MH3', 'ja|MH3'])
+      expect(rows.notes).toEqual([])
+      expect(rows.printings).toHaveLength(2)
+    }
+  })
+
+  it('keeps its own text without an English twin; no local name when equal', () => {
+    const ru = base({
+      id: 'r1',
+      lang: 'ru',
+      oracle_id: 'o-2',
+      name: 'Молния',
+      printed_name: 'Молния'
+    })
+    const c = mtgRows([ru], []).cards.get(mtgCardId('ru', 'o-2'))!
+    expect([c.name, c.desc, c.localName]).toEqual(['Молния', 'Deal 3.', null])
+  })
+
+  it('joins face printed names and sets back image ids', () => {
+    const face = (name: string, printed: string, images: boolean) => ({
+      name,
+      printed_name: printed,
+      ...(images ? { image_uris: {} } : {})
+    })
+    const t = base({
+      id: 't1',
+      lang: 'de',
+      oracle_id: 'o-3',
+      name: 'A // B',
+      layout: 'transform',
+      card_faces: [face('A', 'Aa', true), face('B', 'Bb', true)]
+    })
+    const adv = base({
+      id: 'a1',
+      oracle_id: 'o-4',
+      name: 'C // D',
+      layout: 'adventure',
+      card_faces: [face('C', 'C', false), face('D', 'D', false)]
+    })
+    const rows = mtgRows([t, adv], [])
+    expect(img(rows, 't1').backImageId).toBe(mtgBackImageId('t1'))
+    expect(img(rows, 'a1').backImageId).toBeNull()
+    expect(rows.cards.get(mtgCardId('de', 'o-3'))!.localName).toBe('Aa // Bb')
+  })
+
+  it('stores the borrowed art id lowercase and skips unsupported languages', () => {
+    const upper = base({ id: 'ABCDEF01-0000-4000-8000-000000000000' })
+    const de = base({ id: 'd1', lang: 'de', image_status: 'placeholder' })
+    const xx = base({ id: 'x1', lang: 'xx' })
+    const rows = mtgRows([upper, de, xx], [])
+    expect(img(rows, 'd1').artFrom).toBe('abcdef01-0000-4000-8000-000000000000')
+    expect(rows.notes).toEqual(['unsupported Magic language xx: x1'])
+  })
+
+  it('borrows art from an English twin for placeholders', () => {
+    const de = base({ id: 'd1', lang: 'de', image_status: 'placeholder' })
+    const fr = base({ id: 'f1', lang: 'fr', collector_number: '9', image_status: 'placeholder' })
+    const enMissing = base({ id: 'e2', collector_number: '9', image_status: 'missing' })
+    const low = base({ id: 'l1', lang: 'es', image_status: 'lowres' })
+    const rows = mtgRows([de, fr, enMissing, low, en], [])
+    expect(img(rows, 'd1').artFrom).toBe('e1')
+    expect(img(rows, 'f1').artFrom).toBe('none')
+    expect(img(rows, 'e2').artFrom).toBe('none')
+    expect(img(rows, 'l1').artFrom).toBeNull()
+    expect(img(rows, 'e1').artFrom).toBeNull()
+  })
+
+  it("never borrows art from a different card at the same set and number", () => {
+    const de = base({ id: 'd1', lang: 'de', image_status: 'placeholder' })
+    const other = base({ id: 'e9', oracle_id: 'o-other', name: 'Other' })
+    expect(img(mtgRows([de, other], []), 'd1').artFrom).toBe('none')
+    expect(img(mtgRows([de, other, en], []), 'd1').artFrom).toBe('e1')
+  })
+
+  it('takes the printed name from the newest object, whatever the file order', () => {
+    const old = base({ id: 'j0', lang: 'ja', printed_name: '古い稲妻', released_at: '2010-01-01', set: 'm11', collector_number: '1' })
+    const a = base({ id: 'j1', lang: 'ja', printed_name: '稲妻A', released_at: '2024-06-14', collector_number: '20' })
+    const b = base({ id: 'j2', lang: 'ja', printed_name: '稲妻B', released_at: '2024-06-14', collector_number: '3' })
+    const names = [
+      [old, a, b, en],
+      [b, en, a, old],
+      [en, a, old, b]
+    ].map((objs) => mtgRows(objs, []).cards.get(mtgCardId('ja', 'o-1'))!.localName)
+    // Newest first, then the lower collector number (3 before 20).
+    expect(names).toEqual(['稲妻B', '稲妻B', '稲妻B'])
   })
 })

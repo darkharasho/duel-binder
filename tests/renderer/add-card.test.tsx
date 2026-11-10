@@ -113,6 +113,33 @@ const intlApi = (): ReturnType<typeof createMockApi> =>
 describe('AddCardDialog languages', () => {
   beforeEach(() => localStorage.clear())
 
+  it("labels a Magic result's language and shows its printed name", async () => {
+    const serra = (id: number, extra: Partial<CardSearchResult>): CardSearchResult => ({
+      id,
+      name: 'Serra Angel',
+      type: 'Creature',
+      defaultImageId: id,
+      matchedSetCode: null,
+      ...extra
+    })
+    const api = createMockApi({
+      cards: {
+        search: async () => [
+          serra(1, { language: 'en' }),
+          serra(2, { language: 'ja', localName: 'セラの天使' })
+        ],
+        get: async () => null
+      }
+    })
+    renderWithProviders(<AddCardDialog open onOpenChange={() => {}} />, { api })
+    await userEvent.type(await screen.findByPlaceholderText(/Search cards/), 'serra')
+    const options = await screen.findAllByRole('option')
+    expect(options).toHaveLength(2)
+    expect(options[0]).not.toHaveTextContent('JP')
+    expect(options[1]).toHaveTextContent('JP')
+    expect(options[1]).toHaveTextContent('セラの天使')
+  })
+
   it('hints at the language when the card only has other-language printings', async () => {
     const api = createMockApi({
       cards: {

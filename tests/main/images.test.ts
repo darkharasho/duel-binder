@@ -6,7 +6,8 @@ import { createLimiter, type Limiter } from '../../src/main/images/limiter'
 import type { ImageSources } from '../../src/main/images/cache'
 import type { ImageDownloads } from '../../src/shared/types'
 import { portalImageSources } from '../../src/main/images/portalSources'
-import { createImageCache, idleDownloads, throttleDownloads, imageUrl, parseImageUrl, parsePrintingImageUrl, parseSetImageUrl, parseSmallPrintingImageUrl, parseSpriteImageUrl, setImageKey, setImageUrl, SMALL_RETRY_MS, yugipediaImageKey } from '../../src/main/images/cache'
+import { createImageCache, idleDownloads, throttleDownloads, imageUrl, parseImageUrl, parsePrintingImageUrl, parseSetImageUrl, parseSmallPrintingImageUrl, parseSpriteImageUrl, setImageKey, setImageUrl, SMALL_RETRY_MS, BRIEF_ART_RECHECK_MS, yugipediaImageKey } from '../../src/main/images/cache'
+import { mtgImageId, onePieceImageId } from '../../src/shared/games/ids'
 
 let dir: string
 beforeEach(async () => {
@@ -623,5 +624,60 @@ describe('printing photo small copies', () => {
       sources: direct({ printing: async () => ({ url: 'https://x/p.png', key: 'k' }) })
     })
     expect(await cache.getPrinting(5, { small: true })).toBe(path.join(dir, 'printings', 'k.png'))
+  })
+})
+
+describe('Magic art the portal marks as short-lived (borrowed English art)', () => {
+  type Fetch = (url: string, init?: RequestInit) => Promise<Response>
+  const ID = mtgImageId('6e5e1c1b-0d4e-4c6e-9d2a-1d1f2b6a7c01')
+  const file = (): string => path.join(dir, 'small', `${ID}.jpg`)
+  const art = (body: string, cache: string): Response =>
+    new Response(body, { status: 200, headers: { 'content-type': 'image/jpeg', 'cache-control': cache } })
+  const setup = (fetchFn: Fetch, now: () => number): ReturnType<typeof createImageCache> =>
+    createImageCache({
+      dir,
+      now,
+      fetchFn: fetchFn as unknown as typeof fetch,
+      limit: noLimit,
+      sources: portalImageSources({ portal: PORTAL, token: () => 'tok', remoteId: () => null })
+    })
+
+  it('is kept a day, then asked again, and the real scan then stays for good', async () => {
+    let t = Date.now()
+    const fetchFn = vi.fn<Fetch>(async () => art('english', 'public, max-age=3600'))
+    expect(await setup(fetchFn, () => t).get('small', ID)).toBe(file())
+    t = (await fs.stat(`${file()}.brief`)).mtimeMs
+    expect(await setup(fetchFn, () => t + BRIEF_ART_RECHECK_MS - 1).get('small', ID)).toBe(file())
+    expect(fetchFn).toHaveBeenCalledTimes(1)
+    // A day on, the job has cleared art_from: the portal now serves the object's own scan.
+    t += BRIEF_ART_RECHECK_MS
+    fetchFn.mockImplementation(async () => art('own scan', 'public, max-age=31536000, immutable'))
+    expect(await setup(fetchFn, () => t).get('small', ID)).toBe(file())
+    expect(await fs.readFile(file(), 'utf8')).toBe('own scan')
+    expect(fetchFn).toHaveBeenCalledTimes(2)
+    // Immutable now: never asked again.
+    t += 10 * BRIEF_ART_RECHECK_MS
+    expect(await setup(fetchFn, () => t).get('small', ID)).toBe(file())
+    expect(fetchFn).toHaveBeenCalledTimes(2)
+  })
+
+  it('a failed re-check keeps showing the borrowed art', async () => {
+    let t = Date.now()
+    const fetchFn = vi.fn<Fetch>(async () => art('english', 'public, max-age=3600'))
+    await setup(fetchFn, () => t).get('small', ID)
+    t = (await fs.stat(`${file()}.brief`)).mtimeMs + BRIEF_ART_RECHECK_MS
+    fetchFn.mockImplementation(async () => new Response('down', { status: 503 }))
+    expect(await setup(fetchFn, () => t).get('small', ID)).toBe(file())
+    expect(await fs.readFile(file(), 'utf8')).toBe('english')
+  })
+
+  it("other games' art is kept for good whatever the portal says", async () => {
+    let t = Date.now()
+    const fetchFn = vi.fn<Fetch>(async () => art('op', 'public, max-age=3600'))
+    const op = onePieceImageId('en', 'OP01-001')
+    await setup(fetchFn, () => t).get('small', op)
+    t += 10 * BRIEF_ART_RECHECK_MS
+    await setup(fetchFn, () => t).get('small', op)
+    expect(fetchFn).toHaveBeenCalledTimes(1)
   })
 })

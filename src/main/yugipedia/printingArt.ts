@@ -10,6 +10,7 @@ const REGIONS: Record<Language, string[]> = {
   it: ['IT'],
   es: ['SP'],
   pt: ['PT'],
+  ru: [],
   'zh-hans': ['SC'],
   'zh-hant': ['TC'],
   ae: ['AE'],

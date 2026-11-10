@@ -1,7 +1,13 @@
 import { readFileSync } from 'node:fs'
 import { gzipSync } from 'node:zlib'
 import { describe, expect, it, vi } from 'vitest'
-import { createScryfall, isKept, parseBulkLines } from '../../scripts/catalog/magic/scryfall'
+import {
+  createCompactor,
+  createScryfall,
+  isKept,
+  parseBulkLines,
+  slimCard
+} from '../../scripts/catalog/magic/scryfall'
 import type { ScryCard } from '../../scripts/catalog/magic/types'
 
 const FIXTURE = readFileSync('tests/fixtures/scryfall/default-cards.sample.json', 'utf8')
@@ -37,24 +43,83 @@ describe('parseBulkLines', () => {
 
 describe('isKept', () => {
   const paper = OBJECTS[0]
-  it('keeps English paper objects and drops the rest', () => {
+  it('keeps paper objects in a supported language and drops the rest', () => {
     expect(isKept(paper)).toBe(true)
-    expect(isKept({ ...paper, lang: 'ja' })).toBe(false)
+    expect(isKept({ ...paper, lang: 'ja' })).toBe(true)
+    expect(isKept({ ...paper, lang: 'zhs' })).toBe(true)
+    expect(isKept({ ...paper, lang: 'ph' })).toBe(false)
+    expect(isKept({ ...paper, lang: 'ru', digital: true })).toBe(false)
     expect(isKept({ ...paper, games: ['arena'] })).toBe(false)
     expect(isKept({ ...paper, digital: true })).toBe(false)
     expect(isKept({ ...paper, games: ['paper', 'mtgo'], digital: true })).toBe(false)
   })
   it('judges the fixture objects', () => {
-    const ja = OBJECTS.filter((o) => o.lang !== 'en')
     const digital = OBJECTS.filter((o) => o.digital)
-    expect(ja.length).toBeGreaterThan(0)
     expect(digital.length).toBeGreaterThan(0)
-    for (const o of [...ja, ...digital]) expect(isKept(o)).toBe(false)
+    for (const o of digital) expect(isKept(o)).toBe(false)
+  })
+})
+
+describe('slimCard', () => {
+  it('keeps what rows.ts reads and drops the rest', () => {
+    const full = {
+      ...OBJECTS[0],
+      printed_name: 'Blitz',
+      image_status: 'highres_scan',
+      legalities: { modern: 'legal' },
+      purchase_uris: { tcgplayer: 'u' },
+      related_uris: { gatherer: 'u' },
+      prices: { usd: '1', usd_foil: '2', usd_etched: null, eur: '3', tix: '4' },
+      image_uris: { small: 'a', large: 'b' },
+      card_faces: [
+        { name: 'A', printed_name: 'Ä', image_uris: { small: 'a' }, flavor_text: 'x' },
+        { name: 'B', printed_name: 'B2', flavor_text: 'y' }
+      ]
+    } as unknown as ScryCard
+    const s = slimCard(full) as unknown as Record<string, unknown>
+    expect(s).not.toHaveProperty('legalities')
+    expect(s).not.toHaveProperty('purchase_uris')
+    expect(s).not.toHaveProperty('related_uris')
+    expect(s.prices).toEqual({ usd: '1', usd_foil: '2', usd_etched: null })
+    expect(s.printed_name).toBe('Blitz')
+    expect(s.image_status).toBe('highres_scan')
+    expect(s.image_uris).toEqual({})
+    expect(s.card_faces).toEqual([
+      { name: 'A', printed_name: 'Ä', image_uris: {} },
+      { name: 'B', printed_name: 'B2' }
+    ])
+  })
+})
+
+describe('createCompactor', () => {
+  it('keeps every value slimCard keeps', () => {
+    const compact = createCompactor()
+    for (const o of OBJECTS) expect(compact(o)).toEqual(slimCard(o))
+    for (const o of OBJECTS) expect(compact(slimCard(o))).toEqual(slimCard(o))
+  })
+
+  it('shares repeated lists and prices between objects', () => {
+    const compact = createCompactor()
+    const en = OBJECTS.find((o) => o.lang === 'en' && !o.card_faces)!
+    const a = compact({ ...en, colors: ['W', 'U'], keywords: ['Flying'] })
+    const b = compact({
+      ...en,
+      id: 'other',
+      lang: 'ja',
+      colors: ['W', 'U'],
+      keywords: ['Flying'],
+      prices: { ...en.prices }
+    })
+    expect(b.colors).toBe(a.colors)
+    expect(b.keywords).toBe(a.keywords)
+    expect(b.prices).toBe(a.prices)
+    expect(b.id).toBe('other')
+    expect(compact({ ...en, colors: ['U', 'W'] }).colors).toEqual(['U', 'W'])
   })
 })
 
 describe('createScryfall', () => {
-  it('bulkInfo picks default_cards', async () => {
+  it('bulkInfo picks all_cards', async () => {
     const seen: { url: string; headers: Record<string, string> }[] = []
     const fake = (async (url: string, init?: RequestInit) => {
       seen.push({ url, headers: init?.headers as Record<string, string> })
@@ -64,15 +129,19 @@ describe('createScryfall', () => {
           {
             type: 'default_cards',
             download_uri: 'https://x/default.json',
-            updated_at: '2026-11-09T09:00:00.000+00:00'
+            updated_at: 'd'
           },
-          { type: 'all_cards', download_uri: 'https://x/all.json', updated_at: 'a' }
+          {
+            type: 'all_cards',
+            download_uri: 'https://x/all.json',
+            updated_at: '2026-11-09T09:00:00.000+00:00'
+          }
         ]
       })
     }) as unknown as typeof fetch
     const s = createScryfall({ version: '1.2.3', fetch: fake, gapMs: 0 })
     expect(await s.bulkInfo()).toEqual({
-      downloadUri: 'https://x/default.json',
+      downloadUri: 'https://x/all.json',
       updatedAt: '2026-11-09T09:00:00.000+00:00'
     })
     expect(seen[0].url).toBe('https://api.scryfall.com/bulk-data')
@@ -80,12 +149,22 @@ describe('createScryfall', () => {
     expect(seen[0].headers.Accept).toBe('application/json')
   })
 
+  it('bulkInfo throws without an all_cards entry', async () => {
+    const fake = (async () =>
+      jsonRes({
+        data: [{ type: 'default_cards', download_uri: 'https://x/d.json', updated_at: 'u' }]
+      })) as unknown as typeof fetch
+    await expect(
+      createScryfall({ version: 'x', fetch: fake, gapMs: 0 }).bulkInfo()
+    ).rejects.toThrow('Scryfall bulk-data has no all_cards entry')
+  })
+
   it('bulkInfo takes jsonl_download_uri when the entry has no download_uri', async () => {
     const fake = (async () =>
       jsonRes({
         data: [
           {
-            type: 'default_cards',
+            type: 'all_cards',
             jsonl_download_uri: 'https://x/default.jsonl.gz',
             updated_at: 'u'
           }
@@ -97,7 +176,7 @@ describe('createScryfall', () => {
       updatedAt: 'u'
     })
     const none = (async () =>
-      jsonRes({ data: [{ type: 'default_cards', updated_at: 'u' }] })) as unknown as typeof fetch
+      jsonRes({ data: [{ type: 'all_cards', updated_at: 'u' }] })) as unknown as typeof fetch
     await expect(
       createScryfall({ version: 'x', fetch: none, gapMs: 0 }).bulkInfo()
     ).rejects.toThrow('no download link')
@@ -107,13 +186,13 @@ describe('createScryfall', () => {
     const fake = (async () =>
       new Response(gzipSync(Buffer.from(FIXTURE)), { status: 200 })) as unknown as typeof fetch
     const s = createScryfall({ version: 'x', fetch: fake, gapMs: 0 })
-    expect(await collect(s.cards('https://x/default.json'))).toEqual(OBJECTS)
+    expect(await collect(s.cards('https://x/default.json'))).toEqual(OBJECTS.map(slimCard))
   })
 
   it('cards() streams a plain body', async () => {
     const fake = (async () => new Response(FIXTURE, { status: 200 })) as unknown as typeof fetch
     const s = createScryfall({ version: 'x', fetch: fake, gapMs: 0 })
-    expect(await collect(s.cards('https://x/default.json'))).toEqual(OBJECTS)
+    expect(await collect(s.cards('https://x/default.json'))).toEqual(OBJECTS.map(slimCard))
   })
 
   it('sets() follows next_page', async () => {

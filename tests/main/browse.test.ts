@@ -215,6 +215,29 @@ describe('browseCards by language', () => {
     expect(browseFacets(db, undefined, 'zh-hans').setNames).toEqual(['测试'])
     expect(browseFacets(db).languages).toEqual(['en', 'ja', 'zh-hans'])
   })
+
+  it("prices a market-only game's card from its cheapest priced printing, and sorts by it", async () => {
+    const db = await seededDb()
+    seedPokemon(db)
+    db.prepare("INSERT INTO meta (key, value) VALUES ('active_game', 'pkm')").run()
+    const pika = cardId(db, 'Pikachu')
+    const pikaJa = cardId(db, 'ピカチュウ')
+    const add = db.prepare(
+      `INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity, market_price)
+       VALUES ('pkm', ?, ?, 'Price Test', ?, 'Rare', ?)`
+    )
+    add.run(pika, 'en', 'PT 001', 4.25)
+    add.run(pika, 'en', 'PT 002', 12)
+    add.run(pikaJa, 'ja', 'PT 003', 0.5)
+    const byPrice = browseCards(db, { sort: 'price', dir: 'desc' })
+    expect(byPrice.cards.map((c) => [c.name, c.price])).toEqual([
+      ['Pikachu', 4.25],
+      ['ピカチュウ', 0.5]
+    ])
+    expect(browseCards(db, { sort: 'price', dir: 'asc' }).cards[0].name).toBe('ピカチュウ')
+    // A language filter prices from that language's printings only.
+    expect(browseCards(db, { ...BY_NAME, language: 'ja' }).cards[0].price).toBe(0.5)
+  })
 })
 
 describe('browseFacets', () => {

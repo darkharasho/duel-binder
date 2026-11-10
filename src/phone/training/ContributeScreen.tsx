@@ -100,6 +100,10 @@ const SAVED_MS = 1200
 const FLOURISH_MS = 650
 /** How long Read number's problem stays up. */
 const SNAP_PROBLEM_MS = 3000
+/** The phone's pause between reads of the guide box. */
+const AUTO_SNAP_PAUSE_MS = 150
+/** Guide-box reads in a row with nothing before the card just done may be read again. */
+const AUTO_SNAP_SKIP_CLEARS_AFTER = 3
 /** Shots still encoding at once; past this the shutter waits, so 4K frames don't pile up. */
 const MAX_PENDING_SHOTS = 2
 
@@ -179,7 +183,9 @@ const UNNAMED_CAMERA = 'unnamed-camera-'
 
 /**
  * Testers' training photos: type a card's number (or, for One Piece, take the one the camera
- * read), pick the version in hand and its holder, then shoot. Each shot goes to the outbox with
+ * read), pick the version in hand and its holder, then shoot. On the phone a One Piece number the
+ * camera reads fills itself in, and reading goes on after it: the next card held up replaces it,
+ * so a run of cards needs only the shutter (and a version tap where a number has several). Each shot goes to the outbox with
  * its own label and uploads from there (also after this screen closes, through the shell's drain).
  */
 export function ContributeScreen({
@@ -281,17 +287,24 @@ export function ContributeScreen({
   })
   const chips = prefixSuggestions(text, prefixes.data ?? [])
 
-  // One Piece numbers read off the camera while nothing is typed, offered for one tap. The card
-  // just done (Next card) isn't offered again while it's still in front of the camera.
+  // One Piece numbers read off the camera while nothing is typed: offered for one tap on the
+  // desktop, filled in on the phone. On the phone reading goes on while the number is one it read
+  // (not typed), so the next card replaces it. The card just done (Next card) isn't read again
+  // while it's still in front of the camera.
   const [done, setDone] = useState<string | null>(null)
+  const [autoFilled, setAutoFilled] = useState(false)
+  const [resetKey, setResetKey] = useState(0)
+  const reading =
+    game === 'op' && camera.stream !== null && (text === '' || (!desktop && autoFilled))
   const read = useNumberReader({
     video: videoRef,
-    active: game === 'op' && text === '' && camera.stream !== null,
+    active: reading,
     game,
     engineFactory,
     prefixes: prefixes.data,
     exists: numberExists,
     skip: done,
+    resetKey,
     pauseMs: readPauseMs
   })
   const versions = useQuery({
@@ -321,6 +334,61 @@ export function ContributeScreen({
       })
     })
   const canSnap = game === 'op' && camera.stream !== null && !snapping
+
+  // ---- The phone reads the number by itself: the camera's reads fill it in ----
+  const fillRead = (n: string): void => {
+    setText(n)
+    setSelected(null)
+    setAutoFilled(true)
+    setFilled((c) => c + 1)
+    navigator.vibrate?.(15)
+  }
+  const fillRef = useRef(fillRead)
+  fillRef.current = fillRead
+  const snapRef = useRef(snap)
+  snapRef.current = snap
+  const numberRef = useRef(number)
+  numberRef.current = number
+  const doneRef = useRef(done)
+  doneRef.current = done
+  useEffect(() => {
+    if (!desktop && read !== null && read !== numberRef.current) fillRef.current(read)
+  }, [desktop, read])
+  // The guide box, read over and over: a number that reads the same twice running and isn't the
+  // one shown (nor the card just done) fills in.
+  const autoSnap = !desktop && reading
+  useEffect(() => {
+    if (!autoSnap) return
+    let on = true
+    let skip = doneRef.current
+    let last: string | null = null
+    let empty = 0
+    void (async () => {
+      while (on) {
+        const video = videoRef.current
+        let got: string | null = null
+        if (video && !document.hidden) {
+          try {
+            const r = await snapRef.current(video)
+            if ('number' in r) got = r.number
+          } catch {
+            // Quiet: the next try, or typing.
+          }
+        }
+        if (!on) return
+        empty = got === null ? empty + 1 : 0
+        if (skip && ((got !== null && got !== skip) || empty >= AUTO_SNAP_SKIP_CLEARS_AFTER))
+          skip = null
+        if (got === skip) got = null
+        if (got !== null && got === last && got !== numberRef.current) fillRef.current(got)
+        last = got
+        await new Promise((r) => setTimeout(r, readPauseMs ?? AUTO_SNAP_PAUSE_MS))
+      }
+    })()
+    return () => {
+      on = false
+    }
+  }, [autoSnap, resetKey, readPauseMs])
   const readNumber = async (): Promise<void> => {
     const video = videoRef.current
     if (!video) return
@@ -518,6 +586,8 @@ export function ContributeScreen({
   const numberInput = useRef<HTMLInputElement>(null)
   const nextCard = (): void => {
     setDone(number)
+    setAutoFilled(false)
+    setResetKey((k) => k + 1)
     setText('')
     setSelected(null)
     setShotError(false)
@@ -639,7 +709,7 @@ export function ContributeScreen({
         autoPlay
         muted
         playsInline
-        className="size-full object-cover"
+        className="absolute inset-0 size-full object-cover"
       />
       {guide && (
         <div
@@ -660,7 +730,7 @@ export function ContributeScreen({
           </span>
         </div>
       )}
-      {game === 'op' && camera.stream !== null && (
+      {desktop && game === 'op' && camera.stream !== null && (
         <button
           type="button"
           onClick={() => void readNumber()}
@@ -762,6 +832,7 @@ export function ContributeScreen({
         onChange={(e) => {
           setText(e.target.value)
           setSelected(null)
+          setAutoFilled(false)
         }}
         key={`number-${filled}`}
         className={cn(
@@ -769,7 +840,7 @@ export function ContributeScreen({
           filled > 0 && 'motion-safe:animate-[snap-fill_700ms_ease-out]'
         )}
       />
-      {read !== null && (
+      {desktop && read !== null && (
         <button
           type="button"
           aria-label={`Use ${read}`}
@@ -794,7 +865,10 @@ export function ContributeScreen({
             <button
               key={c}
               type="button"
-              onClick={() => setText(c)}
+              onClick={() => {
+                setText(c)
+                setAutoFilled(false)
+              }}
               className="min-h-11 rounded-full bg-white/[0.08] px-4 text-[15px] font-medium hover:bg-white/[0.12] active:bg-white/[0.16]"
             >
               {c}

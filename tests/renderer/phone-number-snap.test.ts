@@ -1,4 +1,4 @@
-import { readSnap, snapBands, snapRect, toGray } from '../../src/phone/training/numberSnap'
+import { readSnap, snapBands, snapRect, stretch, toGray } from '../../src/phone/training/numberSnap'
 import type { OcrBand } from '@shared/scan/types'
 
 const band = (width: number, height: number): OcrBand => ({
@@ -19,6 +19,23 @@ describe('toGray', () => {
   it('weights the channels', () => {
     const g = toGray(new Uint8ClampedArray([255, 255, 255, 255, 0, 0, 0, 255]), 2, 1)
     expect([...g.data]).toEqual([255, 0])
+  })
+})
+
+describe('stretch', () => {
+  it('spreads grey-on-grey text out to black and white', () => {
+    // A dim number under a sleeve: grays 100..140.
+    const data = new Uint8Array(100).map((_, i) => 100 + Math.round((i * 40) / 99))
+    const out = stretch({ width: 10, height: 10, data })
+    expect(out.data[0]).toBe(0)
+    expect(out.data[99]).toBe(255)
+    expect(out.data[50]).toBeGreaterThan(110)
+    expect(out.data[50]).toBeLessThan(145)
+  })
+
+  it('leaves a flat band alone', () => {
+    const flat = { width: 4, height: 1, data: new Uint8Array([90, 92, 91, 93]) }
+    expect(stretch(flat)).toBe(flat)
   })
 })
 

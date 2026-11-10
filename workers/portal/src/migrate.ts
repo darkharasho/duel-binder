@@ -318,6 +318,42 @@ function onePieceStep(): ServerStep {
   }
 }
 
+/** Frozen, as of server-42: the Magic tables desktop step 44 creates. */
+const SERVER_42_MTG_CARDS: FrozenTable = {
+  name: 'mtg_cards',
+  key: ['card_id'],
+  columns: [
+    'card_id', 'oracle_id', 'layout', 'type_line', 'types', 'mana_cost', 'mana_value', 'colors',
+    'color_identity', 'oracle_text', 'power', 'toughness', 'loyalty', 'defense', 'keywords', 'faces'
+  ]
+}
+const SERVER_42_MTG_IMAGES: FrozenTable = {
+  name: 'mtg_images',
+  key: ['image_id'],
+  columns: [
+    'image_id', 'scryfall_id', 'illustration_id', 'artist', 'frame', 'border_color', 'full_art',
+    'promo_types'
+  ]
+}
+
+/**
+ * The Magic tables join the change feed: `catalog_seq`, its index and the seq triggers, whose
+ * tombstones are Magic ones. Desktop step 44 runs first and the tables start empty, so there is
+ * nothing to backfill.
+ */
+function magicStep(): ServerStep {
+  return {
+    name: 'server-42',
+    sql: [SERVER_42_MTG_CARDS, SERVER_42_MTG_IMAGES]
+      .flatMap((t) => [
+        `ALTER TABLE ${t.name} ADD COLUMN catalog_seq INTEGER NOT NULL DEFAULT 0;`,
+        `CREATE INDEX ix_${t.name}_catalog_seq ON ${t.name}(catalog_seq);`,
+        ...seqTriggers(t, "'mtg'")
+      ])
+      .join('\n')
+  }
+}
+
 /** Frozen, as of server-16: server-13's `pokemon_cards` entry plus `art_twin_id`. */
 const SERVER_16_POKEMON_CARDS: FrozenTable = {
   name: 'pokemon_cards',
@@ -730,7 +766,8 @@ CREATE TABLE admin_handoffs (code_hash TEXT PRIMARY KEY,
   },
   dexNumberStep(),
   // V43's cleanup, run here because on a fresh server card_printings.game comes from a server step.
-  { name: 'server-41', sql: SCHEMA_V43 }
+  { name: 'server-41', sql: SCHEMA_V43 },
+  magicStep()
 ]
 
 /**

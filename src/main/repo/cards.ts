@@ -5,6 +5,7 @@ import type {
   CardImage,
   CardRow,
   CardSearchResult,
+  MagicFacts,
   OnePieceFacts,
   PokemonFacts,
   Printing
@@ -53,6 +54,18 @@ export interface CardDbRow {
   op_attribute?: string | null
   op_traits?: string | null
   op_block_icon?: number | null
+  /** Set when the query reads mtg_cards as `mc` (see onePieceRead); absent on the other games. */
+  mtg_oracle_id?: string | null
+  mtg_type_line?: string | null
+  mtg_types?: string | null
+  mtg_mana_cost?: string | null
+  mtg_mana_value?: number | null
+  mtg_colors?: string | null
+  mtg_oracle_text?: string | null
+  mtg_power?: string | null
+  mtg_toughness?: string | null
+  mtg_loyalty?: string | null
+  mtg_defense?: string | null
 }
 
 /** The pokemon_cards columns rowToCard reads, from a `LEFT JOIN pokemon_cards pc ON pc.card_id = c.id`. */
@@ -66,17 +79,23 @@ export const ONEPIECE_COLS = `oc.number AS op_number, oc.card_type AS op_card_ty
 
 const NO_ONEPIECE = { cols: '', join: '' }
 
+/** The mtg_cards columns rowToCard reads, from a `LEFT JOIN mtg_cards mc ON mc.card_id = c.id`. */
+export const MTG_COLS = `mc.oracle_id AS mtg_oracle_id, mc.type_line AS mtg_type_line, mc.types AS mtg_types,
+  mc.mana_cost AS mtg_mana_cost, mc.mana_value AS mtg_mana_value, mc.colors AS mtg_colors,
+  mc.oracle_text AS mtg_oracle_text, mc.power AS mtg_power, mc.toughness AS mtg_toughness,
+  mc.loyalty AS mtg_loyalty, mc.defense AS mtg_defense`
+
 /**
- * What a card query adds to read One Piece facts: `, ONEPIECE_COLS` (after its last column) and
- * its join (after the join of `c`). Nothing on the other games, so their reads skip the join.
+ * What a card query adds to read a game's own facts: `, ONEPIECE_COLS` (One Piece) or `, MTG_COLS`
+ * (Magic) after its last column, and the matching join after the join of `c`. Nothing on the
+ * other games, so their reads skip the join.
  */
 export const onePieceRead = (game: GameId): { cols: string; join: string } =>
   byGame(game, {
     ygo: NO_ONEPIECE,
     pkm: NO_ONEPIECE,
     op: { cols: `, ${ONEPIECE_COLS}`, join: 'LEFT JOIN onepiece_cards oc ON oc.card_id = c.id' },
-    // mtg_cards arrives with its table (Task 2); until then Magic has no game-table join.
-    mtg: NO_ONEPIECE
+    mtg: { cols: `, ${MTG_COLS}`, join: 'LEFT JOIN mtg_cards mc ON mc.card_id = c.id' }
   })
 
 function parseTypes(json: string | null | undefined): string[] {
@@ -117,6 +136,22 @@ function onePieceFacts(row: CardDbRow): OnePieceFacts | undefined {
   }
 }
 
+function magicFacts(row: CardDbRow): MagicFacts | undefined {
+  if (row.mtg_oracle_id === null || row.mtg_oracle_id === undefined) return undefined
+  return {
+    typeLine: row.mtg_type_line ?? '',
+    types: parseTypes(row.mtg_types),
+    manaCost: row.mtg_mana_cost ?? null,
+    manaValue: row.mtg_mana_value ?? null,
+    colors: parseTypes(row.mtg_colors),
+    oracleText: row.mtg_oracle_text ?? null,
+    power: row.mtg_power ?? null,
+    toughness: row.mtg_toughness ?? null,
+    loyalty: row.mtg_loyalty ?? null,
+    defense: row.mtg_defense ?? null
+  }
+}
+
 export interface PrintingDbRow {
   id: number
   card_id: number
@@ -149,6 +184,7 @@ export function printingArtImageId(
 export function rowToCard(row: CardDbRow): CardRow {
   const pokemon = pokemonFacts(row)
   const onePiece = onePieceFacts(row)
+  const magic = magicFacts(row)
   return {
     id: row.id,
     name: row.name,
@@ -164,7 +200,8 @@ export function rowToCard(row: CardDbRow): CardRow {
     desc: row.desc,
     tcgplayerPrice: row.tcgplayer_price,
     ...(pokemon ? { pokemon } : {}),
-    ...(onePiece ? { onePiece } : {})
+    ...(onePiece ? { onePiece } : {}),
+    ...(magic ? { magic } : {})
   }
 }
 

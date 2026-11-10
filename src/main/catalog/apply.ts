@@ -105,11 +105,12 @@ export function applyChanges(db: SqlDb, changes: CatalogChange[]): ApplyResult {
     }
     if (table.name === 'card_images') {
       if (exists('SELECT 1 FROM collection_entries WHERE image_id = ? LIMIT 1', key[0])) continue
-      // A One Piece image's Bandai row points at it, so it goes first: a page that holds this
+      // A One Piece or Magic image's game row points at it, so it goes first: a page that holds this
       // tombstone without the child's would otherwise fail the deferred FK check at commit. The
       // server never tombstones card_images (deleteKeys skips it); this guards future jobs. A
       // later onepiece_images tombstone for the same image then finds nothing and is a no-op.
       prepared(db, 'DELETE FROM onepiece_images WHERE image_id = ?').run(key[0])
+      prepared(db, 'DELETE FROM mtg_images WHERE image_id = ?').run(key[0])
       if (prepared(db, 'DELETE FROM card_images WHERE image_id = ?').run(key[0]).changes > 0) {
         result.applied++
         result.imagesChanged = true
@@ -117,10 +118,16 @@ export function applyChanges(db: SqlDb, changes: CatalogChange[]): ApplyResult {
       continue
     }
     // An entry of a card keeps the card's Pokémon details too.
-    if ((table.name === 'pokemon_cards' || table.name === 'onepiece_cards') && owned(key[0])) continue
+    if (
+      (table.name === 'pokemon_cards' ||
+        table.name === 'onepiece_cards' ||
+        table.name === 'mtg_cards') &&
+      owned(key[0])
+    )
+      continue
     // An image an entry uses keeps its Bandai id.
     if (
-      table.name === 'onepiece_images' &&
+      (table.name === 'onepiece_images' || table.name === 'mtg_images') &&
       exists('SELECT 1 FROM collection_entries WHERE image_id = ? LIMIT 1', key[0])
     )
       continue

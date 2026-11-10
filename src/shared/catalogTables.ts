@@ -21,7 +21,7 @@ export interface CatalogTable {
   games: GameId[]
 }
 
-const ALL: GameId[] = ['ygo', 'pkm', 'op']
+const ALL: GameId[] = ['ygo', 'pkm', 'op', 'mtg']
 const YGO: GameId[] = ['ygo']
 
 export const CATALOG_TABLES: CatalogTable[] = [
@@ -122,6 +122,24 @@ export const CATALOG_TABLES: CatalogTable[] = [
     key: ['image_id'],
     columns: ['image_id', 'bandai_id'],
     games: ['op']
+  },
+  {
+    name: 'mtg_cards',
+    key: ['card_id'],
+    columns: [
+      'card_id', 'oracle_id', 'layout', 'type_line', 'types', 'mana_cost', 'mana_value', 'colors',
+      'color_identity', 'oracle_text', 'power', 'toughness', 'loyalty', 'defense', 'keywords', 'faces'
+    ],
+    games: ['mtg']
+  },
+  {
+    name: 'mtg_images',
+    key: ['image_id'],
+    columns: [
+      'image_id', 'scryfall_id', 'illustration_id', 'artist', 'frame', 'border_color', 'full_art',
+      'promo_types'
+    ],
+    games: ['mtg']
   }
 ]
 

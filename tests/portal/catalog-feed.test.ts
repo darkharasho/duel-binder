@@ -9,6 +9,7 @@ import { migrateServer } from '../../workers/portal/src/migrate'
 import { PKM_ID_MIN } from '../../src/shared/games'
 import { seedPokemon, SHARED_SET_NAME } from '../fixtures/pokemon'
 import { seedOnePiece } from '../fixtures/onePiece'
+import { seedMagic } from '../fixtures/magic'
 import { withOwnerOnlyPokemon } from '../fixtures/ownerOnlyGame'
 
 withOwnerOnlyPokemon()
@@ -507,6 +508,27 @@ describe('per-game catalog feed', () => {
       const other = (await feed(qs)).changes
       expect(other.some((c) => c.table === 'onepiece_cards' || c.table === 'onepiece_images'), qs).toBe(false)
       expect(other.some((c) => 'row' in c && c.row.game === 'op'), qs).toBe(false)
+    }
+  })
+
+  it('game=mtg from 0 returns exactly the Magic rows, and no other feed holds one', async () => {
+    const { cardIds, printingIds, imageIds } = seedMagic(db)
+    const mtg = (await feed('?since=0&limit=5000&game=mtg')).changes
+    const count = (t: string): number => mtg.filter((c) => c.table === t).length
+    expect(mtg.every((c) => 'row' in c)).toBe(true)
+    expect(count('cards')).toBe(cardIds.length)
+    expect(count('card_images')).toBe(imageIds.length)
+    expect(count('card_printings')).toBe(printingIds.length)
+    expect(count('sets')).toBe(1)
+    expect(count('mtg_cards')).toBe(1)
+    expect(count('mtg_images')).toBe(imageIds.length)
+    expect(mtg).toHaveLength(1 + 2 + 3 + 1 + 1 + 2)
+    for (const c of mtg) if ('row' in c && c.row.game !== undefined) expect(c.row.game).toBe('mtg')
+
+    for (const qs of ['?since=0&limit=5000&game=pkm', '?since=0&limit=5000&game=op', '?since=0&limit=5000&game=ygo', '?since=0&limit=5000']) {
+      const other = (await feed(qs)).changes
+      expect(other.some((c) => c.table === 'mtg_cards' || c.table === 'mtg_images'), qs).toBe(false)
+      expect(other.some((c) => 'row' in c && c.row.game === 'mtg'), qs).toBe(false)
     }
   })
 

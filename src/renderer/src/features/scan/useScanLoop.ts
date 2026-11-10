@@ -30,7 +30,7 @@ import type { PokemonLanguage, ScanStatus } from '@shared/scanWindow'
 import { api } from '@/lib/api'
 import { centreCrop, type CropRect } from './crop'
 import { shiftQuad } from './vision/framing'
-import type { EngineFactory, FrameSignals, ScanEngine } from './engine'
+import type { EngineFactory, FrameSignals, RawSignals, ScanEngine } from './engine'
 import {
   describeLook,
   readChoicesFor,
@@ -384,6 +384,13 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
   const tracker = useRef(createShowingTracker())
   const loop = useRef({
     busy: false,
+    // Live frames are numbered as grabbed; drawnSeq is the latest one whose outline is drawn.
+    frameSeq: 0,
+    drawnSeq: 0,
+    // The latest frame still being read and looked up after its art was matched, and the one
+    // before it, each as the promise of its finishing.
+    finishing: Promise.resolve() as Promise<void>,
+    behind: Promise.resolve() as Promise<void>,
     needsInit: false,
     failures: 0,
     debugFrames: 0,
@@ -945,6 +952,10 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
       if (!profile) return
       l.busy = true
       try {
+        // At most one frame is read while the next one's art is matched.
+        await l.behind
+        if (l.needsInit || l.photoWanted) await l.finishing
+        if (!live) return
         if (l.needsInit) {
           // Cleared first, so a newer file that arrives mid-init asks again.
           l.needsInit = false
@@ -974,119 +985,150 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
         const started = performance.now()
         // A counted card being read: its frames are kept for the reading, as grabbed.
         const read = l.read
+        const seq = ++l.frameSeq
         // When the outline was drawn early, off the art alone (earlyOutline).
         let drawnAt: number | null = null
-        let raw
-        try {
-          raw = await engine.analyze(frame, {
+        let analyzed = 0
+        let visionSeen = (): void => {}
+        const vision = new Promise<void>((done) => (visionSeen = done))
+        const analysis = engine
+          .analyze(frame, {
             candidates,
             wantText: l.lastFound,
             wantLook: !!o.lookModel && profile.rarityLook,
             ...(read ? { tilt: read.imageIds, at: started } : {}),
             ...(region ? { region } : {}),
             onVision: (seen) => {
+              visionSeen()
+              if (!live || engineRef.current !== engine) return
+              l.lastFound = seen.found
               const quad = earlyOutline(seen)
-              if (!quad || !live || engineRef.current !== engine) return
-              if (latest.current.setKey !== o.setKey) return
+              if (!quad || latest.current.setKey !== o.setKey) return
               setOutline({ quad: inPreview(quad, region), width, height })
+              l.drawnSeq = seq
               drawnAt = performance.now()
             }
           })
-        } catch {
-          // An engine thrown away for another game owes nothing.
-          if (live && engineRef.current === engine) {
-            if (read) endRead(read)
-            fail()
-          }
-          return
-        }
-        // Another game's engine took over mid-frame: this frame is the old game's.
-        if (!live || engineRef.current !== engine) return
-        if (read) readFrame(read, raw, started)
-        l.lastFound = raw.found
-        const analyzed = performance.now()
-        // A card that left the view takes its language with it.
-        if (!raw.found) {
-          l.pokemonLanguage = { ...NO_POKEMON_LANGUAGE }
-          l.pokemonNames = { ...NO_POKEMON_NAMES, reads: [] }
-        }
-        let outcome: ScanOutcome
-        try {
-          outcome = await within(
-            resolveSignals(raw, {
-              game: o.game,
-              setPrintings,
-              defaultRarity: o.defaultRarity,
-              cardLanguage: (cardId) => languageOf(cardId, raw.textBands),
-              filterLanguage: o.filterLanguage,
-              artDistance: (x, y) => engine.artDistance?.(x, y) ?? Promise.resolve(null),
-              readLanguage: o.language
-                ? async () => o.language ?? null
-                : () => pokemonLanguageOf(raw.quad, raw.textBands),
-              readLocalName: () => pokemonNamesOf(raw.quad, raw.nameBands ?? []),
-              lookups: api.scan
-            }),
-            LOOKUP_TIMEOUT_MS
+          .then(
+            (raw) => {
+              analyzed = performance.now()
+              // The worker's whole frame comes back (timings and all), as the read and readout use.
+              return raw as RawSignals & FrameSignals
+            },
+            () => null
           )
-        } catch {
-          // An engine thrown away for another game owes nothing.
-          if (live && engineRef.current === engine) fail({ reinit: false })
-          return
-        }
-        l.failures = 0
-        // The set or game changed mid-frame: this frame belongs to the old one.
-        if (!live || latest.current.setKey !== o.setKey || engineRef.current !== engine) return
-        // Something card-shaped that is no card gets no outline either.
-        setOutline(
-          raw.found && raw.quad && outcome.kind !== 'none'
-            ? { quad: inPreview(raw.quad, region), width, height }
-            : null
-        )
-        if (o.timings) {
-          const resolved = performance.now()
-          const { pixels = 0, vision = 0, ocr = 0 } = raw.ms ?? {}
-          setTiming(
-            frameTimes.push({
-              grab: started - grabFrom,
-              pixels,
-              vision,
-              ocr,
-              wait: Math.max(0, analyzed - started - pixels - vision - ocr),
-              lookup: resolved - analyzed,
-              outline: (drawnAt ?? resolved) - grabFrom,
-              every: l.lastGrab === null ? 0 : grabFrom - l.lastGrab
-            })
-          )
-          l.lastGrab = grabFrom
-        }
-        // Only Yu-Gi-Oh's rarities are read by the look of the card.
-        const looked = profile.rarityLook ? withLook(outcome, raw.cues, raw.look) : outcome
-        const draft = tracker.current.push(performance.now(), looked)
-        // A card that stays undecided gets the photo the user would otherwise have to ask for.
-        if (looked.kind === 'unsure' && !draft && l.shown === null) {
-          const at = performance.now()
-          l.unsureSince ??= at
-          if (autoPhotoDue(l.unsureSince, l.autoPhotos, at)) {
-            l.autoPhotos++
-            l.unsureSince = null
-            l.photoWanted = true
-            l.photoQuiet = true
+
+        // What's left of the frame once the worker has answered: its text read, looked up and
+        // counted.
+        const finish = async (): Promise<void> => {
+          const raw = await analysis
+          if (raw === null) {
+            // An engine thrown away for another game owes nothing.
+            if (live && engineRef.current === engine) {
+              if (read) endRead(read)
+              fail()
+            }
+            return
           }
+          // Another game's engine took over mid-frame: this frame is the old game's.
+          if (!live || engineRef.current !== engine) return
+          if (read) readFrame(read, raw, started)
+          l.lastFound = raw.found
+          // A card that left the view takes its language with it.
+          if (!raw.found) {
+            l.pokemonLanguage = { ...NO_POKEMON_LANGUAGE }
+            l.pokemonNames = { ...NO_POKEMON_NAMES, reads: [] }
+          }
+          let outcome: ScanOutcome
+          try {
+            outcome = await within(
+              resolveSignals(raw, {
+                game: o.game,
+                setPrintings,
+                defaultRarity: o.defaultRarity,
+                cardLanguage: (cardId) => languageOf(cardId, raw.textBands),
+                filterLanguage: o.filterLanguage,
+                artDistance: (x, y) => engine.artDistance?.(x, y) ?? Promise.resolve(null),
+                readLanguage: o.language
+                  ? async () => o.language ?? null
+                  : () => pokemonLanguageOf(raw.quad, raw.textBands),
+                readLocalName: () => pokemonNamesOf(raw.quad, raw.nameBands ?? []),
+                lookups: api.scan
+              }),
+              LOOKUP_TIMEOUT_MS
+            )
+          } catch {
+            // An engine thrown away for another game owes nothing.
+            if (live && engineRef.current === engine) fail({ reinit: false })
+            return
+          }
+          l.failures = 0
+          // The set or game changed mid-frame: this frame belongs to the old one.
+          if (!live || latest.current.setKey !== o.setKey || engineRef.current !== engine) return
+          // Something card-shaped that is no card gets no outline either. A later frame that has
+          // drawn its own outline already is newer than this one.
+          if (seq >= l.drawnSeq)
+            setOutline(
+              raw.found && raw.quad && outcome.kind !== 'none'
+                ? { quad: inPreview(raw.quad, region), width, height }
+                : null
+            )
+          if (o.timings) {
+            const resolved = performance.now()
+            const { pixels = 0, vision = 0, ocr = 0 } = raw.ms ?? {}
+            setTiming(
+              frameTimes.push({
+                grab: started - grabFrom,
+                pixels,
+                vision,
+                ocr,
+                wait: Math.max(0, analyzed - started - pixels - vision - ocr),
+                lookup: resolved - analyzed,
+                outline: (drawnAt ?? resolved) - grabFrom,
+                every: l.lastGrab === null ? 0 : grabFrom - l.lastGrab
+              })
+            )
+            l.lastGrab = grabFrom
+          }
+          // Only Yu-Gi-Oh's rarities are read by the look of the card.
+          const looked = profile.rarityLook ? withLook(outcome, raw.cues, raw.look) : outcome
+          const draft = tracker.current.push(performance.now(), looked)
+          // A card that stays undecided gets the photo the user would otherwise have to ask for.
+          if (looked.kind === 'unsure' && !draft && l.shown === null) {
+            const at = performance.now()
+            l.unsureSince ??= at
+            if (autoPhotoDue(l.unsureSince, l.autoPhotos, at)) {
+              l.autoPhotos++
+              l.unsureSince = null
+              l.photoWanted = true
+              l.photoQuiet = true
+            }
+          }
+          if (KEEP_FRAMES) {
+            l.debugTimes.push([
+              Math.round(analyzed - started),
+              Math.round(performance.now() - analyzed),
+              outcome.kind,
+              draft !== null
+            ])
+          }
+          if (shot) {
+            void keepDebugShot(shot, o.game, raw, outcome, draft !== null, l.debugTimes)
+            l.debugTimes = []
+          }
+          if (draft) counted(draft, engine, o, raw.quad)
+          else show(outcome, null)
         }
-        if (KEEP_FRAMES) {
-          l.debugTimes.push([
-            Math.round(analyzed - started),
-            Math.round(performance.now() - analyzed),
-            outcome.kind,
-            draft !== null
-          ])
-        }
-        if (shot) {
-          void keepDebugShot(shot, o.game, raw, outcome, draft !== null, l.debugTimes)
-          l.debugTimes = []
-        }
-        if (draft) counted(draft, engine, o, raw.quad)
-        else show(outcome, null)
+
+        // The worker is free once it has answered (or the frame failed): the next frame's art is
+        // matched while this one's text is read and looked up. Frames finish in order, and a new
+        // one waits for the frame two back, so at most one is ever still being read.
+        await Promise.race([vision, analysis])
+        const before = l.finishing
+        l.behind = before
+        l.finishing = before
+          .then(finish)
+          .catch((e: unknown) => console.error('Scan frame failed:', e))
       } finally {
         l.busy = false
       }
@@ -1094,6 +1136,8 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
 
     l.movedAt = Date.now()
     l.lastGrab = null
+    l.finishing = Promise.resolve()
+    l.behind = Promise.resolve()
     const frameTimes = createFrameTimes()
     // Each tick is timed from the last one's start, so a frame slower than FRAME_MS is followed at
     // once. A photo runs inside a tick, so the next waits for it.

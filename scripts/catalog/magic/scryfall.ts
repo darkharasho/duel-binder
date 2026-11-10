@@ -1,8 +1,9 @@
 import { PassThrough, Readable, pipeline, type Transform } from 'node:stream'
 import { StringDecoder } from 'node:string_decoder'
 import { createGunzip } from 'node:zlib'
+import { mtgLanguageOf } from '../../../src/shared/games/magic'
 import { createLimiter, getJson, REPO_URL } from '../pokemon/http'
-import type { ScryCard, ScryfallSource, ScrySet } from './types'
+import type { ScryCard, ScryFace, ScryfallSource, ScrySet } from './types'
 
 const API = 'https://api.scryfall.com'
 const DEFAULT_GAP_MS = 100
@@ -50,9 +51,88 @@ async function* splitLines(input: AsyncIterable<Buffer>): AsyncIterable<string> 
   if (rest !== '') yield rest
 }
 
-/** What the job keeps: English, in paper, not digital-only. Everything else is dropped silently. */
+const FACE_FIELDS = [
+  'name',
+  'printed_name',
+  'oracle_id',
+  'mana_cost',
+  'cmc',
+  'type_line',
+  'oracle_text',
+  'colors',
+  'power',
+  'toughness',
+  'loyalty',
+  'defense',
+  'illustration_id',
+  'artist'
+] as const satisfies readonly (keyof ScryFace)[]
+
+const CARD_FIELDS = [
+  'id',
+  'oracle_id',
+  'name',
+  'printed_name',
+  'image_status',
+  'lang',
+  'layout',
+  'set',
+  'set_name',
+  'collector_number',
+  'rarity',
+  'released_at',
+  'games',
+  'digital',
+  'finishes',
+  'mana_cost',
+  'cmc',
+  'type_line',
+  'oracle_text',
+  'colors',
+  'color_identity',
+  'power',
+  'toughness',
+  'loyalty',
+  'defense',
+  'keywords',
+  'illustration_id',
+  'artist',
+  'frame',
+  'border_color',
+  'full_art',
+  'promo_types'
+] as const satisfies readonly (keyof ScryCard)[]
+
+function pick(from: object, fields: readonly string[]): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  const src = from as Record<string, unknown>
+  for (const k of fields) if (src[k] !== undefined) out[k] = src[k]
+  return out
+}
+
+/**
+ * The fields rows.ts reads, nothing more. Of `image_uris` only whether it exists survives (`{}`),
+ * and of `prices` only the USD finishes. Keeps the all_cards stream from holding full objects.
+ */
+export function slimCard(c: ScryCard): ScryCard {
+  const out = pick(c, CARD_FIELDS)
+  if (c.prices) {
+    out.prices = { usd: c.prices.usd, usd_foil: c.prices.usd_foil, usd_etched: c.prices.usd_etched }
+  }
+  if (c.image_uris) out.image_uris = {}
+  if (c.card_faces) {
+    out.card_faces = c.card_faces.map((f) => {
+      const face = pick(f, FACE_FIELDS)
+      if (f.image_uris) face.image_uris = {}
+      return face
+    })
+  }
+  return out as unknown as ScryCard
+}
+
+/** What the job keeps: a supported language, in paper, not digital-only. Everything else is dropped silently. */
 export function isKept(c: ScryCard): boolean {
-  return c.lang === 'en' && c.games.includes('paper') && c.digital !== true
+  return mtgLanguageOf(c.lang) !== null && c.games.includes('paper') && c.digital !== true
 }
 
 /**
@@ -119,12 +199,12 @@ export function createScryfall(o: {
           updated_at: string
         }[]
       }>(`${API}/bulk-data`)
-      const e = list.data.find((d) => d.type === 'default_cards')
-      if (!e) throw new Error('Scryfall bulk-data has no default_cards entry')
+      const e = list.data.find((d) => d.type === 'all_cards')
+      if (!e) throw new Error('Scryfall bulk-data has no all_cards entry')
       // Scryfall's live entry carries only `jsonl_download_uri` (one object per line, gzipped) now;
       // parseBulkLines reads both layouts.
       const downloadUri = e.download_uri ?? e.jsonl_download_uri
-      if (!downloadUri) throw new Error('Scryfall default_cards entry has no download link')
+      if (!downloadUri) throw new Error('Scryfall all_cards entry has no download link')
       return { downloadUri, updatedAt: e.updated_at }
     },
     async *cards(downloadUri) {
@@ -136,7 +216,7 @@ export function createScryfall(o: {
         head && head[0] === 0x1f && head[1] === 0x8b ? createGunzip() : new PassThrough()
       // pipeline destroys `body` with the source's error, so a dropped download rejects the iteration.
       pipeline(src, body, () => {})
-      yield* parseBulkLines(splitLines(body))
+      for await (const c of parseBulkLines(splitLines(body))) yield slimCard(c)
     },
     async sets() {
       const out: ScrySet[] = []

@@ -17,6 +17,8 @@ import { codeStatusText } from '@/features/scan/useCodeReader'
 import { useGame } from '@/lib/game'
 import { cn } from '@/lib/utils'
 import { CAMERA_MESSAGES } from './copy'
+import { ScanTimingsReadout } from './ScanTimings'
+import { scanTimingsOn } from './scanTimingsSetting'
 
 /** The video track's torch, where the browser offers one (Chrome on Android; not iPhone). */
 function useTorch(stream: MediaStream | null): {
@@ -122,6 +124,8 @@ export function PhoneCamera({
   const { game } = useGame()
   const videoRef = useRef<HTMLVideoElement>(null)
   const camera = useCamera(settings.deviceId, 'environment')
+  // Read once a mount: Settings and the scanner are never on screen together.
+  const [timings] = useState(scanTimingsOn)
   const { loop, codeStatus } = useHubScan({
     videoRef,
     stream: camera.stream,
@@ -129,7 +133,8 @@ export function PhoneCamera({
     lookModel: scanProfile(game).rarityLook ? lookModel : null,
     tiltModels,
     onStalled: camera.retry,
-    codeMode
+    codeMode,
+    timings
   })
   const torch = useTorch(camera.stream)
 
@@ -149,6 +154,7 @@ export function PhoneCamera({
           className="aspect-[3/4] w-[min(100cqw,75cqh)] rounded-3xl shadow-[0_10px_40px_rgba(0,0,0,0.4)]"
         >
           {codeMode && <AimBox added={codeStatus.kind === 'added'} />}
+          {timings && !codeMode && <ScanTimingsReadout timing={loop.timing} />}
           {children}
           {!codeMode && loop.artReady === false && (
             <div className="absolute inset-x-2 bottom-2 rounded-2xl bg-black/55 p-2 backdrop-blur-md">

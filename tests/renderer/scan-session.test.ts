@@ -9,7 +9,7 @@ import { useScanSession } from '@/features/scan/session'
 import { ScanHubProvider, useScanHub, READ_FLASH_MS, type ScanHub } from '@/features/scan/ScanHub'
 import { GameProvider } from '@/lib/game'
 import type { ScanDraft } from '@/features/scan/resolve'
-import { useScanLoop } from '@/features/scan/useScanLoop'
+import { useScanLoop, type ScanLoop } from '@/features/scan/useScanLoop'
 import { createMockApi, renderWithProviders } from './mockApi'
 import { mutationInvalidationKeys } from '@/lib/api'
 import { fakeBridge, fakeEngine, quad, stubVideo, type FakeEngine } from './scanFakes'
@@ -731,12 +731,14 @@ describe('useScanLoop', () => {
   function loop(
     factory: (game: GameId) => FakeEngine,
     game: GameId,
-    onDraft = vi.fn()
-  ): ReturnType<typeof renderHook<unknown, { game: GameId }>> & { onDraft: typeof onDraft } {
+    onDraft = vi.fn(),
+    extra: { timings?: boolean } = {}
+  ): ReturnType<typeof renderHook<ScanLoop, { game: GameId }>> & { onDraft: typeof onDraft } {
     const video = document.createElement('video')
     const rendered = renderHook(
       ({ game }: { game: GameId }) =>
         useScanLoop({
+          ...extra,
           videoRef: { current: video },
           engineFactory: factory,
           game,
@@ -783,6 +785,32 @@ describe('useScanLoop', () => {
     const ygoFrames = engines[0].engine.analyze.mock.calls.length
     await run(1000)
     expect(engines[0].engine.analyze.mock.calls.length).toBe(ygoFrames)
+  })
+
+  it('follows a frame slower than FRAME_MS at once, and a quick one no sooner than FRAME_MS', async () => {
+    const slow = fakeEngine()
+    slow.analyze.mockImplementation(
+      () => new Promise((done) => setTimeout(() => done({ ...pkmFrame, found: false }), 300))
+    )
+    loop(() => slow, 'ygo')
+    // The first frame starts at 200 ms and takes until 500; the next starts then, not at 600.
+    await run(510)
+    expect(slow.analyze).toHaveBeenCalledTimes(2)
+
+    vi.clearAllTimers()
+    const quick = fakeEngine()
+    loop(() => quick, 'ygo')
+    await run(1000)
+    expect(quick.analyze).toHaveBeenCalledTimes(5)
+  })
+
+  it('times each frame for the readout when asked, and not otherwise', async () => {
+    const engine = fakeEngine(() => ({ ...pkmFrame, ms: { pixels: 30, vision: 120 } }))
+    const timed = loop(() => engine, 'ygo', vi.fn(), { timings: true })
+    const plain = loop(() => fakeEngine(), 'ygo')
+    await run(1000)
+    expect(timed.result.current.timing).toMatchObject({ pixels: 30, vision: 120, every: 200 })
+    expect(plain.result.current.timing).toBeNull()
   })
 
   it("drops a frame the old game's engine was still analyzing", async () => {

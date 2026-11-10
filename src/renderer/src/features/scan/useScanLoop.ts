@@ -40,11 +40,15 @@ import {
   type ScanDraft,
   type ScanOutcome
 } from './resolve'
+import { createFrameTimes, type FrameTiming } from './frameTimes'
 import { sameSpot } from './sameSpot'
 import { createShowingTracker } from './tracker'
 import type { Quad } from './vision/detect'
 
-/** About five analyses a second. */
+/**
+ * The least time from one frame's start to the next's: about five analyses a second. A frame that
+ * takes longer is followed at once, not at the next multiple of it.
+ */
 const FRAME_MS = 200
 /** Engine failures in a row before scanning stops; each waits twice as long as the last. */
 const MAX_FAILURES = 5
@@ -139,6 +143,8 @@ export interface ScanLoopOptions {
    * phone, aimed at the card, reads the crop alone.
    */
   wholeFrame?: boolean
+  /** Measure where each frame's time goes, for a timing readout (ScanLoop's timing). */
+  timings?: boolean
 }
 
 export interface ScanLoop {
@@ -153,6 +159,8 @@ export interface ScanLoop {
   artReady: boolean | null
   /** Where the fingerprint file stands, once checked. */
   artData: FingerprintStatus | null
+  /** With the timings option: the latest frames' median times; null before the first. */
+  timing: FrameTiming | null
 }
 
 const sameStatus = (a: ScanStatus, b: ScanStatus): boolean =>
@@ -289,6 +297,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
   const [outline, setOutline] = useState<ScanLoop['outline']>(null)
   const [artReady, setArtReady] = useState<boolean | null>(null)
   const [artData, setArtData] = useState<FingerprintStatus | null>(null)
+  const [timing, setTiming] = useState<FrameTiming | null>(null)
 
   // The picked sets' artworks, worked out once per pick rather than per frame. A Chinese set's
   // cards mostly have none to match: their twins' art is found among all of it, so with one
@@ -315,6 +324,8 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     failures: 0,
     debugFrames: 0,
     debugTimes: [] as FrameTime[],
+    /** The last timed frame's grab start, for the readout's `every`. */
+    lastGrab: null as number | null,
     retryAt: 0,
     stopped: false,
     photoWanted: false,
@@ -885,6 +896,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
           await photo(engine, video, o, l.photoQuiet)
           return
         }
+        const grabFrom = performance.now()
         const grabbed = await grab(video, !!o.wholeFrame).catch(() => null)
         if (!grabbed) return
         if (!live) {
@@ -957,6 +969,23 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
             ? { quad: inPreview(raw.quad, region), width, height }
             : null
         )
+        if (o.timings) {
+          const resolved = performance.now()
+          const { pixels = 0, vision = 0, ocr = 0 } = raw.ms ?? {}
+          setTiming(
+            frameTimes.push({
+              grab: started - grabFrom,
+              pixels,
+              vision,
+              ocr,
+              wait: Math.max(0, analyzed - started - pixels - vision - ocr),
+              lookup: resolved - analyzed,
+              outline: resolved - grabFrom,
+              every: l.lastGrab === null ? 0 : grabFrom - l.lastGrab
+            })
+          )
+          l.lastGrab = grabFrom
+        }
         // Only Yu-Gi-Oh's rarities are read by the look of the card.
         const looked = profile.rarityLook ? withLook(outcome, raw.cues, raw.look) : outcome
         const draft = tracker.current.push(performance.now(), looked)
@@ -991,10 +1020,21 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     }
 
     l.movedAt = Date.now()
-    const timer = setInterval(() => void tick(), FRAME_MS)
+    l.lastGrab = null
+    const frameTimes = createFrameTimes()
+    // Each tick is timed from the last one's start, so a frame slower than FRAME_MS is followed at
+    // once. A photo runs inside a tick, so the next waits for it.
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const next = (): void => {
+      const from = performance.now()
+      void tick().finally(() => {
+        if (live) timer = setTimeout(next, Math.max(0, FRAME_MS - (performance.now() - from)))
+      })
+    }
+    timer = setTimeout(next, FRAME_MS)
     return () => {
       live = false
-      clearInterval(timer)
+      clearTimeout(timer)
       // Paused or the camera gone: a read in progress ends with nothing applied.
       endRead()
       l.lastFound = false
@@ -1002,5 +1042,5 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     }
   }, [opts.running, showCounted, endRead])
 
-  return { status, retry, takePhoto, outline, artReady, artData }
+  return { status, retry, takePhoto, outline, artReady, artData, timing }
 }

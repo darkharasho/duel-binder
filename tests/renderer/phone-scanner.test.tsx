@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { act, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Toaster } from '@/components/ui/sonner'
 import { useCamera } from '@/features/scan/useCamera'
@@ -461,6 +461,26 @@ describe('phone scanner', () => {
       )
     })
 
+    it('gives the preview a new video with the stream on it when Code mode turns on or off', async () => {
+      const user = userEvent.setup()
+      const store = fakeStore()
+      installPhoneApi(store)
+      const { container } = renderScanner(store)
+      const preview = (): HTMLVideoElement =>
+        container.querySelector<HTMLVideoElement>('video:not([aria-hidden])')!
+      const toggle = await screen.findByRole('button', { name: 'Code mode' })
+      await waitFor(() => expect(preview().srcObject).not.toBeNull())
+      const stream = preview().srcObject
+      const before = preview()
+      await user.click(toggle)
+      const during = preview()
+      expect(during).not.toBe(before)
+      expect(during.srcObject).toBe(stream)
+      await user.click(toggle)
+      expect(preview()).not.toBe(during)
+      expect(preview().srcObject).toBe(stream)
+    })
+
     it('has no Code mode for Pokémon, whose numbers name no set', async () => {
       localStorage.setItem('scan.codeMode', '1')
       const store = fakeStore()
@@ -555,6 +575,47 @@ describe('phone scanner', () => {
       expect(screen.getByRole('region', { name: 'Review' })).toBeInTheDocument()
       await user.click(screen.getByRole('button', { name: 'Close review' }))
       expect(screen.queryByRole('region', { name: 'Review' })).not.toBeInTheDocument()
+    })
+
+    describe('pulling the review down', () => {
+      const pull = (from: Element, distance: number): void => {
+        fireEvent.touchStart(from, { touches: [{ clientY: 100 }] })
+        for (const y of [104, 112, 100 + distance / 2, 100 + distance])
+          fireEvent.touchMove(from, { touches: [{ clientY: y }] })
+        fireEvent.touchEnd(from, { touches: [] })
+      }
+      const open = async (): Promise<HTMLElement> => {
+        const user = userEvent.setup()
+        localStorage.setItem(SESSION_KEY, JSON.stringify([row()]))
+        const store = fakeStore()
+        installPhoneApi(store)
+        renderScanner(store)
+        await user.click(await screen.findByRole('button', { name: 'Review 1 scanned' }))
+        return screen.getByRole('region', { name: 'Review' })
+      }
+
+      it('closes it from its header', async () => {
+        const sheet = await open()
+        pull(within(sheet).getByRole('heading', { name: 'Review' }), 120)
+        expect(screen.queryByRole('region', { name: 'Review' })).not.toBeInTheDocument()
+      })
+
+      it('closes it from its list scrolled to the top, not on a short pull', async () => {
+        const sheet = await open()
+        const list = within(sheet).getByRole('list', { name: 'This session' })
+        pull(list, 40)
+        expect(screen.getByRole('region', { name: 'Review' })).toBeInTheDocument()
+        pull(list, 120)
+        expect(screen.queryByRole('region', { name: 'Review' })).not.toBeInTheDocument()
+      })
+
+      it('leaves a list with room to scroll up to scroll', async () => {
+        const sheet = await open()
+        const list = within(sheet).getByRole('list', { name: 'This session' })
+        list.parentElement!.scrollTop = 200
+        pull(list, 120)
+        expect(screen.getByRole('region', { name: 'Review' })).toBeInTheDocument()
+      })
     })
 
     it('says 1 card for one', async () => {

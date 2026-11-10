@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { printingNoun } from '@shared/games'
 import {
   ChevronDownIcon,
@@ -12,12 +12,7 @@ import { CardArt } from '@/components/CardArt'
 import { photoFor } from '@/features/scan/scanLook'
 import { useScanLanguage } from '@/features/scan/pickerOptions'
 import { useScanHub } from '@/features/scan/ScanHub'
-import {
-  choicesFor,
-  flagText,
-  pickerLabel,
-  setLabelFor
-} from '@/features/scan/ScanRowItem'
+import { choicesFor, flagText, pickerLabel, setLabelFor } from '@/features/scan/ScanRowItem'
 import { OptionLabel } from '@/features/scan/SearchPicker'
 import type { ScanRow } from '@/features/scan/session'
 import { ClearSessionDialog, useSessionCommit } from '@/features/scan/SessionList'
@@ -39,6 +34,75 @@ import {
 const TAP_PX = 8
 /** How far the handle is dragged down before it closes the sheet. */
 const SWITCH_PX = 48
+/** How far the sheet itself is pulled down before it closes. */
+const PULL_CLOSE_PX = 80
+
+/**
+ * Pulling the sheet down by touch closes it, from anywhere on it: its header and footer at
+ * once, its list only when the list is scrolled to the top (otherwise the pull scrolls it).
+ * Native listeners, since React's touchmove is passive and couldn't stop the list's own scroll
+ * (or its bounce) taking the pull. `onDrag` hears the distance, 0 when the pull ends.
+ */
+function usePullToClose(
+  sheetRef: React.RefObject<HTMLElement | null>,
+  listRef: React.RefObject<HTMLElement | null>,
+  onDrag: (dy: number) => void,
+  onClose: () => void
+): void {
+  const latest = useRef({ onDrag, onClose })
+  useEffect(() => {
+    latest.current = { onDrag, onClose }
+  })
+  useEffect(() => {
+    const sheet = sheetRef.current
+    if (!sheet) return
+    let startY: number | null = null
+    let fromList = false
+    let pulling = false
+    let dy = 0
+    const start = (e: TouchEvent): void => {
+      startY = e.touches.length === 1 ? e.touches[0].clientY : null
+      fromList = !!listRef.current?.contains(e.target as Node)
+      pulling = false
+      dy = 0
+    }
+    const move = (e: TouchEvent): void => {
+      if (startY === null) return
+      dy = e.touches[0].clientY - startY
+      if (!pulling) {
+        // Upward, or a list with room to scroll back up: a scroll, not a pull.
+        if (dy < 0 || (fromList && (listRef.current?.scrollTop ?? 0) > 0)) {
+          startY = null
+          return
+        }
+        // Taken from the first move down, so the list never starts its bounce.
+        if (e.cancelable) e.preventDefault()
+        if (dy <= TAP_PX) return
+        pulling = true
+      }
+      if (e.cancelable) e.preventDefault()
+      latest.current.onDrag(dy)
+    }
+    const end = (): void => {
+      if (pulling) {
+        latest.current.onDrag(0)
+        if (dy > PULL_CLOSE_PX) latest.current.onClose()
+      }
+      startY = null
+      pulling = false
+    }
+    sheet.addEventListener('touchstart', start, { passive: true })
+    sheet.addEventListener('touchmove', move, { passive: false })
+    sheet.addEventListener('touchend', end)
+    sheet.addEventListener('touchcancel', end)
+    return () => {
+      sheet.removeEventListener('touchstart', start)
+      sheet.removeEventListener('touchmove', move)
+      sheet.removeEventListener('touchend', end)
+      sheet.removeEventListener('touchcancel', end)
+    }
+  }, [sheetRef, listRef])
+}
 
 const STEP =
   'flex size-10 items-center justify-center rounded-full text-white/85 active:bg-white/[0.12] disabled:opacity-40'
@@ -157,7 +221,7 @@ function ReviewRow({ row, disabled }: { row: ScanRow; disabled: boolean }): Reac
 
 /**
  * The full scanned list as a near full-height glass sheet over the blurred camera, closed by
- * tapping or dragging its handle down: each card with its printing and count, then Clear and Add.
+ * tapping its handle or pulling the sheet down: each card with its printing and count, then Clear and Add.
  * `stream`: the drawer of a stream, shorter (a side panel sideways) with the camera left clear,
  * and showing only the cards to check until All is chosen. Add still covers the whole list.
  */
@@ -178,10 +242,24 @@ export function ReviewSheet({
   const [dy, setDy] = useState(0)
   const start = useRef<number | null>(null)
   const dragged = useRef(false)
+  const sheetRef = useRef<HTMLElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+  usePullToClose(
+    sheetRef,
+    listRef,
+    (d) => {
+      // A pull ends in a click on the handle too; only a tap closes.
+      if (d > 0) dragged.current = true
+      setDy(d)
+    },
+    onClose
+  )
 
   const { value, priced, unpriced } = listValue(session.rows)
 
+  // A mouse drags the handle; a finger pulls the whole sheet (usePullToClose).
   const onPointerDown = (e: React.PointerEvent): void => {
+    if (e.pointerType !== 'mouse') return
     start.current = e.clientY
     dragged.current = false
   }
@@ -216,9 +294,13 @@ export function ReviewSheet({
         />
       )}
       <section
+        ref={sheetRef}
         aria-labelledby="phone-review-title"
+        // A pull that ended away from the handle mustn't swallow the next tap on it.
+        onTouchStart={() => (dragged.current = false)}
         style={dy > 0 ? { transform: `translateY(${dy}px)` } : undefined}
         className={cn(
+          dy === 0 && 'transition-transform duration-200',
           'absolute z-30 flex flex-col rounded-t-[28px] border-t border-white/[0.1] bg-background/80 shadow-2xl backdrop-blur-2xl animate-in slide-in-from-bottom duration-200',
           stream
             ? 'inset-x-0 bottom-0 h-[60%] landscape:inset-y-0 landscape:right-0 landscape:left-auto landscape:h-full landscape:w-[45%] landscape:rounded-l-[28px] landscape:rounded-tr-none landscape:border-l landscape:border-t-0 landscape:pt-[env(safe-area-inset-top)] landscape:pr-[max(0.75rem,env(safe-area-inset-right))]'
@@ -285,7 +367,7 @@ export function ReviewSheet({
             ))}
           </div>
         )}
-        <div className="min-h-0 flex-1 overflow-auto overscroll-contain px-3">
+        <div ref={listRef} className="min-h-0 flex-1 overflow-auto overscroll-contain px-3">
           {shown.length === 0 ? (
             <p className="px-2 py-10 text-center text-sm text-muted-foreground">
               {session.rows.length === 0 ? 'Cards you scan show up here.' : 'Nothing to check.'}

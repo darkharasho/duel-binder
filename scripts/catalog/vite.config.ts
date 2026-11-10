@@ -32,7 +32,8 @@ export default defineConfig({
         'set-art': `${root}scripts/catalog/setArtDryRun.ts`,
         thumbs: `${root}scripts/catalog/thumbs.ts`,
         'pull-training': `${root}scripts/scan/pull-training.ts`,
-        'op-number-replay': `${root}scripts/scan/op-number-replay.ts`
+        'op-number-replay': `${root}scripts/scan/op-number-replay.ts`,
+        'code-replay': `${root}scripts/scan/code-replay.ts`
       },
       output: { format: 'es', entryFileNames: '[name].mjs' }
     }

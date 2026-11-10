@@ -152,6 +152,14 @@ describe('set codes', () => {
     ['SOVR-ENTKI', 'SOVR-ENTK1']
   ])('parseSetCode(%s) = %s', (text, want) => expect(parseSetCode(text)).toBe(want))
 
+  it('tries a prefix ending in I, L or T with a 1 there, after the read as it is', () => {
+    expect(setCodeCandidates('YACI-JP057')).toEqual(['YACI-JP057', 'YAC1-JP057'])
+    expect(setCodeCandidates('YACTJPO57')).toContain('YAC1-JP057')
+    expect(setCodeCandidates('YACL-JP057')).toContain('YAC1-JP057')
+    // Two letters is too short a prefix to guess at.
+    expect(setCodeCandidates('LI-EN001')).not.toContain('L1-EN001')
+  })
+
   it('lists candidates with prefix zeros read as O as an alternate', () => {
     expect(setCodeCandidates('L0B-EN0O5')).toEqual(['L0B-EN005', 'LOB-EN005'])
     expect(setCodeCandidates('LOB-EN005')).toEqual(['LOB-EN005'])

@@ -45,6 +45,14 @@ export function findTextLine(img: RgbaImage, box: Box, scale = 2): TextLine | nu
     : { width, height, sign: -1, blobs: light, rivalBlobs: dark.length }
 }
 
+/**
+ * The longest line of text in a 0/1 ink mask (1 is ink), as findTextLine finds it: for a mask
+ * made some other way than by local contrast. Empty when there is none.
+ */
+export function maskLine(mask: Uint8Array, width: number, height: number): Blob[] {
+  return textLine(blobs(mask, width, height), height)
+}
+
 /** A name line's ink, the ink dilated by 2 px (its halo), and the box around the line. */
 export interface Strokes {
   ink: Uint8Array

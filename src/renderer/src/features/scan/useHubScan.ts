@@ -107,10 +107,11 @@ export function useHubScan({
     onDraft
   })
 
+  // Again when Code mode turns on or off: the phone's preview takes a new video element then.
   useEffect(() => {
     const video = videoRef.current
     if (video) video.srcObject = stream
-  }, [videoRef, stream])
+  }, [videoRef, stream, codeMode])
 
   return { loop, setUnreadable, setsSkipped, found, codeStatus }
 }

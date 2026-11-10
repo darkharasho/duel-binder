@@ -3,7 +3,7 @@ import type { GameId } from '@shared/games'
 import type { Language } from '@shared/languages'
 import type { RgbaImage, ScanPrinting } from '@shared/scan/types'
 import { api } from '@/lib/api'
-import { aimRect, codeBands, codeSignals, createCodeGate, readCode } from './codeMode'
+import { aimRect, codeBands, codeSignals, createCodeGate, darkBands, readCode } from './codeMode'
 import { resolveSignals, type ScanDraft } from './resolve'
 
 /** The pause between reads, so the camera, the UI and the OCR keep their share of the phone. */
@@ -53,24 +53,44 @@ function grabAim(video: HTMLVideoElement): RgbaImage | null {
 }
 
 /**
- * What the aim box reads on the video's current frame, band by band (codeBands), so reading can
- * stop at the first band that names a card: nothing when no line of text is found.
+ * One band's read: `vote` for the glitter-free bands (darkBands), whose reads are counted against
+ * each other; not for the fallback bands (codeBands), the first of which to name a card is taken.
  */
-export async function* readAim(video: HTMLVideoElement): AsyncGenerator<string> {
+export interface AimRead {
+  text: string
+  vote: boolean
+}
+
+/**
+ * What the aim box reads on the video's current frame, band by band, so reading can stop once it
+ * has its answer: darkBands' first, then codeBands' (light ink, which darkBands can't read).
+ * Nothing when no line of text is found.
+ */
+export async function* readAim(video: HTMLVideoElement): AsyncGenerator<AimRead> {
   const img = grabAim(video)
   if (!img) return
-  for (const band of codeBands(img)) {
-    const [text] = await api.scan.ocr([band], 'code')
-    if (text?.trim()) yield text.trim()
-  }
+  for (const [vote, bands] of [
+    [true, () => darkBands(img)],
+    [false, () => codeBands(img)]
+  ] as const)
+    for (const band of bands()) {
+      const [text] = await api.scan.ocr([band], 'code')
+      if (text?.trim()) yield { text: text.trim(), vote }
+    }
 }
+
+/** Votes a code needs from one frame's glitter-free bands, and more than any other code has. */
+const VOTES_NEED = 2
+/** Votes after which a code is taken without reading the frame's other bands. */
+const VOTES_ENOUGH = 3
 
 /**
  * Code mode: reads only the set code in the aim box off the camera while `running`, and adds the
  * card it names (onDraft) once the same code names a card twice running (createCodeGate). A read
  * counts only when its code is in the catalog, so a misread that parses as a code but names
- * nothing is passed over for the next band's. The card is named by resolveSignals from the code alone, so its row offers that code's rarities to cycle,
- * starting on the default rarity's when one is set. A code is taken again only after it has left
+ * nothing is passed over, and the frame's bands vote (readFrame). The card is named by
+ * resolveSignals from the code alone, so its row offers that code's rarities to cycle, starting on
+ * the default rarity's when one is set. A code is taken again only after it has left
  * the box.
  */
 export function useCodeReader(o: {
@@ -82,7 +102,7 @@ export function useCodeReader(o: {
   filterLanguage: Language | null
   onDraft: (draft: ScanDraft) => string
   /** For tests: what the aim box reads on a frame, band by band; readAim when left out. */
-  read?: (video: HTMLVideoElement) => AsyncIterable<string>
+  read?: (video: HTMLVideoElement) => AsyncIterable<AimRead>
 }): CodeStatus {
   const [status, setStatus] = useState<CodeStatus>({ kind: 'aim' })
   const latest = useRef(o)
@@ -100,27 +120,50 @@ export function useCodeReader(o: {
     // A code read twice running that names no card, said once it reads again.
     let unknown: string | null = null
 
-    /** The card the frame's first band to name one names, and the first code read that named none. */
+    /**
+     * The card the frame names, and the first code read that named none. The glitter-free bands
+     * vote: a code is taken when VOTES_NEED of them name it and no other code has as many, so a
+     * digit misread on one band (a 5 as a 3 names another card in the set) is outvoted. Only
+     * when none of them names a card are the fallback bands read, the first to name one taken.
+     */
     const readFrame = async (
       video: HTMLVideoElement
     ): Promise<{ item: ScanDraft | null; missing: string | null }> => {
       let missing: string | null = null
-      for await (const text of (latest.current.read ?? readAim)(video)) {
-        if (!live) break
+      const votes = new Map<string, { item: ScanDraft; n: number }>()
+      const named = new Map<string, ScanDraft | null>()
+      for await (const { text, vote } of (latest.current.read ?? readAim)(video)) {
+        if (!live || (!vote && votes.size > 0)) break
         const code = readCode(game, text)
         if (code === null) continue
-        const ctx = latest.current
-        const outcome = await resolveSignals(codeSignals([text]), {
-          game,
-          setPrintings: ctx.setPrintings,
-          defaultRarity: ctx.defaultRarity,
-          filterLanguage: ctx.filterLanguage,
-          lookups: api.scan
-        })
-        if (outcome.kind === 'recognized') return { item: outcome.item, missing: null }
-        missing ??= code
+        let item = named.get(text)
+        if (item === undefined) {
+          const ctx = latest.current
+          const outcome = await resolveSignals(codeSignals([text]), {
+            game,
+            setPrintings: ctx.setPrintings,
+            defaultRarity: ctx.defaultRarity,
+            filterLanguage: ctx.filterLanguage,
+            lookups: api.scan
+          })
+          item = outcome.kind === 'recognized' ? outcome.item : null
+          named.set(text, item)
+        }
+        if (item === null) {
+          missing ??= code
+          continue
+        }
+        if (!vote) return { item, missing: null }
+        const key = item.setCode?.toUpperCase() ?? String(item.printingId)
+        const tally = votes.get(key) ?? { item, n: 0 }
+        tally.n++
+        votes.set(key, tally)
+        if (tally.n >= VOTES_ENOUGH) break
       }
-      return { item: null, missing }
+      if (votes.size === 0) return { item: null, missing }
+      const [best, next] = [...votes.values()].sort((a, b) => b.n - a.n)
+      const won = best.n >= VOTES_NEED && (next === undefined || best.n > next.n)
+      return { item: won ? best.item : null, missing: null }
     }
 
     const once = async (): Promise<void> => {

@@ -145,6 +145,7 @@ export function PhoneCamera({
           onRetryCamera={camera.retry}
           loop={loop}
           status={codeMode ? codeStatusText(codeStatus) : undefined}
+          videoKey={codeMode ? 'code' : 'card'}
           className="aspect-[3/4] w-[min(100cqw,75cqh)] rounded-3xl shadow-[0_10px_40px_rgba(0,0,0,0.4)]"
         >
           {codeMode && <AimBox added={codeStatus.kind === 'added'} />}

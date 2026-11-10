@@ -31,6 +31,7 @@ export function ScanViewport({
   onZoom,
   smooth = false,
   status,
+  videoKey,
   children
 }: {
   videoRef: RefObject<HTMLVideoElement | null>
@@ -44,6 +45,12 @@ export function ScanViewport({
   smooth?: boolean
   /** Status text shown in place of the scan loop's, with no photo button (Code mode). */
   status?: string
+  /**
+   * A new key gives the preview a new video element (whose stream the caller sets again). iOS
+   * kept drawing the old one's picture at a stale size, a small box in black, after Code mode's
+   * overlay came and went.
+   */
+  videoKey?: string
   children?: React.ReactNode
 }): React.JSX.Element {
   const outline = loop.outline
@@ -89,6 +96,7 @@ export function ScanViewport({
               <SmoothVideo videoRef={videoRef} className="h-full w-full" />
             ) : (
               <video
+                key={videoKey}
                 ref={videoRef}
                 autoPlay
                 muted

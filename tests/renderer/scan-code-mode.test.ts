@@ -8,6 +8,7 @@ import {
   aimRect,
   codeBands,
   createCodeGate,
+  darkBands,
   readCode
 } from '../../src/renderer/src/features/scan/codeMode'
 
@@ -92,6 +93,45 @@ describe('codeBands', () => {
   })
 })
 
+describe('darkBands', () => {
+  /** A 600x140 box: a mid-gray foil bar full of light and dark glitter, with eight black
+   * characters 24 px wide and 50 px tall from x = 150, and nothing else dark. */
+  function foilBox(withCode: boolean): { width: number; height: number; data: Uint8ClampedArray } {
+    const width = 600
+    const height = 140
+    const data = new Uint8ClampedArray(width * height * 4)
+    let seed = 7
+    const rand = (): number => (seed = (seed * 16807) % 2147483647) / 2147483647
+    for (let i = 0; i < width * height; i++) {
+      // Single-pixel specks, as glitter is at this size.
+      const r = rand()
+      const v = r < 0.08 ? 250 : r < 0.16 ? 70 : 140
+      data.set([v, v, v, 255], i * 4)
+    }
+    if (withCode)
+      for (let c = 0; c < 8; c++)
+        for (let y = 45; y < 95; y++)
+          for (let x = 150 + c * 34; x < 174 + c * 34; x++)
+            data.set([15, 15, 15], (y * width + x) * 4)
+    return { width, height, data }
+  }
+
+  it('cuts the code out to its own width through the glitter, as ink on white', () => {
+    const bands = darkBands(foilBox(true))
+    expect(bands.length).toBeGreaterThan(0)
+    for (const b of bands) {
+      // The line is 262 px of a 600 px box, worked on at 160/140 and brought to 32 px letters.
+      expect(b.width).toBeGreaterThan(0)
+      expect(b.width).toBeLessThan(300)
+      expect(new Set(b.data)).toEqual(new Set([0, 255]))
+    }
+  })
+
+  it('finds no line in glitter alone', () => {
+    expect(darkBands(foilBox(false))).toEqual([])
+  })
+})
+
 describe('useCodeReader', () => {
   const LOCR = [
     printing({ printingId: 201, setCode: 'LOCR-JP001', rarity: 'Common', language: 'ja' }),
@@ -102,7 +142,10 @@ describe('useCodeReader', () => {
     vi.useRealTimers()
   })
 
-  function setup(reads: string[][]): {
+  function setup(
+    reads: string[][],
+    known: string[] = ['LOCR-JP001']
+  ): {
     onDraft: ReturnType<typeof vi.fn>
     result: { current: CodeStatus }
     rerender: (p: { running: boolean }) => void
@@ -110,12 +153,16 @@ describe('useCodeReader', () => {
     vi.useFakeTimers()
     window.api = createMockApi({
       scan: {
-        printingsByCode: vi.fn(async (code: string) => (code === 'LOCR-JP001' ? LOCR : []))
+        printingsByCode: vi.fn(async (code: string) =>
+          known.includes(code) ? LOCR.map((p) => ({ ...p, setCode: code })) : []
+        )
       }
     })
     let i = 0
+    // A plain text is a fallback band's read; "vote:" before it makes it a glitter-free band's.
     const read = vi.fn(async function* () {
-      yield* reads[Math.min(i++, reads.length - 1)]
+      for (const r of reads[Math.min(i++, reads.length - 1)])
+        yield r.startsWith('vote:') ? { text: r.slice(5), vote: true } : { text: r, vote: false }
     })
     const onDraft = vi.fn(() => 'row')
     const video = { current: document.createElement('video') }
@@ -163,6 +210,35 @@ describe('useCodeReader', () => {
     await tick(3)
     expect(onDraft).not.toHaveBeenCalled()
     expect(result.current).toEqual({ kind: 'unknown', code: 'ABCD-EN999' })
+  })
+
+  it('takes the code most glitter-free bands name, outvoting a misread digit', async () => {
+    const reads = ['vote:LOCR-JP001', 'vote:LOCR-JP002', 'vote:LOCR-JP001', 'LOCR-JP002']
+    const { onDraft } = setup([reads], ['LOCR-JP001', 'LOCR-JP002'])
+    await tick(3)
+    expect(onDraft).toHaveBeenCalledTimes(1)
+    expect((onDraft.mock.calls[0][0] as ScanDraft).setCode).toBe('LOCR-JP001')
+  })
+
+  it('takes nothing on a tie, nor reads the fallback bands once a vote names a card', async () => {
+    const { onDraft } = setup(
+      [['vote:LOCR-JP001', 'vote:LOCR-JP002', 'LOCR-JP001']],
+      ['LOCR-JP001', 'LOCR-JP002']
+    )
+    await tick(4)
+    expect(onDraft).not.toHaveBeenCalled()
+  })
+
+  it('takes nothing on a single vote', async () => {
+    const { onDraft } = setup([['vote:LOCR-JP001', 'vote:ABCD-EN999']])
+    await tick(4)
+    expect(onDraft).not.toHaveBeenCalled()
+  })
+
+  it('reads the fallback bands when no glitter-free band names a card', async () => {
+    const { onDraft } = setup([['vote:ABCD-EN999', 'LOCR-JP001']])
+    await tick(3)
+    expect(onDraft).toHaveBeenCalledTimes(1)
   })
 
   it('reads nothing while off', async () => {

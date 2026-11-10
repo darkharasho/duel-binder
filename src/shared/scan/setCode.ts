@@ -113,7 +113,9 @@ export function setCodeCandidates(text: string): string[] {
   if (!p && !jp) return []
   const withPrefixAlt = (prefix: string, tail: string): string[] => {
     const nearDigit = prefix.replace(/O(?=\d)|(?<=\d)O/g, '0')
-    return [prefix + tail, prefix.replace(/0/g, 'O') + tail, nearDigit + tail]
+    // A prefix's closing 1 in the serif face read as I, L or T (`YACI` for `YAC1`).
+    const lastOne = prefix.length >= 3 ? prefix.replace(/[ILT]$/, '1') : prefix
+    return [prefix + tail, prefix.replace(/0/g, 'O') + tail, nearDigit + tail, lastOne + tail]
   }
   const forms = ({ prefix, number }: Parts, region: string): string[] => {
     const lead = DIGIT_FIX[number[0]]

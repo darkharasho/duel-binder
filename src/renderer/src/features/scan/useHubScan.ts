@@ -10,6 +10,7 @@ import type { EngineFactory } from './engine'
 import type { ScanDraft } from './resolve'
 import { useScanHub } from './ScanHub'
 import { useScanLoop, type ScanLoop } from './useScanLoop'
+import { useCodeReader, type CodeStatus } from './useCodeReader'
 import { pullOf, type Pull } from './window/overlay'
 import { useScanSets } from './setPrintings'
 
@@ -30,7 +31,8 @@ export function useHubScan({
   onStalled,
   paused = false,
   onPull,
-  wholeFrame = false
+  wholeFrame = false,
+  codeMode = false
 }: {
   videoRef: RefObject<HTMLVideoElement | null>
   stream: MediaStream | null
@@ -43,6 +45,8 @@ export function useHubScan({
   paused?: boolean
   /** As useScanLoop's: the desktop webcam's. */
   wholeFrame?: boolean
+  /** Reads only set codes in an aim box (useCodeReader) in place of whole cards. */
+  codeMode?: boolean
   /** Hears each pull once it's counted: `pull.id` is the row key, `scanned` the copies on the list. */
   onPull?: (pull: Pull, scanned: number, draft: ScanDraft) => void
 }): {
@@ -50,6 +54,8 @@ export function useHubScan({
   setUnreadable: boolean
   setsSkipped: ScanSet[]
   found: Pull | null
+  /** Code mode's state; `aim` when it's off. */
+  codeStatus: CodeStatus
 } {
   const { settings, count, reread, session } = useScanHub()
   const { copiesOf } = session
@@ -77,7 +83,7 @@ export function useHubScan({
     videoRef,
     engineFactory,
     game,
-    running: stream !== null && !paused,
+    running: stream !== null && !paused && !codeMode,
     setKey,
     setPrintings,
     defaultRarity: settings.defaultRarity,
@@ -91,10 +97,20 @@ export function useHubScan({
     wholeFrame
   })
 
+  const codeStatus = useCodeReader({
+    videoRef,
+    running: stream !== null && !paused && codeMode,
+    game,
+    setPrintings: setPrintings ?? null,
+    defaultRarity: settings.defaultRarity,
+    filterLanguage: game === 'ygo' || game === 'op' ? printedLanguage(filter) : null,
+    onDraft
+  })
+
   useEffect(() => {
     const video = videoRef.current
     if (video) video.srcObject = stream
   }, [videoRef, stream])
 
-  return { loop, setUnreadable, setsSkipped, found }
+  return { loop, setUnreadable, setsSkipped, found, codeStatus }
 }

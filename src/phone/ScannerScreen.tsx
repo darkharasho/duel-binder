@@ -8,6 +8,7 @@ import {
   LanguagesIcon,
   LayersIcon,
   RadioIcon,
+  ScanTextIcon,
   SettingsIcon,
   ShuffleIcon,
   StarIcon,
@@ -25,6 +26,7 @@ import { useScanPingSetting } from '@/lib/useScanPing'
 import type { PickerOption } from '@/features/scan/SearchPicker'
 import type { ScanRow } from '@/features/scan/session'
 import { SCAN_PROFILES } from '@shared/scan/profiles'
+import { codeModeGame } from '@/features/scan/codeMode'
 import { useGame } from '@/lib/game'
 import { formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -209,6 +211,18 @@ function Chip({
   )
 }
 
+const CODE_MODE_KEY = 'scan.codeMode'
+
+/** Whether the phone scanner reads set codes only (Code mode), kept on this device. */
+function useCodeModeSetting(): [boolean, (on: boolean) => void] {
+  const [on, setOn] = useState(() => localStorage.getItem(CODE_MODE_KEY) === '1')
+  const set = (next: boolean): void => {
+    setOn(next)
+    localStorage.setItem(CODE_MODE_KEY, next ? '1' : '0')
+  }
+  return [on, set]
+}
+
 const ROUND = 'flex size-11 items-center justify-center rounded-full backdrop-blur-md'
 
 /**
@@ -235,6 +249,8 @@ export function ScannerScreen({
   const [reviewing, setReviewing] = useState(false)
   const [streaming, setStreaming] = useState(false)
   const [pingOn, setPingOn] = useScanPingSetting()
+  const [codeOn, setCodeOn] = useCodeModeSetting()
+  const codeMode = codeOn && codeModeGame(game)
 
   const last = session.rows.reduce<ScanRow | null>(
     (a, r) => (a === null || r.addedAt > a.addedAt ? r : a),
@@ -272,7 +288,7 @@ export function ScannerScreen({
 
   return (
     <div className="relative isolate flex h-full min-h-0 w-full flex-col overflow-hidden pt-[env(safe-area-inset-top)]">
-      <PhoneCamera engineFactory={engineFactory} className="px-6 pt-3">
+      <PhoneCamera engineFactory={engineFactory} codeMode={codeMode} className="px-6 pt-3">
         <button
           type="button"
           aria-label="Close scanner"
@@ -333,6 +349,26 @@ export function ScannerScreen({
         )}
       </div>
       <div className="flex min-w-0 shrink-0 gap-2 overflow-x-auto px-3.5 pt-2.5 [scrollbar-width:none]">
+        {codeModeGame(game) && (
+          <button
+            type="button"
+            aria-label="Code mode"
+            aria-pressed={codeMode}
+            onClick={() => setCodeOn(!codeOn)}
+            className={cn(
+              'flex h-[38px] shrink-0 items-center gap-1.5 rounded-full px-3.5 text-sm font-medium',
+              codeMode
+                ? 'bg-white text-black active:bg-white/80'
+                : cn(GLASS, 'active:bg-white/[0.12]')
+            )}
+          >
+            <ScanTextIcon
+              aria-hidden
+              className={cn('size-4 shrink-0', !codeMode && 'text-white/55')}
+            />
+            Code
+          </button>
+        )}
         <Chip
           label="Language"
           name="Language"

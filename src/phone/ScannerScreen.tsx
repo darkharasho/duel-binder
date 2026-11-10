@@ -19,7 +19,7 @@ import { CardArt } from '@/components/CardArt'
 import type { EngineFactory } from '@/features/scan/engine'
 import { useScanLanguage, useScanPickers, type PickerProps } from '@/features/scan/pickerOptions'
 import { copiesOnList, ownedText, surePrinting, useOwned } from '@/features/scan/owned'
-import { choicesFor, flagText } from '@/features/scan/ScanRowItem'
+import { choicesFor, flagText, pickerLabel } from '@/features/scan/ScanRowItem'
 import { useScanHub } from '@/features/scan/ScanHub'
 import { useScanPingSetting } from '@/lib/useScanPing'
 import type { PickerOption } from '@/features/scan/SearchPicker'
@@ -31,6 +31,7 @@ import { cn } from '@/lib/utils'
 import { FoundBurst } from '@/features/scan/FoundBurst'
 import { PhoneCamera } from './PhoneCamera'
 import { PickerSheet } from './PickerSheet'
+import { PrintingSheet } from './PrintingSheet'
 import { ReviewSheet } from './ReviewSheet'
 import { SessionsSheet } from './SessionsSheet'
 import { StreamScreen } from './stream/StreamScreen'
@@ -69,17 +70,8 @@ function LastScan({ row, burst }: { row: ScanRow; burst: number }): React.JSX.El
     session.setPrinting(row.key, Number(next.key))
   }
 
-  return (
-    <section
-      aria-label="Last scan"
-      // Keyed by the burst, so each new scan replays the bump and the art dropping in.
-      key={burst}
-      className={cn(
-        CARD,
-        burst > 0 && 'motion-safe:animate-[scan-bump_450ms_350ms_both]',
-        row.key === flashed && 'scan-reread'
-      )}
-    >
+  const details = (
+    <>
       <CardArt
         imageId={row.imageId}
         printingId={photoFor(row)}
@@ -90,7 +82,7 @@ function LastScan({ row, burst }: { row: ScanRow; burst: number }): React.JSX.El
           burst > 0 && 'motion-safe:animate-[scan-drop_500ms_ease-in_both]'
         )}
       />
-      <div className="min-w-0 flex-1 text-[13px] leading-[18px]">
+      <div className="min-w-0 flex-1 text-left text-[13px] leading-[18px]">
         <p className="truncate text-base font-semibold leading-5">{row.name}</p>
         {sub && <p className="truncate text-muted-foreground">{sub}</p>}
         {price != null && (
@@ -117,6 +109,38 @@ function LastScan({ row, burst }: { row: ScanRow; burst: number }): React.JSX.El
         </p>
         {flag && <p className="text-amber-300">{flag}</p>}
       </div>
+    </>
+  )
+
+  return (
+    <section
+      aria-label="Last scan"
+      // Keyed by the burst, so each new scan replays the bump and the art dropping in.
+      key={burst}
+      className={cn(
+        CARD,
+        burst > 0 && 'motion-safe:animate-[scan-bump_450ms_350ms_both]',
+        row.key === flashed && 'scan-reread'
+      )}
+    >
+      {/* With several printings, a tap on the card lists them all to pick from (the cycle
+          button's one at a time is slow for a card with dozens). */}
+      {choices.length > 1 ? (
+        <PrintingSheet
+          label={pickerLabel(row)}
+          title={printingNoun(row.game ?? 'ygo') === 'version' ? 'Version' : 'Printing'}
+          value={current === null ? null : String(current)}
+          options={choices}
+          onPick={(v) => session.setPrinting(row.key, Number(v))}
+          searchPlaceholder="Search code, rarity or set"
+          disabled={session.committing}
+          className="-m-1 min-w-0 flex-1 items-start gap-3 rounded-2xl p-1 active:bg-white/[0.06]"
+        >
+          {details}
+        </PrintingSheet>
+      ) : (
+        <div className="flex min-w-0 flex-1 gap-3">{details}</div>
+      )}
       <div className="flex shrink-0 items-center">
         {choices.length > 1 && (
           <button

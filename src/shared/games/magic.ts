@@ -75,3 +75,10 @@ export const MAGIC: GameDef = {
     { key: 'setNumber', label: 'Set & number' }
   ]
 }
+
+/** A Magic printing's finish, read from its rarity text (`Rare (Foil)`, `Mythic (Etched Foil)`). */
+export function finishOf(setRarity: string): 'nonfoil' | 'foil' | 'etched' {
+  if (setRarity.endsWith(' (Etched Foil)')) return 'etched'
+  if (setRarity.endsWith(' (Foil)')) return 'foil'
+  return 'nonfoil'
+}

@@ -180,6 +180,7 @@ describe('logMagic', () => {
           { setCode: 'AAA', printings: 5, priced: 5 },
           { setCode: 'BBB', printings: 5, priced: 1 }
         ],
+        byLanguage: {},
         notes: ['n1']
       },
       (l) => out.push(l)

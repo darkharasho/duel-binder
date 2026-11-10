@@ -2,14 +2,15 @@ import type Database from 'better-sqlite3'
 import { movedEnough } from '../../../src/main/tcgplayer/prices'
 import { mtgCardId, mtgImageId } from '../../../src/shared/games/ids'
 import { finishOf } from '../../../src/shared/games/magic'
+import type { Language } from '../../../src/shared/languages'
 import type { MagicRows } from './rows'
 
 /**
- * The Magic writer: writes the English game = 'mtg' catalog rows into the job's work database in
- * one transaction. Every statement names game = 'mtg' or an mtg_* table. Keys never move: a written
- * set keeps its name and code, a written printing its set name, code and label. Nothing is deleted
- * (an object Scryfall stops listing is flagged missing), and rows are only written when a value
- * differs, so an unchanged night diffs to nothing.
+ * The Magic writer: writes the game = 'mtg' catalog rows, every language, into the job's work
+ * database in one transaction. Every statement names game = 'mtg' or an mtg_* table. Keys never
+ * move: a written set keeps its name and code, a written printing its set name, code and label.
+ * Nothing is deleted (an object Scryfall stops listing is flagged missing), and rows are only
+ * written when a value differs, so an unchanged night diffs to nothing.
  */
 
 export interface MagicReport {
@@ -21,7 +22,10 @@ export interface MagicReport {
   priced: number
   /** Printings flagged missing tonight. */
   missing: number
+  /** English sets only: the priced-share check is meaningful only there. */
   perSet: { setCode: string; printings: number; priced: number }[]
+  /** Tonight's cards, printings and priced printings per language, English included. */
+  byLanguage: Record<string, { cards: number; printings: number; priced: number }>
   notes: string[]
 }
 
@@ -30,7 +34,10 @@ export interface WriteMagicOpts {
   nowIso: string
   updatedAt: string
   /** Test-only: replaces mtgCardId / mtgImageId to force a collision. */
-  idOf?: { card: (oracleId: string) => number; image: (scryfallId: string) => number }
+  idOf?: {
+    card: (lang: Language, oracleId: string) => number
+    image: (scryfallId: string) => number
+  }
 }
 
 interface ExistingPrinting {
@@ -58,18 +65,10 @@ function checkIds(pairs: Map<string, number>): void {
 
 export function writeMagic(
   work: Database.Database,
-  allRows: MagicRows,
+  rows: MagicRows,
   o: WriteMagicOpts
 ): MagicReport {
-  // Until the writer learns languages (next task) it stores the English rows alone.
-  const rows: MagicRows = {
-    ...allRows,
-    cards: new Map([...allRows.cards].filter(([, c]) => c.lang === 'en')),
-    images: allRows.images.filter((i) => allRows.cards.get(i.cardId)?.lang === 'en'),
-    printings: allRows.printings.filter((p) => p.language === 'en'),
-    sets: new Map([...allRows.sets].filter(([, s]) => s.language === 'en'))
-  }
-  const cardIdOf = o.idOf?.card ?? ((s: string) => mtgCardId('en', s))
+  const cardIdOf = o.idOf?.card ?? mtgCardId
   const imageIdOf = o.idOf?.image ?? mtgImageId
   const report: MagicReport = {
     updatedAt: o.updatedAt,
@@ -80,8 +79,11 @@ export function writeMagic(
     priced: 0,
     missing: 0,
     perSet: [],
+    byLanguage: {},
     notes: [...rows.notes]
   }
+  const tally = (lang: string): { cards: number; printings: number; priced: number } =>
+    (report.byLanguage[lang] ??= { cards: 0, printings: 0, priced: 0 })
 
   // A short file would flag most of the catalog missing; refuse it before anything is read or written.
   const stored = (
@@ -93,33 +95,39 @@ export function writeMagic(
     throw new Error(`Scryfall file too short: ${rows.images.length} objects, ${stored} stored`)
 
   const cardPairs = new Map<string, number>()
-  for (const r of work.prepare('SELECT card_id, oracle_id FROM mtg_cards').all() as {
+  for (const r of work.prepare('SELECT card_id, lang, oracle_id FROM mtg_cards').all() as {
     card_id: number
+    lang: string
     oracle_id: string
   }[])
-    cardPairs.set(r.oracle_id, r.card_id)
-  for (const c of rows.cards.values()) cardPairs.set(c.oracleId, cardIdOf(c.oracleId))
+    cardPairs.set(`${r.lang}/${r.oracle_id}`, r.card_id)
+  for (const c of rows.cards.values())
+    cardPairs.set(`${c.lang}/${c.oracleId}`, cardIdOf(c.lang, c.oracleId))
   checkIds(cardPairs)
   const imagePairs = new Map<string, number>()
-  for (const r of work.prepare('SELECT image_id, scryfall_id FROM mtg_images').all() as {
-    image_id: number
-    scryfall_id: string
-  }[])
+  for (const r of work
+    .prepare('SELECT image_id, scryfall_id, back_image_id FROM mtg_images')
+    .all() as { image_id: number; scryfall_id: string; back_image_id: number | null }[]) {
     imagePairs.set(r.scryfall_id, r.image_id)
-  for (const i of rows.images) imagePairs.set(i.scryfallId, imageIdOf(i.scryfallId))
+    if (r.back_image_id !== null) imagePairs.set(`${r.scryfall_id}#back`, r.back_image_id)
+  }
+  for (const i of rows.images) {
+    imagePairs.set(i.scryfallId, imageIdOf(i.scryfallId))
+    if (i.backImageId !== null) imagePairs.set(`${i.scryfallId}#back`, i.backImageId)
+  }
   checkIds(imagePairs)
 
   const setByCode = work.prepare(
-    "SELECT set_name, tcg_date, series FROM sets WHERE game = 'mtg' AND language = 'en' AND set_code = ?"
+    "SELECT set_name, tcg_date, series FROM sets WHERE game = 'mtg' AND language = ? AND set_code = ?"
   )
   const nameTaken = work.prepare(
-    "SELECT 1 FROM sets WHERE game = 'mtg' AND language = 'en' AND set_name = ?"
+    "SELECT 1 FROM sets WHERE game = 'mtg' AND language = ? AND set_name = ?"
   )
   const insertSet = work.prepare(
-    "INSERT INTO sets (game, language, set_name, set_code, tcg_date, series) VALUES ('mtg', 'en', ?, ?, ?, ?)"
+    "INSERT INTO sets (game, language, set_name, set_code, tcg_date, series) VALUES ('mtg', ?, ?, ?, ?, ?)"
   )
   const updateSet = work.prepare(
-    "UPDATE sets SET tcg_date = ?, series = ? WHERE game = 'mtg' AND language = 'en' AND set_name = ?"
+    "UPDATE sets SET tcg_date = ?, series = ? WHERE game = 'mtg' AND language = ? AND set_name = ?"
   )
   const cardRow = work.prepare(`SELECT name, type, "desc" FROM cards WHERE game = 'mtg' AND id = ?`)
   const insertCard = work.prepare(
@@ -131,6 +139,8 @@ export function writeMagic(
   )
   const columns = [
     'oracle_id',
+    'lang',
+    'local_name',
     'layout',
     'type_line',
     'types',
@@ -169,7 +179,9 @@ export function writeMagic(
     'frame',
     'border_color',
     'full_art',
-    'promo_types'
+    'promo_types',
+    'back_image_id',
+    'art_from'
   ]
   const upsertScry = work.prepare(
     `INSERT INTO mtg_images (image_id, ${imageColumns.join(', ')})
@@ -180,7 +192,7 @@ export function writeMagic(
   const insertPrinting = work.prepare(
     `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_rarity_code, set_price,
        missing_from_api, language, tcg_product_id, variant, market_price, game)
-     VALUES (?, ?, ?, ?, ?, NULL, 0, 'en', NULL, NULL, ?, 'mtg')`
+     VALUES (?, ?, ?, ?, ?, NULL, 0, ?, NULL, NULL, ?, 'mtg')`
   )
   const updatePrinting = work.prepare(
     "UPDATE card_printings SET missing_from_api = ?, market_price = ? WHERE game = 'mtg' AND id = ?"
@@ -195,25 +207,28 @@ export function writeMagic(
   let cardsChanged = false
   work.transaction(() => {
     // Sets: inserted when absent, then frozen but for tcg_date and series.
+    // Keyed as rows.sets is, `${language}|${code}`; a name is taken only within its language.
     const setNameOf = new Map<string, string>()
-    for (const s of [...rows.sets.values()].sort((a, b) => bySource(a.code, b.code))) {
-      const old = setByCode.get(s.code) as
+    for (const [key, s] of [...rows.sets].sort(
+      ([, a], [, b]) => bySource(a.language, b.language) || bySource(a.code, b.code)
+    )) {
+      const old = setByCode.get(s.language, s.code) as
         { set_name: string; tcg_date: string | null; series: string | null } | undefined
       if (!old) {
-        const name = nameTaken.get(s.name) ? `${s.name} (${s.code})` : s.name
-        insertSet.run(name, s.code, s.releasedAt, s.series)
-        setNameOf.set(s.code, name)
+        const name = nameTaken.get(s.language, s.name) ? `${s.name} (${s.code})` : s.name
+        insertSet.run(s.language, name, s.code, s.releasedAt, s.series)
+        setNameOf.set(key, name)
       } else {
         const date = s.releasedAt ?? old.tcg_date
         if (old.tcg_date !== date || old.series !== s.series)
-          updateSet.run(date, s.series, old.set_name)
-        setNameOf.set(s.code, old.set_name)
+          updateSet.run(date, s.series, s.language, old.set_name)
+        setNameOf.set(key, old.set_name)
       }
       report.sets++
     }
 
     for (const c of [...rows.cards.values()].sort((a, b) => a.id - b.id)) {
-      const id = cardIdOf(c.oracleId)
+      const id = cardIdOf(c.lang, c.oracleId)
       const row = cardRow.get(id) as { name: string; type: string; desc: string } | undefined
       if (!row) {
         insertCard.run(id, c.name, c.type, c.desc, o.nowIso)
@@ -225,6 +240,8 @@ export function writeMagic(
       upsertDetails.run({
         cardId: id,
         oracle_id: c.oracleId,
+        lang: c.lang,
+        local_name: c.localName,
         layout: c.layout,
         type_line: c.typeLine,
         types: JSON.stringify(c.types),
@@ -241,13 +258,16 @@ export function writeMagic(
         faces: c.faces
       })
       report.cards++
+      tally(c.lang).cards++
     }
 
     // Art order: a card's oldest printing (set release date, then collector number) is sort_order 0,
     // so the tile and the default image show it. The order depends only on the printings.
     const sortOf = new Map<string, number>()
-    const codeOf = new Map<string, string>()
-    for (const p of rows.printings) if (!codeOf.has(p.scryfallId)) codeOf.set(p.scryfallId, p.code)
+    const codeOf = new Map<string, { code: string; language: string }>()
+    for (const p of rows.printings)
+      if (!codeOf.has(p.scryfallId))
+        codeOf.set(p.scryfallId, { code: p.code, language: p.language })
     const byCard = new Map<number, typeof rows.images>()
     for (const i of rows.images) {
       const list = byCard.get(i.cardId) ?? []
@@ -255,9 +275,9 @@ export function writeMagic(
       byCard.set(i.cardId, list)
     }
     const age = (scryfallId: string): [string, string] => {
-      const code = codeOf.get(scryfallId) ?? ''
+      const { code = '', language = 'en' } = codeOf.get(scryfallId) ?? {}
       const [setCode = '', ...num] = code.split(' ')
-      return [rows.sets.get(`en|${setCode}`)?.releasedAt ?? '9999-99-99', num.join(' ')]
+      return [rows.sets.get(`${language}|${setCode}`)?.releasedAt ?? '9999-99-99', num.join(' ')]
     }
     for (const list of byCard.values()) {
       list
@@ -274,12 +294,13 @@ export function writeMagic(
     const seenImages = new Set<string>()
     for (const i of rows.images) {
       const imageId = imageIdOf(i.scryfallId)
-      const toCard = cardIdOf(rows.cards.get(i.cardId)!.oracleId)
+      const card = rows.cards.get(i.cardId)!
+      const toCard = cardIdOf(card.lang, card.oracleId)
       const was = imageCardOf.get(imageId) as { card_id: number } | undefined
       if (was && was.card_id !== toCard) {
         const from = (oracleOf.get(was.card_id) as { oracle_id: string } | undefined)?.oracle_id
         report.notes.push(
-          `Magic image moved card: ${i.scryfallId} ${from ?? was.card_id} -> ${rows.cards.get(i.cardId)!.oracleId}`
+          `Magic image moved card: ${i.scryfallId} ${from ?? was.card_id} -> ${card.oracleId}`
         )
       }
       upsertImage.run(imageId, toCard, sortOf.get(i.scryfallId) ?? 0)
@@ -291,23 +312,35 @@ export function writeMagic(
         frame: i.frame,
         border_color: i.borderColor,
         full_art: i.fullArt ? 1 : 0,
-        promo_types: JSON.stringify(i.promoTypes)
+        promo_types: JSON.stringify(i.promoTypes),
+        back_image_id: i.backImageId,
+        art_from: i.artFrom
       })
       seenImages.add(i.scryfallId)
       report.images++
     }
 
-    // Printings, loaded once: there is no index on set_rarity_code.
+    // Printings, loaded once (there is no index on set_rarity_code), every language. A Scryfall id
+    // is one language's object, and card ids differ by language, so neither key crosses languages:
+    // a Japanese printing never takes over an English row.
     const existing = new Map<string, ExistingPrinting>()
     const taken = new Map<string, ExistingPrinting>()
     for (const p of work
       .prepare(
         `SELECT id, card_id, set_code, set_rarity_code, set_rarity, market_price, missing_from_api FROM card_printings
-         WHERE game = 'mtg' AND language = 'en' AND contributed = 0`
+         WHERE game = 'mtg' AND contributed = 0`
       )
       .all() as ExistingPrinting[]) {
       existing.set(`${p.set_rarity_code}|${finishOf(p.set_rarity)}`, p)
       taken.set(`${p.card_id}|${p.set_code}|${p.set_rarity}`, p)
+    }
+    const count = (lang: string, price: number | null): void => {
+      report.printings++
+      tally(lang).printings++
+      if (price !== null) {
+        report.priced++
+        tally(lang).priced++
+      }
     }
     const seen = new Set<string>()
     for (const p of rows.printings) {
@@ -320,11 +353,11 @@ export function writeMagic(
           p.price !== null && movedEnough(old.market_price, p.price) ? p.price : old.market_price
         if (old.missing_from_api !== 0 || price !== old.market_price)
           updatePrinting.run(0, price, old.id)
-        report.printings++
-        if (price !== null) report.priced++
+        count(p.language, price)
         continue
       }
-      const cardId = cardIdOf(rows.cards.get(p.cardId)!.oracleId)
+      const card = rows.cards.get(p.cardId)!
+      const cardId = cardIdOf(card.lang, card.oracleId)
       const pkey = `${cardId}|${p.code}|${p.rarity}`
       const holder = taken.get(pkey)
       if (holder) {
@@ -348,17 +381,17 @@ export function writeMagic(
         holder.missing_from_api = 0
         existing.set(key, holder)
         seen.add(key)
-        report.printings++
-        if (price !== null) report.priced++
+        count(p.language, price)
         continue
       }
       const id = Number(
         insertPrinting.run(
           cardId,
-          setNameOf.get(p.setCode)!,
+          setNameOf.get(`${p.language}|${p.setCode}`)!,
           p.code,
           p.rarity,
           p.scryfallId,
+          p.language,
           p.price
         ).lastInsertRowid
       )
@@ -374,8 +407,7 @@ export function writeMagic(
       existing.set(key, row)
       taken.set(pkey, row)
       seen.add(key)
-      report.printings++
-      if (p.price !== null) report.priced++
+      count(p.language, p.price)
     }
 
     // Sticky: an object Scryfall no longer lists keeps its rows, flagged missing.

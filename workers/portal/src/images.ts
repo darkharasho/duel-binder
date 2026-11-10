@@ -444,10 +444,24 @@ function resolve(deps: AppDeps, path: string): Target | null {
     }
     if (game === 'mtg') {
       // Magic art is shown whole (never cropped), so `cropped` is the small copy as in cardArtKey.
-      const row = deps.db
-        .prepare('SELECT scryfall_id FROM mtg_images WHERE image_id = ?')
-        .get(n) as { scryfall_id: string } | undefined
-      const url = row ? scryfallArtUrl(row.scryfall_id, kind === 'full' ? 'full' : 'small') : null
+      type ArtRow = { scryfall_id: string; art_from: string | null }
+      const front = deps.db
+        .prepare('SELECT scryfall_id, art_from FROM mtg_images WHERE image_id = ?')
+        .get(n) as ArtRow | undefined
+      // A back face has no row of its own: it is found through its front's back_image_id.
+      const row =
+        front ??
+        (deps.db
+          .prepare('SELECT scryfall_id, art_from FROM mtg_images WHERE back_image_id = ?')
+          .get(n) as ArtRow | undefined)
+      const url =
+        row && row.art_from !== 'none'
+          ? scryfallArtUrl(
+              row.art_from ?? row.scryfall_id,
+              kind === 'full' ? 'full' : 'small',
+              front ? 'front' : 'back'
+            )
+          : null
       if (url === null) return null
       return {
         key: cardArtKey(kind, n),

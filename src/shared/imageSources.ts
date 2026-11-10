@@ -99,9 +99,13 @@ export function opTcgArtUrl(key: string, size: 'small' | 'full'): string | null 
 export const SCRYFALL_IMAGE_PREFIX = 'https://cards.scryfall.io/'
 const SCRYFALL_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
-/** Scryfall's whole front-face picture of a card object at `size`; null unless `scryfallId` is a uuid. */
-export function scryfallArtUrl(scryfallId: string, size: 'small' | 'full'): string | null {
+/** Scryfall's whole picture of a card object's front (or back) face at `size`; null unless `scryfallId` is a uuid. */
+export function scryfallArtUrl(
+  scryfallId: string,
+  size: 'small' | 'full',
+  face: 'front' | 'back' = 'front'
+): string | null {
   const id = scryfallId.toLowerCase()
   if (!SCRYFALL_ID_RE.test(id)) return null
-  return `${SCRYFALL_IMAGE_PREFIX}${size === 'small' ? 'normal' : 'large'}/front/${id[0]}/${id[1]}/${id}.jpg`
+  return `${SCRYFALL_IMAGE_PREFIX}${size === 'small' ? 'normal' : 'large'}/${face}/${id[0]}/${id[1]}/${id}.jpg`
 }

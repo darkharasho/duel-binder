@@ -1,0 +1,35 @@
+Duel Binder
+Copyright (c) 2026 Michael Stephens. All rights reserved.
+
+This repository is published so its source can be read. It is not open
+source, and no license to use it is granted except as stated below.
+
+You may:
+  - view and read the source code in this repository;
+  - fork it on GitHub only as GitHub's Terms of Service allow, for the
+    purpose of viewing it or proposing changes back to this repository.
+
+You may not, without prior written permission from the copyright holder:
+  - copy, modify, merge, or create derivative works of the software or any
+    part of it, including its card scanner, portal, data pipelines, and
+    user interface;
+  - distribute, publish, sublicense, sell, or host the software, a modified
+    version of it, or a service based on it;
+  - use any part of it in another product or service.
+
+The Duel Binder name, logo, and artwork are not licensed for any use.
+
+Official builds of the app are distributed by the copyright holder at
+https://duelbinder.com and may be installed and used under those terms.
+
+Third-party components in this repository (including everything under
+vendor/ and all packages installed as dependencies) are covered by their own
+licenses, not this one.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM,
+DAMAGES, OR OTHER LIABILITY ARISING FROM, OUT OF, OR IN CONNECTION WITH THE
+SOFTWARE OR ITS USE.
+
+For permission requests, contact the copyright holder through
+https://duelbinder.com.

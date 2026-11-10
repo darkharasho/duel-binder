@@ -145,10 +145,15 @@ export function writeMagic(
      WHERE ${columns.map((c) => `mtg_cards.${c} IS NOT excluded.${c}`).join(' OR ')}`
   )
   const upsertImage = work.prepare(
-    `INSERT INTO card_images (image_id, card_id, sort_order, missing_from_api, game) VALUES (?, ?, 0, 0, 'mtg')
-     ON CONFLICT(image_id) DO UPDATE SET card_id = excluded.card_id, missing_from_api = 0
-     WHERE card_images.game = 'mtg' AND (card_images.card_id IS NOT excluded.card_id OR card_images.missing_from_api <> 0)`
+    `INSERT INTO card_images (image_id, card_id, sort_order, missing_from_api, game) VALUES (?, ?, ?, 0, 'mtg')
+     ON CONFLICT(image_id) DO UPDATE SET card_id = excluded.card_id, sort_order = excluded.sort_order, missing_from_api = 0
+     WHERE card_images.game = 'mtg' AND (card_images.card_id IS NOT excluded.card_id
+       OR card_images.sort_order IS NOT excluded.sort_order OR card_images.missing_from_api <> 0)`
   )
+  const imageCardOf = work.prepare(
+    "SELECT card_id FROM card_images WHERE game = 'mtg' AND image_id = ?"
+  )
+  const oracleOf = work.prepare('SELECT oracle_id FROM mtg_cards WHERE card_id = ?')
   const imageColumns = [
     'scryfall_id',
     'illustration_id',
@@ -171,6 +176,9 @@ export function writeMagic(
   )
   const updatePrinting = work.prepare(
     "UPDATE card_printings SET missing_from_api = ?, market_price = ? WHERE game = 'mtg' AND id = ?"
+  )
+  const takeOver = work.prepare(
+    "UPDATE card_printings SET set_rarity_code = ?, missing_from_api = 0, market_price = ? WHERE game = 'mtg' AND id = ?"
   )
   const flagImage = work.prepare(
     "UPDATE card_images SET missing_from_api = 1 WHERE game = 'mtg' AND image_id = ? AND missing_from_api = 0"
@@ -227,10 +235,46 @@ export function writeMagic(
       report.cards++
     }
 
+    // Art order: a card's oldest printing (set release date, then collector number) is sort_order 0,
+    // so the tile and the default image show it. The order depends only on the printings.
+    const sortOf = new Map<string, number>()
+    const codeOf = new Map<string, string>()
+    for (const p of rows.printings) if (!codeOf.has(p.scryfallId)) codeOf.set(p.scryfallId, p.code)
+    const byCard = new Map<number, typeof rows.images>()
+    for (const i of rows.images) {
+      const list = byCard.get(i.cardId) ?? []
+      list.push(i)
+      byCard.set(i.cardId, list)
+    }
+    const age = (scryfallId: string): [string, string] => {
+      const code = codeOf.get(scryfallId) ?? ''
+      const [setCode = '', ...num] = code.split(' ')
+      return [rows.sets.get(setCode)?.releasedAt ?? '9999-99-99', num.join(' ')]
+    }
+    for (const list of byCard.values()) {
+      list
+        .map((i) => ({ id: i.scryfallId, a: age(i.scryfallId) }))
+        .sort(
+          (x, y) =>
+            x.a[0].localeCompare(y.a[0], 'en') ||
+            x.a[1].localeCompare(y.a[1], 'en', { numeric: true }) ||
+            bySource(x.id, y.id)
+        )
+        .forEach((x, n) => sortOf.set(x.id, n))
+    }
+
     const seenImages = new Set<string>()
     for (const i of rows.images) {
       const imageId = imageIdOf(i.scryfallId)
-      upsertImage.run(imageId, cardIdOf(rows.cards.get(i.cardId)!.oracleId))
+      const toCard = cardIdOf(rows.cards.get(i.cardId)!.oracleId)
+      const was = imageCardOf.get(imageId) as { card_id: number } | undefined
+      if (was && was.card_id !== toCard) {
+        const from = (oracleOf.get(was.card_id) as { oracle_id: string } | undefined)?.oracle_id
+        report.notes.push(
+          `Magic image moved card: ${i.scryfallId} ${from ?? was.card_id} -> ${rows.cards.get(i.cardId)!.oracleId}`
+        )
+      }
+      upsertImage.run(imageId, toCard, sortOf.get(i.scryfallId) ?? 0)
       upsertScry.run({
         imageId,
         scryfall_id: i.scryfallId,
@@ -247,7 +291,7 @@ export function writeMagic(
 
     // Printings, loaded once: there is no index on set_rarity_code.
     const existing = new Map<string, ExistingPrinting>()
-    const taken = new Set<string>()
+    const taken = new Map<string, ExistingPrinting>()
     for (const p of work
       .prepare(
         `SELECT id, card_id, set_code, set_rarity_code, set_rarity, market_price, missing_from_api FROM card_printings
@@ -255,7 +299,7 @@ export function writeMagic(
       )
       .all() as ExistingPrinting[]) {
       existing.set(`${p.set_rarity_code}|${finishOf(p.set_rarity)}`, p)
-      taken.add(`${p.card_id}|${p.set_code}|${p.set_rarity}`)
+      taken.set(`${p.card_id}|${p.set_code}|${p.set_rarity}`, p)
     }
     const seen = new Set<string>()
     for (const p of rows.printings) {
@@ -274,11 +318,32 @@ export function writeMagic(
       }
       const cardId = cardIdOf(rows.cards.get(p.cardId)!.oracleId)
       const pkey = `${cardId}|${p.code}|${p.rarity}`
-      if (taken.has(pkey)) {
-        report.notes.push(`Magic printing key taken: ${p.code} ${p.rarity}`)
+      const holder = taken.get(pkey)
+      if (holder) {
+        // Scryfall replaced the object's id: the row it left behind (flagged missing, or no longer
+        // listed tonight) passes to the new id, keeping its printing id and any collection entries.
+        const gone =
+          holder.missing_from_api !== 0 ||
+          !rows.printings.some(
+            (q) =>
+              q.scryfallId === holder.set_rarity_code && finishOf(holder.set_rarity) === q.finish
+          )
+        if (!gone) {
+          report.notes.push(`Magic printing key taken: ${p.code} ${p.rarity}`)
+          continue
+        }
+        const price = p.price ?? holder.market_price
+        takeOver.run(p.scryfallId, price, holder.id)
+        existing.delete(`${holder.set_rarity_code}|${finishOf(holder.set_rarity)}`)
+        holder.set_rarity_code = p.scryfallId
+        holder.market_price = price
+        holder.missing_from_api = 0
+        existing.set(key, holder)
+        seen.add(key)
+        report.printings++
+        if (price !== null) report.priced++
         continue
       }
-      taken.add(pkey)
       const id = Number(
         insertPrinting.run(
           cardId,
@@ -289,7 +354,7 @@ export function writeMagic(
           p.price
         ).lastInsertRowid
       )
-      existing.set(key, {
+      const row: ExistingPrinting = {
         id,
         card_id: cardId,
         set_code: p.code,
@@ -297,7 +362,9 @@ export function writeMagic(
         set_rarity: p.rarity,
         market_price: p.price,
         missing_from_api: 0
-      })
+      }
+      existing.set(key, row)
+      taken.set(pkey, row)
       seen.add(key)
       report.printings++
       if (p.price !== null) report.priced++

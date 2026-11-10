@@ -255,6 +255,102 @@ describe('writeMagic', () => {
     expect(new Set(printings().map((x) => x.set_name))).toEqual(new Set(['Promos', 'Promos (PB)']))
   })
 
+  describe('default art', () => {
+    const twoSets = (): ScrySet[] => [
+      {
+        ...SETS[0],
+        code: 'old',
+        name: 'Old Set',
+        parent_set_code: undefined,
+        released_at: '1999-01-01'
+      },
+      {
+        ...SETS[0],
+        code: 'new',
+        name: 'New Set',
+        parent_set_code: undefined,
+        released_at: '2020-01-01'
+      }
+    ]
+    const art = (o: ScryCard): { sort_order: number } =>
+      db.prepare('SELECT sort_order FROM card_images WHERE image_id = ?').get(mtgImageId(o.id)) as {
+        sort_order: number
+      }
+    const pair = (): { older: ScryCard; newer: ScryCard } => ({
+      older: clone(plain(), {
+        id: '00000000-0000-4000-8000-0000000000a1',
+        set: 'old',
+        collector_number: '5'
+      }),
+      newer: clone(plain(), {
+        id: '00000000-0000-4000-8000-0000000000a2',
+        set: 'new',
+        collector_number: '1'
+      })
+    })
+
+    it('the oldest printing is the default image whatever the input order', () => {
+      const { older, newer } = pair()
+      write([newer, older], twoSets())
+      expect(art(older).sort_order).toBe(0)
+      expect(art(newer).sort_order).toBe(1)
+      const total = (): number =>
+        (db.prepare('SELECT total_changes() AS n').get() as { n: number }).n
+      const start = total()
+      write([older, newer], twoSets())
+      expect(total() - start).toBe(0)
+      expect(
+        db
+          .prepare(
+            "SELECT image_id FROM card_images WHERE game = 'mtg' AND card_id = ? AND sort_order = 0"
+          )
+          .all(mtgCardId('en', older.oracle_id as string))
+      ).toEqual([{ image_id: mtgImageId(older.id) }])
+    })
+
+    it('the same set breaks ties by collector number', () => {
+      const { older } = pair()
+      const b = clone(older, { id: '00000000-0000-4000-8000-0000000000a3', collector_number: '12' })
+      const a = clone(older, { id: '00000000-0000-4000-8000-0000000000a4', collector_number: '9' })
+      write([b, a], twoSets())
+      expect(art(a).sort_order).toBe(0)
+      expect(art(b).sort_order).toBe(1)
+    })
+  })
+
+  it('a replaced Scryfall id takes over its missing printing', () => {
+    const p = plain()
+    write([p])
+    const first = printings().find((x) => x.set_rarity_code === p.id)!
+    db.prepare(
+      `INSERT INTO collection_entries (uid, printing_id, image_id, quantity, created_at, updated_at, game)
+       VALUES ('u1', ?, ?, 2, 'x', 'x', 'mtg')`
+    ).run(first.id, mtgImageId(p.id))
+    const before = printings()
+    const replaced = clone(p, { id: '00000000-0000-4000-8000-0000000000b1' })
+    const r = write([replaced])
+    expect(r.notes.join()).not.toMatch(/key taken/)
+    const after = printings()
+    expect(after).toHaveLength(before.length)
+    expect(after.map((x) => x.id).sort()).toEqual(before.map((x) => x.id).sort())
+    expect(after.every((x) => x.set_rarity_code === replaced.id && x.missing_from_api === 0)).toBe(
+      true
+    )
+    expect(
+      db.prepare('SELECT printing_id, quantity FROM collection_entries WHERE uid = ?').get('u1')
+    ).toEqual({ printing_id: first.id, quantity: 2 })
+  })
+
+  it('an image that moves to another oracle id leaves a note', () => {
+    const p = plain()
+    write([p])
+    const other = OBJECTS.find((o) => o.oracle_id !== p.oracle_id && o.oracle_id)!
+    const r = write([clone(p, { oracle_id: other.oracle_id })])
+    expect(r.notes).toContain(
+      `Magic image moved card: ${p.id} ${p.oracle_id} -> ${other.oracle_id}`
+    )
+  })
+
   it('leaves every ygo, pkm and op row byte-identical', () => {
     const before = catalogHashes(db, 'mtg')
     expect(Object.keys(before)).toContain('pokemon_cards')

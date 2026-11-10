@@ -9,6 +9,7 @@ describe('admin page', () => {
     expect(html).toContain("fetch('/admin/testers'")
     // The panel lists the testers-only game, and its script stays free of inline handlers.
     expect(html).toContain('"name":"One Piece"')
+    expect(html).toContain('"name":"Magic"')
     expect(html).not.toMatch(/ on(click|submit)=/)
   })
 

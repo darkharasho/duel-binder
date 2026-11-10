@@ -87,6 +87,27 @@ describe('desktop admin pages', () => {
     await waitFor(() => expect(admin.stats).toHaveBeenCalledTimes(2))
   })
 
+  it('adds a tester for Magic', async () => {
+    const admin = adminApi()
+    const api = createMockApi({
+      window: { platform: 'linux' },
+      account: { status: vi.fn(async () => status(true)) }
+    })
+    api.admin = admin
+    renderWithProviders(<App />, { api })
+    const group = await screen.findByRole('group', { name: 'Admin' })
+    await userEvent.click(within(group).getByRole('button', { name: 'Admin' }))
+    await userEvent.click(await screen.findByRole('radio', { name: 'Testers' }))
+    await screen.findByText('@kaiba')
+    await userEvent.click(screen.getByRole('combobox', { name: 'Game' }))
+    await userEvent.click(await screen.findByRole('option', { name: 'Magic' }))
+    await userEvent.type(screen.getByRole('textbox', { name: 'Username' }), 'yugi')
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }))
+    await waitFor(() =>
+      expect(admin.addTester).toHaveBeenCalledExactlyOnceWith('mtg', 'username', 'yugi')
+    )
+  })
+
   it('adds and removes testers', async () => {
     const admin = adminApi()
     const api = createMockApi({

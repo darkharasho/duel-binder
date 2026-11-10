@@ -1,4 +1,4 @@
-import { useEffect, useRef, type RefObject } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { SCAN_ZOOM_MAX, SCAN_ZOOM_STEP } from '@shared/scanWindow'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -8,6 +8,9 @@ import { SmoothVideo } from './SmoothVideo'
 import { statusText } from './scanText'
 import type { CameraError } from './useCamera'
 import type { ScanLoop } from './useScanLoop'
+
+/** How long the preview's box must keep a new size before its video element is replaced. */
+const RESIZE_SETTLE_MS = 150
 
 /**
  * The camera preview with the card outline drawn over it and the scan status along its bottom,
@@ -32,6 +35,7 @@ export function ScanViewport({
   smooth = false,
   status,
   videoKey,
+  freshOnResize = false,
   children
 }: {
   videoRef: RefObject<HTMLVideoElement | null>
@@ -51,6 +55,13 @@ export function ScanViewport({
    * overlay came and went.
    */
   videoKey?: string
+  /**
+   * Give the preview a new video element, keeping its stream, whenever the box settles at a new
+   * size. iOS keeps drawing a camera's picture at the size its element had when the picture
+   * started, a small box in black once the preview grows (the phone's preview is sized by the
+   * room left around it).
+   */
+  freshOnResize?: boolean
   children?: React.ReactNode
 }): React.JSX.Element {
   const outline = loop.outline
@@ -59,6 +70,44 @@ export function ScanViewport({
   useEffect(() => {
     zoomNow.current = { zoom, onZoom }
   })
+  const [resizes, setResizes] = useState(0)
+  const keptStream = useRef<MediaProvider | null>(null)
+  useEffect(() => {
+    const box = boxRef.current
+    if (!box || !freshOnResize || typeof ResizeObserver === 'undefined') return
+    let last: string | null = null
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const observer = new ResizeObserver((entries) => {
+      const rect = entries[0]?.contentRect
+      if (!rect) return
+      const size = `${Math.round(rect.width)}x${Math.round(rect.height)}`
+      // The first report is the size the element started at, not a change.
+      if (last === null || size === last) {
+        last = size
+        return
+      }
+      last = size
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        keptStream.current = videoRef.current?.srcObject ?? null
+        setResizes((n) => n + 1)
+      }, RESIZE_SETTLE_MS)
+    })
+    observer.observe(box)
+    return () => {
+      observer.disconnect()
+      clearTimeout(timer)
+    }
+  }, [freshOnResize, videoRef])
+  // The new element takes the old one's stream before it paints.
+  useLayoutEffect(() => {
+    const video = videoRef.current
+    const stream = keptStream.current
+    keptStream.current = null
+    if (!video || !stream || video.srcObject) return
+    video.srcObject = stream
+    void video.play?.()?.catch(() => undefined)
+  }, [resizes, videoRef])
   const zoomable = !!onZoom
   // Not React's onWheel: that listener is passive, so it couldn't stop the page zooming too.
   useEffect(() => {
@@ -96,7 +145,7 @@ export function ScanViewport({
               <SmoothVideo videoRef={videoRef} className="h-full w-full" />
             ) : (
               <video
-                key={videoKey}
+                key={`${videoKey ?? ''}:${resizes}`}
                 ref={videoRef}
                 autoPlay
                 muted

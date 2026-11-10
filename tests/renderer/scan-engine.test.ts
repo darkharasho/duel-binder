@@ -110,6 +110,8 @@ describe('createScanEngine', () => {
     })
     const engine = createScanEngine({ api, makeWorker: () => worker })
     await engine.init(null)
+    // The reader started at init (a read of nothing) is not a read of this frame.
+    vi.mocked(api.ocr).mockClear()
 
     const quiet = await engine.analyze(frame(), { candidates: null, wantText: false })
     expect(quiet).toEqual({
@@ -164,6 +166,9 @@ describe('createScanEngine', () => {
     const { worker } = fakeWorker(signals)
     const engine = createScanEngine({ api, makeWorker: () => worker })
     await engine.init(null)
+    // The reader started at init (a read of nothing) is not a read of this frame.
+    vi.mocked(api.ocr).mockClear()
+    order.length = 0
     const seen: FrameSignals[] = []
     const read = await engine.analyze(frame(), {
       candidates: null,
@@ -200,6 +205,20 @@ describe('createScanEngine', () => {
     expect(api.ocr).toHaveBeenCalledWith([band(7), band(8), band(9)], 'name')
   })
 
+  it('starts the text reader at init, so the first card read does not wait for it', async () => {
+    const api = createMockApi().scan
+    const { worker } = fakeWorker(NO_CARD)
+    await createScanEngine({ api, makeWorker: () => worker }).init(null)
+    expect(api.ocr).toHaveBeenCalledWith([], 'code')
+    const pkm = createMockApi().scan
+    await createScanEngine({
+      api: pkm,
+      makeWorker: () => fakeWorker(NO_CARD).worker,
+      game: 'pkm'
+    }).init(null)
+    expect(pkm.ocr).toHaveBeenCalledWith([], 'number')
+  })
+
   it('codesOnly reads the code bands and leaves the names unread', async () => {
     const api = createMockApi().scan
     vi.mocked(api.ocr).mockImplementation(async (bands) => bands.map(() => 'OP05-119SEC2'))
@@ -215,6 +234,8 @@ describe('createScanEngine', () => {
     })
     const engine = createScanEngine({ api, makeWorker: () => worker, game: 'op' })
     await engine.init(null)
+    // The reader started at init (a read of nothing) is not a read of this frame.
+    vi.mocked(api.ocr).mockClear()
     const read = await engine.analyze(frame(), {
       candidates: null,
       wantText: true,

@@ -24,6 +24,7 @@ import { api } from '@/lib/api'
 import { useGame } from '@/lib/game'
 import { APP_PLATFORM, isNativeApp } from '@/lib/portal'
 import { GAMES, type GameId } from '@shared/games'
+import { MAGIC_FAN_CONTENT, SCRYFALL_CREDIT } from '@shared/legal'
 import { PRIVACY_URL, SIGN_OUT_FAILED, cardDataAge, signOutWarning } from './copy'
 import { CATALOG_KEY, SYNC_STATE_KEY, displayName, usePhone } from './context'
 import { SYNC_FIRST, linkableProviders, linkSignIn, syncedFirst } from './linking'
@@ -326,6 +327,12 @@ export function Settings({
           </Row>
         </Group>
         <ScreenDetails />
+        {available.includes('mtg') && (
+          <div className="space-y-1 px-1 text-xs text-muted-foreground">
+            <p>{MAGIC_FAN_CONTENT}</p>
+            <p>{SCRYFALL_CREDIT}</p>
+          </div>
+        )}
       </section>
 
       <section aria-label="Delete account" className="flex justify-center pt-2">

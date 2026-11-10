@@ -20,6 +20,9 @@ type GameKey =
   | 'opRarities'
   | 'opVersions'
   | 'opBlocks'
+  | 'mtgColors'
+  | 'mtgTypes'
+  | 'mtgFinishes'
 export type ListKey = GameKey | 'setNames' | 'rarities'
 
 /** The part of a page's filters the card facets and ranges read and write. */
@@ -41,7 +44,10 @@ const GAME_KEYS: readonly string[] = [
   'opTraits',
   'opRarities',
   'opVersions',
-  'opBlocks'
+  'opBlocks',
+  'mtgColors',
+  'mtgTypes',
+  'mtgFinishes'
 ] satisfies GameKey[]
 
 /** The pages' own names for some of the games' filters. */
@@ -168,7 +174,7 @@ export const HIDDEN_SORTS: Record<GameId, readonly string[]> = {
   ygo: ['hp', 'cost', 'power'],
   pkm: ['atk', 'def', 'level', 'cost', 'power'],
   op: ['atk', 'def', 'level', 'hp'],
-  // Cost and Power stay hidden until Magic has the columns to sort on (step 2).
+  // Cost and Power are One Piece's; Magic has no sort on them.
   mtg: ['atk', 'def', 'level', 'hp', 'cost', 'power']
 }
 

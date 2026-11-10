@@ -7,6 +7,7 @@ import { setType } from '@shared/setTypes'
 import type { BinderCard, CardRow } from '@shared/types'
 import { rarityColor } from '@/lib/rarityColors'
 import { facetsFor } from '@/lib/filters'
+import { rangeFilters } from '@/lib/rangeFilters'
 import { CardPlaceholder } from '@/components/CardPlaceholder'
 import { CardArt } from '@/components/CardArt'
 import { CardDetails } from '@/components/CardDetails'
@@ -69,6 +70,24 @@ describe('filters on Magic', () => {
   })
 })
 
+describe('the Magic filter panel', () => {
+  it('lists its own facets and ranges, and no Set type', () => {
+    expect(facetsFor(GAMES.mtg).map((f) => f.label)).toEqual([
+      'Color',
+      'Type',
+      'Finish',
+      'Set',
+      'Rarity'
+    ])
+    expect(rangeFilters(GAMES.mtg.filters).map((f) => f.label)).toEqual([
+      'Mana value',
+      'Power',
+      'Toughness'
+    ])
+    expect(GAMES.mtg.filters.map((f) => f.label)).not.toContain('Set type')
+  })
+})
+
 describe('binder type sort on Magic', () => {
   const slot = (name: string, frameType: string): BinderCard =>
     ({
@@ -121,12 +140,13 @@ describe('CardDetails on Magic', () => {
         power: '4',
         toughness: '4',
         loyalty: null,
-        defense: null
+        defense: null,
+        artist: 'Greg Staples'
       }
     } as unknown as CardRow
     renderWithProviders(
       <GameProvider>
-        <CardDetails card={card} printing={{ setCode: 'M15-33', setRarity: 'Rare' }} />
+        <CardDetails card={card} printing={{ setCode: 'M15 33', setRarity: 'Rare' }} />
       </GameProvider>,
       {
         api: createMockApi({
@@ -141,5 +161,8 @@ describe('CardDetails on Magic', () => {
     await fact('Mana cost', '{3}{W}{W}')
     await fact('Power', '4')
     await fact('Rarity', 'Rare')
+    await fact('Artist', 'Greg Staples')
+    await fact('Set & number', 'M15 33')
+    expect(screen.getAllByText('Set & number')).toHaveLength(1)
   })
 })

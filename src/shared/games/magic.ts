@@ -3,6 +3,36 @@ import type { GameDef } from './types'
 
 export const MTG_RARITIES = ['Common', 'Uncommon', 'Rare', 'Mythic', 'Special', 'Bonus'] as const
 
+/** Card types `mtg_cards.types` can hold, in the order they are listed; `cards.type` is the first present. */
+export const MTG_CARD_TYPES = [
+  'Artifact',
+  'Battle',
+  'Creature',
+  'Enchantment',
+  'Instant',
+  'Kindred',
+  'Land',
+  'Planeswalker',
+  'Sorcery',
+  'Tribal',
+  'Token',
+  'Emblem',
+  'Dungeon',
+  'Conspiracy',
+  'Plane',
+  'Phenomenon',
+  'Scheme',
+  'Vanguard'
+] as const
+
+export const MTG_COLOR_NAMES = {
+  W: 'White',
+  U: 'Blue',
+  B: 'Black',
+  R: 'Red',
+  G: 'Green'
+} as const
+
 export const MAGIC: GameDef = {
   id: 'mtg',
   name: 'Magic',
@@ -18,19 +48,16 @@ export const MAGIC: GameDef = {
     rarity: 'Rarity',
     regionLabel: (lang) => languageInfo(lang).label
   },
-  // Stubs: the page filters ignore keys they have no field or SQL for (facetsFor reads GAME_KEYS,
-  // rangeFilters reads RANGE_FIELDS). Step 2 wires the fields and the SQL.
+  // Rarity is the shared Rarity facet, which on Magic lists base rarities (finish apart).
   filters: [
     { key: 'mtgColors', label: 'Color', kind: 'multi' },
     { key: 'mtgTypes', label: 'Type', kind: 'multi' },
-    { key: 'mtgRarities', label: 'Rarity', kind: 'multi' },
     { key: 'mtgFinishes', label: 'Finish', kind: 'multi' },
-    { key: 'mtgSetTypes', label: 'Set type', kind: 'multi' },
     { key: 'manaValue', label: 'Mana value', kind: 'range' },
     { key: 'mtgPower', label: 'Power', kind: 'range' },
     { key: 'mtgToughness', label: 'Toughness', kind: 'range' }
   ],
-  // Keys mirror the mtg_cards columns (Task 2).
+  // Keys mirror the mtg_cards columns; the printing's Set & number comes from the printing itself.
   details: [
     { key: 'typeLine', label: 'Type' },
     { key: 'manaCost', label: 'Mana cost' },
@@ -41,7 +68,22 @@ export const MAGIC: GameDef = {
     { key: 'toughness', label: 'Toughness' },
     { key: 'loyalty', label: 'Loyalty' },
     { key: 'defense', label: 'Defense' },
-    { key: 'artist', label: 'Artist' },
-    { key: 'setNumber', label: 'Set & number' }
+    { key: 'artist', label: 'Artist' }
   ]
 }
+
+/** A Magic printing's finish, read from its rarity text (`Rare (Foil)`, `Mythic (Etched Foil)`). */
+export function finishOf(setRarity: string): 'nonfoil' | 'foil' | 'etched' {
+  if (setRarity.endsWith(' (Etched Foil)')) return 'etched'
+  if (setRarity.endsWith(' (Foil)')) return 'foil'
+  return 'nonfoil'
+}
+
+/** SQL for a Magic printing's finish ('Nonfoil', 'Foil', 'Etched Foil') from the rarity text in `col`. */
+export const mtgFinishSql = (col: string): string =>
+  `CASE WHEN ${col} LIKE '% (Etched Foil)' THEN 'Etched Foil' WHEN ${col} LIKE '% (Foil)' THEN 'Foil' ELSE 'Nonfoil' END`
+
+/** SQL for a Magic printing's base rarity: the rarity text in `col` without its finish suffix. */
+export const mtgBaseRaritySql = (col: string): string =>
+  `CASE WHEN ${col} LIKE '% (Etched Foil)' THEN substr(${col}, 1, length(${col}) - 14)
+        WHEN ${col} LIKE '% (Foil)' THEN substr(${col}, 1, length(${col}) - 7) ELSE ${col} END`

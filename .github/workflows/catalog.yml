@@ -104,6 +104,15 @@ jobs:
           path: catalog-work/fingerprints-op.sqlite
           key: catalog-fpop-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: catalog-fpop-
+      # Magic's set stats: their own cache, for the same reason (nothing starts with catalog-mtg elsewhere).
+      - name: Restore Magic sources
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            catalog-work/magic-src.sqlite
+            catalog-work/magic-src.sqlite-wal
+          key: catalog-mtg-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: catalog-mtg-
       - name: Restore base snapshot
         uses: actions/cache/restore@v4
         with:
@@ -128,6 +137,15 @@ jobs:
         run: npm run catalog:job -- --stage onepiece
       - name: Flag a failed One Piece step
         if: steps.onepiece.outcome == 'failure'
+        run: echo "CATALOG_PROBLEMS=1" >> "$GITHUB_ENV"
+      # Reads Scryfall's whole default_cards file (about 500 MB). Bounded and never blocks the upload.
+      - name: Refresh Magic
+        id: magic
+        timeout-minutes: 60
+        continue-on-error: true
+        run: npm run catalog:job -- --stage magic
+      - name: Flag a failed Magic step
+        if: steps.magic.outcome == 'failure'
         run: echo "CATALOG_PROBLEMS=1" >> "$GITHUB_ENV"
       - name: Upload catalog
         run: >-
@@ -200,6 +218,14 @@ jobs:
         with:
           path: catalog-work/fingerprints-op.sqlite
           key: catalog-fpop-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Save Magic sources
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            catalog-work/magic-src.sqlite
+            catalog-work/magic-src.sqlite-wal
+          key: catalog-mtg-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Save base snapshot
         if: success()
         uses: actions/cache/save@v4

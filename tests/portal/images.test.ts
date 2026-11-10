@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import type Database from 'better-sqlite3'
-import { onePieceImageId, tokenId } from '../../src/shared/games/ids'
+import { mtgImageId, onePieceImageId, tokenId } from '../../src/shared/games/ids'
 import {
   BULBAGARDEN_IMAGE_PREFIX,
   HAND_ART_PREFIX,
@@ -256,11 +256,22 @@ describe('image route', () => {
     })
 
     it('404s ids outside the Pokédex and odd paths', async () => {
-      await bucket.put('sprite/1025.png', PNG.buffer, { httpMetadata: { contentType: 'image/png' } })
+      await bucket.put('sprite/1025.png', PNG.buffer, {
+        httpMetadata: { contentType: 'image/png' }
+      })
       await bucket.put('sprite/0.png', PNG.buffer, { httpMetadata: { contentType: 'image/png' } })
-      await bucket.put('sprite/1026.png', PNG.buffer, { httpMetadata: { contentType: 'image/png' } })
+      await bucket.put('sprite/1026.png', PNG.buffer, {
+        httpMetadata: { contentType: 'image/png' }
+      })
       expect((await getAnon('sprite/1025')).status).toBe(200)
-      for (const p of ['sprite/0', 'sprite/1026', 'sprite/6/x', 'sprite/abc', 'sprite/06', 'sprite'])
+      for (const p of [
+        'sprite/0',
+        'sprite/1026',
+        'sprite/6/x',
+        'sprite/abc',
+        'sprite/06',
+        'sprite'
+      ])
         expect((await getAnon(p)).status).toBe(404)
     })
 
@@ -1328,11 +1339,44 @@ describe('mtg art', () => {
       deps
     )
 
-  it('an id with no stored art is a 404 and nothing is fetched', async () => {
+  const SCRY = '6e5e1c1b-0d4e-4c6e-9d2a-1d1f2b6a7c01'
+
+  it('Magic art: an R2 miss fetches Scryfall and stores it', async () => {
+    const res = await get(`small/${ids[0]}`)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toBe('image/jpeg')
+    expect(bucket.store.has(`card/small/${ids[0]}`)).toBe(true)
+    expect(upstream.mock.calls[0][0]).toBe(`https://cards.scryfall.io/normal/front/6/e/${SCRY}.jpg`)
+  })
+
+  it('Magic art: full fetches large, cropped fetches the small copy', async () => {
+    expect((await get(`full/${ids[0]}`)).status).toBe(200)
+    expect(bucket.store.has(`card/full/${ids[0]}`)).toBe(true)
+    expect(upstream.mock.calls[0][0]).toBe(`https://cards.scryfall.io/large/front/6/e/${SCRY}.jpg`)
+    expect((await get(`cropped/${ids[0]}`)).status).toBe(200)
+    expect(upstream.mock.calls[1][0]).toBe(`https://cards.scryfall.io/normal/front/6/e/${SCRY}.jpg`)
+  })
+
+  it('an unknown Magic image is a 404 with no fetch', async () => {
+    const unknown = mtgImageId('6e5e1c1b-0d4e-4c6e-9d2a-1d1f2b6a7c99')
     for (const size of ['small', 'full', 'cropped']) {
-      expect((await get(`${size}/${ids[0]}`)).status).toBe(404)
+      expect((await get(`${size}/${unknown}`)).status).toBe(404)
     }
     expect(upstream).not.toHaveBeenCalled()
+  })
+
+  it('anonymous Magic art is served within the per-IP quota', async () => {
+    deps.anonImageQuota = createImageQuota<string>(() => 0, { limit: 1, windowMs: 3_600_000 })
+    expect((await get(`small/${ids[0]}`)).status).toBe(200)
+    expect((await get(`small/${ids[1]}`)).status).toBe(429)
+  })
+
+  it('a Scryfall 404 is a 404 and is remembered', async () => {
+    deps.anonMisses = createMissCache(() => 0, { ttlMs: 3_600_000, maxKeys: 100 })
+    upstream.mockResolvedValueOnce(new Response('nope', { status: 404 }))
+    expect((await get(`small/${ids[0]}`)).status).toBe(404)
+    expect((await get(`small/${ids[0]}`)).status).toBe(404)
+    expect(upstream).toHaveBeenCalledTimes(1)
   })
 
   it('serves stored art, cropped as the small copy', async () => {

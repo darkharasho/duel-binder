@@ -647,7 +647,7 @@ export function createTcgProductResolver(
      JOIN cards c ON c.id = p.card_id WHERE p.id = ? AND p.language = 'en'`
   )
   const sharedCode = db.prepare(
-    `SELECT 1 FROM card_printings p WHERE p.set_code = ? COLLATE NOCASE AND p.language = 'en' AND p.card_id <> (
+    `SELECT 1 FROM card_printings p WHERE p.set_code = ? COLLATE NOCASE AND p.language = 'en' AND +p.game = 'ygo' AND p.card_id <> (
        SELECT card_id FROM card_printings WHERE id = ?
      ) LIMIT 1`
   )

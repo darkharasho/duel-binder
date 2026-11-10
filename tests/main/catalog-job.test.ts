@@ -28,6 +28,7 @@ import {
 import { ART_BUDGET } from '../../scripts/catalog/onepiece/art'
 import type { PokemonReport } from '../../scripts/catalog/pokemon'
 import fixture from '../fixtures/cardinfo.sample.json'
+import { seedMagic } from '../fixtures/magic'
 import { seedOnePiece } from '../fixtures/onePiece'
 
 /** The job with Pokémon and One Piece steps that do nothing, so no test reaches the live sources. */
@@ -36,6 +37,7 @@ const runJob = (o: JobOptions): ReturnType<typeof runRealJob> =>
     pokemon: async () => ({ reports: [], error: null }),
     onePiece: async () => ({ report: null, error: null, problems: [] }),
     onePieceJapanese: async () => ({ report: null, error: null, problems: [] }),
+    magic: async () => ({ report: null, error: null, problems: [] }),
     ...o
   })
 
@@ -255,6 +257,23 @@ describe('refreshCatalog', () => {
     })
     expect(second).toEqual({ changed: false })
     expect([ygo.calls.length, wiki.calls.length, webFetch.mock.calls.length]).toEqual(calls)
+    db.close()
+  })
+  it('Magic rows alone do not count as stored Yu-Gi-Oh! cards when deciding to read the other-language sets', async () => {
+    vi.stubGlobal('fetch', webFetch)
+    const db = openDatabase(':memory:')
+    seedMagic(db)
+    const wiki = fakeYugipedia()
+    const empty = fakeYgo()
+    empty.client.fetchCardInfo = async () => []
+    await refreshCatalog(db, {
+      client: empty.client,
+      yugipedia: wiki.client,
+      version: '0.0.0-test',
+      now: () => NOW
+    })
+    expect(wiki.calls).not.toContain('listSetListTitles')
+    expect(getMeta(db, 'intl_sets_synced_at')).toBeNull()
     db.close()
   })
   it('the nightly job keeps TCGplayer prices for every set and matches them to printings', async () => {
@@ -1134,7 +1153,8 @@ describe('One Piece step in the nightly job', () => {
       token: TOKEN,
       fetch,
       pokemon: async () => ({ reports: [], error: null }),
-      onePieceJapanese: async () => ({ report: null, error: null, problems: [] })
+      onePieceJapanese: async () => ({ report: null, error: null, problems: [] }),
+      magic: async () => ({ report: null, error: null, problems: [] })
     })
     expect(out.problems).toHaveLength(1)
     expect(out.problems[0]).toMatch(/^One Piece refresh skipped: .*not a database/i)
@@ -1297,5 +1317,117 @@ describe('One Piece step in the nightly job', () => {
     work.close()
     expect(rowsOf(second.calls, 'card_printings').filter((r) => r['game'] === 'op')).toEqual([])
     expect(second.calls.flatMap((c) => (c.body.keys ?? []) as unknown[])).toEqual([])
+  })
+})
+
+describe('Magic step in the nightly job', () => {
+  /** A fake mtg step that seeds the fixture's mtg rows once. */
+  const seeding = async (
+    work: Database.Database
+  ): Promise<{ report: null; error: null; problems: string[] }> => {
+    if (!work.prepare("SELECT 1 FROM cards WHERE game = 'mtg'").get()) seedMagic(work)
+    return { report: null, error: null, problems: [] }
+  }
+  const common = (): Partial<JobOptions> => ({
+    dir,
+    imageFetch: noImages,
+    checkAccuracy: passing,
+    refresh: async () => {},
+    log: () => {}
+  })
+  async function ygoAndPkm(): Promise<void> {
+    const work = await workDb()
+    addPokemon(work)
+    work.close()
+  }
+
+  it('a failed mtg step is a problem; the others still upload', async () => {
+    await ygoAndPkm()
+    const { fetch, calls } = recordingFetch(ok)
+    const out = await runJob({
+      ...common(),
+      dir,
+      url: URL_BASE,
+      token: TOKEN,
+      fetch,
+      magic: async () => ({ report: null, error: 'boom', problems: ['M15 priced share fell'] })
+    })
+    expect(out.problems).toEqual(['Magic refresh skipped: boom', 'M15 priced share fell'])
+    expect(calls.map((c) => c.path)).toContain('/admin/catalog/finish')
+    const games = new Set(
+      calls
+        .filter((c) => c.body.table === 'card_printings')
+        .flatMap((c) => (c.body.rows ?? []) as Record<string, unknown>[])
+        .map((r) => r['game'])
+    )
+    expect([...games].sort()).toEqual(['pkm', 'ygo'])
+  })
+
+  it('a step that throws is a problem too', async () => {
+    await ygoAndPkm()
+    const out = await runJob({
+      ...common(),
+      dir,
+      dryRun: true,
+      magic: async () => {
+        throw new Error('file is not a database')
+      }
+    })
+    expect(out.problems).toEqual(['Magic refresh skipped: file is not a database'])
+  })
+
+  it('skipMagic leaves the step out', async () => {
+    await ygoAndPkm()
+    const magic = vi.fn(seeding)
+    await runJob({ ...common(), dir, dryRun: true, skipMagic: true, magic })
+    expect(magic).not.toHaveBeenCalled()
+  })
+
+  it('--stage magic runs it alone', async () => {
+    await ygoAndPkm()
+    const refresh = vi.fn(async () => {})
+    const pokemon = vi.fn(async () => ({ reports: [], error: null }))
+    const onePiece = vi.fn(async () => ({ report: null, error: null, problems: [] }))
+    const magic = vi.fn(seeding)
+    const upload = vi.fn(async () => Response.json({ ok: true }))
+    const out = await runJob({
+      ...common(),
+      dir,
+      url: URL_BASE,
+      token: TOKEN,
+      fetch: upload as never,
+      refresh,
+      pokemon,
+      onePiece,
+      magic,
+      stage: 'magic'
+    })
+    expect(out.problems).toEqual([])
+    expect([
+      magic.mock.calls.length,
+      onePiece.mock.calls.length,
+      refresh.mock.calls.length,
+      pokemon.mock.calls.length
+    ]).toEqual([1, 0, 0, 0])
+    expect(upload).not.toHaveBeenCalled()
+    const work = openDatabase(join(dir, 'work.sqlite'))
+    expect(count(work, "card_printings WHERE game = 'mtg'")).toBeGreaterThan(0)
+    work.close()
+  })
+
+  it('the mtg step adds only mtg rows to the diff', async () => {
+    await ygoAndPkm()
+    const without = await runJob({ ...common(), dir, dryRun: true, skipMagic: true })
+    const withMtg = await runJob({ ...common(), dir, dryRun: true, magic: seeding })
+    const others = (c: Record<string, unknown> | null): Record<string, unknown> =>
+      Object.fromEntries(
+        Object.entries(c ?? {}).filter(
+          ([k]) => k.endsWith(':ygo') || k.endsWith(':pkm') || k.endsWith(':op')
+        )
+      )
+    expect(Object.keys(others(withMtg.counts)).length).toBeGreaterThan(0)
+    expect(others(withMtg.counts)).toEqual(others(without.counts))
+    expect(withMtg.counts?.['cards:mtg']).toEqual({ upserts: 1, deletes: 0 })
+    expect(without.counts?.['cards:mtg']).toEqual({ upserts: 0, deletes: 0 })
   })
 })

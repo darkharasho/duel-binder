@@ -78,7 +78,8 @@ export const BANDAI_ID_RE = /^[A-Z]+[0-9]*-[0-9]{3}(_[a-z][0-9]{1,2})?$/
  */
 export function opBandaiArtUrl(key: string): string | null {
   if (BANDAI_ID_RE.test(key)) return `${BANDAI_EN_IMAGE_PREFIX}${key}.png`
-  if (key.startsWith('ja:') && BANDAI_ID_RE.test(key.slice(3))) return `${BANDAI_JA_IMAGE_PREFIX}${key.slice(3)}.png`
+  if (key.startsWith('ja:') && BANDAI_ID_RE.test(key.slice(3)))
+    return `${BANDAI_JA_IMAGE_PREFIX}${key.slice(3)}.png`
   return null
 }
 /**
@@ -92,4 +93,15 @@ export function opTcgArtUrl(key: string, size: 'small' | 'full'): string | null 
   const m = OP_TCG_ART_RE.exec(key)
   if (!m) return null
   return `${TCGPLAYER_PACK_PREFIX}${m[1]}_${size === 'full' ? 'in_1000x1000' : '200w'}.jpg`
+}
+
+/** Scryfall's image host; the only one the portal fetches Magic art from. */
+export const SCRYFALL_IMAGE_PREFIX = 'https://cards.scryfall.io/'
+const SCRYFALL_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+
+/** Scryfall's whole front-face picture of a card object at `size`; null unless `scryfallId` is a uuid. */
+export function scryfallArtUrl(scryfallId: string, size: 'small' | 'full'): string | null {
+  const id = scryfallId.toLowerCase()
+  if (!SCRYFALL_ID_RE.test(id)) return null
+  return `${SCRYFALL_IMAGE_PREFIX}${size === 'small' ? 'normal' : 'large'}/front/${id[0]}/${id[1]}/${id}.jpg`
 }

@@ -9,6 +9,7 @@ import {
 import { runSync } from '../../src/main/sync/sync'
 import type { YgoClient } from '../../src/main/ygo/client'
 import type { ApiCard } from '../../src/main/ygo/mapCard'
+import { seedMagic } from '../fixtures/magic'
 import fixture from '../fixtures/cardinfo.sample.json'
 import { printingImageKey } from '../../src/main/images/cache'
 import { createPrintingArtResolver } from '../../src/main/yugipedia/artResolver'
@@ -121,6 +122,26 @@ describe('TCGplayer catalog', () => {
         product(2, 'LOB-EN005', 'Super Rare')
       ])
     ).toBeNull()
+  })
+
+  it("a Magic printing with a ygo printing's code does not make that code shared", async () => {
+    const db = await seededDb()
+    const row = db
+      .prepare(
+        "SELECT id, set_rarity FROM card_printings WHERE set_code = 'LOB-EN005' AND language = 'en'"
+      )
+      .get() as { id: number; set_rarity: string }
+    const { printingIds } = seedMagic(db)
+    db.prepare("UPDATE card_printings SET set_code = 'LOB-EN005' WHERE id = ?").run(printingIds[0])
+    await refreshTcgCatalog(db, {
+      version: '1',
+      fetchFn: catalogFetch([{ groupId: 10, modifiedOn: 'a' }], {
+        10: [product(1, 'LOB-EN005', row.set_rarity, 1, 'Not This Card')]
+      }) as unknown as typeof fetch
+    })
+    expect(createTcgplayerLookup(db)(row.id)).toBe(
+      'https://tcgplayer-cdn.tcgplayer.com/product/1_in_1000x1000.jpg'
+    )
   })
 
   it('a code two cards share gives each only the product named for it', async () => {

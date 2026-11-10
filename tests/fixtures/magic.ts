@@ -51,9 +51,9 @@ export function seedMagic(db: SqlDb): {
        VALUES ('mtg', ?, 'en', ?, ?, ?)`
     )
     for (const [code, rarity] of [
-      ['M15-33', 'Rare'],
-      ['M15-33', 'Rare (Foil)'],
-      ['M15-34', 'Rare']
+      ['M15 33', 'Rare'],
+      ['M15 33', 'Rare (Foil)'],
+      ['M15 34', 'Rare']
     ]) {
       printingIds.push(Number(printing.run(cardId, SET_NAME, code, rarity).lastInsertRowid))
     }

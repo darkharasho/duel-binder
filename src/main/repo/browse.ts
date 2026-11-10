@@ -6,6 +6,8 @@ import { buildFtsQuery, escapeLike } from './cards'
 import { LOCAL, favouriteSql, scopeGame, type Scope } from './scope'
 import { pokemonFacets, pokemonSearch, pokemonWhere } from './pkmFilters'
 import { onePieceFacets, onePieceWhere, opRarityWhere, opVersionWhere } from './opFilters'
+import { magicFacets, magicWhere, mtgFinishWhere } from './mtgFilters'
+import { mtgBaseRaritySql } from '../../shared/games/magic'
 import { catalogRollup } from './rollup'
 
 const MAX_LIMIT = 200
@@ -181,8 +183,21 @@ function whereClause(
       inList('c.race', f.races)
       inList('c.archetype', f.archetypes)
     },
-    // Step 1: Magic has only the shared filters below (set, rarity, language…); step 2 adds its own.
-    mtg: () => {}
+    mtg: () => {
+      const m = magicWhere(f)
+      if (m) {
+        where.push(m.sql)
+        params.push(...m.args)
+      }
+      // Finish is a printing's, on the language filter like the other printing filters.
+      const fin = mtgFinishWhere(f.mtgFinishes, 'set_rarity')
+      if (fin) {
+        where.push(
+          `c.id IN (SELECT card_id FROM card_printings WHERE +game = ${scope.game} AND contributed = 0${lang} AND ${fin.sql})`
+        )
+        params.push(...fin.args)
+      }
+    }
   })()
   const printingFilter = (col: string, values?: string[]): void => {
     if (!values?.length) return
@@ -194,7 +209,14 @@ function whereClause(
     params.push(...values)
   }
   printingFilter('set_name', f.setNames)
-  if (f.rarities?.length) {
+  if (f.rarities?.length && game === 'mtg') {
+    // Magic's rarity is the base rarity: Rare also takes the foil and etched printings.
+    where.push(
+      `c.id IN (SELECT card_id FROM card_printings WHERE +game = ${scope.game} AND contributed = 0${lang}
+         AND ${mtgBaseRaritySql('set_rarity')} IN (${f.rarities.map(() => '?').join(',')}))`
+    )
+    params.push(...f.rarities)
+  } else if (f.rarities?.length) {
     // The stored rarity narrows by its index first; the label then picks the variant.
     const stored = storedRarities(f.rarities)
     where.push(
@@ -238,7 +260,7 @@ export function browseCards(db: SqlDb, f: BrowseFilters, scope: Scope = LOCAL): 
   // A rarity filter's printing comes first, so its photo shows on the tile (an overframe's art).
   const rarities = f.rarities?.length ? f.rarities : []
   const ofRarity = rarities.length
-    ? `(${rarityLabel('p')}) NOT IN (${rarities.map(() => '?').join(',')}), `
+    ? `(${scopeGame(db, scope) === 'mtg' ? mtgBaseRaritySql('p.set_rarity') : rarityLabel('p')}) NOT IN (${rarities.map(() => '?').join(',')}), `
     : ''
   // Art and the default printing are looked up only for the page, after sorting and limiting. With
   // every language, an English printing is preselected over the rest. Only a flagged Pokémon
@@ -325,7 +347,7 @@ export function browseFacets(db: SqlDb, scope: Scope = LOCAL, language?: Languag
     )
   const game = scopeGame(db, scope)
   const pkm = game === 'pkm'
-  // These four are Yu-Gi-Oh columns; 'pkm' and 'op' have their own facets below, 'mtg' none yet.
+  // These four are Yu-Gi-Oh columns; 'pkm', 'op' and 'mtg' have their own facets below.
   const ygo = game === 'ygo'
   return {
     cardTypes: ygo ? col('type') : [],
@@ -337,7 +359,7 @@ export function browseFacets(db: SqlDb, scope: Scope = LOCAL, language?: Languag
        ORDER BY set_name`
     ),
     rarities: distinct(
-      `SELECT DISTINCT ${rarityLabel('card_printings')} AS v FROM card_printings
+      `SELECT DISTINCT ${game === 'mtg' ? mtgBaseRaritySql('set_rarity') : rarityLabel('card_printings')} AS v FROM card_printings
        WHERE +game = ${scope.game} AND contributed = 0${lang} AND set_rarity <> ''
        ORDER BY v`
     ),
@@ -350,6 +372,9 @@ export function browseFacets(db: SqlDb, scope: Scope = LOCAL, language?: Languag
         .get(code)
     ),
     ...(pkm ? pokemonFacets(db, scope, null) : {}),
-    ...(game === 'op' ? onePieceFacets(db, scope, null) : {})
+    ...(game === 'op' ? onePieceFacets(db, scope, null) : {}),
+    ...(game === 'mtg'
+      ? magicFacets(db, scope, null, { language: isLanguage(language) ? language : undefined })
+      : {})
   }
 }

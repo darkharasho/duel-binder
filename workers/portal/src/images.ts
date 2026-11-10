@@ -2,6 +2,7 @@ import {
   isOpPackUrl,
   opBandaiArtUrl,
   opTcgArtUrl,
+  scryfallArtUrl,
   imageUrl,
   PACK_ART_PREFIX,
   SET_KEY_RE,
@@ -442,12 +443,15 @@ function resolve(deps: AppDeps, path: string): Target | null {
       }
     }
     if (game === 'mtg') {
-      // mtg: Scryfall source in step 2. Until then only art already in R2 is served; the source
-      // finds nothing, so an R2 miss is a 404 and no Magic id ever reaches another game's source.
-      if (!deps.db.prepare('SELECT 1 FROM mtg_images WHERE image_id = ?').get(n)) return null
+      // Magic art is shown whole (never cropped), so `cropped` is the small copy as in cardArtKey.
+      const row = deps.db
+        .prepare('SELECT scryfall_id FROM mtg_images WHERE image_id = ?')
+        .get(n) as { scryfall_id: string } | undefined
+      const url = row ? scryfallArtUrl(row.scryfall_id, kind === 'full' ? 'full' : 'small') : null
+      if (url === null) return null
       return {
         key: cardArtKey(kind, n),
-        source: async () => null,
+        source: fixed(url, { 'User-Agent': USER_AGENT }),
         cache: CARD_CACHE,
         anonymous: true
       }

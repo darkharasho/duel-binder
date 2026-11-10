@@ -3,14 +3,14 @@
  * desktop app does, uploads what changed since catalog-work/base.sqlite (the last snapshot the
  * portal accepted), then makes work the new base.
  *
- *   npm run catalog:job [-- --full | --dry-run | --allow-shrink | --refresh-sets | --refresh-cards | --no-pokemon | --no-onepiece | --no-onepiece-ja | --stage <name>]
+ *   npm run catalog:job [-- --full | --dry-run | --allow-shrink | --refresh-sets | --refresh-cards | --no-pokemon | --no-onepiece | --no-onepiece-ja | --no-magic | --stage <name>]
  *
  * Env: PORTAL_URL, PORTAL_ADMIN_TOKEN (not needed for --dry-run); ONEPIECE_ART_BUDGET (a positive
  * integer) replaces the One Piece step's nightly art download budget for one run. --full ignores the base and
  * uploads every row; --dry-run refreshes and prints per-table counts without uploading or
  * touching the base. A refresh that would delete more than a sliver of any table (see
  * `findShrinks`) is refused unless --allow-shrink is passed, since every client applies the
- * deletes. --no-pokemon skips the Pokémon step, --no-onepiece both One Piece ones, --no-onepiece-ja only the Japanese one. --refresh-sets re-reads the non-English set lists and Pokémon set art now instead of on their weekly timers. --refresh-cards reads the YGOPRODeck card list and the TCGplayer catalog now instead of on their daily and weekly timers.
+ * deletes. --no-pokemon skips the Pokémon step, --no-onepiece both One Piece ones, --no-onepiece-ja only the Japanese one, --no-magic the Magic step. --refresh-sets re-reads the non-English set lists and Pokémon set art now instead of on their weekly timers. --refresh-cards reads the YGOPRODeck card list and the TCGplayer catalog now instead of on their daily and weekly timers.
  * Problems that don't stop the upload (a failed card sync, a failed fingerprint build)
  * end the run with a non-zero exit so the workflow shows red. So does a fingerprint file that fails
  * the accuracy gate (see accuracy.ts), which is held back while clients keep the last one. Each
@@ -43,6 +43,7 @@ import { deletesByGame, diffTable, hasGameColumn } from './diff'
 import { ART_BUDGET } from './onepiece/art'
 import { logOnePiece, runOnePieceStep, type OnePieceReport } from './onepiece'
 import { logOnePieceJapanese, runOnePieceJapaneseStep, type JapaneseReport } from './onepiece/japanese'
+import { logMagic, runMagicStep, type MagicStepResult } from './magic'
 import { runPokemonStep, type PokemonReport } from './pokemon'
 import { refreshPokemonSetArt, shouldRefreshSetArt, warmSetArt } from './pokemon/setArt'
 import { buildFingerprints, uploadFingerprintRefs, uploadFingerprints } from './fingerprints'
@@ -95,6 +96,14 @@ export interface JobOptions {
   ) => Promise<{ report: JapaneseReport | null; error: string | null; problems: string[] }>
   /** Leaves only the Japanese One Piece step out (--no-onepiece-ja). */
   skipOnePieceJapanese?: boolean
+  /**
+   * Refreshes the English Magic catalog in the work database; defaults to `runMagicStep` over
+   * Scryfall's bulk file, with its set stats cached in magic-src.sqlite. A non-null `error` skips
+   * Magic for the night, and each of `problems` is a job problem.
+   */
+  magic?: (work: Database.Database) => Promise<MagicStepResult>
+  /** Leaves the Magic step out (--no-magic). */
+  skipMagic?: boolean
   /** Uploads deletes beyond the shrink limit. */
   allowShrink?: boolean
   /** Re-reads the non-English set lists now instead of waiting for their weekly timer. */
@@ -210,6 +219,7 @@ export const STAGES = [
   'ygo',
   'pokemon',
   'onepiece',
+  'magic',
   'upload',
   'fingerprints-ygo',
   'fingerprints-pkm',
@@ -419,6 +429,27 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
         if (jaOut.report) logOnePieceJapanese(jaOut.report, log)
       }
     }
+    if (on('magic') && !opts.skipMagic) {
+      const step =
+        opts.magic ??
+        ((w: Database.Database) => {
+          // Not async, so this rejects the whole job: a test that forgot to stub `magic` would
+          // otherwise download Scryfall's entire bulk file.
+          if (process.env['VITEST']) {
+            throw new Error('The default Magic step would download live Scryfall data; pass `magic` in tests')
+          }
+          return runMagicStep(w, { cachePath: join(opts.dir, 'magic-src.sqlite'), version, log })
+        })
+      // Whatever the step does, the other games still upload.
+      const out = await step(work).catch((e: unknown) => ({
+        report: null,
+        error: e instanceof Error ? e.message : String(e),
+        problems: [] as string[]
+      }))
+      if (out.error !== null) problem(`Magic refresh skipped: ${out.error}`)
+      for (const p of out.problems) problem(p)
+      if (out.report) logMagic(out.report, log)
+    }
     if (opts.stage && !on('upload')) {
       if (on('fingerprints-ygo')) await fingerprint(true, 'ygo')
       if (on('fingerprints-pkm')) await pokemonFingerprints(true)
@@ -511,7 +542,8 @@ async function main(): Promise<void> {
     '--refresh-cards',
     '--no-pokemon',
     '--no-onepiece',
-    '--no-onepiece-ja'
+    '--no-onepiece-ja',
+    '--no-magic'
   ]
   const at = args.indexOf('--stage')
   const stage = at < 0 ? undefined : (args.splice(at, 2)[1] as Stage)
@@ -530,6 +562,7 @@ async function main(): Promise<void> {
     skipPokemon: args.includes('--no-pokemon'),
     skipOnePiece: args.includes('--no-onepiece'),
     skipOnePieceJapanese: args.includes('--no-onepiece-ja'),
+    skipMagic: args.includes('--no-magic'),
     stage
   })
   for (const p of problems) console.log(`::error::${p}`)

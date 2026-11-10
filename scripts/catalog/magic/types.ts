@@ -61,6 +61,8 @@ export interface ScrySet {
   released_at?: string
   parent_set_code?: string
   set_type: string
+  /** The set's symbol, e.g. https://svgs.scryfall.io/sets/dsk.svg?1794200400 (the query is its version). */
+  icon_svg_uri?: string
 }
 
 export interface ScryfallSource {
@@ -68,4 +70,6 @@ export interface ScryfallSource {
   /** Every object in the bulk file, unfiltered, slimmed (see `slimCard`). */
   cards(downloadUri: string): AsyncIterable<ScryCard>
   sets(): Promise<ScrySet[]>
+  /** A set symbol's SVG text, from svgs.scryfall.io (see symbols.ts). */
+  symbolSvg(url: string): Promise<string>
 }

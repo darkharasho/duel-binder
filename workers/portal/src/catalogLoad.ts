@@ -7,9 +7,13 @@ import { putFingerprintRefs, putFingerprints, rollbackFingerprints } from './sca
 import { isAdmin } from './auth'
 import { collectStats } from './stats'
 import { collectErrors } from './errors'
-import { warmImage } from './images'
+import { isSetSymbolKey, missingSetSymbols, storeSetSymbol, warmImage } from './images'
+import { MAX_SYMBOL_PNG_BYTES } from '../../../src/shared/imageSources'
 
 const MAX_ITEMS = 5000
+/** Keys per /admin/img/set-symbols/missing request: each is an R2 read. */
+const MAX_SYMBOL_KEYS = 100
+const SYMBOLS_PATH = '/admin/img/set-symbols/'
 const META_KEYS: MetaKey[] = ['db_version', 'last_sync_at']
 
 const json = (body: unknown, status = 200): Response =>
@@ -200,6 +204,28 @@ export async function adminRoute(req: Request, deps: AppDeps): Promise<Response>
     if (!isObject(body) || typeof body.path !== 'string')
       return json({ error: 'Body must be { path }' }, 400)
     return json({ result: await warmImage(deps, body.path) })
+  }
+
+  // Magic set symbols, rasterized to PNG by the nightly job (scripts/catalog/magic/symbols.ts).
+  if (req.method === 'POST' && path === `${SYMBOLS_PATH}missing`) {
+    const body: unknown = await req.json().catch(() => null)
+    const keys = isObject(body) ? body.keys : null
+    if (
+      !Array.isArray(keys) ||
+      keys.length > MAX_SYMBOL_KEYS ||
+      !keys.every((k): k is string => typeof k === 'string' && isSetSymbolKey(k))
+    )
+      return json({ error: `Body must be { keys }: at most ${MAX_SYMBOL_KEYS} symbol keys` }, 400)
+    return json({ missing: await missingSetSymbols(deps, keys) })
+  }
+  if (req.method === 'PUT' && path.startsWith(SYMBOLS_PATH)) {
+    const key = path.slice(SYMBOLS_PATH.length)
+    if (!isSetSymbolKey(key)) return json({ error: 'Not a symbol key' }, 400)
+    if (Number(req.headers.get('content-length') ?? 0) > MAX_SYMBOL_PNG_BYTES)
+      return json({ error: 'too-large' }, 413)
+    const result = await storeSetSymbol(deps, key, await req.arrayBuffer())
+    const status = { stored: 200, 'not-png': 415, 'too-large': 413, failed: 500 }[result]
+    return json(result === 'stored' ? { result } : { error: result }, status)
   }
 
   const handlers: Record<string, (body: Record<string, unknown>) => void> = {

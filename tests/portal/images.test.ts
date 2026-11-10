@@ -6,6 +6,7 @@ import {
   HAND_ART_PREFIX,
   KONAMI_LOGO_PREFIX,
   PACK_ART_PREFIX,
+  MAX_SYMBOL_PNG_BYTES,
   POKEMONTCG_IMAGE_PREFIX,
   YUGIPEDIA_IMAGE_PREFIX
 } from '../../src/shared/imageSources'
@@ -1469,5 +1470,67 @@ describe('mtg art', () => {
     expect((await get(`printing/${printingIds[0]}`)).status).toBe(404)
     expect(printingUrl).not.toHaveBeenCalled()
     expect(upstream).not.toHaveBeenCalled()
+  })
+
+  describe('set symbols', () => {
+    // A PNG's signature and IHDR chunk; the portal checks no further.
+    const PNG = new Uint8Array([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 0,
+      1
+    ])
+    const admin = (
+      method: string,
+      path: string,
+      body: BodyInit,
+      token = 'a',
+      type = 'image/png'
+    ): Promise<Response> =>
+      handle(
+        new Request(`${BASE}/admin/img/set-symbols/${path}`, {
+          method,
+          headers: { authorization: `Bearer ${token}`, 'content-type': type },
+          body
+        }),
+        deps
+      )
+    const missing = (keys: unknown, token = 'a'): Promise<Response> =>
+      admin('POST', 'missing', JSON.stringify({ keys }), token, 'application/json')
+
+    it('keeps an uploaded PNG and serves it from R2 only', async () => {
+      expect((await get('set/ms-dsk-1794200400')).status).toBe(404)
+      expect(upstream).not.toHaveBeenCalled()
+      const put = await admin('PUT', 'ms-dsk-1794200400', PNG)
+      expect(put.status).toBe(200)
+      expect(await put.json()).toEqual({ result: 'stored' })
+      expect(bucket.store.get('set/ms-dsk-1794200400')?.contentType).toBe('image/png')
+      const res = await get('set/ms-dsk-1794200400')
+      expect(res.status).toBe(200)
+      expect(res.headers.get('content-type')).toBe('image/png')
+      expect(new Uint8Array(await res.arrayBuffer())).toEqual(PNG)
+      expect(upstream).not.toHaveBeenCalled()
+    })
+
+    it('refuses anything but a PNG, an oversized body, a bad key and a wrong token', async () => {
+      const svg = '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'
+      expect((await admin('PUT', 'ms-dsk-1', svg, 'a', 'image/png')).status).toBe(415)
+      expect((await admin('PUT', 'ms-dsk-1', PNG.slice(0, 8))).status).toBe(415)
+      const big = new Uint8Array(MAX_SYMBOL_PNG_BYTES + 1)
+      big.set(PNG)
+      expect((await admin('PUT', 'ms-dsk-1', big)).status).toBe(413)
+      for (const key of ['bp-dsk-1', 'ms-a.b', `ms-${'x'.repeat(200)}`])
+        expect((await admin('PUT', key, PNG)).status).toBe(400)
+      expect((await admin('PUT', 'ms-dsk-1', PNG, 'wrong')).status).toBe(401)
+      expect(bucket.store.size).toBe(0)
+    })
+
+    it('lists the symbol keys R2 lacks', async () => {
+      await admin('PUT', 'ms-dsk-1', PNG)
+      const res = await missing(['ms-dsk-1', 'ms-lea-1'])
+      expect(await res.json()).toEqual({ missing: ['ms-lea-1'] })
+      expect((await missing(['ms-dsk-1'], 'wrong')).status).toBe(401)
+      expect((await missing(['td-en-x'])).status).toBe(400)
+      expect((await missing('ms-dsk-1')).status).toBe(400)
+      expect((await missing(Array.from({ length: 101 }, (_, i) => `ms-x-${i}`))).status).toBe(400)
+    })
   })
 })

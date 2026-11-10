@@ -109,3 +109,25 @@ export function scryfallArtUrl(
   if (!SCRYFALL_ID_RE.test(id)) return null
   return `${SCRYFALL_IMAGE_PREFIX}${size === 'small' ? 'normal' : 'large'}/${face}/${id[0]}/${id[1]}/${id}.jpg`
 }
+
+/** Scryfall's set symbols (single-colour SVGs). Never served as SVG: the job hands the portal a PNG. */
+export const SCRYFALL_SYMBOL_PREFIX = 'https://svgs.scryfall.io/sets/'
+/** Set art keys of Magic set symbols: PNGs the catalog job uploads, served from the portal's R2 only. */
+export const MTG_SYMBOL_KEY_PREFIX = 'ms-'
+/** The largest symbol PNG the portal keeps; Scryfall's symbols come to a few KB at 256 px. */
+export const MAX_SYMBOL_PNG_BYTES = 512 * 1024
+const SCRYFALL_SYMBOL_RE =
+  /^https:\/\/svgs\.scryfall\.io\/sets\/([a-z0-9_]{1,40})\.svg(?:\?([0-9]{1,20}))?$/
+/** Placeholders Scryfall gives sets without a symbol of their own: shown as no art at all. */
+const PLACEHOLDER_SYMBOLS = new Set(['star', 'default'])
+
+/**
+ * The set art key of a Scryfall set symbol URL: 'ms-<symbol>-<version>' (or 'ms-<symbol>' when the
+ * URL has no version), one per symbol, so sets that share a symbol share the key and a redrawn
+ * symbol (a new version) gets a new one. Null for any other URL and for the placeholders.
+ */
+export function mtgSymbolKey(url: string | null | undefined): string | null {
+  const m = url ? SCRYFALL_SYMBOL_RE.exec(url) : null
+  if (!m || PLACEHOLDER_SYMBOLS.has(m[1])) return null
+  return `${MTG_SYMBOL_KEY_PREFIX}${m[1]}${m[2] ? `-${m[2]}` : ''}`
+}

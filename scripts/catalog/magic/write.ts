@@ -118,16 +118,17 @@ export function writeMagic(
   checkIds(imagePairs)
 
   const setByCode = work.prepare(
-    "SELECT set_name, tcg_date, series FROM sets WHERE game = 'mtg' AND language = ? AND set_code = ?"
+    "SELECT set_name, tcg_date, series, image_url, image_key FROM sets WHERE game = 'mtg' AND language = ? AND set_code = ?"
   )
   const nameTaken = work.prepare(
     "SELECT 1 FROM sets WHERE game = 'mtg' AND language = ? AND set_name = ?"
   )
   const insertSet = work.prepare(
-    "INSERT INTO sets (game, language, set_name, set_code, tcg_date, series) VALUES ('mtg', ?, ?, ?, ?, ?)"
+    `INSERT INTO sets (game, language, set_name, set_code, tcg_date, series, image_url, image_key)
+     VALUES ('mtg', ?, ?, ?, ?, ?, ?, ?)`
   )
   const updateSet = work.prepare(
-    "UPDATE sets SET tcg_date = ?, series = ? WHERE game = 'mtg' AND language = ? AND set_name = ?"
+    "UPDATE sets SET tcg_date = ?, series = ?, image_url = ?, image_key = ? WHERE game = 'mtg' AND language = ? AND set_name = ?"
   )
   const cardRow = work.prepare(`SELECT name, type, "desc" FROM cards WHERE game = 'mtg' AND id = ?`)
   const insertCard = work.prepare(
@@ -207,22 +208,35 @@ export function writeMagic(
 
   let cardsChanged = false
   work.transaction(() => {
-    // Sets: inserted when absent, then frozen but for tcg_date and series.
+    // Sets: inserted when absent, then frozen but for tcg_date, series and the symbol.
     // Keyed as rows.sets is, `${language}|${code}`; a name is taken only within its language.
+    // A symbol's key is shared by every set (and language) that shows it: sets.image_key is not unique.
     const setNameOf = new Map<string, string>()
     for (const [key, s] of [...rows.sets].sort(
       ([, a], [, b]) => bySource(a.language, b.language) || bySource(a.code, b.code)
     )) {
       const old = setByCode.get(s.language, s.code) as
-        { set_name: string; tcg_date: string | null; series: string | null } | undefined
+        | {
+            set_name: string
+            tcg_date: string | null
+            series: string | null
+            image_url: string | null
+            image_key: string | null
+          }
+        | undefined
       if (!old) {
         const name = nameTaken.get(s.language, s.name) ? `${s.name} (${s.code})` : s.name
-        insertSet.run(s.language, name, s.code, s.releasedAt, s.series)
+        insertSet.run(s.language, name, s.code, s.releasedAt, s.series, s.symbolUrl, s.symbolKey)
         setNameOf.set(key, name)
       } else {
         const date = s.releasedAt ?? old.tcg_date
-        if (old.tcg_date !== date || old.series !== s.series)
-          updateSet.run(date, s.series, s.language, old.set_name)
+        if (
+          old.tcg_date !== date ||
+          old.series !== s.series ||
+          old.image_url !== s.symbolUrl ||
+          old.image_key !== s.symbolKey
+        )
+          updateSet.run(date, s.series, s.symbolUrl, s.symbolKey, s.language, old.set_name)
         setNameOf.set(key, old.set_name)
       }
       report.sets++

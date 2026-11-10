@@ -1,6 +1,7 @@
 import { mtgBackImageId, mtgCardId, mtgImageId } from '../../../src/shared/games/ids'
 import { MTG_CARD_TYPES, MTG_RARITIES, mtgLanguageOf } from '../../../src/shared/games/magic'
 import type { Language } from '../../../src/shared/languages'
+import { mtgSymbolKey } from '../../../src/shared/imageSources'
 import type { ScryCard, ScryFace, ScrySet } from './types'
 
 export interface MtgCardRow {
@@ -63,6 +64,12 @@ export interface MtgSetRow {
   name: string
   series: string
   releasedAt: string | null
+  /**
+   * The set's Scryfall symbol (an SVG URL) and its set art key (mtgSymbolKey), the same in every
+   * language; both null when Scryfall has only a placeholder (star, default) or no set entry.
+   */
+  symbolUrl: string | null
+  symbolKey: string | null
 }
 
 export interface MagicRows {
@@ -330,12 +337,15 @@ export function mtgRows(input: Iterable<ScryCard>, sets: ScrySet[]): MagicRows {
       const s = byCode.get(o.set.toLowerCase())
       const name = s?.name ?? o.set_name
       const parent = s?.parent_set_code ? byCode.get(s.parent_set_code.toLowerCase()) : undefined
+      const symbolKey = mtgSymbolKey(s?.icon_svg_uri)
       out.sets.set(setKey, {
         language: lang,
         code: setCode,
         name,
         series: parent?.name ?? name,
-        releasedAt: s?.released_at ?? null
+        releasedAt: s?.released_at ?? null,
+        symbolUrl: symbolKey === null ? null : s!.icon_svg_uri!,
+        symbolKey
       })
     }
   }

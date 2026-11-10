@@ -43,7 +43,7 @@ import { deletesByGame, diffTable, hasGameColumn } from './diff'
 import { ART_BUDGET } from './onepiece/art'
 import { logOnePiece, runOnePieceStep, type OnePieceReport } from './onepiece'
 import { logOnePieceJapanese, runOnePieceJapaneseStep, type JapaneseReport } from './onepiece/japanese'
-import { logMagic, runMagicStep, type MagicStepResult } from './magic'
+import { logMagic, logMagicSymbols, runMagicStep, type MagicStepResult } from './magic'
 import { runPokemonStep, type PokemonReport } from './pokemon'
 import { refreshPokemonSetArt, shouldRefreshSetArt, warmSetArt } from './pokemon/setArt'
 import { buildFingerprints, uploadFingerprintRefs, uploadFingerprints } from './fingerprints'
@@ -438,7 +438,12 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
           if (process.env['VITEST']) {
             throw new Error('The default Magic step would download live Scryfall data; pass `magic` in tests')
           }
-          return runMagicStep(w, { cachePath: join(opts.dir, 'magic-src.sqlite'), version, log })
+          return runMagicStep(w, {
+            cachePath: join(opts.dir, 'magic-src.sqlite'),
+            version,
+            log,
+            portal: url && token && !opts.dryRun ? { url, token, fetch: opts.fetch } : undefined
+          })
         })
       // Whatever the step does, the other games still upload.
       const out = await step(work).catch((e: unknown) => ({
@@ -449,6 +454,7 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
       if (out.error !== null) problem(`Magic refresh skipped: ${out.error}`)
       for (const p of out.problems) problem(p)
       if (out.report) logMagic(out.report, log)
+      if ('symbols' in out && out.symbols) logMagicSymbols(out.symbols, log)
     }
     if (opts.stage && !on('upload')) {
       if (on('fingerprints-ygo')) await fingerprint(true, 'ygo')

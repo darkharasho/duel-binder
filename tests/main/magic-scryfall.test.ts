@@ -5,6 +5,7 @@ import {
   createCompactor,
   createScryfall,
   isKept,
+  MAX_SYMBOL_SVG_BYTES,
   parseBulkLines,
   slimCard
 } from '../../scripts/catalog/magic/scryfall'
@@ -229,6 +230,27 @@ describe('createScryfall', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('symbolSvg() reads a symbol with the job User-Agent, only from svgs.scryfall.io and only a small one', async () => {
+    const calls: [string, RequestInit | undefined][] = []
+    const fake = (async (url: string, init?: RequestInit) => {
+      calls.push([url, init])
+      if (url.includes('big')) return new Response('x'.repeat(MAX_SYMBOL_SVG_BYTES + 1))
+      if (url.includes('gone')) return new Response('nope', { status: 404 })
+      return new Response('<svg/>')
+    }) as unknown as typeof fetch
+    const s = createScryfall({ version: 'x', fetch: fake, gapMs: 0 })
+    expect(await s.symbolSvg('https://svgs.scryfall.io/sets/dsk.svg?1')).toBe('<svg/>')
+    expect((calls[0][1]?.headers as Record<string, string>)['User-Agent']).toMatch(
+      /^DuelBinder\/x /
+    )
+    await expect(s.symbolSvg('https://svgs.scryfall.io/sets/big.svg?1')).rejects.toThrow('bytes')
+    await expect(s.symbolSvg('https://svgs.scryfall.io/sets/gone.svg?1')).rejects.toThrow('404')
+    await expect(s.symbolSvg('https://evil.example/dsk.svg')).rejects.toThrow(
+      'Not a Scryfall symbol'
+    )
+    expect(calls).toHaveLength(3)
   })
 
   it('cards() rejects on a failed response', async () => {

@@ -2,11 +2,14 @@ import { PassThrough, Readable, pipeline, type Transform } from 'node:stream'
 import { StringDecoder } from 'node:string_decoder'
 import { createGunzip } from 'node:zlib'
 import { mtgLanguageOf } from '../../../src/shared/games/magic'
+import { SCRYFALL_SYMBOL_PREFIX } from '../../../src/shared/imageSources'
 import { createLimiter, getJson, REPO_URL } from '../pokemon/http'
 import type { ScryCard, ScryFace, ScryfallSource, ScrySet } from './types'
 
 const API = 'https://api.scryfall.com'
 const DEFAULT_GAP_MS = 100
+/** Scryfall's symbols are a few KB; anything far past that is not one. */
+export const MAX_SYMBOL_SVG_BYTES = 256 * 1024
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
@@ -324,6 +327,19 @@ export function createScryfall(o: {
         url = page.has_more && page.next_page ? page.next_page : null
       }
       return out
+    },
+    async symbolSvg(url) {
+      if (!url.startsWith(SCRYFALL_SYMBOL_PREFIX)) throw new Error(`Not a Scryfall symbol: ${url}`)
+      // Paced with the API requests: Scryfall asks for the same gap on every host.
+      const res = await paced(url, {
+        headers: { 'User-Agent': userAgent, Accept: 'image/svg+xml' },
+        signal: AbortSignal.timeout(30_000)
+      })
+      if (!res.ok) throw new Error(`GET ${url} returned ${res.status}`)
+      const bytes = new Uint8Array(await res.arrayBuffer())
+      if (bytes.byteLength > MAX_SYMBOL_SVG_BYTES)
+        throw new Error(`${url} is ${bytes.byteLength} bytes, over ${MAX_SYMBOL_SVG_BYTES}`)
+      return new TextDecoder().decode(bytes)
     }
   }
 }

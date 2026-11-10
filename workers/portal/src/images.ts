@@ -14,6 +14,8 @@ import {
   HAND_ART_PREFIX,
   TCGPLAYER_PACK_PREFIX,
   isFallbackLogoUrl,
+  MAX_SYMBOL_PNG_BYTES,
+  MTG_SYMBOL_KEY_PREFIX,
   type ImageSize
 } from '../../../src/shared/imageSources'
 import { gameOfId, isTokenId, mtgBackImageId, mtgImageId } from '../../../src/shared/games/ids'
@@ -569,6 +571,11 @@ function resolve(deps: AppDeps, path: string): Target | null {
         cache: SET_CACHE
       }
     }
+    if (prefix === MTG_SYMBOL_KEY_PREFIX) {
+      // A Magic set symbol: a PNG the catalog job made from Scryfall's SVG (storeSetSymbol). R2 only,
+      // never fetched from upstream, so the SVG itself never passes through here.
+      return { key: `set/${id}`, source: async () => null, cache: SET_CACHE }
+    }
     if (prefix === 'yp-' || prefix === 'yc-') {
       const source = findSetImageUrl(deps.db, id)
       const allowed = prefix === 'yp-' ? YUGIPEDIA_IMAGE_PREFIX : PACK_ART_PREFIX
@@ -762,4 +769,59 @@ export async function warmImage(deps: AppDeps, path: string): Promise<WarmResult
   if (!source) return 'missing'
   const got = await fetchAndStore(deps, target, source)
   return got && got !== 'oversized' ? 'stored' : 'failed'
+}
+
+// ---- Magic set symbols ------------------------------------------------------------------------
+
+/** A PNG starts with these eight bytes, then its IHDR chunk. */
+const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
+const IHDR = [0x49, 0x48, 0x44, 0x52]
+
+/** A Magic set symbol key the portal accepts: 'ms-', the set key alphabet, and no longer than any set key. */
+export const isSetSymbolKey = (key: string): boolean =>
+  key.startsWith(MTG_SYMBOL_KEY_PREFIX) && key.length <= MAX_SET_KEY && SET_KEY_RE.test(key)
+
+/** True when `bytes` open as a PNG does: the signature, then an IHDR chunk. */
+export function isPng(bytes: Uint8Array): boolean {
+  if (bytes.byteLength < 16) return false
+  return PNG_SIGNATURE.every((b, i) => bytes[i] === b) && IHDR.every((b, i) => bytes[12 + i] === b)
+}
+
+/** Admin only (the nightly job): the symbol keys of `keys` that R2 doesn't hold yet. */
+export async function missingSetSymbols(deps: AppDeps, keys: string[]): Promise<string[]> {
+  const held = await Promise.all(
+    keys.map(async (key) => {
+      const stored = await deps.images.get(`set/${key}`).catch(() => null)
+      if (!stored) return false
+      try {
+        await stored.body.cancel() // only its presence matters
+      } catch {
+        // already read or closed
+      }
+      return true
+    })
+  )
+  return keys.filter((_, i) => !held[i])
+}
+
+export type StoreSymbolResult = 'stored' | 'not-png' | 'too-large' | 'failed'
+
+/**
+ * Admin only (the nightly job): keeps a Magic set symbol, already turned into a PNG by the job, in
+ * R2 under its set key. Only PNG bytes (checked, not taken from a header) up to
+ * MAX_SYMBOL_PNG_BYTES are kept, and always as image/png: no SVG is ever stored or served.
+ */
+export async function storeSetSymbol(
+  deps: AppDeps,
+  key: string,
+  bytes: ArrayBuffer
+): Promise<StoreSymbolResult> {
+  if (bytes.byteLength > MAX_SYMBOL_PNG_BYTES) return 'too-large'
+  if (!isPng(new Uint8Array(bytes))) return 'not-png'
+  try {
+    await deps.images.put(`set/${key}`, bytes, { httpMetadata: { contentType: 'image/png' } })
+    return 'stored'
+  } catch {
+    return 'failed'
+  }
 }

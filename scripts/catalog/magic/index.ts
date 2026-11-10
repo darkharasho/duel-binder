@@ -4,6 +4,7 @@ import { pricedShareProblems, type SetStat } from '../priceShare'
 import { openMagicCache, type MagicCache } from './cache'
 import { mtgRows, type MagicRows } from './rows'
 import { createCompactor, createScryfall, isKept } from './scryfall'
+import { syncMagicSymbols, type SymbolReport } from './symbols'
 import type { ScryCard, ScryfallSource, ScrySet } from './types'
 import { writeMagic, type MagicReport } from './write'
 
@@ -15,12 +16,21 @@ export interface MagicStepOpts {
   /** Replaces the live Scryfall source (tests). */
   source?: ScryfallSource
   now?: () => Date
+  /**
+   * The portal that set symbols are uploaded to (see symbols.ts); none on a dry run, and then no
+   * symbol is fetched.
+   */
+  portal?: { url: string; token: string; fetch?: typeof fetch }
+  /** Replaces whiteSymbolPng (tests). */
+  rasterize?: (svg: string) => Uint8Array
 }
 
 export interface MagicStepResult {
   report: MagicReport | null
   error: string | null
   problems: string[]
+  /** Tonight's set symbol uploads; null when there was no portal or no rows. A failure here is never a problem. */
+  symbols?: SymbolReport | null
 }
 
 /**
@@ -62,7 +72,26 @@ export async function runMagicStep(
       problems.push(`Magic set stats not saved: ${e instanceof Error ? e.message : String(e)}`)
     }
 
-    return { report: written, error: null, problems }
+    // After the rows, so tonight's symbols are known; before the upload stage, so R2 holds a symbol
+    // by the time clients get its key. Failures are logged, not problems: a set without its symbol
+    // only shows its code, as before, and the next night tries again.
+    let symbols: SymbolReport | null = null
+    if (o.portal) {
+      const portal = o.portal
+      symbols = await syncMagicSymbols(work, {
+        portal,
+        svg: (url) => source.symbolSvg(url),
+        rasterize: o.rasterize
+      }).catch((e: unknown) => ({
+        inUse: 0,
+        stored: 0,
+        uploaded: 0,
+        failed: 1,
+        notes: [`symbols skipped: ${e instanceof Error ? e.message : String(e)}`]
+      }))
+    }
+
+    return { report: written, error: null, problems, symbols }
   } catch (e) {
     return { report: null, error: e instanceof Error ? e.message : String(e), problems }
   } finally {
@@ -102,4 +131,13 @@ export function logMagic(r: MagicReport, log: (line: string) => void): void {
       log(`Magic en ${s.setCode}: ${s.priced}/${s.printings} priced`)
   }
   for (const n of r.notes) log(`Magic en: ${n}`)
+}
+
+/** The set symbol line, then a line per failure (only logged: a failed symbol is not a job problem). */
+export function logMagicSymbols(r: SymbolReport, log: (line: string) => void): void {
+  log(
+    `Magic set symbols: ${r.inUse} in use, ${r.stored} already stored, ${r.uploaded} uploaded, ${r.failed} failed`
+  )
+  for (const n of r.notes) log(`Magic set symbol failed: ${n}`)
+  if (r.failed > r.notes.length) log(`Magic set symbols: ${r.failed - r.notes.length} more failed`)
 }

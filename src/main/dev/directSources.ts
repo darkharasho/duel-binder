@@ -11,7 +11,8 @@ import {
   isFallbackLogoUrl,
   PACK_ART_PREFIX,
   setImageUrl,
-  YUGIPEDIA_IMAGE_PREFIX
+  YUGIPEDIA_IMAGE_PREFIX,
+  MTG_SYMBOL_KEY_PREFIX
 } from '../../shared/imageSources'
 import { gameOfId } from '../../shared/games'
 import type { ImageSources } from '../images/cache'
@@ -81,6 +82,8 @@ export function directImageSources(opts: {
         const url = findSetImageUrl(opts.db, key)
         return url !== null && isOpPackUrl(url) ? { url, headers } : null
       }
+      // Magic set symbols are PNGs the catalog job makes; only the portal's R2 has them.
+      if (source === MTG_SYMBOL_KEY_PREFIX) return null
       if (source === 'yp-') return resolved(key, YUGIPEDIA_IMAGE_PREFIX)
       if (source === 'yc-') return resolved(key, PACK_ART_PREFIX)
       if (source === 'bp-') return resolved(key, BULBAGARDEN_IMAGE_PREFIX, findPokemonSetArtUrl)

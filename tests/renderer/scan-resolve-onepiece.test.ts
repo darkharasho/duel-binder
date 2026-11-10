@@ -145,6 +145,31 @@ describe('resolveOnePieceSignals', () => {
     expect(out.kind).toBe('unsure')
   })
 
+  it('takes confident art over a read one digit off it in the same set', async () => {
+    // OP01-120 misread as OP01-126 (Kaido stands in for it at that number).
+    const misread = PRINTINGS.map((p) => (p.cardId === 3 ? { ...p, setCode: 'OP01-126' } : p))
+    const c = ctx({
+      lookups: {
+        ...lookups,
+        printingsByCode: async (code) =>
+          misread.filter((p) => p.setCode.toUpperCase() === code.toUpperCase())
+      }
+    })
+    const item = await recognized(raw({ art: ALT_ART, codeTexts: ['OP01-126'] }), c)
+    expect(item).toMatchObject({ printingId: 12, flag: null, via: 'art' })
+    // Two digits off, or another set, is still a disagreement.
+    const far = misread.map((p) => (p.cardId === 3 ? { ...p, setCode: 'OP01-106' } : p))
+    const farCtx = ctx({
+      lookups: {
+        ...lookups,
+        printingsByCode: async (code) =>
+          far.filter((p) => p.setCode.toUpperCase() === code.toUpperCase())
+      }
+    })
+    const out = await resolveSignals(raw({ art: ALT_ART, codeTexts: ['OP01-106'] }), farCtx)
+    expect(out.kind).toBe('unsure')
+  })
+
   it('trusts art only OP_ART_MIN_MARGIN ahead of another number', async () => {
     const close = art([102, 20], [301, 20 + OP_ART_MIN_MARGIN - 1])
     expect((await resolveSignals(raw({ art: close }), ctx())).kind).toBe('unsure')

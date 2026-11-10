@@ -20,8 +20,9 @@ import type { ResolveContext, ScanOutcome } from './resolve'
  * SAMPLE stamp hashes the same, nor a reprint from the card it reprints.
  *
  * So a frame is read as: the number, when one reads on its code bands; else the number of the
- * closest art, when it is OP_ART_MIN_MARGIN ahead of every other number's. A number read that
- * names another card than confident art is a misread one way or the other: unsure. Then the
+ * closest art, when it is OP_ART_MIN_MARGIN ahead of every other number's. A number read one digit
+ * off confident art's, in the same set, is taken as misread (the art's number stands); one that
+ * names another card than confident art otherwise is a misread one way or the other: unsure. Then the
  * language: a picked set's, else the user's language filter, else the language the text reads
  * as, else English. Then, among that number's printings in that language (in the picked set when
  * it has some), the one whose art is closest; when another's is within OP_SAME_ART of it, or
@@ -33,8 +34,11 @@ export async function resolveOnePieceSignals(
 ): Promise<ScanOutcome> {
   if (!raw.found) return { kind: 'none' }
   const read = frameNumber(raw.codeTexts)
-  const byRead = read ? await ctx.lookups.printingsByCode(read) : []
   const artNumber = await confidentNumber(raw, ctx)
+  // A read one digit off confident art in the same set is the read gone wrong: the number's
+  // digits are small and soft, and art that far ahead of every other number isn't.
+  const misread = read !== null && artNumber !== null && oneDigitApart(read, artNumber)
+  const byRead = read && !misread ? await ctx.lookups.printingsByCode(read) : []
   if (byRead.length && artNumber !== null && artNumber !== byRead[0].setCode.toUpperCase())
     return { kind: 'unsure' }
   const options = byRead.length
@@ -48,6 +52,16 @@ export async function resolveOnePieceSignals(
   if (item) return { kind: 'recognized', item }
   const [top] = raw.art
   return top && top.distance > ART_FAR_DISTANCE ? { kind: 'none', far: true } : { kind: 'unsure' }
+}
+
+/** "OP13-116" and "OP13-115": one set, card numbers one digit apart. */
+export function oneDigitApart(a: string, b: string): boolean {
+  const [setA, numA] = a.toUpperCase().split('-')
+  const [setB, numB] = b.toUpperCase().split('-')
+  if (setA !== setB || !numA || !numB || numA.length !== numB.length) return false
+  let off = 0
+  for (let i = 0; i < numA.length; i++) if (numA[i] !== numB[i]) off++
+  return off === 1
 }
 
 /**

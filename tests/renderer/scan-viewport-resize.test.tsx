@@ -109,6 +109,25 @@ describe('ScanViewport preview resizing', () => {
     expect(videoRef.current!.srcObject).toBe(stream)
   })
 
+  it('takes a new video element when the camera reopens with a new stream on the old one', async () => {
+    // Back from another app with the camera muted: useCamera opens a new stream, and the
+    // caller sets it on the element that showed the old one, at the same picture size.
+    const { videoRef } = mount(true)
+    const first = videoRef.current!
+    Object.defineProperty(first, 'videoWidth', { value: 2160, configurable: true })
+    Object.defineProperty(first, 'videoHeight', { value: 3840, configurable: true })
+    act(() => first.dispatchEvent(new Event('loadedmetadata')))
+    await settle()
+    expect(videoRef.current).toBe(first)
+
+    const reopened = { id: 'camera-2' } as unknown as MediaStream
+    first.srcObject = reopened
+    act(() => first.dispatchEvent(new Event('loadedmetadata')))
+    await settle()
+    expect(videoRef.current).not.toBe(first)
+    expect(videoRef.current!.srcObject).toBe(reopened)
+  })
+
   it('keeps its video element without the option', async () => {
     const { videoRef } = mount(false)
     const first = videoRef.current

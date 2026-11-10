@@ -59,7 +59,8 @@ function useTorch(stream: MediaStream | null): {
  */
 function CameraBackdrop({ stream }: { stream: MediaStream | null }): React.JSX.Element | null {
   const ref = useRef<HTMLVideoElement>(null)
-  // A new element after coming back from another app, as the preview takes (ScanViewport).
+  // A new element after coming back from another app or for a new stream (the camera reopened),
+  // as the preview takes (ScanViewport).
   const [shows, setShows] = useState(0)
   useEffect(() => {
     const shown = (): void => {
@@ -77,7 +78,7 @@ function CameraBackdrop({ stream }: { stream: MediaStream | null }): React.JSX.E
   if (!stream) return null
   return (
     <video
-      key={shows}
+      key={`${shows}:${stream.id}`}
       ref={ref}
       aria-hidden
       autoPlay

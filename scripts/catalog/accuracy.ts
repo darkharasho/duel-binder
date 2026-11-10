@@ -59,6 +59,13 @@ export const PKM_MIN_RIGHT_SHARE = 0.6
  */
 export const PKM_MAX_WRONG_SHARE = 0.05
 
+/**
+ * The One Piece real-photo test's bars, on the testers' Contribute photos (scan-op-real.test.ts):
+ * 78 of 84 right and 1 wrong on 2026-11-10, the misses outlines the detector got wrong.
+ */
+export const OP_MIN_RIGHT_SHARE = 0.9
+export const OP_MAX_WRONG_SHARE = 0.05
+
 export interface AccuracyReport {
   shots: number
   right: number

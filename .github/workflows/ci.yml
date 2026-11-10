@@ -50,6 +50,8 @@ jobs:
             test: tests/main/scan-real.test.ts
           - game: pkm
             test: tests/main/scan-pkm-real.test.ts
+          - game: op
+            test: tests/main/scan-op-real.test.ts
     env:
       HAS_CORPUS_KEY: ${{ secrets.SCAN_CORPUS_KEY != '' }}
     steps:
@@ -79,3 +81,4 @@ jobs:
           SCAN_PKM_TRUTH: ${{ github.workspace }}/scan-corpus/pkm/pkm-truth.owner.json
           SCAN_PKM_LIVE: '1'
           SCAN_PKM_CROP: '1'
+          SCAN_OP_DIR: ${{ github.workspace }}/scan-corpus/op

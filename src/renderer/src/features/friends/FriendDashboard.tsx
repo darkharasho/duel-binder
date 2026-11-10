@@ -1,13 +1,17 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import type { Friend } from '@shared/types'
+import type { EntryView, Friend } from '@shared/types'
 import { cardArtUrl, useArtWash } from '@/components/artWashContext'
+import { CardSheet } from '@/components/CardSheet'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { api, queryKeys } from '@/lib/api'
 import { formatUsd } from '@/lib/format'
 import { friendsErrorMessage } from '@/lib/friends'
+import { DEFAULT_FILTERS } from '../collection/defaultFilters'
 import { Breakdowns, MostValuable, PriceNotes } from '../dashboard/DashboardPage'
+import { FriendEntryPanel } from './FriendEntryPanel'
 
 function Stat({ label, value }: { label: string; value: string }): React.JSX.Element {
   return (
@@ -18,16 +22,14 @@ function Stat({ label, value }: { label: string; value: string }): React.JSX.Ele
   )
 }
 
-/** A friend's stats in the game shown, read-only. */
+/** A friend's stats in the game shown, read-only. A card opens over it, with the friend's copies. */
 export function FriendDashboard({
   friend,
   header,
-  onOpenEntry,
   onSeeAll
 }: {
   friend: Friend
   header: React.ReactNode
-  onOpenEntry: (entryId: number) => void
   onSeeAll: () => void
 }): React.JSX.Element {
   const name = friend.displayName ?? friend.username
@@ -39,6 +41,14 @@ export function FriendDashboard({
   const data = stats.data
   const top = data?.topEntries[0]
   useArtWash(top ? cardArtUrl(top.imageId) : null)
+  const [open, setOpen] = useState<EntryView | null>(null)
+  // The friend's other copies of the card, for the panel's list; the opened entry shows meanwhile.
+  const all = useQuery({
+    queryKey: queryKeys.friendEntries(friend.id, DEFAULT_FILTERS),
+    queryFn: () => api.friends.collection(friend.id, DEFAULT_FILTERS),
+    enabled: open !== null
+  })
+  const copies = open ? (all.data ?? [open]).filter((e) => e.card.id === open.card.id) : []
 
   return (
     <TooltipProvider>
@@ -68,9 +78,18 @@ export function FriendDashboard({
               </div>
               <PriceNotes stats={data} />
             </section>
-            <MostValuable stats={data} onOpen={onOpenEntry} onSeeAll={onSeeAll} />
-            <Breakdowns stats={data} onOpen={onOpenEntry} />
+            <MostValuable stats={data} onOpen={setOpen} onSeeAll={onSeeAll} />
+            <Breakdowns stats={data} onOpen={setOpen} />
           </>
+        )}
+        {open && (
+          <CardSheet onClose={() => setOpen(null)}>
+            <FriendEntryPanel
+              entry={open}
+              copies={copies.length ? copies : [open]}
+              onSelectEntry={(id) => setOpen(copies.find((e) => e.id === id) ?? open)}
+            />
+          </CardSheet>
         )}
       </div>
     </TooltipProvider>

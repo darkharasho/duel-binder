@@ -45,12 +45,7 @@ export function FriendBinder({
     (chosen === 'binders' && !showBinders) || (chosen === 'sessions' && !showSessions)
       ? 'dashboard'
       : chosen
-  // The card the Dashboard sent over, opened once by the Collection tab.
-  const [openEntry, setOpenEntry] = useState<number | undefined>()
-  const setTab = (next: BinderTab): void => {
-    setOpenEntry(undefined)
-    setTabState(next)
-  }
+  const setTab = setTabState
   const header = (trailing?: React.ReactNode): React.JSX.Element => (
     <FriendHeader
       friend={friend}
@@ -65,25 +60,10 @@ export function FriendBinder({
   switch (tab) {
     case 'dashboard':
       return (
-        <FriendDashboard
-          friend={friend}
-          header={header()}
-          onOpenEntry={(id) => {
-            setOpenEntry(id)
-            setTabState('collection')
-          }}
-          onSeeAll={() => setTab('collection')}
-        />
+        <FriendDashboard friend={friend} header={header()} onSeeAll={() => setTab('collection')} />
       )
     case 'collection':
-      return (
-        <CollectionPage
-          key={openEntry ?? 'all'}
-          friend={friend}
-          friendHeader={header}
-          initialEntryId={openEntry}
-        />
-      )
+      return <CollectionPage friend={friend} friendHeader={header} />
     case 'sets':
       return <FriendSets friend={friend} header={header()} />
     case 'wishlist':

@@ -11,8 +11,8 @@ import { createMockApi, renderWithProviders } from './mockApi'
 import { fakeEngine, stubCamera, stubVideo } from './scanFakes'
 import { fakeStore, installPhoneApi, json, setOnline, stubFetch } from './phoneFakes'
 
-// The dashboard's Most valuable ranks every language; clicking a card there opens its entry on
-// the Collection page even when the shared language filter hides it. The real repo answers the
+// The dashboard's Most valuable ranks every language; clicking a card there opens its entry over
+// the dashboard, without leaving it, even when the shared language filter hides it. The real repo answers the
 // data channels, so list, forCard and stats agree as they do in the app.
 
 let db: Database.Database

@@ -174,12 +174,13 @@ export function GameSegments(): React.JSX.Element {
           aria-busy={(loading && g === game) || undefined}
           onClick={() => choose(g)}
           className={cn(
-            'flex h-10 items-center justify-center gap-2 rounded-lg text-sm font-semibold transition-colors',
+            // Dot over name, so four names fit a 320 px phone; a longer one is cut, not wrapped.
+            'flex h-12 min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1 text-[12px] font-semibold transition-colors',
             g === game ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'
           )}
         >
           <GameMark game={g} loading={loading && g === game} />
-          {GAMES[g].name}
+          <span className="max-w-full truncate">{GAMES[g].name}</span>
         </button>
       ))}
     </div>

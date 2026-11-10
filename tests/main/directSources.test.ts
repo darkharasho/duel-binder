@@ -4,7 +4,7 @@ import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { directImageSources } from '../../src/main/dev/directSources'
 import { createImageCache } from '../../src/main/images/cache'
-import { onePieceImageId } from '../../src/shared/games/ids'
+import { mtgImageId, onePieceImageId } from '../../src/shared/games/ids'
 import { createLimiter } from '../../src/main/images/limiter'
 import type { SqlDb } from '../../src/main/db/sql'
 
@@ -114,5 +114,12 @@ describe('directImageSources', () => {
     expect(await failing.cache.getPrinting(1)).toBeNull()
     expect(closed.fetchFn).not.toHaveBeenCalled()
     expect(failing.fetchFn).not.toHaveBeenCalled()
+  })
+
+  it('a Magic id has no source, never the Yu-Gi-Oh or Pokémon path', () => {
+    const prepare = vi.fn(() => ({ get: () => ({ image_url: 'https://assets.tcgdex.net/x' }) }))
+    const sources = directImageSources({ db: { prepare } as unknown as SqlDb, version: '1.0.0' })
+    const id = mtgImageId('6e5e1c1b-0d4e-4c6e-9d2a-1d1f2b6a7c01')
+    for (const size of ['small', 'full', 'cropped'] as const) expect(sources.card(size, id)).toBeNull()
   })
 })

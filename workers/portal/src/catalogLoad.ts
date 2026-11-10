@@ -108,7 +108,7 @@ function upsertRows(deps: AppDeps, table: CatalogTable, rows: unknown[]): void {
   db.transaction(() => {
     for (const row of valid) {
       const flagged =
-        table.name === 'card_printings' && (row.game === 'pkm' || row.game === 'op') && row.missing_from_api === 1
+        table.name === 'card_printings' && (row.game === 'pkm' || row.game === 'op' || row.game === 'mtg') && row.missing_from_api === 1
       upsertCatalogRow(db, table, row, extra, { clearMissing: !flagged })
     }
   })()

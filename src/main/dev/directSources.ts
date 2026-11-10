@@ -58,6 +58,8 @@ export function directImageSources(opts: {
         const bandai = op ? opBandaiArtUrl(op.bandai_id) : null
         return bandai === null ? null : { url: bandai, headers }
       }
+      // mtg: Scryfall source in step 2
+      if (game === 'mtg') return null
       if (game === 'ygo') return { url: imageUrl(size, id) }
       const row = opts.db
         .prepare(

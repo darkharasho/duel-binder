@@ -23,6 +23,7 @@ import {
   createMissCache,
   edgeImage
 } from '../../workers/portal/src/images'
+import { seedMagic } from '../fixtures/magic'
 import { seedOnePiece } from '../fixtures/onePiece'
 import { addUser, memoryBucket, noPrices, seededServerDb } from './helpers'
 
@@ -1283,5 +1284,83 @@ describe('op art', () => {
     ).id
     expect((await get(`cropped/${pass}`)).status).toBe(200)
     expect(bucket.store.has(`card/cropped/${pass}`)).toBe(true)
+  })
+})
+
+describe('mtg art', () => {
+  let db: Database.Database
+  let upstream: ReturnType<typeof vi.fn>
+  let deps: AppDeps
+  let bucket: ReturnType<typeof memoryBucket>
+  let printingUrl: ReturnType<typeof vi.fn<(id: number) => Promise<string | null>>>
+  let ids: number[]
+  let printingIds: number[]
+
+  beforeEach(async () => {
+    db = await seededServerDb()
+    ;({ imageIds: ids, printingIds } = seedMagic(db))
+    bucket = memoryBucket()
+    upstream = vi.fn(async () => imageResponse())
+    printingUrl = vi.fn(async (): Promise<string | null> => null)
+    deps = {
+      db,
+      assets: { fetch: async () => new Response('nope', { status: 404 }) },
+      images: bucket,
+      printingArt: { url: printingUrl },
+      prices: noPrices,
+      env: {
+        PUBLIC_URL: BASE,
+        SITE_URL: 'https://site.test',
+        DISCORD_CLIENT_ID: 'c',
+        DISCORD_CLIENT_SECRET: 's',
+        ADMIN_TOKEN: 'a',
+        PRICE_WORKER_URL: 'https://prices.test'
+      },
+      now: () => new Date('2026-11-09T12:00:00.000Z'),
+      fetch: upstream as unknown as typeof fetch
+    }
+  })
+  afterEach(() => db.close())
+
+  const get = (path: string): Promise<Response> =>
+    handle(
+      new Request(`${BASE}/img/${path}`, { headers: { 'cf-connecting-ip': '198.51.100.7' } }),
+      deps
+    )
+
+  it('an id with no stored art is a 404 and nothing is fetched', async () => {
+    for (const size of ['small', 'full', 'cropped']) {
+      expect((await get(`${size}/${ids[0]}`)).status).toBe(404)
+    }
+    expect(upstream).not.toHaveBeenCalled()
+  })
+
+  it('serves stored art, cropped as the small copy', async () => {
+    for (const key of [`card/small/${ids[0]}`, `card/full/${ids[0]}`])
+      bucket.store.set(key, {
+        bytes: JPEG.buffer.slice(0) as ArrayBuffer,
+        contentType: 'image/jpeg',
+        etag: '"s"'
+      })
+    for (const size of ['small', 'full', 'cropped']) {
+      const res = await get(`${size}/${ids[0]}`)
+      expect(res.status).toBe(200)
+      expect(new Uint8Array(await res.arrayBuffer())).toEqual(JPEG)
+    }
+    const edge = await edgeImage(
+      new Request(`${BASE}/img/cropped/${ids[0]}`),
+      bucket,
+      null,
+      () => undefined,
+      async () => new Response('forwarded', { status: 500 })
+    )
+    expect(edge!.status).toBe(200)
+    expect(upstream).not.toHaveBeenCalled()
+  })
+
+  it('a printing photo is a 404 and never asks Yugipedia', async () => {
+    expect((await get(`printing/${printingIds[0]}`)).status).toBe(404)
+    expect(printingUrl).not.toHaveBeenCalled()
+    expect(upstream).not.toHaveBeenCalled()
   })
 })

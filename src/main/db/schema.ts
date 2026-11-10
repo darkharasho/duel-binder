@@ -669,6 +669,51 @@ export const RARITY_LABEL = "p.set_rarity || COALESCE(' (' || p.variant || ')', 
 export const SCHEMA_V46 =
   'CREATE INDEX ix_printings_game_set ON card_printings(game, language, set_name, card_id, set_rarity);'
 
+/**
+ * Rollup triggers that drop one game's rollups, not every game's: `catalog_rollups.game` names the
+ * game a rollup is about (src/main/repo/rollup.ts) and `game` is SQL for the changed row's game,
+ * using OLD/NEW as the operation has them. A NULL game rollup goes on any change.
+ */
+const gameRollupTriggers = (
+  table: string,
+  cols: string[] | null,
+  game: (row: 'OLD' | 'NEW') => string
+): string => {
+  const guard = cols ? ` WHEN ${cols.map((c) => `OLD.${c} IS NOT NEW.${c}`).join(' OR ')}` : ''
+  const games = { INSERT: [game('NEW')], DELETE: [game('OLD')], UPDATE: [game('OLD'), game('NEW')] }
+  return (['INSERT', 'DELETE', 'UPDATE'] as const)
+    .map(
+      (op) =>
+        `DROP TRIGGER rollup_${table}_${op.toLowerCase()};
+CREATE TRIGGER rollup_${table}_${op.toLowerCase()} AFTER ${op} ON ${table}${
+          op === 'UPDATE' ? guard : ''
+        } BEGIN DELETE FROM catalog_rollups WHERE game IS NULL OR game IN (${games[op].join(', ')}); END;`
+    )
+    .join('\n')
+}
+
+/**
+ * Rollups by game: a Magic catalog update no longer drops Yu-Gi-Oh!'s Sets list and filters, nor
+ * the other way round. Pack art and logos are Yu-Gi-Oh!'s and pokemon_set_art Pokémon's (the
+ * SET_JOINS of src/main/repo/sets.ts). Stored rollups have no game yet, so they go. Desktop and
+ * phone only, as V24.
+ */
+export const SCHEMA_V47 = `
+ALTER TABLE catalog_rollups ADD COLUMN game TEXT;
+DELETE FROM catalog_rollups;
+${gameRollupTriggers('card_printings', ['language', 'set_name', 'set_code', 'set_rarity', 'card_id', 'game', 'contributed', 'missing_from_api'], (r) => `${r}.game`)}
+${gameRollupTriggers('card_images', ['image_id', 'card_id', 'sort_order', 'game'], (r) => `${r}.game`)}
+${gameRollupTriggers('cards', ['type', 'attribute', 'race', 'archetype', 'game'], (r) => `${r}.game`)}
+${gameRollupTriggers('pokemon_cards', ['card_id', 'category', 'types', 'stage', 'rarity'], () => "'pkm'")}
+${gameRollupTriggers('onepiece_cards', ['card_id', 'colors', 'card_type', 'attribute', 'traits'], () => "'op'")}
+${gameRollupTriggers('mtg_cards', ['card_id', 'types', 'colors', 'mana_value'], () => "'mtg'")}
+${gameRollupTriggers('sets', null, (r) => `${r}.game`)}
+${gameRollupTriggers('pack_art', null, () => "'ygo'")}
+${gameRollupTriggers('set_logos', null, () => "'ygo'")}
+${gameRollupTriggers('konami_logos', null, () => "'ygo'")}
+${gameRollupTriggers('pokemon_set_art', null, () => "'pkm'")}
+`
+
 export const MIGRATIONS: Migration[] = [
   { version: 1, sql: SCHEMA_V1 },
   { version: 2, sql: SCHEMA_V2 },
@@ -715,5 +760,6 @@ export const MIGRATIONS: Migration[] = [
   { version: 43, sql: SCHEMA_V43, server: false },
   { version: 44, sql: SCHEMA_V44, server: SCHEMA_V44_SERVER },
   { version: 45, sql: SCHEMA_V45, server: false },
-  { version: 46, sql: SCHEMA_V46, server: false }
+  { version: 46, sql: SCHEMA_V46, server: false },
+  { version: 47, sql: SCHEMA_V47, server: false }
 ]

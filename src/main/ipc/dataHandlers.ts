@@ -1,6 +1,9 @@
-import type { Language } from '@shared/languages'
+import { isLanguage, type Language } from '@shared/languages'
 import type { SqlDb } from '../db/sql'
-import { ebayPricesHidden, LOCAL, setEbayPricesHidden } from '../repo/scope'
+import { ebayPricesHidden, LOCAL, scopeGame, setEbayPricesHidden } from '../repo/scope'
+import { readRollup } from '../repo/rollup'
+import type { BrowseFacets, SetSummary } from '../../shared/types'
+import { rollupJobKey, type RollupJob } from '../repo/rollupJobs'
 import { borrowedArt, getCardDetail, japaneseArt, searchCards, traditionalArt } from '../repo/cards'
 import { browseCards, browseFacetsFast } from '../repo/browse'
 import { checkLanguage, checkNotesLength } from '../repo/args'
@@ -130,7 +133,8 @@ export function createDataHandlers({
   db,
   onEdit,
   availableGames,
-  onGameChanged
+  onGameChanged,
+  buildRollup
 }: {
   db: SqlDb
   onEdit(): void
@@ -138,7 +142,26 @@ export function createDataHandlers({
   availableGames(): GameId[]
   /** The game shown changed: every page should reload. */
   onGameChanged(): void
+  /**
+   * Builds and stores a rollup off the main process (src/main/rollupRunner.ts). Without it, or when
+   * it fails, a missing rollup is built here, as before.
+   */
+  buildRollup?(job: RollupJob): Promise<unknown>
 }): Record<DataChannel, Handler> {
+  /**
+   * The job's rollup from `buildRollup` when none is stored yet; undefined when one is stored, the
+   * build failed, or the game shown changed meanwhile (the caller then reads it as usual).
+   */
+  const offThread = async (job: RollupJob): Promise<unknown> => {
+    if (!buildRollup || readRollup(db, rollupJobKey(job)) !== undefined) return undefined
+    try {
+      const value = await buildRollup(job)
+      return scopeGame(db, LOCAL) === job.game ? value : undefined
+    } catch (e) {
+      console.warn('Rollup build failed', e)
+      return undefined
+    }
+  }
   // Keep today's value snapshot meaning "end of day" as the collection changes.
   const snapshotAfter = <T>(result: T): T => {
     recordSnapshot(db)
@@ -168,7 +191,11 @@ export function createDataHandlers({
     'cards:search': async (q: string) => searchCards(db, q),
     'cards:get': async (cardId: number) => getCardDetail(db, cardId),
     'cards:browse': async (f) => browseCards(db, f),
-    'cards:browseFacets': async (language) => browseFacetsFast(db, undefined, language),
+    'cards:browseFacets': async (language) => {
+      const lang = isLanguage(language) ? language : undefined
+      const built = await offThread({ kind: 'facets', game: scopeGame(db, LOCAL), language: lang })
+      return (built as BrowseFacets | undefined) ?? browseFacetsFast(db, undefined, lang)
+    },
     'cards:borrowedArt': async () => borrowedArt(db),
     'cards:traditionalArt': async () => traditionalArt(db),
     'cards:japaneseArt': async () => japaneseArt(db),
@@ -259,7 +286,10 @@ export function createDataHandlers({
       return pokedexSpecies(db, n)
     },
     'stats:get': async () => getStats(db),
-    'sets:list': async () => listSetsFast(db),
+    'sets:list': async () => {
+      const built = await offThread({ kind: 'sets', game: scopeGame(db, LOCAL) })
+      return listSetsFast(db, LOCAL, built as SetSummary[] | undefined)
+    },
     'sets:checklist': async (setName: string, language: Language) =>
       getChecklist(db, setName, checkLanguage(language)),
     'sets:adjust': async (setName: string, language: Language, printingId: number, delta: 1 | -1) =>

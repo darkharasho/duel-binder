@@ -54,6 +54,10 @@ import { printingPhotoSuffix } from './yugipedia/printingArt'
 import { emailAuthRequest, emailSignInEnabled } from './cloud/emailAuth'
 import { signInWithBrowser } from './cloud/signIn'
 import { TokenStore, electronCipher } from './cloud/tokenStore'
+import { createRollupRunner } from './rollupRunner'
+import createRollupWorker from './rollupWorker?nodeWorker'
+import type { RollupJob } from './repo/rollupJobs'
+import { LOCAL, scopeGame } from './repo/scope'
 
 // Launched from a desktop menu, stdout/stderr can be closed pipes; a console.log then emits EPIPE,
 // which would surface as an uncaught exception dialog. Logging is best-effort, so drop those errors.
@@ -316,6 +320,20 @@ async function bootstrap(): Promise<void> {
 
   const userData = app.getPath('userData')
   const db = openDatabase(join(userData, 'collection.db'))
+  // Sets and Browse filters take seconds to build over Magic's catalog: a worker builds them.
+  const rollups = createRollupRunner(() =>
+    createRollupWorker({ workerData: { file: join(userData, 'collection.db') } })
+  )
+  app.on('will-quit', () => rollups.dispose())
+  /** Builds the shown game's Sets list and Browse filters before they're first opened. */
+  const warmRollups = (): void => {
+    const game = scopeGame(db, LOCAL)
+    const jobs: RollupJob[] = [
+      { kind: 'sets', game },
+      { kind: 'facets', game }
+    ]
+    for (const job of jobs) rollups.build(job).catch((e) => console.warn('Rollup build failed', e))
+  }
   const portal = portalUrl(process.env, app.isPackaged)
   const tokens = new TokenStore(join(userData, 'account.json'), await electronCipher())
   const remoteIdOf = db.prepare('SELECT remote_id FROM card_printings WHERE id = ?').pluck()
@@ -477,6 +495,7 @@ async function bootstrap(): Promise<void> {
     onCatalogChanged: ({ imagesChanged }) => {
       recordSnapshot(db)
       if (imagesChanged) refreshFingerprints()
+      warmRollups()
     },
     signInRequired: !fakeData
   })
@@ -564,12 +583,14 @@ async function bootstrap(): Promise<void> {
       emitDataChanged,
       fingerprints,
       ocr,
-      ripCapture: createRipCapture(join(userData, 'rip-capture'), (p) => shell.openPath(p))
+      ripCapture: createRipCapture(join(userData, 'rip-capture'), (p) => shell.openPath(p)),
+      rollups
     })
   )
 
   if (captureDir) setMeta(db, 'active_game', captureGame)
   createWindow()
+  warmRollups()
   updater.start()
   account.start()
 

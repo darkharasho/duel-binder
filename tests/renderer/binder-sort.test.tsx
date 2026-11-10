@@ -6,8 +6,8 @@ import type { BinderCard, BinderDetail, CardRow, Printing } from '@shared/types'
 import { BinderPlaceholdersButton } from '@/features/binders/BinderPlaceholders'
 import { binderPlaceholders } from '@/features/binders/placeholderCards'
 import {
+  binderOrder,
   binderSorts,
-  readBinderOrder,
   saveBinderOrder,
   sortBinderCards
 } from '@/features/binders/binderSort'
@@ -108,26 +108,48 @@ describe('sortBinderCards', () => {
     )
     expect(names(sorted)).toEqual(['LOB-EN002', 'LOB-EN010', 'LOB-EN100'])
   })
+
+  it('groups by set, a card slot by the set it first came out in', () => {
+    const sorted = sortBinderCards(
+      [
+        slot('B', { firstSet: 'Metal Raiders', firstSetCode: 'MRD-002' }),
+        slot('A', { printing: { ...printing('LOB-EN005'), setName: 'Legend of Blue Eyes' } }),
+        slot('C', { firstSet: 'Metal Raiders', firstSetCode: 'MRD-001' })
+      ],
+      { by: 'set', dir: 'asc' },
+      'ygo'
+    )
+    expect(sorted.map((c) => c.card.name)).toEqual(['A', 'C', 'B'])
+  })
 })
 
 describe('binder order choices', () => {
   beforeEach(() => localStorage.clear())
 
-  it('offers set number only for a printing binder', () => {
-    expect(binderSorts('printing').some((o) => o.value === 'number')).toBe(true)
-    expect(binderSorts('card').some((o) => o.value === 'number')).toBe(false)
+  const plain = { version: 1, rules: [] }
+
+  it('offers set and set number for every binder', () => {
+    expect(binderSorts().map((o) => o.value)).toEqual(
+      expect.arrayContaining(['release', 'set', 'number', 'name', 'type', 'price'])
+    )
   })
 
-  it('remembers each binder its own order, oldest first by default', () => {
-    expect(readBinderOrder('b1', 'card')).toEqual({ by: 'release', dir: 'asc' })
+  it("uses the order saved on the binder, then this device's old one, then oldest first", () => {
+    expect(binderOrder('b1', plain)).toEqual({ by: 'release', dir: 'asc' })
     saveBinderOrder('b1', { by: 'name', dir: 'desc' })
-    expect(readBinderOrder('b1', 'card')).toEqual({ by: 'name', dir: 'desc' })
-    expect(readBinderOrder('b2', 'card')).toEqual({ by: 'release', dir: 'asc' })
+    expect(binderOrder('b1', plain)).toEqual({ by: 'name', dir: 'desc' })
+    expect(binderOrder('b2', plain)).toEqual({ by: 'release', dir: 'asc' })
+    expect(binderOrder('b1', { ...plain, order: { by: 'set', dir: 'asc' } })).toEqual({
+      by: 'set',
+      dir: 'asc'
+    })
   })
 
-  it("drops a saved order the binder's goal no longer offers", () => {
-    saveBinderOrder('b1', { by: 'number', dir: 'asc' })
-    expect(readBinderOrder('b1', 'card')).toEqual({ by: 'release', dir: 'asc' })
+  it("shows a newer app's order it doesn't know in the default order", () => {
+    expect(binderOrder('b1', { ...plain, order: { by: 'mood', dir: 'asc' } })).toEqual({
+      by: 'release',
+      dir: 'asc'
+    })
   })
 })
 

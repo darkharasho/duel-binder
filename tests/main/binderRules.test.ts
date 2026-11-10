@@ -11,6 +11,7 @@ import { seedPokemon } from '../fixtures/pokemon'
 import { seededDb } from './helpers'
 
 const rules = (...r: BinderRule[]): BinderRules => ({ version: 1, rules: r })
+const anyOf = (...r: BinderRule[]): BinderRules => ({ version: 2, rules: r, match: 'any' })
 const find = (db: SqlDb, r: BinderRules, langs: string[] = []): string[] => {
   const w = ruleSql(r, langs as never)
   return (
@@ -201,6 +202,38 @@ describe('rule queries narrowed through the cards', () => {
       db,
       rules({ field: 'name', op: 'is', value: 'Dark Magician' }, { field: 'name', op: 'is', value: 'Pot of Greed' })
     )
+  })
+
+  it('matching any rule takes the union, narrowed or not', async () => {
+    const db = await seededDb()
+    const dm = find(db, rules({ field: 'name', op: 'is', value: 'Dark Magician' }))
+    const pot = find(db, rules({ field: 'name', op: 'is', value: 'Pot of Greed' }))
+    expect(dm.length).toBeGreaterThan(0)
+    expect(pot.length).toBeGreaterThan(0)
+    const either = anyOf(
+      { field: 'name', op: 'is', value: 'Dark Magician' },
+      { field: 'name', op: 'is', value: 'Pot of Greed' }
+    )
+    expect(find(db, either)).toEqual([...dm, ...pot].sort())
+    expect(find(db, { ...either, match: 'all' })).toEqual([])
+    expectSame(db, either)
+    // A printing rule can't narrow by card: the plain condition, same printings.
+    const withSet = anyOf(
+      { field: 'name', op: 'is', value: 'Pot of Greed' },
+      { field: 'set', values: ['Legend of Blue Eyes White Dragon'] }
+    )
+    expectSame(db, withSet)
+    expect(find(db, withSet).length).toBeGreaterThan(pot.length)
+    expectSame(db, anyOf({ field: 'level', values: ['7'] }, { field: 'race', values: ['Spellcaster'] }))
+  })
+
+  it('a language limit still holds for every rule when matching any', async () => {
+    const db = await seededDb()
+    const either = anyOf(
+      { field: 'name', op: 'is', value: 'Dark Magician' },
+      { field: 'name', op: 'is', value: 'Pot of Greed' }
+    )
+    expect(find(db, either, ['xx'])).toEqual([])
   })
 
   it('finds Pokémon cards by either name, and by artist and energy', async () => {

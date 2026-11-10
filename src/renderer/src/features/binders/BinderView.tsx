@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { PencilIcon } from 'lucide-react'
 import type { BinderCard, BinderDetail } from '@shared/types'
-import type { BinderRule } from '@shared/binders'
+import { normalizeRules, type BinderRule } from '@shared/binders'
 import { CardSheet } from '@/components/CardSheet'
 import { PageHeader } from '@/components/PageHeader'
 import { binderScanFor } from '@/components/scanFor'
@@ -10,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { SetProgress } from '@/features/sets/SetProgress'
 import { CardPanel } from '@/features/card/CardPanel'
 import { SortControl } from '@/components/SortControl'
+import { api, queryKeys } from '@/lib/api'
 import { formatUsd } from '@/lib/format'
 import { useGame } from '@/lib/game'
 import { isWeb } from '@/lib/platform'
@@ -17,8 +19,8 @@ import { BinderGrid } from './BinderGrid'
 import { BinderPlaceholdersButton } from './BinderPlaceholders'
 import { GOAL_LABEL, binderProgress, languagesLabel } from './binderProgress'
 import {
+  binderOrder,
   binderSorts,
-  readBinderOrder,
   saveBinderOrder,
   sortBinderCards,
   type BinderOrder
@@ -77,16 +79,31 @@ export function BinderView({
   const [view, setView] = useState<View>('all')
   const [open, setOpen] = useState<BinderCard | null>(null)
   const { game } = useGame()
-  const [order, setOrder] = useState<{ uid: string; order: BinderOrder }>(() => ({
-    uid: detail.uid,
-    order: readBinderOrder(detail.uid, detail.goal)
-  }))
-  // Another binder opened in the same view reads its own saved order.
-  const current = order.uid === detail.uid ? order.order : readBinderOrder(detail.uid, detail.goal)
-  const sorts = binderSorts(detail.goal)
+  const qc = useQueryClient()
+  // The order just chosen here, until the saved binder comes back with it.
+  const [chosen, setChosen] = useState<{ uid: string; order: BinderOrder } | null>(null)
+  const current = chosen?.uid === detail.uid ? chosen.order : binderOrder(detail.uid, detail.rules)
+  const sorts = binderSorts()
   const chooseOrder = (o: BinderOrder): void => {
-    setOrder({ uid: detail.uid, order: o })
-    saveBinderOrder(detail.uid, o)
+    setChosen({ uid: detail.uid, order: o })
+    // Saved on the binder, so every device and friend sees the same order. A friend's binder, or
+    // one this app can't save, remembers it on this device only.
+    if (readOnly || !detail.editable) {
+      saveBinderOrder(detail.uid, o)
+      return
+    }
+    void api.binders
+      .save({
+        uid: detail.uid,
+        name: detail.name,
+        rules: normalizeRules({ ...detail.rules, order: o }),
+        goal: detail.goal,
+        languages: detail.languages,
+        friendsVisible: detail.friendsVisible
+      })
+      .then(() => qc.invalidateQueries({ queryKey: queryKeys.binders }))
+      .then(() => setChosen(null))
+      .catch(() => saveBinderOrder(detail.uid, o))
   }
   const progress = binderProgress(detail)
   const hasGoal = detail.goal !== 'none'
@@ -114,6 +131,9 @@ export function BinderView({
 
   const chips = (
     <>
+      {detail.rules.match === 'any' && detail.rules.rules.length > 1 && (
+        <Chip label="Matches">any rule</Chip>
+      )}
       {detail.rules.rules.map((r, i) => {
         const t = ruleText(r)
         return (

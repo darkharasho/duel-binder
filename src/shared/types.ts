@@ -598,6 +598,12 @@ export interface BinderCard {
    * undated, and absent from a server that predates it.
    */
   releaseDate?: string | null
+  /**
+   * A card or art slot's first release: its set and set number, which "Set" and "Set number" sort
+   * it by (a printing slot uses its own printing). Absent from a server that predates it.
+   */
+  firstSet?: string | null
+  firstSetCode?: string | null
   owned: number
   added: boolean
   /** The cheapest known price of a missing slot; null when owned or unpriced. */

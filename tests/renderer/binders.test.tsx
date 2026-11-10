@@ -111,6 +111,76 @@ describe('the binders page', () => {
 })
 
 describe('a binder', () => {
+  it('saves a chosen order on the binder, so every device shows it', async () => {
+    const save = vi.fn(async () => 'b1')
+    renderWithProviders(<BinderView detail={detail()} />, {
+      api: createMockApi({ binders: { save } })
+    })
+    await userEvent.click(screen.getByLabelText('Sort by'))
+    await userEvent.click(await screen.findByRole('option', { name: /^Set: A/ }))
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith({
+        uid: 'b1',
+        name: 'Blue-Eyes',
+        rules: {
+          version: 1,
+          rules: [{ field: 'name', op: 'is', value: 'Blue-Eyes White Dragon' }],
+          order: { by: 'set', dir: 'asc' }
+        },
+        goal: 'art',
+        languages: ['en', 'ja'],
+        friendsVisible: true
+      })
+    )
+  })
+
+  it("shows a binder in its saved order, and keeps a friend's binder's order on this device", async () => {
+    const save = vi.fn(async () => 'b1')
+    const cards = [
+      slot(1, 0, { card: { id: 1, name: 'Zed' } as CardRow }),
+      slot(2, 0, { card: { id: 2, name: 'Abe' } as CardRow })
+    ]
+    renderWithProviders(
+      <BinderView
+        readOnly
+        detail={detail({
+          cards,
+          rules: { version: 1, rules: [], order: { by: 'name', dir: 'asc' } }
+        })}
+      />,
+      { api: createMockApi({ binders: { save } }) }
+    )
+    const grid = screen.getByRole('list', { name: 'Binder cards' })
+    expect(
+      within(grid)
+        .getAllByRole('listitem')
+        .map((li) => li.textContent)
+    ).toEqual([expect.stringContaining('Abe'), expect.stringContaining('Zed')])
+    await userEvent.click(screen.getByLabelText('Sort by'))
+    await userEvent.click(await screen.findByRole('option', { name: /^Name: Z/ }))
+    expect(within(grid).getAllByRole('listitem')[0]).toHaveTextContent('Zed')
+    expect(save).not.toHaveBeenCalled()
+    localStorage.clear()
+  })
+
+  it('says when a binder matches any of its rules', () => {
+    renderWithProviders(
+      <BinderView
+        detail={detail({
+          rules: {
+            version: 2,
+            match: 'any',
+            rules: [
+              { field: 'name', op: 'is', value: 'Blue-Eyes White Dragon' },
+              { field: 'rarity', values: ['Secret Rare'] }
+            ]
+          }
+        })}
+      />
+    )
+    expect(screen.getByText('any rule')).toBeInTheDocument()
+  })
+
   it('filters All, Owned and Missing', async () => {
     renderWithProviders(<BinderView detail={detail()} />)
     const grid = screen.getByRole('list', { name: 'Binder cards' })

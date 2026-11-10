@@ -26,7 +26,8 @@ const COLUMN: Partial<Record<RuleField, string>> = {
 
 /**
  * Boolean SQL over aliases p, c and pc (LEFT JOIN pokemon_cards), true for a printing that meets
- * every rule and, when `languages` is not empty, is in one of them. No WHERE; values are bound.
+ * every rule (or, with match 'any', at least one) and, when `languages` is not empty, is in one of
+ * them. No WHERE; values are bound.
  */
 export function ruleSql(
   rules: BinderRules,
@@ -58,12 +59,17 @@ export function ruleSql(
       params.push(JSON.stringify(rule.values))
     }
   }
+  const ruleParts = matchesAny(rules) ? [`(${parts.join(' OR ')})`] : parts
   if (languages.length) {
-    parts.push('p.language IN (SELECT value FROM json_each(?))')
+    ruleParts.push('p.language IN (SELECT value FROM json_each(?))')
     params.push(JSON.stringify(languages))
   }
-  return { sql: parts.length ? parts.join(' AND ') : '1', params }
+  return { sql: ruleParts.length ? ruleParts.join(' AND ') : '1', params }
 }
+
+/** True when one rule is enough. A single rule matches the same either way. */
+export const matchesAny = (rules: BinderRules): boolean =>
+  rules.match === 'any' && rules.rules.length > 1
 
 const FROM = (scope: Scope): string => `
   FROM card_printings p
@@ -124,6 +130,14 @@ function candidateCards(
   scope: Scope,
   lookups?: CardLookups
 ): number[] | null {
+  if (matchesAny(rules)) {
+    // Any one rule: the union of each rule's own cards, unless one of them can't narrow.
+    const each = rules.rules.map((r) =>
+      candidateCards(db, { version: rules.version, rules: [r] }, scope, lookups)
+    )
+    if (each.some((ids) => ids === null)) return null
+    return [...new Set(each.flatMap((ids) => ids ?? []))]
+  }
   const cardRules = rules.rules.filter((r) => !onPrinting(r.field))
   if (cardRules.length === 0) return null
   const name = cardRules.find((r): r is NameRule => r.field === 'name')

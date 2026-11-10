@@ -6,6 +6,7 @@ import {
   MAX_BINDER_MATCHES,
   MAX_BINDERS,
   draftProblem,
+  normalizeRules,
   rulesEditable,
   type BinderDraft,
   type BinderEditAction,
@@ -414,16 +415,39 @@ const SET_DATE = 'COALESCE(s.tcg_date, es.tcg_date)'
 const SET_JOINS = `LEFT JOIN sets s ON s.game = p.game AND s.language = p.language AND s.set_name = p.set_name
   LEFT JOIN sets es ON es.game = p.game AND es.language = 'en' AND es.set_name = p.set_name`
 
-/** Each card's first release: the earliest dated set of its listed printings, in any language. */
-function firstReleases(db: SqlDb, cardIds: number[], scope: Scope): Map<number, string> {
+interface FirstRelease {
+  date: string | null
+  setName: string
+  setCode: string
+}
+
+/**
+ * Each card's first release: the printing in the earliest dated set of its listed printings, in any
+ * language (undated sets last, then the lowest set number). Its set places a card slot under "Set".
+ */
+function firstReleases(db: SqlDb, cardIds: number[], scope: Scope): Map<number, FirstRelease> {
   const rows = db
     .prepare(
-      `SELECT p.card_id, MIN(${SET_DATE}) AS d FROM card_printings p ${SET_JOINS}
-       WHERE +p.game = ${scope.game} AND p.card_id IN ${IN_LIST} AND +p.contributed = 0
-       GROUP BY p.card_id`
+      `SELECT p.card_id, p.set_name, p.set_code, ${SET_DATE} AS d FROM card_printings p ${SET_JOINS}
+       WHERE +p.game = ${scope.game} AND p.card_id IN ${IN_LIST} AND +p.contributed = 0`
     )
-    .all(JSON.stringify(cardIds)) as { card_id: number; d: string | null }[]
-  return new Map(rows.flatMap((r) => (r.d ? [[r.card_id, r.d] as const] : [])))
+    .all(JSON.stringify(cardIds)) as {
+    card_id: number
+    set_name: string
+    set_code: string
+    d: string | null
+  }[]
+  const first = new Map<number, FirstRelease>()
+  const earlier = (a: FirstRelease, b: FirstRelease): boolean =>
+    a.date !== b.date
+      ? b.date === null || (a.date !== null && a.date < b.date)
+      : a.setCode < b.setCode
+  for (const r of rows) {
+    const next = { date: r.d, setName: r.set_name, setCode: r.set_code }
+    const known = first.get(r.card_id)
+    if (!known || earlier(next, known)) first.set(r.card_id, next)
+  }
+  return first
 }
 
 const CARD_COLS = `c.id, c.name, c.type, c.frame_type, c.race, c.attribute, c.level, c.linkval, c.atk,
@@ -480,7 +504,11 @@ function binderCards(db: SqlDb, slots: Slot[], scope: Scope): BinderCard[] {
         releaseDate:
           (slot.level === 'printing' && slot.printing
             ? printingDates.get(slot.printing.printingId)
-            : cardDates.get(slot.cardId)) ?? null,
+            : cardDates.get(slot.cardId)?.date) ?? null,
+        ...(slot.level !== 'printing' && {
+          firstSet: cardDates.get(slot.cardId)?.setName ?? null,
+          firstSetCode: cardDates.get(slot.cardId)?.setCode ?? null
+        }),
         owned: slot.owned,
         added: slot.added,
         price: slot.price
@@ -564,7 +592,7 @@ export function saveBinder(
   ).run(
     uid,
     draft.name.trim(),
-    JSON.stringify(draft.rules),
+    JSON.stringify(normalizeRules(draft.rules)),
     draft.goal,
     JSON.stringify(draft.languages),
     draft.friendsVisible ? 1 : 0,

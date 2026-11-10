@@ -159,6 +159,11 @@ export interface ScanEngine {
       codesOnly?: boolean
       /** As the frame request's region. */
       region?: CropRect
+      /**
+       * Hears what the worker saw as soon as it answers, before the frame's text is read: a
+       * matched card's outline can be drawn while its OCR runs.
+       */
+      onVision?: (seen: FrameSignals) => void
     }
   ): Promise<RawSignals>
   /** Live frames match only these artworks from now on; null for every one. */
@@ -429,7 +434,17 @@ export function createScanEngine(deps: {
 
     async analyze(
       frame,
-      { candidates, wantText, wantLook = false, photo = false, tilt, at, codesOnly = false, region }
+      {
+        candidates,
+        wantText,
+        wantLook = false,
+        photo = false,
+        tilt,
+        at,
+        codesOnly = false,
+        region,
+        onVision
+      }
     ) {
       const id = nextId++
       const grabbed = at ?? performance.now()
@@ -464,6 +479,7 @@ export function createScanEngine(deps: {
           reject(e instanceof Error ? e : new Error(String(e)))
         }
       })
+      onVision?.(signals)
       const { found, quad, art, cues, version, slab, look } = signals
       // Only when set, so a frame's signals are as they were without the holder search or a tilt.
       const flags = {

@@ -20,6 +20,13 @@ import { CAMERA_MESSAGES } from './copy'
 import { ScanTimingsReadout } from './ScanTimings'
 import { scanTimingsOn } from './scanTimingsSetting'
 
+/**
+ * The widest live frame the phone scans (useScanLoop's maxFrameWidth): its 4K camera's crop is
+ * 2160 wide, which took the phone ~3x the desktop's time a frame. Above the 810-wide frames the
+ * scan photo tests read.
+ */
+const LIVE_FRAME_WIDTH = 1080
+
 /** The video track's torch, where the browser offers one (Chrome on Android; not iPhone). */
 function useTorch(stream: MediaStream | null): {
   available: boolean
@@ -52,15 +59,25 @@ function useTorch(stream: MediaStream | null): {
  */
 function CameraBackdrop({ stream }: { stream: MediaStream | null }): React.JSX.Element | null {
   const ref = useRef<HTMLVideoElement>(null)
+  // A new element after coming back from another app, as the preview takes (ScanViewport).
+  const [shows, setShows] = useState(0)
+  useEffect(() => {
+    const shown = (): void => {
+      if (document.visibilityState === 'visible') setShows((n) => n + 1)
+    }
+    document.addEventListener('visibilitychange', shown)
+    return () => document.removeEventListener('visibilitychange', shown)
+  }, [])
   useEffect(() => {
     const video = ref.current
     if (!video) return
     video.srcObject = stream
     if (stream) void video.play?.()?.catch(() => undefined)
-  }, [stream])
+  }, [stream, shows])
   if (!stream) return null
   return (
     <video
+      key={shows}
       ref={ref}
       aria-hidden
       autoPlay
@@ -134,7 +151,8 @@ export function PhoneCamera({
     tiltModels,
     onStalled: camera.retry,
     codeMode,
-    timings
+    timings,
+    maxFrameWidth: LIVE_FRAME_WIDTH
   })
   const torch = useTorch(camera.stream)
 
@@ -151,7 +169,7 @@ export function PhoneCamera({
           loop={loop}
           status={codeMode ? codeStatusText(codeStatus) : undefined}
           videoKey={codeMode ? 'code' : 'card'}
-          freshOnResize
+          freshVideo
           className="aspect-[3/4] w-[min(100cqw,75cqh)] rounded-3xl shadow-[0_10px_40px_rgba(0,0,0,0.4)]"
         >
           {codeMode && <AimBox added={codeStatus.kind === 'added'} />}

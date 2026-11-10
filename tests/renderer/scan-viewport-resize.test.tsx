@@ -4,8 +4,8 @@ import { ScanViewport } from '@/features/scan/ScanViewport'
 import type { ScanLoop } from '@/features/scan/useScanLoop'
 
 // iOS kept drawing the camera's picture at the size its element had when the picture started,
-// a small box in black once the phone's preview grew: the preview takes a new video element,
-// with the same stream, whenever its box settles at a new size.
+// a small box in black once the phone's preview grew or the app came back from the background:
+// the preview takes a new video element, with the same stream, then.
 
 let report: (width: number, height: number) => void = () => undefined
 class FakeResizeObserver {
@@ -34,7 +34,7 @@ const loop: ScanLoop = {
 
 const stream = { id: 'camera' } as unknown as MediaStream
 
-function mount(freshOnResize: boolean): {
+function mount(freshVideo: boolean): {
   videoRef: React.RefObject<HTMLVideoElement | null>
 } {
   const videoRef = createRef<HTMLVideoElement>()
@@ -45,7 +45,7 @@ function mount(freshOnResize: boolean): {
       messages={{} as never}
       onRetryCamera={() => undefined}
       loop={loop}
-      freshOnResize={freshOnResize}
+      freshVideo={freshVideo}
     />
   )
   videoRef.current!.srcObject = stream
@@ -83,11 +83,38 @@ describe('ScanViewport preview resizing', () => {
     expect(videoRef.current!.srcObject).toBe(stream)
   })
 
+  it('takes a new video element when the page comes back from the background', async () => {
+    const { videoRef } = mount(true)
+    const first = videoRef.current
+    act(() => document.dispatchEvent(new Event('visibilitychange')))
+    await settle()
+    expect(videoRef.current).not.toBe(first)
+    expect(videoRef.current!.srcObject).toBe(stream)
+  })
+
+  it("takes a new video element when the picture's own size changes", async () => {
+    const { videoRef } = mount(true)
+    const first = videoRef.current!
+    const size = (w: number, h: number): void => {
+      Object.defineProperty(first, 'videoWidth', { value: w, configurable: true })
+      Object.defineProperty(first, 'videoHeight', { value: h, configurable: true })
+      act(() => first.dispatchEvent(new Event('resize')))
+    }
+    size(1920, 1080)
+    await settle()
+    expect(videoRef.current).toBe(first)
+    size(1080, 1920)
+    await settle()
+    expect(videoRef.current).not.toBe(first)
+    expect(videoRef.current!.srcObject).toBe(stream)
+  })
+
   it('keeps its video element without the option', async () => {
     const { videoRef } = mount(false)
     const first = videoRef.current
     act(() => report(330, 440))
     act(() => report(585, 780))
+    act(() => document.dispatchEvent(new Event('visibilitychange')))
     await settle()
     expect(videoRef.current).toBe(first)
   })

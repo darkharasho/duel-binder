@@ -168,7 +168,7 @@ describe('background rarity read', () => {
     // Every frame's options are exactly as without a read.
     expect(engine.analyze.mock.calls.length).toBeGreaterThan(5)
     for (const [, o] of engine.analyze.mock.calls)
-      expect(Object.keys(o).sort()).toEqual(['candidates', 'wantLook', 'wantText'])
+      expect(Object.keys(o).sort()).toEqual(['candidates', 'onVision', 'wantLook', 'wantText'])
     expect(engine.tiltReading).not.toHaveBeenCalled()
     expect(engine.tiltReset).not.toHaveBeenCalled()
     expect(onRarityRead).not.toHaveBeenCalled()

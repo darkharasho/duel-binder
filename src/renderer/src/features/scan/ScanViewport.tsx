@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { SCAN_ZOOM_MAX, SCAN_ZOOM_STEP } from '@shared/scanWindow'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -9,7 +9,7 @@ import { statusText } from './scanText'
 import type { CameraError } from './useCamera'
 import type { ScanLoop } from './useScanLoop'
 
-/** How long the preview's box must keep a new size before its video element is replaced. */
+/** How long things must settle before the preview's video element is replaced. */
 const RESIZE_SETTLE_MS = 150
 
 /**
@@ -35,7 +35,7 @@ export function ScanViewport({
   smooth = false,
   status,
   videoKey,
-  freshOnResize = false,
+  freshVideo = false,
   children
 }: {
   videoRef: RefObject<HTMLVideoElement | null>
@@ -56,12 +56,13 @@ export function ScanViewport({
    */
   videoKey?: string
   /**
-   * Give the preview a new video element, keeping its stream, whenever the box settles at a new
-   * size. iOS keeps drawing a camera's picture at the size its element had when the picture
-   * started, a small box in black once the preview grows (the phone's preview is sized by the
-   * room left around it).
+   * Give the preview a new video element, keeping its stream, when its box settles at a new size,
+   * when the page comes back from the background, or when the picture's own size changes. iOS
+   * keeps drawing a camera's picture at a stale size, a small box in black, in each case (the
+   * phone's preview is sized by the room left around it; iOS restarts the camera after another
+   * app had the screen).
    */
-  freshOnResize?: boolean
+  freshVideo?: boolean
   children?: React.ReactNode
 }): React.JSX.Element {
   const outline = loop.outline
@@ -72,33 +73,54 @@ export function ScanViewport({
   })
   const [resizes, setResizes] = useState(0)
   const keptStream = useRef<MediaProvider | null>(null)
+  const freshTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  useEffect(() => () => clearTimeout(freshTimer.current), [])
+  // Soon (once things settle), a new video element with the same stream.
+  const freshen = useCallback(() => {
+    clearTimeout(freshTimer.current)
+    freshTimer.current = setTimeout(() => {
+      keptStream.current = videoRef.current?.srcObject ?? null
+      if (keptStream.current) setResizes((n) => n + 1)
+    }, RESIZE_SETTLE_MS)
+  }, [videoRef])
   useEffect(() => {
     const box = boxRef.current
-    if (!box || !freshOnResize || typeof ResizeObserver === 'undefined') return
+    if (!box || !freshVideo || typeof ResizeObserver === 'undefined') return
     let last: string | null = null
-    let timer: ReturnType<typeof setTimeout> | undefined
     const observer = new ResizeObserver((entries) => {
       const rect = entries[0]?.contentRect
       if (!rect) return
       const size = `${Math.round(rect.width)}x${Math.round(rect.height)}`
       // The first report is the size the element started at, not a change.
-      if (last === null || size === last) {
-        last = size
-        return
-      }
+      if (last !== null && size !== last) freshen()
       last = size
-      clearTimeout(timer)
-      timer = setTimeout(() => {
-        keptStream.current = videoRef.current?.srcObject ?? null
-        setResizes((n) => n + 1)
-      }, RESIZE_SETTLE_MS)
     })
     observer.observe(box)
-    return () => {
-      observer.disconnect()
-      clearTimeout(timer)
+    return () => observer.disconnect()
+  }, [freshVideo, freshen])
+  // Back from another app: iOS restarts the camera, and its picture can come back small.
+  useEffect(() => {
+    if (!freshVideo || typeof document === 'undefined') return
+    const shown = (): void => {
+      if (document.visibilityState === 'visible') freshen()
     }
-  }, [freshOnResize, videoRef])
+    document.addEventListener('visibilitychange', shown)
+    return () => document.removeEventListener('visibilitychange', shown)
+  }, [freshVideo, freshen])
+  // The picture's own size changing (a camera restart, the phone turned) after it first showed.
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video || !freshVideo) return
+    let last: string | null = null
+    const resized = (): void => {
+      if (!video.videoWidth || !video.videoHeight) return
+      const size = `${video.videoWidth}x${video.videoHeight}`
+      if (last !== null && size !== last) freshen()
+      last = size
+    }
+    video.addEventListener('resize', resized)
+    return () => video.removeEventListener('resize', resized)
+  }, [freshVideo, freshen, videoRef, resizes, videoKey])
   // The new element takes the old one's stream before it paints.
   useLayoutEffect(() => {
     const video = videoRef.current

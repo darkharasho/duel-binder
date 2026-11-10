@@ -1,0 +1,62 @@
+{
+  "object": "list",
+  "has_more": false,
+  "data": [
+    {
+      "code": "tmh3",
+      "name": "Modern Horizons 3 Tokens",
+      "released_at": "2024-06-14",
+      "set_type": "token",
+      "parent_set_code": "mh3"
+    },
+    {
+      "code": "mh3",
+      "name": "Modern Horizons 3",
+      "released_at": "2024-06-14",
+      "set_type": "draft_innovation"
+    },
+    {
+      "code": "amh2",
+      "name": "Modern Horizons 2 Art Series",
+      "released_at": "2021-06-18",
+      "set_type": "memorabilia",
+      "parent_set_code": "mh2"
+    },
+    {
+      "code": "cmr",
+      "name": "Commander Legends",
+      "released_at": "2020-11-20",
+      "set_type": "draft_innovation"
+    },
+    {
+      "code": "plst",
+      "name": "The List",
+      "released_at": "2020-09-26",
+      "set_type": "masters"
+    },
+    {
+      "code": "sld",
+      "name": "Secret Lair Drop",
+      "released_at": "2019-12-02",
+      "set_type": "box"
+    },
+    {
+      "code": "xln",
+      "name": "Ixalan",
+      "released_at": "2017-09-29",
+      "set_type": "expansion"
+    },
+    {
+      "code": "isd",
+      "name": "Innistrad",
+      "released_at": "2011-09-30",
+      "set_type": "expansion"
+    },
+    {
+      "code": "9ed",
+      "name": "Ninth Edition",
+      "released_at": "2005-07-29",
+      "set_type": "core"
+    }
+  ]
+}

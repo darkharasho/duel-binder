@@ -129,7 +129,7 @@ export const CATALOG_TABLES: CatalogTable[] = [
     columns: [
       'card_id', 'oracle_id', 'layout', 'type_line', 'types', 'mana_cost', 'mana_value', 'colors',
       'color_identity', 'oracle_text', 'power', 'toughness', 'loyalty', 'defense', 'keywords', 'faces',
-      'lang', 'local_name'
+      'lang', 'local_name', 'local_name_search'
     ],
     games: ['mtg']
   },

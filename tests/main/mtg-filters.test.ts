@@ -8,6 +8,7 @@ import { browseCards, browseFacets } from '../../src/main/repo/browse'
 import { getCardDetail, searchCards } from '../../src/main/repo/cards'
 import { getStats } from '../../src/main/repo/stats'
 import { magicFacets } from '../../src/main/repo/mtgFilters'
+import { magicNameSearchKey } from '../../src/shared/games/magic'
 import { LOCAL } from '../../src/main/repo/scope'
 
 const now = new Date('2026-11-09T12:00:00.000Z')
@@ -176,9 +177,9 @@ describe('Magic filters, facets, stats and details', () => {
     ).run(ja)
     db.prepare(
       `INSERT INTO mtg_cards (card_id, oracle_id, layout, type_line, types, mana_cost, mana_value, colors,
-         color_identity, oracle_text, power, toughness, keywords, lang, local_name)
+         color_identity, oracle_text, power, toughness, keywords, lang, local_name, local_name_search)
        VALUES (?, 'serra-oracle', 'normal', 'Creature - Angel', '["Creature"]', '{3}{W}{W}', 5, '["W"]',
-         '["W"]', '', '4', '4', '[]', 'ja', 'セラの天使')`
+         '["W"]', '', '4', '4', '[]', 'ja', 'セラの天使', 'セラの天使')`
     ).run(ja)
     const p = Number(
       db
@@ -235,6 +236,47 @@ describe('Magic filters, facets, stats and details', () => {
       ['ja', 'セラの天使'],
       ['de', 'Serra-Engel']
     ])
+  })
+
+  it('finds a printed name whatever its case, Cyrillic or accented', () => {
+    const add = (lang: string, oracle: string, name: string, localName: string): number => {
+      const id = mtgCardId(lang, oracle)
+      db.prepare(
+        `INSERT INTO cards (id, game, name, type, frame_type, race, "desc", updated_at)
+         VALUES (?, 'mtg', ?, 'Instant', 'mtg', '', '', '2026-11-09')`
+      ).run(id, name)
+      db.prepare(
+        `INSERT INTO mtg_cards (card_id, oracle_id, layout, type_line, lang, local_name, local_name_search)
+         VALUES (?, ?, 'normal', 'Instant', ?, ?, ?)`
+      ).run(id, oracle, lang, localName, magicNameSearchKey(localName))
+      const p = Number(
+        db
+          .prepare(
+            `INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity)
+             VALUES ('mtg', ?, ?, 'Magic 2015', 'M15 1', 'Common')`
+          )
+          .run(id, lang).lastInsertRowid
+      )
+      const image = mtgImageId(`${lang}-${oracle}`)
+      db.prepare(
+        "INSERT INTO card_images (image_id, game, card_id, sort_order) VALUES (?, 'mtg', ?, 0)"
+      ).run(image, id)
+      addEntry(db, { printingId: p, imageId: image, quantity: 1 }, now)
+      return id
+    }
+    const ru = add('ru', 'bolt-oracle', 'Lightning Bolt', 'Молния')
+    const fr = add('fr', 'eclair-oracle', 'Fire Bolt', 'Éclair de feu')
+    db.exec(`INSERT INTO cards_fts(cards_fts) VALUES('rebuild')`)
+    for (const [q, id] of [
+      ['молния', ru],
+      ['МОЛНИЯ', ru],
+      ['éclair', fr],
+      ['ÉCLAIR DE', fr]
+    ] as const) {
+      expect(searchCards(db, q).map((r) => r.id)).toEqual([id])
+      expect(browseCards(db, { sort: 'name', dir: 'asc', q }).cards.map((c) => c.id)).toEqual([id])
+      expect(listEntries(db, { sort: 'name', dir: 'asc', q }).map((e) => e.card.id)).toEqual([id])
+    }
   })
 
   it('gives artists in a fixed order, only on the details read', () => {

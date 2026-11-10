@@ -401,10 +401,20 @@ describe('writeMagic', () => {
         [enId, jaId].sort((a, b) => a - b).map((id) => ({ id, name: 'Eldrazi Repurposer' }))
       )
       expect(
-        db.prepare('SELECT card_id, lang, local_name, oracle_id FROM mtg_cards ORDER BY lang').all()
+        db
+          .prepare(
+            'SELECT card_id, lang, local_name, local_name_search, oracle_id FROM mtg_cards ORDER BY lang'
+          )
+          .all()
       ).toEqual([
-        { card_id: enId, lang: 'en', local_name: null, oracle_id: oracle },
-        { card_id: jaId, lang: 'ja', local_name: 'エルドラージの再利用者', oracle_id: oracle }
+        { card_id: enId, lang: 'en', local_name: null, local_name_search: null, oracle_id: oracle },
+        {
+          card_id: jaId,
+          lang: 'ja',
+          local_name: 'エルドラージの再利用者',
+          local_name_search: 'エルドラージの再利用者',
+          oracle_id: oracle
+        }
       ])
       expect(
         db

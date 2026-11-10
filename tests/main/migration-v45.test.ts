@@ -18,7 +18,8 @@ describe('migration V45 (Magic languages and faces)', () => {
     expect(old.prepare('SELECT * FROM mtg_cards WHERE card_id = ?').get(cardIds[0])).toEqual({
       ...card,
       lang: 'en',
-      local_name: null
+      local_name: null,
+      local_name_search: null
     })
     expect(old.prepare('SELECT * FROM mtg_images WHERE image_id = ?').get(imageIds[0])).toEqual({
       ...image,

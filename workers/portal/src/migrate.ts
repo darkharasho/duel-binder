@@ -355,11 +355,11 @@ function magicStep(): ServerStep {
   }
 }
 
-/** Frozen, as of server-43: server-42's `mtg_cards` entry plus `lang` and `local_name`. */
+/** Frozen, as of server-43: server-42's `mtg_cards` entry plus `lang`, `local_name` and `local_name_search`. */
 const SERVER_43_MTG_CARDS: FrozenTable = {
   name: 'mtg_cards',
   key: ['card_id'],
-  columns: [...SERVER_42_MTG_CARDS.columns, 'lang', 'local_name']
+  columns: [...SERVER_42_MTG_CARDS.columns, 'lang', 'local_name', 'local_name_search']
 }
 /** Frozen, as of server-43: server-42's `mtg_images` entry plus `back_image_id` and `art_from`. */
 const SERVER_43_MTG_IMAGES: FrozenTable = {

@@ -40,6 +40,13 @@ export const MTG_LANGUAGES: Readonly<Record<string, Language>> = {
   zht: 'zh-hant'
 }
 
+/**
+ * `mtg_cards.local_name_search`: the printed name as a search compares it. SQLite's LIKE and lower()
+ * fold ASCII only, so "молния" would never find "Молния"; the job writes this lowercased copy and a
+ * search lowercases its text the same way.
+ */
+export const magicNameSearchKey = (s: string): string => s.normalize('NFC').toLowerCase()
+
 export const mtgLanguageOf = (scryLang: string): Language | null =>
   Object.hasOwn(MTG_LANGUAGES, scryLang) ? MTG_LANGUAGES[scryLang] : null
 

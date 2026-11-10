@@ -1,5 +1,5 @@
 import type { SqlDb } from '../db/sql'
-import { MTG_CARD_TYPES, MTG_COLOR_NAMES, mtgFinishSql } from '../../shared/games/magic'
+import { magicNameSearchKey, MTG_CARD_TYPES, MTG_COLOR_NAMES, mtgFinishSql } from '../../shared/games/magic'
 import type { Scope } from './scope'
 
 export interface MagicFilterFields {
@@ -84,8 +84,8 @@ export function magicWhere(f: MagicFilterFields): { sql: string; args: unknown[]
  */
 export function magicLocalName(text: string): { sql: string; params: unknown[] } {
   return {
-    sql: `c.id IN (SELECT card_id FROM mtg_cards WHERE local_name LIKE ? ESCAPE '\\')`,
-    params: [`%${escapeLike(text)}%`]
+    sql: `c.id IN (SELECT card_id FROM mtg_cards WHERE local_name_search LIKE ? ESCAPE '\\')`,
+    params: [`%${escapeLike(magicNameSearchKey(text))}%`]
   }
 }
 

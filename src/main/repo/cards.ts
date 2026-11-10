@@ -11,6 +11,7 @@ import type {
   Printing
 } from '../../shared/types'
 import { byGame, gameOfId, mtgImageId, type GameId } from '../../shared/games'
+import { magicNameSearchKey } from '../../shared/games/magic'
 import { opPrintingImageId } from '../../shared/games/onePiece'
 import { isLanguage, LANGUAGES } from '../../shared/languages'
 import { setPrice } from './priceRule'
@@ -311,21 +312,22 @@ export function searchCards(db: SqlDb, q: string, limit = 20, scope: Scope = LOC
       .all(fts, text, limit) as DbHit[]
     rows.forEach((r) => push(toResult(r)))
   }
-  const localNames = byGame<string | null>(scopeGame(db, scope), {
+  const localNames = byGame<{ table: string; col: string; text: string } | null>(scopeGame(db, scope), {
     ygo: null,
-    pkm: 'pokemon_cards',
+    pkm: { table: 'pokemon_cards', col: 'local_name', text },
     op: null,
-    mtg: 'mtg_cards'
+    // Magic matches a lowercased copy: SQLite folds ASCII case only (magicNameSearchKey).
+    mtg: { table: 'mtg_cards', col: 'local_name_search', text: magicNameSearchKey(text) }
   })
   if (localNames) {
     // A card's printed (local) name: Pokémon's Japanese name, a Magic printing's own language's.
     const rows = db
       .prepare(
         `SELECT c.id, c.name, c.type, ${defaultImage} AS default_image_id, NULL AS matched
-         FROM ${localNames} lc JOIN cards c ON c.id = lc.card_id AND +c.game = ${scope.game}
-         WHERE lc.local_name LIKE ? ESCAPE '\\' ORDER BY c.name LIMIT ?`
+         FROM ${localNames.table} lc JOIN cards c ON c.id = lc.card_id AND +c.game = ${scope.game}
+         WHERE lc.${localNames.col} LIKE ? ESCAPE '\\' ORDER BY c.name LIMIT ?`
       )
-      .all(`%${escapeLike(text)}%`, limit) as DbHit[]
+      .all(`%${escapeLike(localNames.text)}%`, limit) as DbHit[]
     rows.forEach((r) => push(toResult(r)))
   }
   return scopeGame(db, scope) === 'mtg' ? withMagicLanguages(db, results) : results

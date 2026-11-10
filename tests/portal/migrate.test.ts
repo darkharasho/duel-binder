@@ -599,7 +599,7 @@ describe('server-43 (mtg language and face columns)', () => {
     expect(cols(old, 'mtg_cards')).not.toContain('lang')
     seedMagic(old)
     migrateServer(old)
-    expect(cols(old, 'mtg_cards')).toEqual(expect.arrayContaining(['lang', 'local_name']))
+    expect(cols(old, 'mtg_cards')).toEqual(expect.arrayContaining(['lang', 'local_name', 'local_name_search']))
     expect(cols(old, 'mtg_images')).toEqual(expect.arrayContaining(['back_image_id', 'art_from']))
     expect(rows(old, 'SELECT DISTINCT lang, local_name FROM mtg_cards')).toEqual([{ lang: 'en', local_name: null }])
     old.close()
@@ -613,6 +613,9 @@ describe('server-43 (mtg language and face columns)', () => {
       (db.prepare(`SELECT catalog_seq AS s FROM ${t} WHERE ${k} = ?`).get(id) as { s: number }).s
     let last = seqOf('mtg_cards', 'card_id', cardIds[0])
     db.prepare('UPDATE mtg_cards SET local_name = ? WHERE card_id = ?').run('Ange', cardIds[0])
+    expect(seqOf('mtg_cards', 'card_id', cardIds[0])).toBeGreaterThan(last)
+    last = seqOf('mtg_cards', 'card_id', cardIds[0])
+    db.prepare('UPDATE mtg_cards SET local_name_search = ? WHERE card_id = ?').run('ange', cardIds[0])
     expect(seqOf('mtg_cards', 'card_id', cardIds[0])).toBeGreaterThan(last)
     last = seqOf('mtg_images', 'image_id', imageIds[0])
     db.prepare('UPDATE mtg_images SET back_image_id = ? WHERE image_id = ?').run(imageIds[1], imageIds[0])

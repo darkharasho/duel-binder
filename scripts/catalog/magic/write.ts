@@ -1,7 +1,7 @@
 import type Database from 'better-sqlite3'
 import { movedEnough } from '../../../src/main/tcgplayer/prices'
 import { mtgCardId, mtgImageId } from '../../../src/shared/games/ids'
-import { finishOf } from '../../../src/shared/games/magic'
+import { finishOf, magicNameSearchKey } from '../../../src/shared/games/magic'
 import type { Language } from '../../../src/shared/languages'
 import type { MagicRows } from './rows'
 
@@ -141,6 +141,7 @@ export function writeMagic(
     'oracle_id',
     'lang',
     'local_name',
+    'local_name_search',
     'layout',
     'type_line',
     'types',
@@ -242,6 +243,7 @@ export function writeMagic(
         oracle_id: c.oracleId,
         lang: c.lang,
         local_name: c.localName,
+        local_name_search: c.localName === null ? null : magicNameSearchKey(c.localName),
         layout: c.layout,
         type_line: c.typeLine,
         types: JSON.stringify(c.types),

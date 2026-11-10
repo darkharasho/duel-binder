@@ -14,7 +14,10 @@ import App from '@/App'
 import type { AccountStatus } from '@shared/types'
 import type { Grabbed } from '../../src/phone/training/capture'
 import { createMockApi, renderWithProviders } from './mockApi'
-import { fakeEngine, stubCamera, stubVideo } from './scanFakes'
+import { NOTHING, fakeEngine, stubCamera, stubVideo } from './scanFakes'
+import type { EngineFactory } from '@/features/scan/engine'
+import type { SnapResult } from '../../src/phone/training/numberSnap'
+import { SNAP_MANY, SNAP_NONE } from '../../src/phone/training/copy'
 
 const CARD_ID = 2 ** 39 + 5
 const NOW = new Date('2026-11-05T12:00:00.000Z')
@@ -53,7 +56,8 @@ let deps: TrainingDeps & {
 
 function renderDesktop(
   onClose: () => void = () => {},
-  grab: (v: HTMLVideoElement) => Promise<ArrayBuffer> | Grabbed = async () => JPEG()
+  grab: (v: HTMLVideoElement) => Promise<ArrayBuffer> | Grabbed = async () => JPEG(),
+  o: { engineFactory?: EngineFactory; snap?: (v: HTMLVideoElement) => Promise<SnapResult> } = {}
 ): void {
   const api = createMockApi({
     scan: {
@@ -72,8 +76,9 @@ function renderDesktop(
         outbox={outbox}
         grab={grab}
         now={() => NOW}
-        engineFactory={() => fakeEngine()}
+        engineFactory={o.engineFactory ?? (() => fakeEngine())}
         readPauseMs={5}
+        snap={o.snap}
         deps={deps}
         layout="desktop"
       />
@@ -207,6 +212,34 @@ describe('desktop contribute photos', () => {
     expect(numberBox()).toHaveFocus()
     await user.keyboard('{Escape}')
     expect(onClose).toHaveBeenCalledOnce()
+  })
+})
+
+describe('desktop number reading: offered, and read on R', () => {
+  it('offers what the camera reads for Enter or a tap, and never fills it in by itself', async () => {
+    const user = userEvent.setup()
+    const engine = fakeEngine(() => ({ ...NOTHING, found: true, codeTexts: ['OP01-002'] }))
+    renderDesktop(undefined, undefined, { engineFactory: () => engine })
+    const use = await screen.findByRole('button', { name: 'Use OP01-002' })
+    expect(numberBox()).toHaveValue('')
+    await user.click(use)
+    expect(numberBox()).toHaveValue('OP01-002')
+  })
+
+  it('Read number fills in the number in the box, or says what went wrong', async () => {
+    const user = userEvent.setup()
+    const results: SnapResult[] = [{ problem: 'none' }, { problem: 'many' }, { number: 'OP01-002' }]
+    const snap = vi.fn(async () => results.shift()!)
+    renderDesktop(undefined, undefined, { snap })
+    // It reads only when asked.
+    await new Promise((r) => setTimeout(r, 30))
+    expect(snap).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: /Read number/ }))
+    expect(await screen.findByText(SNAP_NONE)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Read number/ }))
+    expect(await screen.findByText(SNAP_MANY)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Read number/ }))
+    await waitFor(() => expect(numberBox()).toHaveValue('OP01-002'))
   })
 })
 

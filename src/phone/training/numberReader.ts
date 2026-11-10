@@ -34,6 +34,8 @@ export function useNumberReader(o: {
   prefixes: readonly string[] | undefined
   exists(number: string): Promise<boolean>
   skip: string | null
+  /** A change starts the reading over (Next card), with nothing offered and `skip` re-read. */
+  resetKey?: number
   pauseMs?: number
 }): string | null {
   const [offer, setOffer] = useState<string | null>(null)
@@ -52,7 +54,7 @@ export function useNumberReader(o: {
     []
   )
 
-  const { active, game } = o
+  const { active, game, resetKey } = o
   useEffect(() => {
     if (!active) return
     let live = true
@@ -124,7 +126,7 @@ export function useNumberReader(o: {
       // The next time it reads, it starts with nothing offered.
       setOffer(null)
     }
-  }, [active, game])
+  }, [active, game, resetKey])
 
   return active ? offer : null
 }

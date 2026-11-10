@@ -373,6 +373,8 @@ export function browseFacets(db: SqlDb, scope: Scope = LOCAL, language?: Languag
     ),
     ...(pkm ? pokemonFacets(db, scope, null) : {}),
     ...(game === 'op' ? onePieceFacets(db, scope, null) : {}),
-    ...(game === 'mtg' ? magicFacets(db, scope, null) : {})
+    ...(game === 'mtg'
+      ? magicFacets(db, scope, null, { language: isLanguage(language) ? language : undefined })
+      : {})
   }
 }

@@ -93,7 +93,8 @@ export function mtgFinishWhere(
 export function magicFacets(
   db: SqlDb,
   scope: Scope,
-  cardIds: number[] | null
+  cardIds: number[] | null,
+  opts: { ownedFinishes?: boolean; language?: string } = {}
 ): { mtgColors: string[]; mtgTypes: string[]; mtgFinishes: string[] } {
   const ids = cardIds ? JSON.stringify(cardIds) : null
   const only = (col: string): string =>
@@ -111,11 +112,25 @@ export function magicFacets(
   const types = new Set(
     values(`SELECT DISTINCT j.value AS v FROM (${src}) s, json_each(s.types) j`)
   )
+  // Finishes come from the printings: the owned ones (collection) or the catalog's, in a language.
+  const finishSql = opts.ownedFinishes
+    ? `SELECT DISTINCT ${mtgFinishSql('p.set_rarity')} AS v FROM collection_entries e
+       JOIN card_printings p ON p.id = e.printing_id AND +p.game = ${scope.game}
+       WHERE ${scope.where('e')} AND p.set_rarity <> ''`
+    : `SELECT DISTINCT ${mtgFinishSql('p.set_rarity')} AS v FROM card_printings p
+       WHERE +p.game = ${scope.game} AND p.contributed = 0 AND p.set_rarity <> ''${only('p.card_id')}${
+         opts.language ? ' AND p.language = ?' : ''
+       }`
   const finishes = new Set(
-    values(
-      `SELECT DISTINCT ${mtgFinishSql('p.set_rarity')} AS v FROM card_printings p
-       WHERE +p.game = ${scope.game} AND p.contributed = 0 AND p.set_rarity <> ''${only('p.card_id')}`
-    )
+    (
+      db
+        .prepare(finishSql)
+        .all(
+          ...(opts.ownedFinishes ? [] : [...bind, ...(opts.language ? [opts.language] : [])])
+        ) as {
+        v: string
+      }[]
+    ).map((r) => r.v)
   )
   return {
     mtgColors: [

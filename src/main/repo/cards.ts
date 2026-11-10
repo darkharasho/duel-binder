@@ -84,9 +84,7 @@ const NO_ONEPIECE = { cols: '', join: '' }
 export const MTG_COLS = `mc.oracle_id AS mtg_oracle_id, mc.type_line AS mtg_type_line, mc.types AS mtg_types,
   mc.mana_cost AS mtg_mana_cost, mc.mana_value AS mtg_mana_value, mc.colors AS mtg_colors,
   mc.oracle_text AS mtg_oracle_text, mc.power AS mtg_power, mc.toughness AS mtg_toughness,
-  mc.loyalty AS mtg_loyalty, mc.defense AS mtg_defense,
-  (SELECT GROUP_CONCAT(DISTINCT mi.artist) FROM card_images ci JOIN mtg_images mi ON mi.image_id = ci.image_id
-    WHERE ci.card_id = c.id) AS mtg_artist`
+  mc.loyalty AS mtg_loyalty, mc.defense AS mtg_defense`
 
 /**
  * What a card query adds to read a game's own facts: `, ONEPIECE_COLS` (One Piece) or `, MTG_COLS`
@@ -152,7 +150,8 @@ function magicFacts(row: CardDbRow): MagicFacts | undefined {
     toughness: row.mtg_toughness ?? null,
     loyalty: row.mtg_loyalty ?? null,
     defense: row.mtg_defense ?? null,
-    artist: row.mtg_artist ? row.mtg_artist.split(',').join(', ') : null
+    // Only the details read fills the artist (see getCardDetail); list rows leave it out.
+    ...(row.mtg_artist !== undefined ? { artist: row.mtg_artist } : {})
   }
 }
 
@@ -388,6 +387,15 @@ export function getCardDetail(db: SqlDb, cardId: number, scope: Scope = LOCAL): 
     | CardDbRow
     | undefined
   if (!row) return null
+  if (row.mtg_oracle_id !== undefined && row.mtg_oracle_id !== null) {
+    const artists = db
+      .prepare(
+        `SELECT DISTINCT mi.artist AS a FROM card_images ci JOIN mtg_images mi ON mi.image_id = ci.image_id
+         WHERE ci.card_id = ? AND mi.artist IS NOT NULL AND mi.artist <> '' ORDER BY mi.artist`
+      )
+      .all(cardId) as { a: string }[]
+    row.mtg_artist = artists.length ? artists.map((r) => r.a).join(', ') : null
+  }
   const printings = (
     db
       .prepare(

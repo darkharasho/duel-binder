@@ -120,4 +120,28 @@ describe('Magic filters, facets, stats and details', () => {
     db.prepare("UPDATE mtg_images SET artist = 'Zed' WHERE image_id = ?").run(mtg.imageIds[1])
     expect(getCardDetail(db, mtg.cardIds[0])?.card.magic?.artist).toBe('Greg Staples, Zed')
   })
+
+  it('lists only the finishes the collection owns, and Browse the catalog ones', () => {
+    expect(getFacets(db).mtgFinishes).toEqual(['Nonfoil', 'Foil'])
+    db.prepare('DELETE FROM collection_entries WHERE printing_id = ?').run(mtg.printingIds[1])
+    addEntry(db, { printingId: mtg.printingIds[0], imageId: mtg.imageIds[0], quantity: 1 }, now)
+    expect(getFacets(db).mtgFinishes).toEqual(['Nonfoil'])
+    expect(browseFacets(db).mtgFinishes).toEqual(['Nonfoil', 'Foil'])
+  })
+
+  it('limits the Browse finish facet to the language filter', () => {
+    db.prepare(
+      `INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity)
+       VALUES ('mtg', ?, 'ja', 'Magic 2015', 'M15 33', 'Rare (Etched Foil)')`
+    ).run(mtg.cardIds[0])
+    expect(browseFacets(db, LOCAL, 'ja').mtgFinishes).toEqual(['Etched Foil'])
+    expect(browseFacets(db, LOCAL, 'en').mtgFinishes).toEqual(['Nonfoil', 'Foil'])
+  })
+
+  it('gives artists in a fixed order, only on the details read', () => {
+    db.prepare("UPDATE mtg_images SET artist = 'Zed' WHERE image_id = ?").run(mtg.imageIds[0])
+    db.prepare("UPDATE mtg_images SET artist = 'Abe' WHERE image_id = ?").run(mtg.imageIds[1])
+    expect(getCardDetail(db, mtg.cardIds[0])?.card.magic?.artist).toBe('Abe, Zed')
+    expect(listEntries(db, { sort: 'name', dir: 'asc' })[0].card.magic?.artist).toBeUndefined()
+  })
 })

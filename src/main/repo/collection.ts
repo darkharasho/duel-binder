@@ -426,7 +426,10 @@ export function getFacets(db: SqlDb, scope: Scope = LOCAL): Facets {
       ? magicFacets(
           db,
           scope,
-          (db.prepare(ownedCards).all() as { card_id: number }[]).map((r) => r.card_id)
+          (db.prepare(ownedCards.replace('SELECT', 'SELECT DISTINCT')).all() as { card_id: number }[]).map(
+            (r) => r.card_id
+          ),
+          { ownedFinishes: true }
         )
       : {})
   }

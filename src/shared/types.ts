@@ -60,8 +60,8 @@ export interface MagicFacts {
   toughness: string | null
   loyalty: string | null
   defense: string | null
-  /** The artist(s) of the card's art, joined with ', '. */
-  artist: string | null
+  /** The artist(s) of the card's art, joined with ', '. Only the card details fill it. */
+  artist?: string | null
 }
 
 export interface Printing {

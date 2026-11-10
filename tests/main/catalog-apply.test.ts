@@ -7,6 +7,7 @@ import type { CatalogChange } from '../../src/shared/catalogFeed'
 import { seededDb } from './helpers'
 import { seedPokemon } from '../fixtures/pokemon'
 import { seedOnePiece } from '../fixtures/onePiece'
+import { seedMagic } from '../fixtures/magic'
 
 interface P {
   id: number
@@ -320,6 +321,51 @@ describe('applyChanges', () => {
       ])
       expect(rows(db, imageIds[1])).toEqual([1, 1])
       fkClean(db)
+    })
+  })
+
+  describe('Magic image tombstones', () => {
+    const rows = (db: Database.Database, id: number): number[] =>
+      [
+        'SELECT COUNT(*) AS n FROM card_images WHERE image_id = ?',
+        'SELECT COUNT(*) AS n FROM mtg_images WHERE image_id = ?'
+      ].map((q) => (db.prepare(q).get(id) as { n: number }).n)
+    const apply = (db: Database.Database, changes: CatalogChange[]): void =>
+      db.transaction(() => {
+        applyChanges(db, changes)
+      })()
+
+    it('a card_images tombstone alone commits', async () => {
+      const db = await seededDb()
+      const { imageIds } = seedMagic(db)
+      apply(db, [{ seq: 1, table: 'card_images', deleted: [imageIds[1]] }])
+      expect(rows(db, imageIds[1])).toEqual([0, 0])
+      expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+    })
+
+    it('parent then child commits', async () => {
+      const db = await seededDb()
+      const { imageIds } = seedMagic(db)
+      apply(db, [
+        { seq: 1, table: 'card_images', deleted: [imageIds[1]] },
+        { seq: 2, table: 'mtg_images', deleted: [imageIds[1]] }
+      ])
+      expect(rows(db, imageIds[1])).toEqual([0, 0])
+    })
+
+    it('an image or card an entry uses keeps its Magic rows', async () => {
+      const db = await seededDb()
+      const { imageIds, printingIds, cardIds } = seedMagic(db)
+      db.prepare(
+        `INSERT INTO collection_entries (uid, game, printing_id, image_id, quantity, created_at, updated_at)
+         VALUES ('mtg-entry', 'mtg', ?, ?, 1, 'x', 'x')`
+      ).run(printingIds[0], imageIds[1])
+      apply(db, [
+        { seq: 1, table: 'mtg_images', deleted: [imageIds[1]] },
+        { seq: 2, table: 'mtg_cards', deleted: [cardIds[0]] }
+      ])
+      expect(rows(db, imageIds[1])).toEqual([1, 1])
+      expect(db.prepare('SELECT COUNT(*) AS n FROM mtg_cards').get()).toEqual({ n: 1 })
     })
   })
 })

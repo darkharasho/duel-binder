@@ -26,7 +26,7 @@ const DEMO_USER: Me = {
   displayName: 'Demo Duelist',
   avatarUrl: null,
   // Every game, so the switch can be looked at; the demo catalog is Yu-Gi-Oh! only.
-  games: ['ygo', 'pkm', 'op']
+  games: ['ygo', 'pkm', 'op', 'mtg']
 }
 
 /** The fixture as catalog feed rows. */

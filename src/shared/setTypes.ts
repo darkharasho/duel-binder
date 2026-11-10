@@ -38,10 +38,12 @@ function onePieceSetType(setCode: string): SetType {
 
 /**
  * Classify a set into one of the five set types. Yu-Gi-Oh! sets go by name (the rules below); One
- * Piece sets by code (onePieceSetType). Pokémon sets are all boosters until it has rules of its own.
+ * Piece sets by code (onePieceSetType). Pokémon and Magic sets are all boosters until they have
+ * rules of their own.
  */
 export function setType(s: { setName: string; setCode: string }, game: GameId = 'ygo'): SetType {
   if (game === 'op') return onePieceSetType(s.setCode)
+  // Pokémon, and Magic until step 2 reads Scryfall's set_type: every set a booster.
   if (game !== 'ygo') return 'booster'
   const override = OVERRIDES[s.setName]
   if (override) return override

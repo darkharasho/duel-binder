@@ -600,6 +600,41 @@ DELETE FROM intl_prices WHERE printing_id IN (
 /** The server keeps rollups out, as V24 does. */
 export const SCHEMA_V40_SERVER = ONEPIECE_TABLES
 
+/**
+ * Magic: The Gathering (hidden game 'mtg'), in the Yu-Gi-Oh!-like card model on the shared tables:
+ * - `cards`: one row per oracle card per language, id `mtgCardId(lang, oracleId)`.
+ * - `card_images`: one row per Scryfall object (one printing's art), id `mtgImageId(scryfallId)`.
+ * - `card_printings`: one row per set appearance x finish, the finish in the rarity text.
+ * `mtg_cards` holds only game text. `types`, `colors`, `color_identity` and `keywords` are JSON
+ * arrays (`types` the parsed card types, for the Type filter); `faces` is a JSON array of per-face
+ * fields on a two-faced card, NULL otherwise. Power and toughness stay TEXT (`*`, `1+*`); the range
+ * filter casts. `mtg_images` ties an image to its Scryfall object and art facts.
+ * The server adds its change-feed columns in server-42.
+ */
+const MTG_TABLES = `
+CREATE TABLE mtg_cards (card_id INTEGER PRIMARY KEY REFERENCES cards(id),
+  oracle_id TEXT NOT NULL, layout TEXT NOT NULL DEFAULT 'normal',
+  type_line TEXT NOT NULL DEFAULT '', types TEXT NOT NULL DEFAULT '[]',
+  mana_cost TEXT, mana_value REAL, colors TEXT NOT NULL DEFAULT '[]',
+  color_identity TEXT NOT NULL DEFAULT '[]', oracle_text TEXT,
+  power TEXT, toughness TEXT, loyalty TEXT, defense TEXT,
+  keywords TEXT NOT NULL DEFAULT '[]', faces TEXT);
+CREATE INDEX ix_mtg_cards_oracle ON mtg_cards(oracle_id);
+CREATE TABLE mtg_images (image_id INTEGER PRIMARY KEY REFERENCES card_images(image_id),
+  scryfall_id TEXT NOT NULL, illustration_id TEXT, artist TEXT,
+  frame TEXT, border_color TEXT, full_art INTEGER NOT NULL DEFAULT 0,
+  promo_types TEXT NOT NULL DEFAULT '[]');
+CREATE INDEX ix_mtg_images_scryfall ON mtg_images(scryfall_id);
+CREATE INDEX ix_mtg_images_illustration ON mtg_images(illustration_id);
+`
+
+export const SCHEMA_V44 = `${MTG_TABLES}
+${rollupTriggers('mtg_cards', ['card_id', 'types', 'colors', 'mana_value'])}
+`
+
+/** The server keeps rollups out, as V24 does. */
+export const SCHEMA_V44_SERVER = MTG_TABLES
+
 /** A printing's rarity as shown: "Starlight Rare (Extended Art)" for a labelled variant. */
 export const RARITY_LABEL = "p.set_rarity || COALESCE(' (' || p.variant || ')', '')"
 
@@ -647,5 +682,6 @@ export const MIGRATIONS: Migration[] = [
   { version: 40, sql: SCHEMA_V40, server: SCHEMA_V40_SERVER },
   { version: 41, sql: SCHEMA_V41, server: false },
   { version: 42, sql: SCHEMA_V42, server: false },
-  { version: 43, sql: SCHEMA_V43, server: false }
+  { version: 43, sql: SCHEMA_V43, server: false },
+  { version: 44, sql: SCHEMA_V44, server: SCHEMA_V44_SERVER }
 ]

@@ -1,8 +1,8 @@
 import type { Language } from '../languages'
 
-export type GameId = 'ygo' | 'pkm' | 'op'
+export type GameId = 'ygo' | 'pkm' | 'op' | 'mtg'
 
-export const GAME_IDS: readonly GameId[] = ['ygo', 'pkm', 'op']
+export const GAME_IDS: readonly GameId[] = ['ygo', 'pkm', 'op', 'mtg']
 
 /** What decides which games a viewer sees. */
 export interface ViewerFacts {

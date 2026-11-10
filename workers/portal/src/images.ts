@@ -287,7 +287,7 @@ const handArt = (url: string, cache: string): Target => ({
 const cardArtKey = (size: ImageSize, n: number): string =>
   isTokenId(n)
     ? `card/full/${n}`
-    : gameOfId(n) === 'op'
+    : gameOfId(n) === 'op' || gameOfId(n) === 'mtg'
       ? `card/${size === 'full' ? 'full' : 'small'}/${n}`
       : `card/${size}/${n}`
 
@@ -441,6 +441,17 @@ function resolve(deps: AppDeps, path: string): Target | null {
         anonymous: true
       }
     }
+    if (game === 'mtg') {
+      // mtg: Scryfall source in step 2. Until then only art already in R2 is served; the source
+      // finds nothing, so an R2 miss is a 404 and no Magic id ever reaches another game's source.
+      if (!deps.db.prepare('SELECT 1 FROM mtg_images WHERE image_id = ?').get(n)) return null
+      return {
+        key: cardArtKey(kind, n),
+        source: async () => null,
+        cache: CARD_CACHE,
+        anonymous: true
+      }
+    }
     if (game === 'pkm') {
       const row = deps.db
         .prepare(
@@ -570,8 +581,8 @@ function resolve(deps: AppDeps, path: string): Target | null {
       anonymous: printing !== undefined,
       meterFirst: true,
       source: async () => {
-        // One Piece has no printing photos to look up.
-        if (printing?.game === 'op') return null
+        // One Piece and Magic have no printing photos to look up.
+        if (printing?.game === 'op' || printing?.game === 'mtg') return null
         const url = await withTimeout(
           deps.printingArt.url(n).catch(() => null),
           IMAGE_TIMEOUT_MS

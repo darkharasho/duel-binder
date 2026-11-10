@@ -20,6 +20,8 @@ export interface CardRow {
   pokemon?: PokemonFacts
   /** A One Piece card's own facts (from onepiece_cards); absent on the other games. */
   onePiece?: OnePieceFacts
+  /** A Magic card's own facts (from mtg_cards); absent on the other games. */
+  magic?: MagicFacts
 }
 
 export interface PokemonFacts {
@@ -45,6 +47,19 @@ export interface OnePieceFacts {
   blockIcon: number | null
   /** The printed base number, e.g. OP01-001. */
   number: string
+}
+
+export interface MagicFacts {
+  typeLine: string
+  types: string[]
+  manaCost: string | null
+  manaValue: number | null
+  colors: string[]
+  oracleText: string | null
+  power: string | null
+  toughness: string | null
+  loyalty: string | null
+  defense: string | null
 }
 
 export interface Printing {

@@ -11,6 +11,7 @@ import { seededDb } from './helpers'
 import { inProcessPortal, PORTAL } from './cloudHelpers'
 import { seedPokemon } from '../fixtures/pokemon'
 import { seedOnePiece } from '../fixtures/onePiece'
+import { seedMagic } from '../fixtures/magic'
 import { withOwnerOnlyPokemon } from '../fixtures/ownerOnlyGame'
 
 withOwnerOnlyPokemon()
@@ -448,7 +449,8 @@ describe('catalog service', () => {
       expect(asked).toEqual([
         { since: serverClock(), game: 'ygo' },
         { since: 0, game: 'pkm' },
-        { since: 0, game: 'op' } // the owner sees the hidden game too, with no rows yet
+        { since: 0, game: 'op' }, // the owner sees the hidden games too, with no rows yet
+        { since: 0, game: 'mtg' }
       ])
       expect(pkmCount('cards')).toBe(2)
       expect(pkmCount('card_images')).toBe(2)
@@ -489,6 +491,33 @@ describe('catalog service', () => {
       expect(count('SELECT count(*) AS n FROM onepiece_images')).toBe(2)
       expect(count("SELECT count(*) AS n FROM card_printings WHERE game = 'op'")).toBe(2)
       expect(Number(getMeta(db, 'catalog_cursor:op'))).toBeGreaterThan(0)
+    })
+
+    it('first mtg pass starts from 0 and applies the Magic tables', async () => {
+      seedMagic(owned.serverDb)
+      const service = makeService()
+      await service.update(
+        { ...ownerClient, me: async () => ({ ...(await ownerClient.me()), games: ['ygo'] }) },
+        { force: true }
+      )
+      setMeta(db, 'catalog_cursor', String(serverClock()))
+      const asked: { since: number; game: string | undefined }[] = []
+      const watching: CloudClient = {
+        ...ownerClient,
+        me: async () => ({ ...(await ownerClient.me()), games: ['ygo', 'pkm', 'op', 'mtg'] }),
+        catalogChanges: (since, limit, tables, game) => {
+          asked.push({ since, game })
+          return ownerClient.catalogChanges(since, limit, tables, game)
+        }
+      }
+      await service.update(watching, { force: true })
+      expect(asked).toContainEqual({ since: 0, game: 'mtg' })
+      const count = (sql: string): number => (db.prepare(sql).get() as { n: number }).n
+      expect(count("SELECT count(*) AS n FROM cards WHERE game = 'mtg'")).toBe(1)
+      expect(count('SELECT count(*) AS n FROM mtg_cards')).toBe(1)
+      expect(count('SELECT count(*) AS n FROM mtg_images')).toBe(2)
+      expect(count("SELECT count(*) AS n FROM card_printings WHERE game = 'mtg'")).toBe(3)
+      expect(Number(getMeta(db, 'catalog_cursor:mtg'))).toBeGreaterThan(0)
     })
 
     it('a user without Pokémon never asks for it', async () => {

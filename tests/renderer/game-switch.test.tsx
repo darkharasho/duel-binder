@@ -121,6 +121,58 @@ describe('desktop game switch', () => {
       expect(radios.map((r) => r.getAttribute('aria-checked'))).toEqual(['false', 'false', 'true'])
     )
     expect(radios[2]).toHaveTextContent('One Piece')
+    // Three games keep the single-row layout, exactly as before Magic.
+    for (const r of radios) {
+      expect(r).toHaveClass('h-10')
+      expect(r).not.toHaveClass('h-12')
+      expect(r).not.toHaveClass('flex-col')
+      expect(r.querySelector('.truncate')).toBeNull()
+    }
+  })
+
+  it('four games in the sidebar menu, Magic among them', async () => {
+    const api = desktopApi(['ygo', 'pkm', 'op', 'mtg'])
+    await renderDesktop(api)
+    await userEvent.click(await screen.findByRole('button', { name: /switch game/i }))
+    const menu = await screen.findByRole('menu')
+    expect(within(menu).getAllByRole('menuitemradio')).toHaveLength(4)
+    await userEvent.click(within(menu).getByRole('menuitemradio', { name: /Magic/ }))
+    expect(api.games.setActive).toHaveBeenCalledWith('mtg')
+  })
+
+  it('four phone segments, only the active one checked, labels that truncate', async () => {
+    renderWithProviders(
+      <GameProvider>
+        <GameSegments />
+      </GameProvider>,
+      { api: desktopApi(['ygo', 'pkm', 'op', 'mtg'], 'mtg') }
+    )
+    const group = await screen.findByRole('radiogroup', { name: 'Game' })
+    const radios = within(group).getAllByRole('radio')
+    expect(radios).toHaveLength(4)
+    await waitFor(() =>
+      expect(radios.map((r) => r.getAttribute('aria-checked'))).toEqual([
+        'false',
+        'false',
+        'false',
+        'true'
+      ])
+    )
+    expect(radios[3]).toHaveTextContent('Magic')
+    for (const r of radios) {
+      expect(r).toHaveClass('h-12', 'flex-col')
+      expect(r.querySelector('.truncate')).not.toBeNull()
+    }
+  })
+
+  it('Magic hides Scan and the Pokédex', async () => {
+    await renderDesktop(desktopApi(['ygo', 'pkm', 'op', 'mtg'], 'mtg'))
+    expect(await screen.findByRole('button', { name: /switch game/i })).toHaveTextContent('Magic')
+    expect(navNames()).not.toContain('Scan')
+    expect(navNames()).not.toContain('Pokédex')
+    expect(pageInGame('scan', GAMES.mtg)).toBe(false)
+    expect(pageInGame('pokedex', GAMES.mtg)).toBe(false)
+    expect(pageInGame('sets', GAMES.mtg)).toBe(true)
   })
 
   it('op shows Scan', async () => {

@@ -108,7 +108,7 @@ describe('fingerprint store', () => {
       return ok(body(1))
     }) as unknown as typeof globalThis.fetch
     const token = (): string | null => 'tok'
-    for (const game of ['op', 'pkm'] as const) {
+    for (const game of ['op', 'mtg', 'pkm'] as const) {
       await createFingerprintStore({
         dir,
         portal: 'https://p.test',
@@ -119,6 +119,9 @@ describe('fingerprint store', () => {
       }).refresh()
     }
     expect(seen['https://p.test/scan/fingerprints?game=op']).toEqual({
+      authorization: 'Bearer tok'
+    })
+    expect(seen['https://p.test/scan/fingerprints?game=mtg']).toEqual({
       authorization: 'Bearer tok'
     })
     expect(seen['https://p.test/scan/fingerprints?game=pkm']).toEqual({})

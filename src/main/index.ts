@@ -419,6 +419,12 @@ async function bootstrap(): Promise<void> {
       portal,
       game: 'op',
       token: () => tokens.get()
+    }),
+    mtg: createFingerprintStore({
+      dir: join(userData, 'scan'),
+      portal,
+      game: 'mtg',
+      token: () => tokens.get()
     })
   }
   /** Re-downloads the files of the games this account can see (a game it can't has no file for it). */

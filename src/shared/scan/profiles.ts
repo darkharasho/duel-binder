@@ -145,6 +145,7 @@ const OP_PROFILE: ScanProfile = {
   keepOutline: false
 }
 
+// mtg: scanner step (scan is off for Magic, so it has no profile yet).
 // The Record<'ygo' | 'pkm'> part lists the games every build has a profile for; op's is OP_PROFILE.
 export const SCAN_PROFILES: Record<'ygo' | 'pkm', ScanProfile> &
   Partial<Record<GameId, ScanProfile>> = {

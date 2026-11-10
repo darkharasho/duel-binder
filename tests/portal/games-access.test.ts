@@ -119,7 +119,7 @@ describe('per-user game access', () => {
   })
 
   it('/api/me lists Pokémon only for the ADMIN_DISCORD_ID account', async () => {
-    expect((await meFor(co)).games).toEqual(['ygo', 'pkm', 'op'])
+    expect((await meFor(co)).games).toEqual(['ygo', 'pkm', 'op', 'mtg'])
     expect((await meFor(cb)).games).toEqual(['ygo'])
   })
 
@@ -145,7 +145,7 @@ describe('per-user game access', () => {
   })
 
   it('refuses an unknown game with the same 403, even for the owner', async () => {
-    for (const game of ['mtg', 'YGO', "ygo' OR 1 --"]) {
+    for (const game of ['zzz', 'YGO', "ygo' OR 1 --"]) {
       const res = await rpc('collection:list', [F], co, game)
       expect(res.status, game).toBe(403)
       expect(await res.json()).toEqual({ error: 'game-not-allowed' })
@@ -284,7 +284,7 @@ describe('/api/me games list', () => {
       const res = await handle(new Request(BASE + '/api/me', { headers: { cookie: `session=${token}` } }), deps)
       return ((await res.json()) as { games: string[] }).games
     }
-    expect(await gamesOf(ownerId, 'o')).toEqual(['ygo', 'pkm', 'op'])
+    expect(await gamesOf(ownerId, 'o')).toEqual(['ygo', 'pkm', 'op', 'mtg'])
     expect(await gamesOf(otherId, 'x')).toEqual(['ygo', 'pkm'])
   })
 })

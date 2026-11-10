@@ -252,10 +252,13 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
   const gate =
     opts.checkAccuracy ??
     ((w: Database.Database, bytes: Uint8Array, game: GameId) =>
+      // mtg: scanner step (Magic is never fingerprinted, so it never reaches the Yu-Gi-Oh! shots).
       checkAccuracy(w, bytes, game === 'pkm' ? PKM_FIXTURES_DIR : FIXTURES_DIR, game))
   // The catalog is the job's main product, so a fingerprint failure never stops its upload; it
   // is reported as a problem instead. Each game's file is gated and uploaded on its own.
-  const fingerprint = async (upload: boolean, game: GameId): Promise<void> => {
+  // mtg: scanner step. Magic has no fingerprint stage (and no scan profile, which buildFingerprints
+  // needs), so the type leaves it out rather than let it fall into the Yu-Gi-Oh! paths below.
+  const fingerprint = async (upload: boolean, game: Exclude<GameId, 'mtg'>): Promise<void> => {
     const pkm = game === 'pkm'
     const ygo = game === 'ygo'
     const what = pkm ? 'Pokémon fingerprints' : game === 'op' ? 'One Piece fingerprints' : 'Fingerprints'

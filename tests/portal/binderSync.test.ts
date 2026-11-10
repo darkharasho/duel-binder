@@ -152,7 +152,7 @@ describe('portal binder sync', () => {
       for (const bad of [
         binder({ uid: '' }),
         binder({ uid: 'x'.repeat(65) }),
-        binder({ game: 'mtg' as never }),
+        binder({ game: 'zzz' as never }),
         binder({ name: '' }),
         binder({ name: 'x'.repeat(81) }),
         binder({ rules: 'x'.repeat(8 * 1024 + 1) }),
@@ -244,7 +244,7 @@ describe('portal binder sync', () => {
         edit({ target: 'x'.repeat(301) }),
         edit({ level: 'set' as never }),
         edit({ action: 'toggle' as never }),
-        edit({ game: 'mtg' as never }),
+        edit({ game: 'zzz' as never }),
         edit({ createdAt: 'nope' })
       ])
         expect(() => check(bad)).toThrow()

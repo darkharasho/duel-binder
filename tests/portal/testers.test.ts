@@ -136,6 +136,15 @@ describe('game tester list', () => {
     expect(testerGames(db, kaiba)).toEqual(['op'])
   })
 
+  it('a Magic tester sees Magic and not One Piece', async () => {
+    expect((await post('/admin/testers', 'tok-owner', { game: 'mtg', username: 'Kaiba' })).status).toBe(
+      200
+    )
+    expect(gamesFor(deps, kaiba)).toEqual(['ygo', 'pkm', 'mtg'])
+    expect(testerGames(db, kaiba)).toEqual(['mtg'])
+    expect((await list('tok-owner')).filter((r) => r.game === 'mtg')).toHaveLength(1)
+  })
+
   it('add by app username binds at once', async () => {
     const res = await post('/admin/testers', 'tok-owner', { game: 'op', username: 'Kaiba' })
     expect(res.status).toBe(200)

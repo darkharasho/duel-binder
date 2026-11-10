@@ -118,13 +118,15 @@ export const RULE_FIELDS: Record<GameId, readonly RuleField[]> = {
     'rarity'
   ],
   pkm: ['name', 'artist', 'category', 'energyType', 'stage', 'set', 'rarity'],
-  op: ['name', 'set', 'rarity']
+  op: ['name', 'set', 'rarity'],
+  mtg: ['name', 'set', 'rarity']
 }
 
 export const GOALS: Record<GameId, readonly BinderGoal[]> = {
   ygo: ['none', 'card', 'art', 'printing'],
   pkm: ['none', 'card', 'printing'],
-  op: ['none', 'card', 'printing']
+  op: ['none', 'card', 'printing'],
+  mtg: ['none', 'card', 'printing']
 }
 
 const isObj = (v: unknown): v is Record<string, unknown> =>

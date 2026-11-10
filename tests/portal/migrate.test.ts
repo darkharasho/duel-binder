@@ -6,6 +6,7 @@ import { userScope } from '../../workers/portal/src/scope'
 import { getChecklist } from '../../src/main/repo/sets'
 import { SHARED_SET_NAME, seedPokemon } from '../fixtures/pokemon'
 import { seedOnePiece } from '../fixtures/onePiece'
+import { seedMagic } from '../fixtures/magic'
 
 function freshDb(): Database.Database {
   const db = new Database(':memory:')
@@ -131,7 +132,7 @@ function serverBefore12(): Database.Database {
   const db = freshDb()
   runSteps(db, [
     ...MIGRATIONS.filter((m) => m.version <= 18),
-    ...SERVER_STEPS.filter((s) => !['server-12', 'server-13', 'server-14', 'server-16', 'server-18', 'server-21', 'server-23', 'server-26', 'server-27', 'server-28', 'server-35', 'server-40', 'server-41'].includes(s.name))
+    ...SERVER_STEPS.filter((s) => !['server-12', 'server-13', 'server-14', 'server-16', 'server-18', 'server-21', 'server-23', 'server-26', 'server-27', 'server-28', 'server-35', 'server-40', 'server-41', 'server-42'].includes(s.name))
   ])
   db.exec(`
     INSERT INTO users (id, discord_id, username, created_at, updated_at) VALUES (1, 'd1', 'one', 'x', 'x');
@@ -372,7 +373,7 @@ describe('server-40 (pokemon_cards dex_no / dex_extra)', () => {
     const fresh = freshDb()
     migrateServer(fresh)
     const old = freshDb()
-    runSteps(old, [...MIGRATIONS.filter((m) => m.version <= 41), ...SERVER_STEPS.filter((s) => s.name !== 'server-40')])
+    runSteps(old, [...MIGRATIONS.filter((m) => m.version <= 41), ...SERVER_STEPS.filter((s) => s.name !== 'server-40' && s.name !== 'server-42')])
     expect(cols(old)).not.toContain('dex_no')
     seedPokemon(old)
     migrateServer(old)
@@ -416,7 +417,7 @@ describe('server-14 (pokemon_set_art in the change feed)', () => {
     const old = freshDb()
     runSteps(old, [
       ...MIGRATIONS.filter((m) => m.version <= 22),
-      ...SERVER_STEPS.filter((s) => s.name !== 'server-14' && s.name !== 'server-35' && s.name !== 'server-40')
+      ...SERVER_STEPS.filter((s) => s.name !== 'server-14' && s.name !== 'server-35' && s.name !== 'server-40' && s.name !== 'server-42')
     ])
     migrateServer(old)
     for (const db of [fresh, old]) {
@@ -557,6 +558,33 @@ describe('server-35 feeds onepiece_cards', () => {
       { tbl: 'onepiece_images', game: 'op' },
       { tbl: 'onepiece_cards', game: 'op' }
     ])
+    db.close()
+  })
+})
+
+describe('server-42 feeds mtg_cards', () => {
+  it('stamps the rows and tombstones deletes for game mtg', () => {
+    const db = freshDb()
+    migrateServer(db)
+    seedMagic(db)
+    for (const t of ['mtg_cards', 'mtg_images']) {
+      const stamps = db.prepare(`SELECT catalog_seq AS s FROM ${t}`).all() as { s: number }[]
+      expect(stamps.length, t).toBeGreaterThan(0)
+      for (const r of stamps) expect(r.s, t).toBeGreaterThan(0)
+    }
+    db.prepare('DELETE FROM mtg_images').run()
+    db.prepare('DELETE FROM mtg_cards').run()
+    expect(
+      (db.prepare('SELECT tbl, game FROM catalog_tombstones ORDER BY seq').all() as { tbl: string; game: string }[])
+        .filter((r) => r.tbl.startsWith('mtg_'))
+    ).toEqual([
+      { tbl: 'mtg_images', game: 'mtg' },
+      { tbl: 'mtg_images', game: 'mtg' },
+      { tbl: 'mtg_cards', game: 'mtg' }
+    ])
+    expect(
+      (db.prepare('SELECT name FROM server_migrations ORDER BY rowid DESC LIMIT 1').get() as { name: string }).name
+    ).toBe('server-42')
     db.close()
   })
 })

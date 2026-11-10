@@ -57,6 +57,7 @@ describe('sort lists by game', () => {
     expect(HIDDEN_SORTS.ygo).toEqual(['hp', 'cost', 'power'])
     expect(HIDDEN_SORTS.pkm).toEqual(['atk', 'def', 'level', 'cost', 'power'])
     expect(HIDDEN_SORTS.op).toEqual(['atk', 'def', 'level', 'hp'])
+    expect(HIDDEN_SORTS.mtg).toEqual(['atk', 'def', 'level', 'hp', 'cost', 'power'])
     const values = (g: GameId): string[] => checklistSorts(g).map((s) => s.value)
     expect(values('ygo')).toContain('atk')
     expect(values('ygo')).not.toContain('hp')

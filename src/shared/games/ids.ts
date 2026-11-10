@@ -3,6 +3,9 @@ import type { GameId } from './types'
 /** Pokémon card ids live at or above this; Yu-Gi-Oh! passcodes are far below it. */
 export const PKM_ID_MIN = 2 ** 40
 
+/** Magic ids live in [2^38, 2^39): above every Yu-Gi-Oh! id, below One Piece's. */
+export const MTG_ID_MIN = 2 ** 38
+
 /** One Piece card ids live in [2^39, 2^40): above every Yu-Gi-Oh! id, below Pokémon's. */
 export const ONEPIECE_ID_MIN = 2 ** 39
 
@@ -116,6 +119,28 @@ export const onePieceDonCardId = (region: string, productId: number): number =>
 export const onePieceDonImageId = (region: string, productId: number): number =>
   onePieceId(`${region}/don/${productId}#img`)
 
+/**
+ * A stable numeric id for a Magic row: the first 52 bits of SHA-256 of `mtg:${sourceId}` (7 bytes
+ * read, `>> 4`, as in onePieceId), taken mod 2^38 and added to 2^38, so it lands in [2^38, 2^39).
+ *
+ * Source ids (permanent once shipped):
+ * - a card is one oracle card per language: `mtgCardId('en', oracleId)` = `mtgId('en/<oracle_id>')`
+ * - an image is one Scryfall object: `mtgImageId(scryfallId)` = `mtgId('<scryfall id>#img')`
+ * Callers use the wrappers, never the strings. Scryfall UUIDs are lowercased before hashing.
+ */
+export function mtgId(sourceId: string): number {
+  const d = sha256(new TextEncoder().encode(`mtg:${sourceId}`))
+  let h = 0n
+  for (let i = 0; i < 7; i++) h = (h << 8n) | BigInt(d[i])
+  h >>= 4n
+  const lo = 2n ** 38n
+  return Number(lo + (h % lo))
+}
+
+export const mtgCardId = (lang: string, oracleId: string): number =>
+  mtgId(`${lang}/${oracleId.toLowerCase()}`)
+export const mtgImageId = (scryfallId: string): number => mtgId(`${scryfallId.toLowerCase()}#img`)
+
 export function gameOfId(id: number): GameId {
-  return id >= PKM_ID_MIN ? 'pkm' : id >= ONEPIECE_ID_MIN ? 'op' : 'ygo'
+  return id >= PKM_ID_MIN ? 'pkm' : id >= ONEPIECE_ID_MIN ? 'op' : id >= MTG_ID_MIN ? 'mtg' : 'ygo'
 }

@@ -158,7 +158,7 @@ describe('owner scope', () => {
   })
 
   it('userScope rejects an unknown game', () => {
-    expect(() => userScope(u1, 'mtg' as GameId)).toThrow()
+    expect(() => userScope(u1, 'zzz' as GameId)).toThrow()
     expect(() => userScope(u1, "ygo' OR 1 --" as GameId)).toThrow()
   })
 

@@ -1,4 +1,5 @@
 import type { FingerprintStatus } from '@shared/scan/types'
+import { GAMES } from '@shared/games'
 import { api } from '@/lib/api'
 import type { PhoneStore } from './data/store'
 
@@ -12,7 +13,7 @@ export async function refreshAllFingerprints(
 ): Promise<FingerprintStatus> {
   const games = await api.games.available().catch(() => ['ygo' as const])
   const statuses = await Promise.all(
-    games.map((game) => store.refreshFingerprints({ game, ...opts }))
+    games.filter((game) => GAMES[game].features.scan).map((game) => store.refreshFingerprints({ game, ...opts }))
   )
   return statuses.find((s) => s.state === 'error') ?? statuses[0]
 }

@@ -2,6 +2,7 @@ import type { SqlDb } from '../db/sql'
 import { RARITY_LABEL } from '../db/schema'
 import { MAX_NOTES } from '../../shared/cloud'
 import { LANGUAGES } from '../../shared/languages'
+import { byGame } from '../../shared/games'
 import { priceFor } from '../../shared/pricing'
 import type {
   AddEntryInput,
@@ -293,33 +294,39 @@ export function listEntries(db: SqlDb, f: CollectionFilters, scope: Scope = LOCA
     }
     where.push(`(${parts.join(' OR ')})`)
   }
-  // Each game has its own card filters; the other game's are ignored.
-  if (pkm) {
-    const pkm = pokemonWhere(f)
-    where.push(...pkm.where)
-    params.push(...pkm.params)
-  } else if (game === 'op') {
-    const op = onePieceWhere(f)
-    where.push(...op.where)
-    params.push(...op.params)
-    for (const label of [opRarityWhere(f.opRarities, 'p.set_rarity'), opVersionWhere(f.opVersions, 'p.set_rarity')]) {
-      if (!label) continue
-      where.push(label.sql)
-      params.push(...label.params)
-    }
-  } else {
-    inList('c.type', f.cardTypes)
-    inList('c.attribute', f.attributes)
-    inList('c.archetype', f.archetypes)
-    if (f.levelMin !== undefined) {
-      where.push('COALESCE(c.level, c.linkval) >= ?')
-      params.push(f.levelMin)
-    }
-    if (f.levelMax !== undefined) {
-      where.push('COALESCE(c.level, c.linkval) <= ?')
-      params.push(f.levelMax)
-    }
-  }
+  // Each game has its own card filters; another game's are ignored.
+  byGame<() => void>(game, {
+    pkm: () => {
+      const pkm = pokemonWhere(f)
+      where.push(...pkm.where)
+      params.push(...pkm.params)
+    },
+    op: () => {
+      const op = onePieceWhere(f)
+      where.push(...op.where)
+      params.push(...op.params)
+      for (const label of [opRarityWhere(f.opRarities, 'p.set_rarity'), opVersionWhere(f.opVersions, 'p.set_rarity')]) {
+        if (!label) continue
+        where.push(label.sql)
+        params.push(...label.params)
+      }
+    },
+    ygo: () => {
+      inList('c.type', f.cardTypes)
+      inList('c.attribute', f.attributes)
+      inList('c.archetype', f.archetypes)
+      if (f.levelMin !== undefined) {
+        where.push('COALESCE(c.level, c.linkval) >= ?')
+        params.push(f.levelMin)
+      }
+      if (f.levelMax !== undefined) {
+        where.push('COALESCE(c.level, c.linkval) <= ?')
+        params.push(f.levelMax)
+      }
+    },
+    // Step 1: Magic has only the shared filters below (set, rarity, language…); step 2 adds its own.
+    mtg: () => {}
+  })()
   inList('p.set_name', f.setNames)
   inList('p.set_rarity', f.rarities)
   if (f.language) {
@@ -390,7 +397,7 @@ export function getFacets(db: SqlDb, scope: Scope = LOCAL): Facets {
   const owned = new Set(distinct('p.language'))
   const game = scopeGame(db, scope)
   const pkm = game === 'pkm'
-  // These three are Yu-Gi-Oh columns; 'op' has its own facets below.
+  // These three are Yu-Gi-Oh columns; 'pkm' and 'op' have their own facets below, 'mtg' none yet.
   const ygo = game === 'ygo'
   const ownedCards = `SELECT p.card_id FROM collection_entries e JOIN card_printings p ON p.id = e.printing_id AND +p.game = ${scope.game} WHERE ${scope.where('e')}`
   return {

@@ -24,7 +24,7 @@ export interface MagicStepResult {
 }
 
 /**
- * The nightly job's Magic step: Scryfall's English `default_cards` bulk file, written as mtg rows.
+ * The nightly job's Magic step: Scryfall's `all_cards` bulk file, every kept language, written as mtg rows.
  * Any throw (a source down, a short file, an id collision) is returned as `error`; writeMagic writes
  * in one transaction at the end, so the work database keeps last night's rows.
  */

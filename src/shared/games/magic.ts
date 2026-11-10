@@ -1,4 +1,4 @@
-import { languageInfo } from '../languages'
+import { languageInfo, type Language } from '../languages'
 import type { GameDef } from './types'
 
 export const MTG_RARITIES = ['Common', 'Uncommon', 'Rare', 'Mythic', 'Special', 'Bonus'] as const
@@ -24,6 +24,24 @@ export const MTG_CARD_TYPES = [
   'Scheme',
   'Vanguard'
 ] as const
+
+/** Scryfall's printed-language codes the app carries, mapped to app languages. Others (Phyrexian, Quenya) are skipped. */
+export const MTG_LANGUAGES: Readonly<Record<string, Language>> = {
+  en: 'en',
+  es: 'es',
+  fr: 'fr',
+  de: 'de',
+  it: 'it',
+  pt: 'pt',
+  ja: 'ja',
+  ko: 'ko',
+  ru: 'ru',
+  zhs: 'zh-hans',
+  zht: 'zh-hant'
+}
+
+export const mtgLanguageOf = (scryLang: string): Language | null =>
+  Object.hasOwn(MTG_LANGUAGES, scryLang) ? MTG_LANGUAGES[scryLang] : null
 
 export const MTG_COLOR_NAMES = {
   W: 'White',

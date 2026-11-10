@@ -11,6 +11,7 @@ import { getStats } from '../../src/main/repo/stats'
 import { countCandidates, priceCandidates } from '../../src/main/prices/candidates'
 import { refreshTcgCatalog } from '../../src/main/tcgplayer/catalog'
 import { applyTcgPrices } from '../../src/main/tcgplayer/prices'
+import { MARKET_ONLY_PRICE, setPrice } from '../../src/main/repo/priceRule'
 
 const NOW = new Date('2026-10-29T12:00:00.000Z')
 const ALL = { sort: 'name', dir: 'asc' } as const
@@ -315,5 +316,32 @@ describe('TCGplayer prices are Yu-Gi-Oh! only', () => {
       (db.prepare('SELECT market_price FROM card_printings WHERE id = ?').get(pkm) as { market_price: number | null })
         .market_price
     ).toBeNull()
+  })
+})
+
+describe('Magic Chinese printings keep the market-only price rule', () => {
+  it('a zh-hans printing with no market price reads as unpriced, whatever its set_price', async () => {
+    const db = await seededDb()
+    const cardId = (db.prepare('SELECT id FROM cards LIMIT 1').get() as { id: number }).id
+    const insert = (num: string, market: number | null): number =>
+      Number(
+        db
+          .prepare(
+            `INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity, market_price, set_price)
+             VALUES ('mtg', ?, 'zh-hans', 'Test Set', ?, 'Rare', ?, 9.99)`
+          )
+          .run(cardId, num, market).lastInsertRowid
+      )
+    const unpriced = insert('TST 1', null)
+    const priced = insert('TST 2', 2.5)
+    const read = (id: number): { price: number | null; setPrice: number | null } =>
+      db
+        .prepare(
+          `SELECT ${MARKET_ONLY_PRICE} AS price, ${setPrice('1 = 0')} AS setPrice
+           FROM card_printings p LEFT JOIN intl_prices ip ON ip.printing_id = p.id WHERE p.id = ?`
+        )
+        .get(id) as { price: number | null; setPrice: number | null }
+    expect(read(unpriced)).toEqual({ price: null, setPrice: null })
+    expect(read(priced).price).toBe(2.5)
   })
 })

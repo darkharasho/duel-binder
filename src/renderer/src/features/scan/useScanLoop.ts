@@ -384,13 +384,18 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
   const tracker = useRef(createShowingTracker())
   const loop = useRef({
     busy: false,
-    // Live frames are numbered as grabbed; drawnSeq is the latest one whose outline is drawn.
+    // Live frames are numbered as grabbed; drawnSeq is the latest one whose outline is drawn, and
+    // seenSeq the latest one the worker has answered (an engine with lanes may answer out of order).
     frameSeq: 0,
     drawnSeq: 0,
-    // The latest frame still being read and looked up after its art was matched, and the one
-    // before it, each as the promise of its finishing.
+    seenSeq: 0,
+    // The latest frame still being read and looked up after its art was matched, as the promise of
+    // its finishing; and the finishing the next frame waits for (the engine's lanes + 1 back).
     finishing: Promise.resolve() as Promise<void>,
     behind: Promise.resolve() as Promise<void>,
+    // The latest frames' finishings and art matches, oldest first: lanes + 1 and lanes of them.
+    finishes: [] as Promise<void>[],
+    visions: [] as Promise<void>[],
     needsInit: false,
     failures: 0,
     debugFrames: 0,
@@ -1004,6 +1009,9 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
             onVision: (seen) => {
               visionSeen()
               if (!live || engineRef.current !== engine) return
+              // A newer frame answered first (another lane): it is the one to go by.
+              if (seq < l.seenSeq) return
+              l.seenSeq = seq
               l.lastFound = seen.found
               const quad = earlyOutline(seen)
               if (!quad || latest.current.setKey !== o.setKey) return
@@ -1126,15 +1134,19 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
           } else show(outcome, null)
         }
 
-        // The worker is free once it has answered (or the frame failed): the next frame's art is
-        // matched while this one's text is read and looked up. Frames finish in order, and a new
-        // one waits for the frame two back, so at most one is ever still being read.
-        await Promise.race([vision, analysis])
-        const before = l.finishing
-        l.behind = before
-        l.finishing = before
+        // A worker is free once it has answered (or the frame failed): the next frame's art is
+        // matched while this one's text is read and looked up. Frames finish in order. With one
+        // lane, a new frame waits for this one's art and for the frame two back to finish, so at
+        // most one is ever still being read; an engine with more lanes (the phone's two workers)
+        // keeps that many frames' art being matched, and that many more being read.
+        const lanes = Math.max(1, engine.lanes ?? 1)
+        l.finishing = l.finishing
           .then(finish)
           .catch((e: unknown) => console.error('Scan frame failed:', e))
+        l.finishes = [...l.finishes, l.finishing].slice(-(lanes + 1))
+        l.behind = l.finishes.length > lanes ? l.finishes[0] : Promise.resolve()
+        l.visions = [...l.visions, Promise.race([vision, analysis]).then(() => {})].slice(-lanes)
+        if (l.visions.length === lanes) await l.visions[0]
       } finally {
         l.busy = false
       }
@@ -1144,6 +1156,8 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     l.lastGrab = null
     l.finishing = Promise.resolve()
     l.behind = Promise.resolve()
+    l.finishes = []
+    l.visions = []
     const frameTimes = createFrameTimes()
     // Each tick is timed from the last one's start, so a frame slower than FRAME_MS is followed at
     // once. A photo runs inside a tick, so the next waits for it.

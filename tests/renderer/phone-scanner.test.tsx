@@ -441,6 +441,52 @@ describe('phone scanner', () => {
       ).toHaveTextContent('3/3')
     })
 
+    it('Code mode shows the aim box and its own status, and is remembered', async () => {
+      const user = userEvent.setup()
+      const store = fakeStore()
+      installPhoneApi(store)
+      const { unmount } = renderScanner(store)
+      const toggle = await screen.findByRole('button', { name: 'Code mode' })
+      expect(toggle).toHaveAttribute('aria-pressed', 'false')
+      expect(screen.queryByTestId('code-aim')).toBeNull()
+      await user.click(toggle)
+      expect(toggle).toHaveAttribute('aria-pressed', 'true')
+      expect(screen.getByTestId('code-aim')).toBeInTheDocument()
+      expect(screen.getByRole('status')).toHaveTextContent('Fit the set code in the box')
+      unmount()
+      renderScanner(store)
+      expect(await screen.findByRole('button', { name: 'Code mode' })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      )
+    })
+
+    it('has no Code mode for Pokémon, whose numbers name no set', async () => {
+      localStorage.setItem('scan.codeMode', '1')
+      const store = fakeStore()
+      const { api } = installPhoneApi(store)
+      api.games.available = vi.fn(async () => ['ygo', 'pkm'] as never)
+      api.games.active = vi.fn(async () => 'pkm' as const)
+      const engine = fakeEngine()
+      renderWithProviders(
+        <PhoneContext.Provider value={{ store, user: SETO, signedOut: () => {} }}>
+          <GameProvider>
+            <ScanHubProvider>
+              <ScannerScreen
+                engineFactory={() => engine}
+                onClose={() => {}}
+                onOpenSettings={() => {}}
+              />
+            </ScanHubProvider>
+          </GameProvider>
+        </PhoneContext.Provider>,
+        { api }
+      )
+      await waitFor(() => expect(api.games.active).toHaveBeenCalled())
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Code mode' })).toBeNull())
+      expect(screen.queryByTestId('code-aim')).toBeNull()
+    })
+
     it('words the cycle button as versions for a Pokémon card', async () => {
       localStorage.setItem(
         SESSION_KEY,

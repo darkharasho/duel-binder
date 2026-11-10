@@ -30,6 +30,7 @@ export function ScanViewport({
   zoom = 1,
   onZoom,
   smooth = false,
+  status,
   children
 }: {
   videoRef: RefObject<HTMLVideoElement | null>
@@ -41,6 +42,8 @@ export function ScanViewport({
   zoom?: number
   onZoom?: (zoom: number) => void
   smooth?: boolean
+  /** Status text shown in place of the scan loop's, with no photo button (Code mode). */
+  status?: string
   children?: React.ReactNode
 }): React.JSX.Element {
   const outline = loop.outline
@@ -93,7 +96,7 @@ export function ScanViewport({
                 className="h-full w-full object-cover object-center"
               />
             )}
-            {outline && (
+            {outline && status === undefined && (
               <CardOutline
                 quad={outline.quad}
                 width={outline.width}
@@ -103,8 +106,8 @@ export function ScanViewport({
             )}
           </div>
           <div className="absolute inset-x-0 bottom-0 flex items-center gap-3 bg-black/70 px-4 py-2 text-sm text-white">
-            <p role="status">{statusText(loop.status)}</p>
-            {loop.status.kind === 'stopped' ? (
+            <p role="status">{status ?? statusText(loop.status)}</p>
+            {status !== undefined ? null : loop.status.kind === 'stopped' ? (
               <Button variant="outline" size="xs" className="ml-auto" onClick={loop.retry}>
                 Retry
               </Button>

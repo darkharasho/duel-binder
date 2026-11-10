@@ -12,6 +12,8 @@ import { ArtDataNotice } from '@/features/scan/ArtDataNotice'
 import { ScanViewport } from '@/features/scan/ScanViewport'
 import { useCamera } from '@/features/scan/useCamera'
 import { useHubScan } from '@/features/scan/useHubScan'
+import { CODE_AIM } from '@/features/scan/codeMode'
+import { codeStatusText } from '@/features/scan/useCodeReader'
 import { useGame } from '@/lib/game'
 import { cn } from '@/lib/utils'
 import { CAMERA_MESSAGES } from './copy'
@@ -67,6 +69,27 @@ function CameraBackdrop({ stream }: { stream: MediaStream | null }): React.JSX.E
   )
 }
 
+/** Code mode's aim box (CODE_AIM), with the picture around it dimmed. */
+function AimBox({ added }: { added: boolean }): React.JSX.Element {
+  const [x0, y0, x1, y1] = CODE_AIM
+  return (
+    <div
+      data-testid="code-aim"
+      aria-hidden
+      className={cn(
+        'pointer-events-none absolute rounded-xl border-2 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)] transition-colors',
+        added ? 'border-emerald-400' : 'border-white/90'
+      )}
+      style={{
+        left: `${x0 * 100}%`,
+        top: `${y0 * 100}%`,
+        width: `${(x1 - x0) * 100}%`,
+        height: `${(y1 - y0) * 100}%`
+      }}
+    />
+  )
+}
+
 /**
  * The phone's camera: the rear camera with the card outline and the scan status over it, as the
  * desktop's in-page scanner. It takes the room the rows below it leave: at the screen's width
@@ -84,9 +107,12 @@ export function PhoneCamera({
   lookModel = LOOK_MODEL,
   tiltModels = TILT_MODELS,
   className,
+  codeMode = false,
   children
 }: {
   engineFactory?: EngineFactory
+  /** Read only set codes in an aim box (Code mode), not whole cards. */
+  codeMode?: boolean
   lookModel?: LookModel | null
   tiltModels?: Partial<Record<GameId, TiltModel>> | null
   className?: string
@@ -96,13 +122,14 @@ export function PhoneCamera({
   const { game } = useGame()
   const videoRef = useRef<HTMLVideoElement>(null)
   const camera = useCamera(settings.deviceId, 'environment')
-  const { loop } = useHubScan({
+  const { loop, codeStatus } = useHubScan({
     videoRef,
     stream: camera.stream,
     engineFactory,
     lookModel: scanProfile(game).rarityLook ? lookModel : null,
     tiltModels,
-    onStalled: camera.retry
+    onStalled: camera.retry,
+    codeMode
   })
   const torch = useTorch(camera.stream)
 
@@ -117,10 +144,12 @@ export function PhoneCamera({
           messages={CAMERA_MESSAGES}
           onRetryCamera={camera.retry}
           loop={loop}
+          status={codeMode ? codeStatusText(codeStatus) : undefined}
           className="aspect-[3/4] w-[min(100cqw,75cqh)] rounded-3xl shadow-[0_10px_40px_rgba(0,0,0,0.4)]"
         >
+          {codeMode && <AimBox added={codeStatus.kind === 'added'} />}
           {children}
-          {loop.artReady === false && (
+          {!codeMode && loop.artReady === false && (
             <div className="absolute inset-x-2 bottom-2 rounded-2xl bg-black/55 p-2 backdrop-blur-md">
               <ArtDataNotice status={loop.artData} />
             </div>

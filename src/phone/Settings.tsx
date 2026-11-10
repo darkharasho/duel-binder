@@ -30,6 +30,7 @@ import { CATALOG_KEY, SYNC_STATE_KEY, displayName, usePhone } from './context'
 import { SYNC_FIRST, linkableProviders, linkSignIn, syncedFirst } from './linking'
 import { forgetSavedScans } from './savedScans'
 import { refreshAllFingerprints } from './refreshFingerprints'
+import { ScanTimingsToggle } from './ScanTimings'
 import { ScreenDetails } from './ScreenDetails'
 import { SyncProblems } from './SyncProblems'
 
@@ -309,6 +310,7 @@ export function Settings({
             Privacy
           </a>
           <ScanPingToggle className="flex min-h-12 items-start gap-3 px-4 py-3 text-[15px]" />
+          <ScanTimingsToggle className="flex min-h-12 items-start gap-3 px-4 py-3 text-[15px]" />
           <Row>
             {/* The stream's hit moment: the same setting as the stream's start screen. */}
             <HitPriceInput

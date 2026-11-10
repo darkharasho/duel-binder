@@ -51,6 +51,17 @@ export interface FrameSignals {
   look: number[] | null
   /** The worker kept this frame for the tilt reading (the frame's `tilt` held its art). */
   tiltKept?: boolean
+  /**
+   * A live frame's times in ms, for the phone's timing readout: reading the bitmap's pixels in
+   * the worker, the vision work on them, and (when text was read) the OCR after.
+   */
+  ms?: FrameMs
+}
+
+export interface FrameMs {
+  pixels: number
+  vision: number
+  ocr?: number
 }
 
 /** Messages to the vision worker. Frames are answered in the order they're sent. */
@@ -458,7 +469,8 @@ export function createScanEngine(deps: {
       const flags = {
         ...(signals.artVia ? { artVia: signals.artVia } : {}),
         ...(signals.artBack !== undefined ? { artBack: signals.artBack } : {}),
-        ...(signals.tiltKept ? { tiltKept: true } : {})
+        ...(signals.tiltKept ? { tiltKept: true } : {}),
+        ...(signals.ms ? { ms: signals.ms } : {})
       }
       if (!wantText || !found)
         return {
@@ -482,7 +494,9 @@ export function createScanEngine(deps: {
         bands.length ? deps.api.ocr(bands, kind).catch(() => []) : Promise.resolve([])
       // A Pokémon card's code band holds its collector number, slash and all.
       const codeKind = deps.game === 'pkm' ? 'number' : 'code'
+      const ocrFrom = performance.now()
       const [codes, names] = await Promise.all([read(codeBands, codeKind), read(nameBands, 'name')])
+      if (flags.ms) flags.ms = { ...flags.ms, ocr: performance.now() - ocrFrom }
       return {
         found,
         quad,

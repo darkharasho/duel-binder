@@ -131,8 +131,11 @@ async function handle(msg: WorkerRequest): Promise<void> {
     // Read at the centre crop, and wider when the card runs off it (framing.ts); the quad is told
     // in whole-frame pixels.
     const holderPass = budget.allow()
+    const from = performance.now()
+    const image = pixels(msg.image)
+    const read = performance.now()
     const { upright, ...signals } = readFramed(
-      pixels(msg.image),
+      image,
       msg.region ?? null,
       (img, first) =>
         analyze(
@@ -151,6 +154,7 @@ async function handle(msg: WorkerRequest): Promise<void> {
       (img) => findCandidates(cv, img, profile),
       keep ? held : null
     )
+    signals.ms = { pixels: read - from, vision: performance.now() - read }
     if (upright && msg.tilt && msg.at !== undefined && keepsForTilt(signals.art, msg.tilt)) {
       tilt.keep(upright, msg.at)
       signals.tiltKept = true

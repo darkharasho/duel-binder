@@ -32,7 +32,8 @@ export function useHubScan({
   paused = false,
   onPull,
   wholeFrame = false,
-  codeMode = false
+  codeMode = false,
+  timings = false
 }: {
   videoRef: RefObject<HTMLVideoElement | null>
   stream: MediaStream | null
@@ -47,6 +48,8 @@ export function useHubScan({
   wholeFrame?: boolean
   /** Reads only set codes in an aim box (useCodeReader) in place of whole cards. */
   codeMode?: boolean
+  /** As useScanLoop's: measure each frame for a timing readout. */
+  timings?: boolean
   /** Hears each pull once it's counted: `pull.id` is the row key, `scanned` the copies on the list. */
   onPull?: (pull: Pull, scanned: number, draft: ScanDraft) => void
 }): {
@@ -94,7 +97,8 @@ export function useHubScan({
     onDraft,
     onRarityRead: reread,
     onStalled,
-    wholeFrame
+    wholeFrame,
+    timings
   })
 
   const codeStatus = useCodeReader({

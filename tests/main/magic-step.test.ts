@@ -46,7 +46,10 @@ const source = (objects: ScryCard[], sets: ScrySet[] = SETS): ScryfallSource => 
   async *cards() {
     yield* objects
   },
-  sets: async () => sets
+  sets: async () => sets,
+  symbolSvg: async () => {
+    throw new Error('no symbols in this test')
+  }
 })
 
 const run = (src: ScryfallSource, log: string[] = []): ReturnType<typeof runMagicStep> =>

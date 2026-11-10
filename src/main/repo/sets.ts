@@ -54,8 +54,9 @@ const SET_JOINS = `LEFT JOIN sets s ON s.game = p.game AND s.language = p.langua
 // A (card, rarity) pair is keyed as "<card_id>|<rarity>"; card_id is an integer, so the first "|"
 // always ends it. Yu-Gi-Oh! pack art and logos are English only, keyed by set name alone; Pokémon
 // pack art and fallback logos come from pokemon_set_art, per language; a One Piece set's pack shot
-// is its own sets.image_key (an 'ob-' key). A Magic set has no pack or logo key in step 1: every
-// art join above is keyed to its own game, so it can't pick up a Yu-Gi-Oh! row by set name.
+// is its own sets.image_key (an 'ob-' key). A Magic set has no pack or logo key: its art is its
+// symbol, sets.image_key (an 'ms-' key, shared by every set showing that symbol). Every art join
+// above is keyed to its own game, so it can't pick up a Yu-Gi-Oh! row by set name.
 // Ownership is an uncorrelated IN list (built once, then a keyed lookup per printing). A LEFT JOIN
 // to the owned printings made SQLite scan them for every printing (~1 s on a full catalog).
 const summary = (scope: Scope): string => {

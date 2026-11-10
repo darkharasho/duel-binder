@@ -3,6 +3,7 @@ import { RARITY_LABEL } from '../db/schema'
 import { pickDefaultCode, setNumber, setPrefix } from '../../shared/sets'
 import type { ChecklistCard, ChecklistRarity, SetChecklist, SetSummary } from '../../shared/types'
 import type { Language } from '../../shared/languages'
+import type { GameId } from '../../shared/games'
 import { setImageKey } from '../../shared/setImages'
 import { addEntry, CollectionError } from './collection'
 import { printingArtImageId } from './cards'
@@ -218,11 +219,14 @@ export function listSets(db: SqlDb, scope: Scope = LOCAL): SetSummary[] {
 /** Bump when `catalogSets` or `toSummary` change what they produce: stored rollups aren't rebuilt otherwise. */
 const SETS_ROLLUP = 4
 
+/** Where listSetsFast stores a game's catalog Sets list. */
+export const setsRollupKey = (game: GameId): string => `sets:${SETS_ROLLUP}:${game}`
+
 /**
  * listSets as the catalog alone has it: nobody owns anything and a flagged Pokémon printing isn't
  * listed. Each set's counts are taken before the art joins, which would otherwise run per printing.
  */
-function catalogSets(db: SqlDb, scope: Scope): SetSummary[] {
+export function catalogSets(db: SqlDb, scope: Scope): SetSummary[] {
   const rows = db
     .prepare(
       `WITH p AS (
@@ -255,9 +259,14 @@ function setSummary(db: SqlDb, setName: string, language: Language, scope: Scope
  * rollup and the scope's ownership, always read live, goes on top. A set holding an owned flagged
  * Pokémon printing (see shownPrinting) lists rows the rollup left out, so it's read on its own.
  */
-export function listSetsFast(db: SqlDb, scope: Scope = LOCAL): SetSummary[] {
-  const key = `sets:${SETS_ROLLUP}:${scopeGame(db, scope)}`
-  const catalog = catalogRollup(db, key, () => catalogSets(db, scope))
+export function listSetsFast(
+  db: SqlDb,
+  scope: Scope = LOCAL,
+  /** The catalog's part when the caller already has it (a background rollup build that couldn't store it). */
+  known?: SetSummary[]
+): SetSummary[] {
+  const game = scopeGame(db, scope)
+  const catalog = known ?? catalogRollup(db, setsRollupKey(game), game, () => catalogSets(db, scope))
   const owned = db
     .prepare(
       `SELECT p.language, p.set_name, COUNT(DISTINCT p.card_id) AS cards,

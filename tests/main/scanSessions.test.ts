@@ -273,7 +273,7 @@ describe('migration V41 (scan_sessions)', () => {
     const old = databaseAt(40)
     old.exec("INSERT INTO meta (key, value) VALUES ('keep', 'me')")
     migrate(old)
-    expect(old.pragma('user_version', { simple: true })).toBe(46)
+    expect(old.pragma('user_version', { simple: true })).toBe(47)
     expect(old.prepare("SELECT value FROM meta WHERE key = 'keep'").get()).toEqual({ value: 'me' })
     expect(old.prepare('SELECT COUNT(*) AS n FROM scan_sessions').get()).toEqual({ n: 0 })
     old.close()

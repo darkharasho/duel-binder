@@ -323,6 +323,10 @@ export function browseCards(db: SqlDb, f: BrowseFilters, scope: Scope = LOCAL): 
 /** Bump when browseFacets changes what it produces: stored rollups aren't rebuilt otherwise. */
 const FACETS_ROLLUP = 4
 
+/** Where browseFacetsFast stores a game's facets for a language (every language's without one). */
+export const facetsRollupKey = (game: GameId, language?: Language): string =>
+  `browseFacets:${FACETS_ROLLUP}:${game}:${isLanguage(language) ? language : 'all'}`
+
 /** browseFacets from its rollup: its answer depends on the catalog alone. */
 export function browseFacetsFast(
   db: SqlDb,
@@ -330,11 +334,8 @@ export function browseFacetsFast(
   language?: Language
 ): BrowseFacets {
   const lang = isLanguage(language) ? language : undefined
-  return catalogRollup(
-    db,
-    `browseFacets:${FACETS_ROLLUP}:${scopeGame(db, scope)}:${lang ?? 'all'}`,
-    () => browseFacets(db, scope, lang)
-  )
+  const game = scopeGame(db, scope)
+  return catalogRollup(db, facetsRollupKey(game, lang), game, () => browseFacets(db, scope, lang))
 }
 
 /**

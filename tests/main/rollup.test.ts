@@ -118,10 +118,7 @@ describe('catalog_rollups', () => {
     ['pack art', () => db.exec("INSERT INTO pack_art VALUES ('First Set', 'u', 'k')")],
     ['a logo', () => db.exec("INSERT INTO set_logos VALUES ('First Set', 'u', 'k')")],
     ['a Konami logo', () => db.exec("INSERT INTO konami_logos VALUES ('First Set', 'u', 'k')")],
-    [
-      'Pokémon set art',
-      () => db.exec("INSERT INTO pokemon_set_art VALUES ('en', 'First Set', 'pack', 0, 'u', 'k')")
-    ],
+    // Pokémon set art drops only Pokémon's rollups (tests/main/rollup-build.test.ts).
     ['a card image', () => db.exec('UPDATE card_images SET sort_order = 1 WHERE image_id = 1')],
     ['a card type', () => db.exec("UPDATE cards SET type = 'Effect Monster' WHERE id = 1")]
   ]
@@ -155,7 +152,7 @@ describe('catalog_rollups', () => {
   it('computes when the store is unusable', () => {
     setup()
     db.exec('DROP TABLE catalog_rollups')
-    expect(catalogRollup(db, 'k', () => 7)).toBe(7)
+    expect(catalogRollup(db, 'k', 'ygo', () => 7)).toBe(7)
   })
 })
 

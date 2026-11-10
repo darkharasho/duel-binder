@@ -280,6 +280,22 @@ describe('cardVersions', () => {
       { label: 'Reverse Holofoil', productId: 642163, subTypeName: 'Reverse Holofoil', price: 0.29 }
     ])
   })
+  it('reads a stamp the whole print run carries as no stamp (30th Celebration Pikachu, 30C 027/128)', () => {
+    // TCGdex 2026-11: the card's only variant is a 30th-anniversary holo pointing at TCGplayer's one
+    // Holofoil product; there is no separate stamped printing.
+    const p = prod(716310, 24722, '027/128')
+    const prices = new Map([[716310, [{ productId: 716310, subTypeName: 'Holofoil', marketPrice: 0.78 }]]])
+    const c = brief({
+      rarity: 'Rare',
+      variants_detailed: [{ type: 'holo', stamp: ['30th-anniversary'], thirdParty: { tcgplayer: 716310 } }]
+    })
+    const r = cardVersions(c, [{ product: p, variantSubtype: null }], prices)
+    expect(r.versions).toEqual([{ label: 'Holofoil', productId: 716310, subTypeName: 'Holofoil', price: 0.78 }])
+    expect(r.problems).toEqual([])
+    expect(variantLabel({ type: 'holo', stamp: ['30th Anniversary'] })).toBe('Holofoil')
+    // Another stamp beside it still counts.
+    expect(variantLabel({ type: 'holo', stamp: ['30th-anniversary', 'prerelease'] })).toBe('Prerelease Holofoil')
+  })
   it("keeps the plain Holofoil's price when a stamped product also has a Holofoil row", () => {
     const plain = prod(1, 9, '001/010')
     const stamped = prod(2, 8, '001/010')

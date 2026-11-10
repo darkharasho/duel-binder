@@ -58,12 +58,35 @@ export function canonicalLabel(subTypeName: string): string {
   return SUBTYPES[s] ?? s
 }
 
+/** One spelling per stamp: TCGdex spells one several ways ("1st-edition", "1st edition", "1st Edition"). */
+const stampKey = (s: string): string =>
+  s
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_]+/g, '-')
+
+/**
+ * Stamps a whole print run carries, so they mark no version of their own. TCGdex added
+ * "30th-anniversary" (2026-11) to every card of 30th Celebration, 30th Classic Collection and the
+ * holo Mega Evolution Energies, each sold on TCGplayer as one plain product; read as a stamp, it
+ * made a "30th Anniversary Holofoil" beside every card's real Holofoil (owner report 2026-11-09).
+ */
+const PRINT_RUN_STAMPS = new Set(['30th-anniversary'])
+
+/** The variant without its print-run stamps (unchanged when it has none). */
+export function withoutPrintRunStamps(v: TdVariant): TdVariant {
+  if (!v.stamp?.length) return v
+  const stamp = v.stamp.filter((s) => !PRINT_RUN_STAMPS.has(stampKey(s)))
+  if (stamp.length === v.stamp.length) return v
+  const { stamp: _dropped, ...rest } = v
+  return stamp.length ? { ...rest, stamp } : rest
+}
+
 /** A variant's label without its subtype prefix, and whether it is in the table. */
 function variantBase(v: TdVariant): { label: string; known: boolean } {
   const type = v.type.trim().toLowerCase()
-  // TCGdex spells one stamp several ways ("1st-edition", "1st edition", "1st Edition").
   // Sorted and deduped: the label is frozen at first write, and TCGdex's stamp order isn't stable.
-  const stamps = [...new Set((v.stamp ?? []).map((s) => s.trim().toLowerCase().replace(/[\s_]+/g, '-')).filter(Boolean))].sort()
+  const stamps = [...new Set((withoutPrintRunStamps(v).stamp ?? []).map(stampKey).filter(Boolean))].sort()
   if (stamps.length === 0 && TYPES[type]) return { label: TYPES[type], known: true }
   if (stamps.length === 1 && stamps[0] === '1st-edition' && FIRST_EDITION[type]) {
     return { label: FIRST_EDITION[type], known: true }
@@ -249,6 +272,7 @@ export function cardVersions(
   prices: Map<number, TcPrice[]>,
   setFinish: string | null = null
 ): { versions: PkmVersion[]; problems: string[]; unverified: boolean } {
+  const variants = card.variants_detailed?.map(withoutPrintRunStamps)
   const problems: string[] = []
   const entries = new Map<string, Entry>()
   const entry = (label: string): Entry => {
@@ -276,7 +300,7 @@ export function cardVersions(
   // A product only stamped TCGdex variants point at (a museum or prerelease stamp TCGplayer sells on
   // its own) is that stamped version: its rows price it, never a plain Normal or Holofoil.
   const pointers = new Map<number, Set<TdVariant>>()
-  for (const v of card.variants_detailed ?? []) {
+  for (const v of variants ?? []) {
     const id = v.thirdParty?.tcgplayer
     if (typeof id !== 'number' || isGenerated(v)) continue
     const set = pointers.get(id) ?? new Set<TdVariant>()
@@ -340,7 +364,7 @@ export function cardVersions(
   )
   const foil = alwaysFoil(card.rarity)
   let unverified = false
-  for (const raw of card.variants_detailed ?? []) {
+  for (const raw of variants ?? []) {
     let v = raw
     if (isGenerated(raw)) {
       if (plainRows) continue
@@ -361,7 +385,7 @@ export function cardVersions(
       v.foil?.trim().toLowerCase() === 'cosmos' &&
       !versionSubtype(v.subtype) &&
       !v.stamp?.length &&
-      card.variants_detailed!.some((o) => !o.foil)
+      variants!.some((o) => !o.foil)
     if (cosmos && entries.has('Cosmos Holofoil')) continue
     const label = treatment ?? (cosmos ? 'Cosmos Holo' : variantLabel(v))
     const rival = EXCLUDES[label]

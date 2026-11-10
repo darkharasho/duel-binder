@@ -6,6 +6,7 @@ import {
   SCHEMA_V28,
   SCHEMA_V42,
   SCHEMA_V43,
+  SCHEMA_V45,
   SCHEMA_V36,
   type Migration
 } from '../../../src/main/db/schema'
@@ -351,6 +352,34 @@ function magicStep(): ServerStep {
         ...seqTriggers(t, "'mtg'")
       ])
       .join('\n')
+  }
+}
+
+/** Frozen, as of server-43: server-42's `mtg_cards` entry plus `lang` and `local_name`. */
+const SERVER_43_MTG_CARDS: FrozenTable = {
+  name: 'mtg_cards',
+  key: ['card_id'],
+  columns: [...SERVER_42_MTG_CARDS.columns, 'lang', 'local_name']
+}
+/** Frozen, as of server-43: server-42's `mtg_images` entry plus `back_image_id` and `art_from`. */
+const SERVER_43_MTG_IMAGES: FrozenTable = {
+  name: 'mtg_images',
+  key: ['image_id'],
+  columns: [...SERVER_42_MTG_IMAGES.columns, 'back_image_id', 'art_from']
+}
+
+/** The Magic language and face columns (the server's V45), and both tables' seq triggers recreated over them, as in server-40. */
+function magicLanguagesStep(): ServerStep {
+  return {
+    name: 'server-43',
+    sql: [
+      SCHEMA_V45.trim(),
+      ...['mtg_cards', 'mtg_images'].flatMap((t) =>
+        ['ins', 'upd', 'del'].map((op) => `DROP TRIGGER IF EXISTS trg_${t}_seq_${op};`)
+      ),
+      ...seqTriggers(SERVER_43_MTG_CARDS, "'mtg'"),
+      ...seqTriggers(SERVER_43_MTG_IMAGES, "'mtg'")
+    ].join('\n')
   }
 }
 
@@ -767,7 +796,8 @@ CREATE TABLE admin_handoffs (code_hash TEXT PRIMARY KEY,
   dexNumberStep(),
   // V43's cleanup, run here because on a fresh server card_printings.game comes from a server step.
   { name: 'server-41', sql: SCHEMA_V43 },
-  magicStep()
+  magicStep(),
+  magicLanguagesStep()
 ]
 
 /**

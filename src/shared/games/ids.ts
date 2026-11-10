@@ -126,6 +126,7 @@ export const onePieceDonImageId = (region: string, productId: number): number =>
  * Source ids (permanent once shipped):
  * - a card is one oracle card per language: `mtgCardId('en', oracleId)` = `mtgId('en/<oracle_id>')`
  * - an image is one Scryfall object: `mtgImageId(scryfallId)` = `mtgId('<scryfall id>#img')`
+ * - a two-faced card's back face image: `mtgBackImageId(scryfallId)` = `mtgId('<scryfall id>#back')`
  * Callers use the wrappers, never the strings. Scryfall UUIDs are lowercased before hashing.
  */
 export function mtgId(sourceId: string): number {
@@ -140,6 +141,7 @@ export function mtgId(sourceId: string): number {
 export const mtgCardId = (lang: string, oracleId: string): number =>
   mtgId(`${lang}/${oracleId.toLowerCase()}`)
 export const mtgImageId = (scryfallId: string): number => mtgId(`${scryfallId.toLowerCase()}#img`)
+export const mtgBackImageId = (scryfallId: string): number => mtgId(`${scryfallId.toLowerCase()}#back`)
 
 export function gameOfId(id: number): GameId {
   return id >= PKM_ID_MIN ? 'pkm' : id >= ONEPIECE_ID_MIN ? 'op' : id >= MTG_ID_MIN ? 'mtg' : 'ygo'

@@ -128,7 +128,8 @@ export const CATALOG_TABLES: CatalogTable[] = [
     key: ['card_id'],
     columns: [
       'card_id', 'oracle_id', 'layout', 'type_line', 'types', 'mana_cost', 'mana_value', 'colors',
-      'color_identity', 'oracle_text', 'power', 'toughness', 'loyalty', 'defense', 'keywords', 'faces'
+      'color_identity', 'oracle_text', 'power', 'toughness', 'loyalty', 'defense', 'keywords', 'faces',
+      'lang', 'local_name'
     ],
     games: ['mtg']
   },
@@ -137,7 +138,7 @@ export const CATALOG_TABLES: CatalogTable[] = [
     key: ['image_id'],
     columns: [
       'image_id', 'scryfall_id', 'illustration_id', 'artist', 'frame', 'border_color', 'full_art',
-      'promo_types'
+      'promo_types', 'back_image_id', 'art_from'
     ],
     games: ['mtg']
   }

@@ -123,7 +123,7 @@ const coversSql = (scope: Scope): string => `
     FROM card_printings p
     LEFT JOIN intl_prices ip ON ip.printing_id = p.id AND ${scope.ebayPrices}
     LEFT JOIN pokemon_cards pc ON pc.card_id = p.card_id AND p.game = 'pkm'
-    WHERE +p.game = ${scope.game} AND p.missing_from_api = 0 AND p.contributed = 0 %WHERE%
+    WHERE p.game = ${scope.game} AND p.missing_from_api = 0 AND p.contributed = 0 %WHERE%
     GROUP BY p.language, p.set_name, p.card_id),
   ranked AS (
     SELECT *, ROW_NUMBER() OVER (PARTITION BY language, set_name
@@ -212,7 +212,7 @@ function catalogSets(db: SqlDb, scope: Scope): SetSummary[] {
            COUNT(DISTINCT p.card_id) AS total_cards,
            COUNT(DISTINCT p.card_id || '|' || p.set_rarity) AS total_rarities
          FROM card_printings p
-         WHERE +p.game = ${scope.game} AND p.contributed = 0 AND (p.game <> 'pkm' OR p.missing_from_api = 0)
+         WHERE p.game = ${scope.game} AND p.contributed = 0 AND (p.game <> 'pkm' OR p.missing_from_api = 0)
          GROUP BY p.language, p.set_name)
        SELECT p.language, p.set_name, p.min_code, ${SET_ART}, p.total_cards, 0 AS owned_cards,
          p.total_rarities, 0 AS owned_rarities

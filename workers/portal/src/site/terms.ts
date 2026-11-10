@@ -12,7 +12,7 @@ export function renderTerms(view: LegalView): string {
       description: 'The terms for using Duel Binder, its apps and its web portal.',
       heading: 'Terms of Service',
       lead: 'The rules for using Duel Binder: the desktop app, the phone app and the web portal.',
-      updated: 'Last updated October 30, 2026',
+      updated: 'Last updated November 9, 2026',
       sections: [
         [
           'Agreeing to these terms',

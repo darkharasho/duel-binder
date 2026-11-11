@@ -41,18 +41,23 @@ const stop = (s: MediaStream): void => s.getTracks().forEach((t) => t.stop())
 /** Which way the camera should face when no device is picked: the phone's rear camera. */
 export type CameraFacing = 'environment'
 
-const constraints = (deviceId: string | null, facing?: CameraFacing): MediaStreamConstraints => ({
+const constraints = (
+  deviceId: string | null,
+  facing: CameraFacing | undefined,
+  frameRate: number
+): MediaStreamConstraints => ({
   audio: false,
   video: {
     // 4K where the camera has it (a held card's set code is then about 14 px tall, not 7);
     // being ideal, not min, any lower resolution still opens.
     width: { ideal: 3840 },
     height: { ideal: 2160 },
-    // 60 fps on desktop where the camera has it at that size (Elgato's Facecam 4K does): each frame
-    // is then exposed for at most 1/60 s, so a hand-held card blurs half as much. Chromium opens
-    // 30 when not asked. Ideal again, so a camera without 60 still opens; the phone (facing) keeps
-    // its default, sparing battery and heat.
-    ...(facing ? {} : { frameRate: { ideal: 60 } }),
+    // The frame rate picked on desktop (60 by default, where the camera has it at that size, as
+    // Elgato's Facecam 4K does): each frame is then exposed for at most 1/60 s, so a hand-held
+    // card blurs half as much, at the cost of grain in a dim room. Chromium opens 30 when not
+    // asked. Ideal again, so a camera without it still opens; the phone (facing) keeps its
+    // default, sparing battery and heat.
+    ...(facing ? {} : { frameRate: { ideal: frameRate } }),
     ...(deviceId
       ? { deviceId: { exact: deviceId } }
       : facing
@@ -85,9 +90,14 @@ export function useCamera(
   facing?: CameraFacing,
   /**
    * For cameras opened outside the scanner (admin Rip capture): `remember: false` leaves the
-   * scanner's remembered pick alone; `off` opens nothing until it's false.
+   * scanner's remembered pick alone; `off` opens nothing until it's false. `frameRate` is asked
+   * of a desktop camera (not the phone's, opened with `facing`); a change reopens it.
    */
-  { remember: rememberPick = true, off = false }: { remember?: boolean; off?: boolean } = {}
+  {
+    remember: rememberPick = true,
+    off = false,
+    frameRate = 60
+  }: { remember?: boolean; off?: boolean; frameRate?: number } = {}
 ): {
   stream: MediaStream | null
   devices: MediaDeviceInfo[]
@@ -95,7 +105,7 @@ export function useCamera(
   retry: () => void
 } {
   const [attempt, setAttempt] = useState(0)
-  const key = `${deviceId ?? ''}#${facing ?? ''}#${attempt}`
+  const key = `${deviceId ?? ''}#${facing ?? ''}#${frameRate}#${attempt}`
   // Results are tagged with the request they answer, so a new request starts out empty.
   const [opened, setOpened] = useState<{
     key: string
@@ -169,11 +179,11 @@ export function useCamera(
     let current: MediaStream | null = null
     const open = async (): Promise<MediaStream> => {
       try {
-        return await media.getUserMedia(constraints(deviceId, facing))
+        return await media.getUserMedia(constraints(deviceId, facing, frameRate))
       } catch (e) {
         // A remembered camera that's gone: fall back to the default one.
         if (deviceId && e instanceof DOMException && e.name === 'OverconstrainedError')
-          return media.getUserMedia(constraints(null, facing))
+          return media.getUserMedia(constraints(null, facing, frameRate))
         throw e
       }
     }
@@ -196,7 +206,7 @@ export function useCamera(
       live = false
       if (current) stop(current)
     }
-  }, [deviceId, facing, key, rememberPick, off])
+  }, [deviceId, facing, frameRate, key, rememberPick, off])
 
   return { stream, devices, error, retry }
 }

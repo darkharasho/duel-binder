@@ -4,11 +4,13 @@ import type { GameId } from '@shared/games/types'
 import { isLanguage } from '@shared/languages'
 import { RARITY_TIERS } from '@shared/scan/rarity'
 import {
+  SCAN_FRAME_RATES,
   SCAN_ZOOM_MAX,
   isFromScanWindow,
   isPokemonLanguage,
   scanSetKey,
   type ScanFit,
+  type ScanFrameRate,
   type ScanSet,
   type ScanSummary,
   type ScanWindowSettings,
@@ -31,6 +33,7 @@ const LANGUAGE_KEY = 'scan.pokemonLanguage'
 const HIT_PRICE_KEY = 'scan.hitPrice'
 const FIT_KEY = 'scan.fit'
 const ZOOM_KEY = 'scan.zoom'
+const FRAME_RATE_KEY = 'scan.frameRate'
 const SEEN_KEY = 'scan.drafts.seen'
 const DEFAULT_HIT_PRICE = 20
 const HIGHLIGHT_MS = 1500
@@ -118,6 +121,9 @@ const parseZoom = (raw: string): number | null => {
   return n >= 1 && n <= SCAN_ZOOM_MAX ? n : null
 }
 
+const parseFrameRate = (raw: string): ScanFrameRate | null =>
+  SCAN_FRAME_RATES.find((r) => String(r) === raw) ?? null
+
 const initialSettings = (): ScanWindowSettings => ({
   deviceId: rememberedCamera(),
   paused: false,
@@ -126,7 +132,8 @@ const initialSettings = (): ScanWindowSettings => ({
   defaultRarity: read(RARITY_KEY, (r) => (RARITY_TIERS.includes(r) ? r : null)),
   hitPrice: read(HIT_PRICE_KEY, parseHitPrice) ?? DEFAULT_HIT_PRICE,
   fit: read(FIT_KEY, (f): ScanFit | null => (f === 'whole' || f === 'fill' ? f : null)) ?? 'fill',
-  zoom: read(ZOOM_KEY, parseZoom) ?? 1
+  zoom: read(ZOOM_KEY, parseZoom) ?? 1,
+  frameRate: read(FRAME_RATE_KEY, parseFrameRate) ?? 60
 })
 
 /**
@@ -283,6 +290,7 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
       if ('hitPrice' in patch) write(HIT_PRICE_KEY, String(next.hitPrice))
       if ('fit' in patch) write(FIT_KEY, next.fit)
       if ('zoom' in patch) write(ZOOM_KEY, String(next.zoom))
+      if ('frameRate' in patch) write(FRAME_RATE_KEY, String(next.frameRate))
       setSettingsState(next)
       // Sent now, not from an effect, so a retry sent right after reaches the window after it.
       // Main drops it while no window is open.

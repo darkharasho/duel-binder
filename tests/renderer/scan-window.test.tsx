@@ -31,7 +31,8 @@ const SETTINGS: ScanWindowSettings = {
   defaultRarity: null,
   hitPrice: 20,
   fit: 'fill',
-  zoom: 1
+  zoom: 1,
+  frameRate: 60
 }
 
 let grabbed: ReturnType<typeof vi.fn>

@@ -71,7 +71,7 @@ export function InPageScanner({
 }): React.JSX.Element {
   const { settings } = useScanHub()
   const videoRef = useRef<HTMLVideoElement>(null)
-  const camera = useCamera(settings.deviceId)
+  const camera = useCamera(settings.deviceId, undefined, { frameRate: settings.frameRate })
   const [zoom, setZoom] = usePageZoom()
   const { loop, setUnreadable, setsSkipped, found } = useHubScan({
     videoRef,

@@ -30,6 +30,21 @@ describe('useCamera', () => {
     desk.unmount()
   })
 
+  it('asks a desktop camera for the frame rate given, and reopens it when that changes', async () => {
+    const { getUserMedia } = stubCamera()
+    const r = renderHook(({ fps }) => useCamera(null, undefined, { frameRate: fps }), {
+      initialProps: { fps: 30 }
+    })
+    await waitFor(() => expect(r.result.current.stream).not.toBeNull())
+    expect(getUserMedia).toHaveBeenLastCalledWith({
+      audio: false,
+      video: { ...SIZE, frameRate: { ideal: 30 } }
+    })
+    r.rerender({ fps: 60 })
+    await waitFor(() => expect(getUserMedia).toHaveBeenLastCalledWith(DESKTOP))
+    r.unmount()
+  })
+
   it('a picked camera opens by its id, whichever way it faces', async () => {
     const { getUserMedia } = stubCamera()
     const r = renderHook(() => useCamera('cam1', 'environment'))

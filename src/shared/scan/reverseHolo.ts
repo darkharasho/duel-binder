@@ -24,30 +24,69 @@ export function reverseChecked(setCode: string | null): boolean {
   return REVERSE_CHECKED_SETS.includes(setCode.split(' ')[0])
 }
 
-/** Shrinks to W x H by area averaging, flattening alpha on white, into luma values. */
+const bounds = (r: typeof ART) => ({
+  x0: Math.round(r.x0 * W),
+  x1: Math.round(r.x1 * W),
+  y0: Math.round(r.y0 * H),
+  y1: Math.round(r.y1 * H)
+})
+
+/**
+ * Shrinks to W x H by area averaging, flattening alpha on white, into luma values. Only the
+ * output pixels the ART and BODY regions read are computed; the rest stay 0.
+ */
 function shrinkLuma(img: RgbaImage): Float32Array {
   const { width, height, data } = img
   const out = new Float32Array(W * H)
   const sx = width / W
   const sy = height / H
+  const regions = [bounds(ART), bounds(BODY)]
+  const cx0 = Math.min(...regions.map((r) => r.x0))
+  const cx1 = Math.max(...regions.map((r) => r.x1))
+  // Per output column: its source x range and weights, the same for every row.
+  const colStart = new Int32Array(W)
+  const colEnd = new Int32Array(W)
+  const colW: Float64Array[] = []
+  for (let ox = cx0; ox < cx1; ox++) {
+    const x0 = ox * sx
+    const x1 = x0 + sx
+    const xs = Math.floor(x0)
+    const xe = Math.min(width, Math.ceil(x1))
+    colStart[ox] = xs
+    colEnd[ox] = xe
+    const ws = new Float64Array(Math.max(0, xe - xs))
+    for (let x = xs; x < xe; x++) ws[x - xs] = Math.min(x + 1, x1) - Math.max(x, x0)
+    colW[ox] = ws
+  }
   for (let oy = 0; oy < H; oy++) {
+    if (!regions.some((r) => oy >= r.y0 && oy < r.y1)) continue
     const y0 = oy * sy
     const y1 = y0 + sy
-    for (let ox = 0; ox < W; ox++) {
-      const x0 = ox * sx
-      const x1 = x0 + sx
+    const ys = Math.floor(y0)
+    const ye = Math.min(height, Math.ceil(y1))
+    for (let ox = cx0; ox < cx1; ox++) {
+      const xs = colStart[ox]
+      const xe = colEnd[ox]
+      const ws = colW[ox]
       let sum = 0
       let wsum = 0
-      for (let y = Math.floor(y0); y < Math.min(height, Math.ceil(y1)); y++) {
+      for (let y = ys; y < ye; y++) {
         const wy = Math.min(y + 1, y1) - Math.max(y, y0)
-        for (let x = Math.floor(x0); x < Math.min(width, Math.ceil(x1)); x++) {
-          const w = wy * (Math.min(x + 1, x1) - Math.max(x, x0))
-          const i = (y * width + x) * 4
-          const a = data[i + 3] / 255
-          const r = data[i] * a + 255 * (1 - a)
-          const g = data[i + 1] * a + 255 * (1 - a)
-          const b = data[i + 2] * a + 255 * (1 - a)
-          sum += w * (0.299 * r + 0.587 * g + 0.114 * b)
+        let i = (y * width + xs) * 4
+        for (let x = xs; x < xe; x++, i += 4) {
+          const w = wy * ws[x - xs]
+          const al = data[i + 3]
+          let lum: number
+          if (al === 255) {
+            lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]
+          } else {
+            const a = al / 255
+            const r = data[i] * a + 255 * (1 - a)
+            const g = data[i + 1] * a + 255 * (1 - a)
+            const b = data[i + 2] * a + 255 * (1 - a)
+            lum = 0.299 * r + 0.587 * g + 0.114 * b
+          }
+          sum += w * lum
           wsum += w
         }
       }

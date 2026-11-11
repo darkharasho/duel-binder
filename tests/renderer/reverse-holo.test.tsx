@@ -103,6 +103,25 @@ describe('reverseLook', () => {
       holes(reverseLook('Reverse Holofoil', 'SSH 178/202', { category: 'Trainer' })!.region)
     ).toBe(1)
   })
+
+  it("fits Mega Evolution's frame: the body nearer the edge, the Pokédex bar's ends drawn", () => {
+    const svg = (code: string, category = 'Pokemon'): string =>
+      svgOf(reverseLook('Reverse Holofoil', code, { category })!.region)
+    // The body runs 3.65% from the sides and 2.65% from the top (733 × 1024): x 26.8 + the corner.
+    expect(svg('DLR 002/103')).toContain("d='M40.8 27.1H")
+    expect(svg('MEG 019/132')).toContain("d='M40.8 27.1H")
+    expect(svg('DLR 090/103', 'Trainer')).toContain("d='M40.8 27.1H")
+    // Scarlet & Violet keep theirs.
+    expect(svg('SVI 001/198')).toContain("d='M43.3 28.7H")
+    // The bar's rounded left end and tapering right tail are traced, not boxed.
+    const strip = svg('DLR 002/103')
+      .match(/d='[^']+'/)![0]
+      .split('M')[3]
+    expect(strip.match(/L/g)!.length).toBeGreaterThan(6)
+    expect(
+      holes(reverseLook('Reverse Holofoil', 'DLR 002/103', { category: 'Pokemon' })!.region)
+    ).toBe(2)
+  })
 })
 
 describe('eraPattern', () => {

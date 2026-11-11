@@ -21,11 +21,14 @@ interface Border {
   y: number
 }
 
+/** A traced outline, as `[x, y]` percent of the card. */
+type Outline = readonly (readonly [number, number])[]
+
 interface Layout {
   art: Box
   border: Border
   /** The silver Pokédex bar under a Pokémon's art, starting where the art ends; left plain too. */
-  strip?: Box
+  strip?: Box | Outline
   /**
    * Where the drawn pattern fades in from the top, as percent of the card: clear above the first,
    * full from the second, so the name, HP and the Basic, Stage or TRAINER heading stay legible.
@@ -34,20 +37,48 @@ interface Layout {
 }
 
 const MODERN_BORDER: Border = { x: 4, y: 2.8 }
+/**
+ * Mega Evolution's body starts 3.7–4% in and 2.7–2.9% down depending on the image's source, so the
+ * look reaches the nearest of them: a dulled sliver of silver border shows less than a bright one
+ * of body.
+ */
+const ME_BORDER: Border = { x: 3.65, y: 2.65 }
+const MODERN_ART: Box = { top: 9.3, bottom: 47.6, left: 7.4, right: 7.2 }
+const MODERN_TRAINER_ART: Box = { top: 14.8, bottom: 53, left: 8, right: 7.3 }
+
+/**
+ * Mega Evolution's Pokédex bar: a rounded left end and a tail that tapers up to the right, traced
+ * just inside the silver so no body shows around it.
+ */
+const ME_STRIP: Outline = [
+  [6.8, 47.6],
+  [95, 47.6],
+  [94.6, 48.3],
+  [93.8, 48.8],
+  [92.8, 49.2],
+  [92, 49.9],
+  [91.6, 50.3],
+  [6.6, 50.3],
+  [5.6, 49.7],
+  [5.4, 48.8],
+  [5.8, 48]
+]
 
 // Measured on sample cards of each layout (733 × 1024 scans).
 const LAYOUTS = {
   modern: {
-    art: { top: 9.3, bottom: 47.6, left: 7.4, right: 7.2 },
+    art: MODERN_ART,
     border: MODERN_BORDER,
     strip: { top: 47.6, bottom: 50.3, left: 4.6, right: 4.2 },
     fade: [8, 11]
   },
   'modern-trainer': {
-    art: { top: 14.8, bottom: 53, left: 8, right: 7.3 },
+    art: MODERN_TRAINER_ART,
     border: MODERN_BORDER,
     fade: [13, 16]
   },
+  me: { art: MODERN_ART, border: ME_BORDER, strip: ME_STRIP, fade: [8, 11] },
+  'me-trainer': { art: MODERN_TRAINER_ART, border: ME_BORDER, fade: [13, 16] },
   // XY and Black & White Trainers carry a taller name banner over the art.
   'banner-trainer': {
     art: { top: 17.1, bottom: 53, left: 8.6, right: 7 },
@@ -82,6 +113,7 @@ type LayoutName = keyof typeof LAYOUTS
 const EREADER_SETS = new Set(['EX', 'AQ', 'SK'])
 const WOTC_SETS = new Set(['BS', 'JU', 'FO', 'B2', 'RO', 'G1', 'G2', 'N1', 'N2', 'N3', 'N4'])
 const LEGENDARY_COLLECTION = 'LC'
+const ME_SETS = new Set(['MEG', 'PFL', 'ASC', 'POR', 'CRI', 'PBL', 'DLR', 'MEE', 'MEP'])
 const BANNER_TRAINER_SETS = new Set([
   // Black & White
   'BLW',
@@ -181,6 +213,7 @@ function layoutFor(set: string, category: string): LayoutName {
   const trainer = category !== 'pokemon'
   if (WOTC_SETS.has(set) || set === LEGENDARY_COLLECTION) return trainer ? 'wotc-trainer' : 'wotc'
   if (EREADER_SETS.has(set)) return trainer ? 'ereader-trainer' : 'ereader'
+  if (ME_SETS.has(set)) return trainer ? 'me-trainer' : 'me'
   if (!trainer) return 'modern'
   return BANNER_TRAINER_SETS.has(set) ? 'banner-trainer' : 'modern-trainer'
 }
@@ -211,9 +244,17 @@ function regionMask({ art, border, strip }: Layout, bars: Box | null): string {
     `H${r1(bx + radius)}Q${r1(bx)} ${r1(H - by)} ${r1(bx)} ${r1(H - by - radius)}` +
     `V${r1(by + radius)}Q${r1(bx)} ${r1(by)} ${r1(bx + radius)} ${r1(by)}Z`
   // Holes must not overlap, or even-odd fills the overlap back in.
-  const hole = (b: Box): string => {
-    const [x0, x1] = [(b.left / 100) * W, W - (b.right / 100) * W]
-    const [y0, y1] = [(b.top / 100) * H, (b.bottom / 100) * H]
+  const hole = (b: Box | Outline): string => {
+    if (Array.isArray(b)) {
+      const pts = (b as Outline).map(([x, y]) => `${r1((x / 100) * W)} ${r1((y / 100) * H)}`)
+      return `M${pts[0]}${pts
+        .slice(1)
+        .map((p) => `L${p}`)
+        .join('')}Z`
+    }
+    const box = b as Box
+    const [x0, x1] = [(box.left / 100) * W, W - (box.right / 100) * W]
+    const [y0, y1] = [(box.top / 100) * H, (box.bottom / 100) * H]
     return `M${r1(x0)} ${r1(y0)}H${r1(x1)}V${r1(y1)}H${r1(x0)}Z`
   }
   const holes = hole(art) + (strip ? hole(strip) : '') + (bars ? hole(bars) : '')

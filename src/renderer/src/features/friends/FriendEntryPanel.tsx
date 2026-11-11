@@ -1,4 +1,5 @@
 import type { EntryView } from '@shared/types'
+import { printingReverseLook } from '@shared/reverseHolo'
 import { CardDetails } from '@/components/CardDetails'
 import { CopyNameButton } from '@/components/CopyNameButton'
 import { LanguageTag } from '@/components/LanguageTag'
@@ -42,6 +43,7 @@ export function FriendEntryPanel({
           printingId={scanFor(entry)}
           alt={card.name}
           nav={nav}
+          reverse={printingReverseLook(entry.printing, card)}
         />
       }
     >

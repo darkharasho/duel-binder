@@ -7,6 +7,8 @@ import { cardImageSrc } from '@/lib/images'
 import { usePrintingPhotoSrc } from '@/lib/printingPhotos'
 import { artLoadedOnce, markArtLoaded, useArtLoad } from './artLoad'
 import { CardPlaceholder } from './CardPlaceholder'
+import { ReverseLayer } from './ReverseLayer'
+import type { ReverseLook } from '@shared/reverseHolo'
 
 interface CardArtProps {
   imageId: number
@@ -17,6 +19,8 @@ interface CardArtProps {
   printingId?: number | null
   /** Someone is waiting on this image (a clicked card): the desktop downloads it ahead of its queue. */
   priority?: boolean
+  /** A Pokémon Reverse Holofoil printing's look (`reverseLook`), drawn over the art. */
+  reverse?: ReverseLook | null
 }
 
 /**
@@ -113,6 +117,17 @@ function BorrowedArtLabel({ language }: { language: BorrowedArt['language'] }): 
  * and art of its own replaces it at once.
  */
 export function CardArt(props: CardArtProps): React.JSX.Element {
+  const { reverse, className } = props
+  if (!reverse || gameOfId(props.imageId) !== 'pkm') return <CardArtFace {...props} />
+  return (
+    <span className={cn('relative isolate block rounded-[6px] shadow-sm', className)}>
+      <CardArtFace {...props} className="block w-full rounded-[inherit] shadow-none" />
+      <ReverseLayer look={reverse} />
+    </span>
+  )
+}
+
+function CardArtFace(props: CardArtProps): React.JSX.Element {
   const { imageId, alt, className } = props
   const borrowed = useBorrowedArt(imageId)
   const aspect = useCardAspect(imageId)

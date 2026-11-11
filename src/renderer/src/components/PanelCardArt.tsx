@@ -8,6 +8,7 @@ import { SheetPortal } from '@/components/ui/sheet'
 import { useCardAspect } from '@/lib/game'
 import { isPhone } from '@/lib/platform'
 import { cn } from '@/lib/utils'
+import type { ReverseLook } from '@shared/reverseHolo'
 
 interface PanelCardArtProps {
   imageId: number
@@ -17,6 +18,8 @@ interface PanelCardArtProps {
   nav?: PanelNav
   /** A two-faced card's flip control, on the art; none when omitted. `back`: the back is shown. */
   flip?: { back: boolean; onFlip: () => void }
+  /** A Pokémon Reverse Holofoil printing's look, drawn over the card (not its glow). */
+  reverse?: ReverseLook | null
 }
 
 function NavArrow({
@@ -83,7 +86,8 @@ export function PanelCardArt({
   printingId,
   alt,
   nav,
-  flip
+  flip,
+  reverse
 }: PanelCardArtProps): React.JSX.Element {
   usePanelNavKeys(nav)
   useSwipeNav(nav)
@@ -136,6 +140,7 @@ export function PanelCardArt({
             priority
             alt={alt}
             className="w-full"
+            reverse={reverse}
           />
           {flip && <FlipButton flip={flip} />}
         </TiltCard>
@@ -162,6 +167,7 @@ export function PanelCardArt({
                 priority
                 alt=""
                 className="w-full rounded-[14px] shadow-[0_30px_80px_rgb(0_0_0/0.65)]"
+                reverse={reverse}
               />
               {flip && <FlipButton flip={flip} large />}
             </TiltCard>

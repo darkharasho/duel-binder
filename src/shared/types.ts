@@ -524,6 +524,7 @@ export interface ChecklistCard {
   level: number | null // level, rank or link rating
   cardRarity?: string | null // Pokémon only: the card's own rarity (null when unknown), apart from its finishes
   hp?: number | null // Pokémon only
+  pokemonTypes?: string[] // Pokémon only: the card's Energy types
 }
 
 export interface SetChecklist {

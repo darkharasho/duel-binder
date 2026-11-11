@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { printingReverseLook } from '@shared/reverseHolo'
 import { useQuery } from '@tanstack/react-query'
 import type { Language } from '@shared/languages'
 import type { CardSearchResult } from '@shared/types'
@@ -220,6 +221,7 @@ export function CardPanel({
             printingId={panelArt.printingId}
             alt={name ?? ''}
             nav={nav}
+            reverse={printingReverseLook(shown, info)}
             flip={
               backImageId !== undefined && panelArt === art
                 ? { back: flipped, onFlip: () => setFlip({ key: flipKey, back: !flipped }) }

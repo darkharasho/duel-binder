@@ -344,3 +344,8 @@ export const TILT_MIN_MOTION = 24.8
  * tight enough that a hand or a bad outline over the held card's art isn't kept.
  */
 export const TILT_MAX_ART_DISTANCE = ART_MAX_DISTANCE * 1.5
+
+/** Reverse holo check: a body this much darker than the Normal reference (ratio) is Reverse. */
+export const REVERSE_BODY_LUM_MAX = 0.69
+/** Reverse holo check: body brightness spread this far above the reference's is Reverse. */
+export const REVERSE_SPREAD_MIN = 0.2

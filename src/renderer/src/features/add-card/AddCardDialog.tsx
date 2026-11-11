@@ -17,6 +17,7 @@ import { LANGUAGES, type LanguageFilter } from '@shared/languages'
 import { ValueText } from '@/features/collection/EntryValue'
 import { cn } from '@/lib/utils'
 import { CardArt } from '@/components/CardArt'
+import { useReverseLook } from '@/components/useReverseLook'
 import { LanguageSelect } from '@/components/LanguageSelect'
 import { LanguageTag } from '@/components/LanguageTag'
 import { PrintingLabel } from '@/components/PrintingLabel'
@@ -138,6 +139,11 @@ export function AddCardDialog({
     setName: p.setName,
     rarity: p.setRarity
   })
+  const reverse = useReverseLook(
+    { cardId: card?.id ?? 0, imageId: card ? imageId(printing) : 0 },
+    printing?.setRarity,
+    printing?.setCode
+  )
   const printingValue = (p: Printing): string =>
     `${p.id} ${englishSetName(p.setName, p.setCode)} ${p.setName} ${p.setCode} ${p.setRarity} ${p.language}`
   const preferred = printings.find((p) => p.id === preferredId)
@@ -271,6 +277,7 @@ export function AddCardDialog({
             <CardArt
               imageId={imageId(printing)}
               printingId={printing?.id}
+              reverse={reverse}
               size="small"
               alt=""
               className="w-9"

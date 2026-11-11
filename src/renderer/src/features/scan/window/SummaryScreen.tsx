@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { ScanSummary, ScanSummaryCard } from '@shared/scanWindow'
 import { CardArt } from '@/components/CardArt'
+import { useReverseLook } from '@/components/useReverseLook'
 import { formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { plural } from '../scanText'
@@ -33,6 +34,7 @@ function usePage(pages: number): number {
 }
 
 function Hit({ card }: { card: ScanSummaryCard }): React.JSX.Element {
+  const reverse = useReverseLook(card, card.rarity, card.setCode)
   return (
     <section
       aria-label="Hit of the session"
@@ -44,6 +46,7 @@ function Hit({ card }: { card: ScanSummaryCard }): React.JSX.Element {
       <CardArt
         imageId={card.imageId}
         printingId={card.photoId}
+        reverse={reverse}
         size="full"
         alt=""
         className="w-full rounded-[clamp(0.4rem,0.9vw,0.8rem)] bg-transparent shadow-none drop-shadow-[0_0_2vw_rgba(251,191,36,0.35)]"
@@ -68,11 +71,13 @@ function Hit({ card }: { card: ScanSummaryCard }): React.JSX.Element {
 
 function Row({ card }: { card: ScanSummaryCard }): React.JSX.Element {
   const { name, imageId, photoId, detail, quantity, price, raw, guess } = card
+  const reverse = useReverseLook(card, card.rarity, card.setCode)
   return (
     <li className="flex h-[7.4vh] min-w-0 portrait:h-[5.6vh] items-center gap-[1vw] border-b border-white/10">
       <CardArt
         imageId={imageId}
         printingId={photoId}
+        reverse={reverse}
         size="small"
         alt=""
         className="w-[4vh] shrink-0 overflow-hidden rounded-sm"

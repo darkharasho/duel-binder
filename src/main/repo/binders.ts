@@ -15,6 +15,7 @@ import {
   type BinderTarget
 } from '../../shared/binders'
 import { isLanguage, type Language } from '../../shared/languages'
+import { isReverseFinish } from '../../shared/reverseHolo'
 import type { GameId } from '../../shared/games'
 import type {
   BinderCard,
@@ -357,14 +358,42 @@ function cover(
   db: SqlDb,
   slots: Slot[],
   scope: Scope
-): Pick<BinderSummary, 'coverImageId' | 'coverPrintingId'> {
+): Pick<BinderSummary, 'coverImageId' | 'coverPrintingId' | 'coverReverse'> {
   const slot = slots.find((s) => s.owned > 0) ?? slots[0]
-  if (!slot) return { coverImageId: null, coverPrintingId: null }
+  if (!slot) return { coverImageId: null, coverPrintingId: null, coverReverse: null }
+  const coverPrintingId =
+    slot.printing?.printingId ?? shownPrintings(db, [slot], scope).get(slot.key) ?? null
   return {
     coverImageId: slot.imageId ?? firstImage(db, slot.cardId, scope),
-    coverPrintingId:
-      slot.printing?.printingId ?? shownPrintings(db, [slot], scope).get(slot.key) ?? null
+    coverPrintingId,
+    coverReverse: coverReverse(db, coverPrintingId, scope)
   }
+}
+
+/** The cover printing's finish and card, when it's a Pokémon reverse (drawn with its look). */
+function coverReverse(
+  db: SqlDb,
+  printingId: number | null,
+  scope: Scope
+): BinderSummary['coverReverse'] {
+  if (printingId === null || scopeGame(db, scope) !== 'pkm') return null
+  const row = db
+    .prepare(
+      `SELECT ${RARITY_LABEL} AS finish, p.set_code, pc.category, pc.types
+       FROM card_printings p LEFT JOIN pokemon_cards pc ON pc.card_id = p.card_id
+       WHERE p.id = ? AND +p.game = ${scope.game}`
+    )
+    .get(printingId) as
+    { finish: string; set_code: string; category: string | null; types: string | null } | undefined
+  if (!row || !isReverseFinish(row.finish)) return null
+  let types: string[] = []
+  try {
+    const parsed: unknown = JSON.parse(row.types ?? '[]')
+    if (Array.isArray(parsed)) types = parsed.filter((t): t is string => typeof t === 'string')
+  } catch {
+    // A malformed types column draws the plain pattern.
+  }
+  return { finish: row.finish, setCode: row.set_code, category: row.category, types }
 }
 
 function summarize(

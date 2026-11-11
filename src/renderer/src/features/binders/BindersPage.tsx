@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { ChevronLeftIcon } from 'lucide-react'
 import type { BinderCard, BinderDetail, BinderSummary } from '@shared/types'
+import { reverseLook } from '@shared/reverseHolo'
 import { CardArt } from '@/components/CardArt'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
@@ -38,6 +39,10 @@ export function Row({ b, onOpen }: { b: BinderSummary; onOpen: () => void }): Re
               <CardArt
                 imageId={b.coverImageId}
                 printingId={b.coverPrintingId}
+                reverse={
+                  b.coverReverse &&
+                  reverseLook(b.coverReverse.finish, b.coverReverse.setCode, b.coverReverse)
+                }
                 size="small"
                 alt=""
                 className="w-full rounded-[2px]"

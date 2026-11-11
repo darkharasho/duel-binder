@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { printingReverseLook } from '@shared/reverseHolo'
 import { useQuery } from '@tanstack/react-query'
 import type { CollectionStats, EntryView } from '@shared/types'
 import type { NavigateFn } from '@/components/AppShell'
@@ -142,6 +143,7 @@ function RecentlyAdded({
                   size="small"
                   alt=""
                   className="w-7 shrink-0 rounded-[2px]"
+                  reverse={printingReverseLook(e.printing, e.card)}
                 />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{e.card.name}</span>
@@ -275,6 +277,7 @@ export function MostValuable({
                   size="small"
                   alt=""
                   className="w-full rounded-[4px] shadow-[0_8px_20px_rgb(0_0_0/0.5)]"
+                  reverse={printingReverseLook(e.printing, e.card)}
                 />
               </TiltCard>
               <span className="min-w-0 text-xs leading-snug">

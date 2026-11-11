@@ -13,6 +13,7 @@ import { languageInfo, type Language } from '@shared/languages'
 import { printingChip, printingParts, printingSearch, printingText } from '@shared/printingLabel'
 import { englishSetName } from '@shared/setNames'
 import { CardArt } from '@/components/CardArt'
+import { useReverseLook } from '@/components/useReverseLook'
 import { formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { ownedText, surePrinting, useOwned } from './owned'
@@ -151,6 +152,8 @@ export const ScanRowItem = memo(function ScanRowItem({
   const price = priceOf(row)
   const range = versionToPick(row) ? priceRange(row) : null
   const current = printingOf(row)
+  const chosen = row.options.find((o) => o.printingId === current)
+  const reverse = useReverseLook(row, chosen?.rarity, chosen?.setCode)
   const flag = flagText(row)
   const owned = useOwned(row.cardId, surePrinting(row))
   const where = setLabelFor(row)
@@ -173,6 +176,7 @@ export const ScanRowItem = memo(function ScanRowItem({
         size="small"
         alt=""
         className="w-12 shrink-0 self-start"
+        reverse={reverse}
       />
       <div className="min-w-0 flex-1 text-[13px] leading-[18px]">
         <p className="truncate text-[15px] font-semibold leading-5">{row.name}</p>

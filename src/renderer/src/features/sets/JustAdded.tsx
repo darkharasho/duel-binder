@@ -1,4 +1,5 @@
 import { Undo2 } from 'lucide-react'
+import { reverseLook } from '@shared/reverseHolo'
 import { CardArt } from '@/components/CardArt'
 import { Button } from '@/components/ui/button'
 
@@ -10,6 +11,9 @@ export interface AddedItem {
   rarity: string
   setCode: string
   imageId: number
+  /** The card's category and Energy types, for a reverse printing's look. */
+  category?: string
+  types?: string[]
 }
 
 const SHOWN = 8
@@ -34,6 +38,7 @@ export function JustAdded({
             alt={item.name}
             printingId={item.printingId}
             className="w-7 shrink-0"
+            reverse={reverseLook(item.rarity, item.setCode, item)}
           />
           <div className="min-w-0 flex-1">
             <div className="truncate font-medium">{item.name}</div>

@@ -382,6 +382,29 @@ describe('slots read from the catalog and the collection', () => {
     expect(getBinder(db, uid)?.coverPrintingId).toBe(printingId(db, LOB_DM))
   })
 
+  it("a Pokémon reverse cover carries its finish, set code and card types; others don't", async () => {
+    const db = await seededDb()
+    const { printingIds } = seedPokemon(db)
+    const pkm = localScope("'pkm'")
+    const pkey = (id: number): string =>
+      (db.prepare('SELECT pkey FROM card_printings WHERE id = ?').get(id) as { pkey: string }).pkey
+    const [normal, reverse] = printingIds
+    const uid = saveBinder(db, draft(), T1, pkm)
+    setBinderEdit(db, uid, { level: 'printing', target: pkey(normal) }, 'add', T1, pkm)
+    expect(listBinders(db, pkm)[0].coverReverse).toBeNull()
+    setBinderEdit(db, uid, { level: 'printing', target: pkey(normal) }, null, T1, pkm)
+    setBinderEdit(db, uid, { level: 'printing', target: pkey(reverse) }, 'add', T1, pkm)
+    expect(listBinders(db, pkm)[0]).toMatchObject({
+      coverPrintingId: reverse,
+      coverReverse: {
+        finish: 'Reverse Holo',
+        setCode: expect.stringMatching(/^PAL\b/),
+        category: 'Pokémon',
+        types: ['Lightning']
+      }
+    })
+  })
+
   it("an owned card slot shows its dearest owned printing's photo, as does its cover", async () => {
     const db = await seededDb()
     const price = (pkey: string, p: number): void => {

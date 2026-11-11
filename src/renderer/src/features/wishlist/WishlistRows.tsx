@@ -1,4 +1,5 @@
 import { Check, Minus, Plus, X } from 'lucide-react'
+import { printingReverseLook } from '@shared/reverseHolo'
 import { englishSetName } from '@shared/setNames'
 import { MAX_WANTED } from '@shared/cloud'
 import type { WishlistItem, WishOwners } from '@shared/types'
@@ -125,6 +126,7 @@ export function WishlistRows({
                 size="small"
                 alt=""
                 className="w-12 shrink-0 rounded-sm"
+                reverse={printingReverseLook(p, item.card)}
               />
               <span className="min-w-0 flex-1 space-y-0.5">
                 <span className="block truncate text-sm font-medium">{item.card.name}</span>

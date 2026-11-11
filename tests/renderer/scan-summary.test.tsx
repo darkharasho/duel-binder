@@ -73,6 +73,8 @@ describe('sessionSummary', () => {
     const s = sessionSummary(rows, 20)
     expect(s.list.map((c) => c.price)).toEqual([50, 9, 3, null])
     expect(s.list[0]).toMatchObject({ guess: true, raw: true, detail: 'X · R' })
+    // The set code and rarity on their own too, for a Pokémon reverse's look.
+    expect(s.list[0]).toMatchObject({ cardId: rows[2].cardId, setCode: 'X', rarity: 'R' })
     expect(s.list[1]).toMatchObject({ quantity: 2, guess: false, raw: false })
   })
 

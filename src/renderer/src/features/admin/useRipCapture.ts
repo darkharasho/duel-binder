@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import type { RipFrame, RipPickerState } from '@shared/ripWindow'
 import { api } from '@/lib/api'
 import { errorText } from './adminTabs'
+import { LOOK_W, SAME_CARD, lookDiff } from './cardLook'
+import type { LookReply, LookRequest } from './cardLook.worker'
 import { KeyframePicker, PICK_H, PICK_W, toGrey } from './keyframes'
 
 /** Samples a second: enough to catch a card held for about ¾ s (3 still samples). */
@@ -10,6 +12,8 @@ const SAMPLE_MS = 250
 const KEEP_BACK = 5
 const THUMB_W = 640
 const JPEG_QUALITY = 0.92
+/** How long to wait for the card comparison before judging on the whole frame. */
+const LOOK_TIMEOUT_MS = 3000
 
 const pad = (n: number, w = 2): string => String(n).padStart(w, '0')
 
@@ -37,6 +41,66 @@ async function jpegOf(
   const canvas = new OffscreenCanvas(w, h)
   canvas.getContext('2d')!.drawImage(src, 0, 0, w, h)
   return canvas.convertToBlob({ type: 'image/jpeg', quality })
+}
+
+/**
+ * Finds the card in key frames on a worker (OpenCV stays off the UI thread) and answers with its
+ * look, or null when there's no card, the worker fails or it takes too long.
+ */
+function cardLooks(): {
+  of(src: CanvasImageSource, w: number, h: number): Promise<Float32Array | null>
+  close(): void
+} {
+  let worker: Worker | null = null
+  let next = 0
+  const waiting = new Map<number, (look: Float32Array | null) => void>()
+  const open = (): Worker => {
+    if (worker) return worker
+    worker = new Worker(new URL('./cardLook.worker.ts', import.meta.url), { type: 'module' })
+    worker.onmessage = (e: MessageEvent<LookReply>) => {
+      waiting.get(e.data.id)?.(e.data.look)
+      waiting.delete(e.data.id)
+    }
+    worker.onerror = () => {
+      for (const done of waiting.values()) done(null)
+      waiting.clear()
+    }
+    return worker
+  }
+  return {
+    of(src, w, h) {
+      // Drawn now, so the caller may close src as soon as this returns.
+      const lh = Math.round((LOOK_W * h) / w)
+      const canvas = new OffscreenCanvas(LOOK_W, lh)
+      const ctx = canvas.getContext('2d', { willReadFrequently: true })!
+      ctx.drawImage(src, 0, 0, LOOK_W, lh)
+      const data = ctx.getImageData(0, 0, LOOK_W, lh).data
+      const id = ++next
+      return new Promise((resolve) => {
+        const timer = setTimeout(() => {
+          waiting.delete(id)
+          resolve(null)
+        }, LOOK_TIMEOUT_MS)
+        waiting.set(id, (look) => {
+          clearTimeout(timer)
+          resolve(look)
+        })
+        try {
+          const msg: LookRequest = { id, frame: { width: LOOK_W, height: lh, data } }
+          open().postMessage(msg, [data.buffer])
+        } catch {
+          waiting.get(id)?.(null)
+          waiting.delete(id)
+        }
+      })
+    },
+    close() {
+      worker?.terminate()
+      worker = null
+      for (const done of waiting.values()) done(null)
+      waiting.clear()
+    }
+  }
 }
 
 export interface RipCapture {
@@ -68,6 +132,17 @@ export function useRipCapture(
   const [error, setError] = useState<string | null>(null)
   const pick = useRef(new KeyframePicker())
   const recent = useRef<{ seq: number; bitmap: ImageBitmap; grey: Uint8Array }[]>([])
+  const looks = useRef<ReturnType<typeof cardLooks> | null>(null)
+  // The last key frame's card, when one was found in it.
+  const lastLook = useRef<Float32Array | null>(null)
+  useEffect(() => {
+    const l = cardLooks()
+    looks.current = l
+    return () => {
+      l.close()
+      looks.current = null
+    }
+  }, [])
   const count = useRef(0)
   const saving = useRef(Promise.resolve())
   const on = useRef(events)
@@ -137,10 +212,20 @@ export function useRipCapture(
         recent.current.push({ seq, bitmap, grey })
         while (recent.current.length > KEEP_BACK) recent.current.shift()!.bitmap.close()
         setPicker(p.state)
-        if (chosen) {
-          const at = recent.current.find((r) => r.seq === chosen.seq)
+        const at = chosen && recent.current.find((r) => r.seq === chosen.seq)
+        if (chosen && at) {
           // The kept copy outlives this buffer, which closes its own.
-          if (at) keep(await createImageBitmap(at.bitmap), chosen.sharp, false)
+          const copy = await createImageBitmap(at.bitmap)
+          const look = (await looks.current?.of(copy, copy.width, copy.height)) ?? null
+          const prev = lastLook.current
+          // On the card when both frames have one; a hand move or foil shimmer changes the
+          // whole frame more than a new card does. Else on the whole frame.
+          const isNew = look && prev ? lookDiff(look, prev) >= SAME_CARD : chosen.fresh
+          if (isNew) {
+            p.markKept(at.grey)
+            lastLook.current = look
+            keep(copy, chosen.sharp, false)
+          } else copy.close()
         }
       } catch {
         // A frame that can't be read (camera switching) is skipped.
@@ -153,6 +238,7 @@ export function useRipCapture(
       for (const r of recent.current) r.bitmap.close()
       recent.current = []
       p.reset()
+      lastLook.current = null
     }
   }, [session, stream, keep, video])
 
@@ -163,7 +249,9 @@ export function useRipCapture(
     const bitmap = await createImageBitmap(v)
     const last = recent.current.at(-1)
     if (last) pick.current.markKept(last.grey)
+    const look = looks.current?.of(bitmap, bitmap.width, bitmap.height)
     keep(bitmap, 0, true)
+    lastLook.current = (await look) ?? null
   }
 
   const start = useCallback((name: string): void => {

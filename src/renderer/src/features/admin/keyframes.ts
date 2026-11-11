@@ -1,8 +1,9 @@
 /**
  * Picks key frames out of a live pack opening: the sharpest frame of each still stretch (a card
- * held up to the camera), skipping a stretch that looks like the last key frame (the same card
- * held for a while, or an empty table). It works on small grey copies of the samples, all the
- * same size; the caller grabs the full frame for a pick.
+ * held up to the camera), saying whether the whole frame looks unlike the last key frame (not the
+ * same card held for a while, or an empty table). It works on small grey copies of the samples,
+ * all the same size; the caller grabs the full frame for a pick, decides whether to keep it (on
+ * the card itself when it can find one, see cardLook) and marks what it keeps.
  */
 
 /** The small grey copy's size: big enough to see a card move, small enough for every sample. */
@@ -26,6 +27,8 @@ export interface Pick {
   /** The picked sample's sequence number, as `push` returned it. */
   seq: number
   sharp: number
+  /** The whole frame differs from the last key frame by more than `fresh`. */
+  fresh: boolean
 }
 
 /** Mean absolute difference of two grey images, on every other pixel. */
@@ -79,8 +82,8 @@ export class KeyframePicker {
 
   /**
    * Adds the next sample; returns its sequence number, and the pick when this sample completes
-   * a still stretch that's new. The pick may be an earlier sample of the stretch (the sharpest),
-   * so the caller keeps the last few full frames by sequence number.
+   * a still stretch. The pick may be an earlier sample of the stretch (the sharpest), so the
+   * caller keeps the last few full frames by sequence number.
    */
   push(grey: Uint8Array): { seq: number; pick: Pick | null } {
     const seq = ++this.seq
@@ -101,12 +104,14 @@ export class KeyframePicker {
     this.picked = true
     this.state = 'held'
     const best = this.run.reduce((a, b) => (b.sharp > a.sharp ? b : a))
-    if (this.last && motion(best.grey, this.last) <= this.opts.fresh) return { seq, pick: null }
-    this.last = best.grey
-    return { seq, pick: { seq: best.seq, sharp: best.sharp } }
+    const fresh = !this.last || motion(best.grey, this.last) > this.opts.fresh
+    return { seq, pick: { seq: best.seq, sharp: best.sharp, fresh } }
   }
 
-  /** A frame kept by hand counts as the last key frame, so holding still doesn't keep it twice. */
+  /**
+   * The frame just kept (picked or kept by hand) becomes the last key frame; one kept by hand
+   * also ends the stretch, so holding still doesn't keep it twice.
+   */
   markKept(grey: Uint8Array): void {
     this.last = grey
     this.picked = true

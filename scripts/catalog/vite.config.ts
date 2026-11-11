@@ -33,7 +33,8 @@ export default defineConfig({
         thumbs: `${root}scripts/catalog/thumbs.ts`,
         'pull-training': `${root}scripts/scan/pull-training.ts`,
         'op-number-replay': `${root}scripts/scan/op-number-replay.ts`,
-        'code-replay': `${root}scripts/scan/code-replay.ts`
+        'code-replay': `${root}scripts/scan/code-replay.ts`,
+        'rip-picker-replay': `${root}scripts/scan/rip-picker-replay.ts`
       },
       output: { format: 'es', entryFileNames: '[name].mjs' }
     }

@@ -33,6 +33,7 @@
     "catalog:thumbs": "vite build --config scripts/catalog/vite.config.ts && node out/catalog/thumbs.mjs",
     "scan:pull-training": "vite build --config scripts/catalog/vite.config.ts && node out/catalog/pull-training.mjs",
     "scan:op-replay": "vite build --config scripts/catalog/vite.config.ts && node out/catalog/op-number-replay.mjs",
+    "scan:rip-replay": "vite build --config scripts/catalog/vite.config.ts && node out/catalog/rip-picker-replay.mjs",
     "scan:code-replay": "vite build --config scripts/catalog/vite.config.ts && node out/catalog/code-replay.mjs",
     "catalog:parity": "vite build --config scripts/catalog/vite.config.ts && cross-env ELECTRON_RUN_AS_NODE=1 electron out/catalog/parity.mjs",
     "catalog:set-art": "vite build --config scripts/catalog/vite.config.ts && cross-env ELECTRON_RUN_AS_NODE=1 electron out/catalog/set-art.mjs",

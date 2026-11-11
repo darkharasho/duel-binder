@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Settings2 } from 'lucide-react'
+import { Popover } from 'radix-ui'
 import {
   SCAN_SIZES,
   SCAN_SIZE_MAX,
   resolutionText,
-  type CameraControlValues,
   type ScanFit,
   type ScanWindowState
 } from '@shared/scanWindow'
@@ -20,7 +21,6 @@ import {
 } from '@/components/ui/select'
 import { defaultEngine, type EngineFactory } from './engine'
 import { InPageScanner, type InPageCamera } from './InPageScanner'
-import { CameraControlsPanel } from './CameraControlsPanel'
 import { ZoomSlider } from './ScanViewport'
 import { MakeReplay } from './replay/MakeReplay'
 import { replaySourceOfRows } from './replay/pulls'
@@ -59,7 +59,6 @@ export function ScanPage({
   const [local, setLocal] = useState<InPageCamera | null>(null)
   // Set from the click until the window reports open: the page camera is released first.
   const [handingOff, setHandingOff] = useState(false)
-  const [showControls, setShowControls] = useState(false)
   const inPage = openKnown && !open && !handingOff
   const replaySource = useMemo(() => replaySourceOfRows(hub.session.rows), [hub.session.rows])
 
@@ -97,20 +96,6 @@ export function ScanPage({
       : open
         ? (state?.resolution ?? null)
         : null
-  const cameraControls = cameraError
-    ? null
-    : inPage
-      ? (local?.controls ?? null)
-      : open
-        ? (state?.cameraControls ?? null)
-        : null
-  const setCameraControls = (values: CameraControlValues | null): void => {
-    if (!cameraControls) return
-    const { [cameraControls.deviceId]: _old, ...others } = settings.cameraControls
-    setSettings({
-      cameraControls: values ? { ...others, [cameraControls.deviceId]: values } : others
-    })
-  }
   // Shown as picked only when it's one of the listed cameras (ids are blank before permission),
   // and not while the camera is in error, so picking it again reopens it.
   const activeCamera =
@@ -121,7 +106,7 @@ export function ScanPage({
   if (!openKnown) return <div className="p-8" />
 
   const newScansAs = rarities && (
-    <>
+    <span className="flex items-center gap-2">
       <span className="text-sm text-muted-foreground">New scans as</span>
       <SearchPicker
         label="New scans as"
@@ -129,16 +114,47 @@ export function ScanPage({
         options={pickers.rarity.options}
         onPick={pickers.rarity.onPick}
         searchPlaceholder="Search rarities…"
-        className="w-48"
+        className="w-44"
       />
-    </>
+    </span>
   )
-  const hitPrice = (
-    <HitPriceInput value={settings.hitPrice} onCommit={(hitPrice) => setSettings({ hitPrice })} />
+  const options = (
+    <ScanOptions>
+      <div className="flex items-center justify-between gap-3">
+        <HitPriceInput
+          value={settings.hitPrice}
+          onCommit={(hitPrice) => setSettings({ hitPrice })}
+        />
+        <ScanSoundToggle />
+      </div>
+      {!inPage && (
+        <>
+          <div className="flex flex-col gap-2 border-t border-white/[0.06] pt-3">
+            <p className="text-xs font-medium text-muted-foreground">Scan window</p>
+            <Select
+              value={settings.fit}
+              onValueChange={(fit) => setSettings({ fit: fit as ScanFit })}
+            >
+              <SelectTrigger size="sm" aria-label="Picture" className="w-full justify-between">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="fill">Fill the window</SelectItem>
+                <SelectItem value="whole">Whole picture</SelectItem>
+              </SelectContent>
+            </Select>
+            <ZoomSlider value={settings.zoom} onChange={(zoom) => setSettings({ zoom })} />
+            <div className="flex flex-wrap items-center gap-2">
+              <WindowSize open={open} size={state?.size} />
+            </div>
+          </div>
+        </>
+      )}
+    </ScanOptions>
   )
 
   return (
-    <div className="p-8 max-md:p-4">
+    <div className="flex h-full min-h-[36rem] flex-col p-8 max-md:p-4">
       <PageHeader>
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="mr-auto text-2xl font-semibold tracking-tight">Scan</h1>
@@ -148,7 +164,7 @@ export function ScanPage({
             options={pickers.language.options}
             onPick={pickers.language.onPick}
             searchPlaceholder="Search languages…"
-            className="w-40"
+            className="w-36"
           />
           <MultiSearchPicker
             label="Sets"
@@ -160,14 +176,14 @@ export function ScanPage({
             placeholder="Any set"
             many={(n) => `${n} sets`}
             searchPlaceholder="Search sets…"
-            className="w-72"
+            className="w-60"
           />
           <Select
             value={activeCamera}
             onValueChange={pickCamera}
             disabled={(!inPage && !open) || devices.length === 0}
           >
-            <SelectTrigger size="sm" aria-label="Camera" className="w-56">
+            <SelectTrigger size="sm" aria-label="Camera" className="w-52">
               <SelectValue placeholder={devices.length ? 'Choose a camera' : 'No camera'} />
             </SelectTrigger>
             <SelectContent>
@@ -183,57 +199,22 @@ export function ScanPage({
             <span
               aria-label="Camera resolution"
               title="What the camera is actually sending"
-              className="text-xs text-muted-foreground tabular-nums"
+              className="text-xs whitespace-nowrap text-muted-foreground tabular-nums"
             >
               {resolutionText(resolution)}
             </span>
           )}
-          {cameraControls && (
-            <Button
-              variant="outline"
-              size="sm"
-              aria-expanded={showControls}
-              onClick={() => setShowControls((v) => !v)}
-            >
-              Camera settings
-            </Button>
-          )}
         </div>
-        {cameraControls && showControls && (
-          <CameraControlsPanel
-            controls={cameraControls}
-            values={settings.cameraControls[cameraControls.deviceId] ?? {}}
-            onChange={setCameraControls}
-          />
-        )}
       </PageHeader>
 
-      {inPage ? (
-        <div className="mt-6 flex gap-6">
-          <InPageScanner
-            engineFactory={engineFactory}
-            onCamera={setLocal}
-            controls={
-              <div className="flex flex-wrap items-center gap-3">
-                {newScansAs}
-                {hitPrice}
-                <ScanSoundToggle />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="ml-auto"
-                  onClick={() => setHandingOff(true)}
-                >
-                  Open scan window
-                </Button>
-              </div>
-            }
-          />
-          <SessionList className="h-[calc(100vh-15rem)] flex-1" />
-        </div>
-      ) : (
-        <>
-          <div className="mt-6 flex flex-wrap items-center gap-3">
+      {/* One row of controls, then the scanner and list filling the rest of the window. */}
+      <div className="mt-5 flex flex-wrap items-center gap-2">
+        {inPage ? (
+          <Button variant="outline" size="sm" onClick={() => setHandingOff(true)}>
+            Open scan window
+          </Button>
+        ) : (
+          <>
             <Button
               variant="outline"
               size="sm"
@@ -258,21 +239,6 @@ export function ScanPage({
             >
               {hub.summaryOn ? 'Hide summary' : 'Show summary'}
             </Button>
-            <MakeReplay source={replaySource} variant="desktop" />
-            <Select
-              value={settings.fit}
-              onValueChange={(fit) => setSettings({ fit: fit as ScanFit })}
-            >
-              <SelectTrigger size="sm" aria-label="Picture" className="w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="fill">Fill the window</SelectItem>
-                <SelectItem value="whole">Whole picture</SelectItem>
-              </SelectContent>
-            </Select>
-            <ZoomSlider value={settings.zoom} onChange={(zoom) => setSettings({ zoom })} />
-            <WindowSize open={open} size={state?.size} />
             <Button
               variant="outline"
               size="sm"
@@ -281,12 +247,22 @@ export function ScanPage({
             >
               Full screen
             </Button>
-            <ScanSoundToggle />
-            <span className="ml-3" />
-            {newScansAs}
-            {hitPrice}
-          </div>
+            <MakeReplay source={replaySource} variant="desktop" />
+          </>
+        )}
+        <span className="ml-auto flex items-center gap-2">
+          {newScansAs}
+          {options}
+        </span>
+      </div>
 
+      {inPage ? (
+        <div className="mt-4 flex min-h-0 flex-1 gap-6">
+          <InPageScanner engineFactory={engineFactory} onCamera={setLocal} />
+          <SessionList className="min-h-0 flex-1" />
+        </div>
+      ) : (
+        <>
           <div className="mt-3 flex flex-col gap-1 text-sm">
             {!open ? (
               <p className="text-muted-foreground">Opening the scan window…</p>
@@ -327,10 +303,33 @@ export function ScanPage({
             {open && state?.artReady === false && <ArtDataNotice status={state.artData} />}
           </div>
 
-          <SessionList className="mt-6 h-[calc(100vh-17rem)]" />
+          <SessionList className="mt-4 min-h-0 flex-1" />
         </>
       )}
     </div>
+  )
+}
+
+/** Settings changed now and then: kept behind one button so the toolbar stays a single row. */
+function ScanOptions({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return (
+    <Popover.Root>
+      <Popover.Trigger asChild>
+        <Button variant="outline" size="sm" aria-label="Scan options">
+          <Settings2 aria-hidden />
+          Options
+        </Button>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          align="end"
+          sideOffset={6}
+          className="z-50 flex w-72 flex-col gap-3 rounded-md border bg-popover p-3 text-popover-foreground shadow-md"
+        >
+          {children}
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
   )
 }
 

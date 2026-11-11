@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { cssAspect, gameOfId } from '@shared/games'
 import { useCardAspect, useCardGame } from '@/lib/game'
@@ -8,7 +8,7 @@ import { usePrintingPhotoSrc } from '@/lib/printingPhotos'
 import { artLoadedOnce, markArtLoaded, useArtLoad } from './artLoad'
 import { CardPlaceholder } from './CardPlaceholder'
 import { ReverseLayer } from './ReverseLayer'
-import type { ReverseLook } from '@shared/reverseHolo'
+import { coverFit, type ReverseLook } from '@shared/reverseHolo'
 
 interface CardArtProps {
   imageId: number
@@ -117,12 +117,40 @@ function BorrowedArtLabel({ language }: { language: BorrowedArt['language'] }): 
  * and art of its own replaces it at once.
  */
 export function CardArt(props: CardArtProps): React.JSX.Element {
-  const { reverse, className } = props
+  const { reverse } = props
   if (!reverse || gameOfId(props.imageId) !== 'pkm') return <CardArtFace {...props} />
+  return <ReverseCardArt {...props} reverse={reverse} />
+}
+
+/**
+ * The art with its reverse look on top. The image fills its frame cropped (`object-cover`), and
+ * art whose shape differs from the frame's (Delta Reign's, 733 × 1024 in a 600 × 825 frame) loses
+ * a strip off two edges, so the look is cropped the same way: its regions are the image's.
+ */
+function ReverseCardArt(props: CardArtProps & { reverse: ReverseLook }): React.JSX.Element {
+  const { reverse, className, imageId } = props
+  const box = useRef<HTMLSpanElement>(null)
+  const frame = useCardAspect(imageId)
+  const [image, setImage] = useState<number | null>(null)
+  useEffect(() => {
+    const el = box.current
+    if (!el) return
+    const read = (img: HTMLImageElement | null): void => {
+      if (img?.naturalWidth && img.naturalHeight) setImage(img.naturalWidth / img.naturalHeight)
+    }
+    const img = el.querySelector('img')
+    if (img?.complete) read(img)
+    // A load doesn't bubble, but it does pass its ancestors on the way down: catch every image's.
+    const onLoad = (e: Event): void => {
+      if (e.target instanceof HTMLImageElement) read(e.target)
+    }
+    el.addEventListener('load', onLoad, true)
+    return () => el.removeEventListener('load', onLoad, true)
+  }, [])
   return (
-    <span className={cn('relative isolate block rounded-[6px] shadow-sm', className)}>
+    <span ref={box} className={cn('relative isolate block rounded-[6px] shadow-sm', className)}>
       <CardArtFace {...props} className="block w-full rounded-[inherit] shadow-none" />
-      <ReverseLayer look={reverse} />
+      <ReverseLayer look={reverse} fit={coverFit(frame.width / frame.height, image)} />
     </span>
   )
 }

@@ -11,9 +11,10 @@ export interface AddedItem {
   rarity: string
   setCode: string
   imageId: number
-  /** The card's category and Energy types, for a reverse printing's look. */
+  /** The card's category, Energy types and stage, for a reverse printing's look. */
   category?: string
   types?: string[]
+  stage?: string | null
 }
 
 const SHOWN = 8

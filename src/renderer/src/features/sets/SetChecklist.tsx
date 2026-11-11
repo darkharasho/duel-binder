@@ -637,7 +637,8 @@ export function SetChecklist({
                           className="w-full"
                           reverse={reverseLook(t.rarity, data.set.setCode, {
                             category: t.card.type,
-                            types: t.card.pokemonTypes
+                            types: t.card.pokemonTypes,
+                            stage: t.card.pokemonStage
                           })}
                         />
                       </TiltCard>

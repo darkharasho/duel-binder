@@ -266,17 +266,101 @@ describe('Magic filters, facets, stats and details', () => {
     }
     const ru = add('ru', 'bolt-oracle', 'Lightning Bolt', 'Молния')
     const fr = add('fr', 'eclair-oracle', 'Fire Bolt', 'Éclair de feu')
+    const yo = add('ru', 'hog-oracle', 'Hedgehog', 'Ёжик')
     db.exec(`INSERT INTO cards_fts(cards_fts) VALUES('rebuild')`)
     for (const [q, id] of [
       ['молния', ru],
       ['МОЛНИЯ', ru],
       ['éclair', fr],
-      ['ÉCLAIR DE', fr]
+      ['ÉCLAIR DE', fr],
+      ['eclair', fr],
+      ['ECLAIR DE', fr],
+      ['ежик', yo],
+      ['Ёжик', yo]
     ] as const) {
       expect(searchCards(db, q).map((r) => r.id)).toEqual([id])
       expect(browseCards(db, { sort: 'name', dir: 'asc', q }).cards.map((c) => c.id)).toEqual([id])
       expect(listEntries(db, { sort: 'name', dir: 'asc', q }).map((e) => e.card.id)).toEqual([id])
     }
+  })
+
+  it('folds Latin and Cyrillic accents but keeps Japanese voicing marks', () => {
+    expect(magicNameSearchKey('Éclair de Feu')).toBe('eclair de feu')
+    expect(magicNameSearchKey('Lim-Dûl')).toBe('lim-dul')
+    expect(magicNameSearchKey('Ёжик')).toBe('ежик')
+    expect(magicNameSearchKey('Йод')).toBe('иод')
+    expect(magicNameSearchKey('ガ')).not.toBe(magicNameSearchKey('カ'))
+    expect(magicNameSearchKey('ガ')).toBe('ガ'.normalize('NFC'))
+    expect(magicNameSearchKey('세라의 천사')).toBe('세라의 천사')
+  })
+
+  it('matches rarity and finish on one printing in Browse', () => {
+    // A Common foil and a Rare non-foil: Rare + Foil needs a Rare (Foil) printing, which it lacks.
+    const p = addCard(
+      mtgCardId('en', 'mixed'),
+      'Mixed',
+      'Instant',
+      ['["Instant"]', 1, '["R"]', null, null],
+      'M15 80'
+    )
+    db.prepare("UPDATE card_printings SET set_rarity = 'Common (Foil)' WHERE id = ?").run(p)
+    db.prepare(
+      `INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity)
+       VALUES ('mtg', ?, 'en', 'Magic 2015', 'M15 81', 'Rare')`
+    ).run(mtgCardId('en', 'mixed'))
+    expect(browse({ rarities: ['Rare'] })).toEqual(['Mixed', 'Serra Angel'])
+    expect(browse({ mtgFinishes: ['Foil'] })).toEqual(['Mixed', 'Serra Angel'])
+    expect(browse({ rarities: ['Rare'], mtgFinishes: ['Foil'] })).toEqual(['Serra Angel'])
+    expect(browse({ rarities: ['Common'], mtgFinishes: ['Foil'] })).toEqual(['Mixed'])
+    expect(browse({ rarities: ['Rare'], mtgFinishes: ['Nonfoil'] })).toEqual([
+      'Mixed',
+      'Serra Angel'
+    ])
+  })
+
+  it('counts Add Card search results by name, with every language of each', () => {
+    // The language list's order, which search groups each name's languages in.
+    const langs = ['en', 'ja', 'ko', 'de', 'fr', 'it', 'es', 'pt', 'ru', 'zh-hans', 'zh-hant']
+    for (const name of ['Bolt A', 'Bolt B', 'Bolt C']) {
+      for (const lang of langs) {
+        const id = mtgCardId(lang, name)
+        db.prepare(
+          `INSERT INTO cards (id, game, name, type, frame_type, race, "desc", updated_at)
+           VALUES (?, 'mtg', ?, 'Instant', 'mtg', '', '', '2026-11-09')`
+        ).run(id, name)
+        db.prepare(
+          `INSERT INTO mtg_cards (card_id, oracle_id, layout, type_line, lang) VALUES (?, ?, 'normal', 'Instant', ?)`
+        ).run(id, name, lang)
+      }
+    }
+    db.exec(`INSERT INTO cards_fts(cards_fts) VALUES('rebuild')`)
+    const hits = searchCards(db, 'Bolt', 2)
+    expect(new Set(hits.map((r) => r.name)).size).toBe(2)
+    expect(hits).toHaveLength(22)
+    expect(hits.filter((r) => r.name === hits[0].name).map((r) => r.language)).toEqual(langs)
+  })
+
+  it('labels each Browse tile with its language and printed name', () => {
+    const ja = mtgCardId('ja', 'serra-oracle')
+    db.prepare(
+      `INSERT INTO cards (id, game, name, type, frame_type, race, "desc", updated_at)
+       VALUES (?, 'mtg', 'Serra Angel', 'Creature', 'mtg', '', '', '2026-11-09')`
+    ).run(ja)
+    db.prepare(
+      `INSERT INTO mtg_cards (card_id, oracle_id, layout, type_line, lang, local_name)
+       VALUES (?, 'serra-oracle', 'normal', 'Creature', 'ja', 'セラの天使')`
+    ).run(ja)
+    db.prepare(
+      `INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity)
+       VALUES ('mtg', ?, 'ja', 'Magic 2015', 'M15 33', 'Rare')`
+    ).run(ja)
+    db.exec(`INSERT INTO cards_fts(cards_fts) VALUES('rebuild')`)
+    const tiles = browseCards(db, { sort: 'name', dir: 'asc', q: 'Serra' }).cards
+    const serra = tiles.filter((c) => c.name === 'Serra Angel')
+    expect(serra.map((c) => [c.language, c.localName]).sort()).toEqual([
+      ['en', undefined],
+      ['ja', 'セラの天使']
+    ])
   })
 
   it('gives artists in a fixed order, only on the details read', () => {

@@ -43,9 +43,15 @@ export const MTG_LANGUAGES: Readonly<Record<string, Language>> = {
 /**
  * `mtg_cards.local_name_search`: the printed name as a search compares it. SQLite's LIKE and lower()
  * fold ASCII only, so "молния" would never find "Молния"; the job writes this lowercased copy and a
- * search lowercases its text the same way.
+ * search lowercases its text the same way. Latin and Cyrillic accents are dropped too, so "eclair"
+ * finds "Éclair" and "ежик" finds "Ёжик". Only the combining diacritics block (U+0300–U+036F) goes:
+ * Japanese voicing marks (U+3099) and Hangul jamo stay, or ガ would read as カ.
  */
-export const magicNameSearchKey = (s: string): string => s.normalize('NFC').toLowerCase()
+export const magicNameSearchKey = (s: string): string =>
+  s.normalize('NFD').replace(/[̀-ͯ]/g, '').normalize('NFC').toLowerCase()
+
+/** How many languages a Magic card can have (each its own card under the English name). */
+export const MAGIC_LANGUAGE_COUNT = Object.keys(MTG_LANGUAGES).length
 
 export const mtgLanguageOf = (scryLang: string): Language | null =>
   Object.hasOwn(MTG_LANGUAGES, scryLang) ? MTG_LANGUAGES[scryLang] : null

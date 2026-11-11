@@ -9,6 +9,7 @@ import { CardSheet } from '@/components/CardSheet'
 import { FavouriteHeart } from '@/components/FavouriteHeart'
 import { TiltCard } from '@/components/TiltCard'
 import { TILE, TILE_BUTTON, TILE_HEART, TILE_NAME } from '@/components/tileLayout'
+import { LanguageTag } from '@/components/LanguageTag'
 import { useTileImage } from '@/lib/cardSize'
 import { FilterBar } from '@/components/FilterBar'
 import {
@@ -298,8 +299,15 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
                       </span>
                     )}
                   </TiltCard>
-                  <div className={cn('truncate text-[13px] font-semibold', TILE_NAME)}>
-                    {c.name}
+                  {/* With every language shown, a Magic card's languages are same-named tiles. */}
+                  <div
+                    className={cn('flex items-center gap-1 text-[13px] font-semibold', TILE_NAME)}
+                    title={c.localName}
+                  >
+                    <span className="truncate">{c.name}</span>
+                    {language === undefined && c.language && (
+                      <LanguageTag language={c.language} className="shrink-0" />
+                    )}
                   </div>
                   <div className="mt-0.5 min-w-0 space-y-0.5">
                     <div className="truncate font-mono text-[11px] text-muted-foreground">

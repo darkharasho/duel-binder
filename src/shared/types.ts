@@ -301,6 +301,10 @@ export interface BrowseCard {
   owned: number
   /** An English printing to preselect when adding the card, if it has one. */
   defaultPrintingId: number | null
+  /** A Magic card's language: each language is its own card under the English name. */
+  language?: Language
+  /** A Magic card's printed name in its language, when not English. */
+  localName?: string
 }
 
 export interface BrowsePage {

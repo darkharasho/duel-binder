@@ -1,5 +1,12 @@
 import { createWorker, OEM } from 'tesseract.js'
+import { APP_PLATFORM } from '../renderer/src/lib/portal'
 import { createOcrQueue, type Ocr, type OcrModel, type OcrWorker } from '../shared/scan/ocr'
+
+/**
+ * Android's packaging unzips every .gz asset and drops the extension, so the app holds plain
+ * `<lang>.traineddata` files there; everywhere else they stay gzipped.
+ */
+export const GZIPPED_LANG = APP_PLATFORM !== 'android'
 
 /**
  * OCR in the browser, with one tesseract Web Worker per model, created on first use. The worker
@@ -16,7 +23,7 @@ export function createBrowserOcr(base: string): Ocr {
         corePath: base + 'ocr/core/',
         langPath: base + 'ocr/lang/',
         workerBlobURL: false,
-        gzip: true,
+        gzip: GZIPPED_LANG,
         cacheMethod: 'write',
         // Without a handler, tesseract.js rethrows a failed job as an uncaught exception; the
         // job's promise rejects either way.

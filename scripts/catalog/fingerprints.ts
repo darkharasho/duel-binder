@@ -107,7 +107,7 @@ async function hashImage(
  * TCGdex serves a card's image at `${base}/low.jpg` (jpeg-js can't read its webp default); a
  * TCGplayer image is already a full `_200w.jpg` URL.
  */
-function pokemonImageUrl(base: string): string {
+export function pokemonImageUrl(base: string): string {
   return base.includes('tcgplayer-cdn') ? base : `${base}/low.jpg`
 }
 

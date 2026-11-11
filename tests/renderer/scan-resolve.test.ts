@@ -870,6 +870,10 @@ describe('tilt', () => {
     ])
     expect(readChoicesFor(draftOf(['Super Rare', 'Ultra Rare']), null, MODEL)).toBeNull()
   })
+  it('a Pokémon draft the reverse check settled (flag null) is not read by tilt', () => {
+    const settled = { ...draftOf(['Normal', 'Reverse Holofoil']), game: 'pkm' as const, flag: null }
+    expect(readChoicesFor(settled, null, MODEL)).toBeNull()
+  })
   it('a Yu-Gi-Oh! Common/Ultra Rare draft reads under the default list, Super/Ultra does not', () => {
     const Y: TiltModel = {
       features: ['f'],

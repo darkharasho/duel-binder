@@ -6,6 +6,7 @@ import {
   VERSION_FRAME_FOIL_MIN,
   VERSION_FRAME_PLAIN_MAX
 } from '../../src/shared/scan/thresholds'
+import { bodyStats } from '../../src/shared/scan/reverseHolo'
 import type { RgbaImage } from '../../src/shared/scan/types'
 import {
   pokemonVersion,
@@ -17,7 +18,8 @@ const cues = (frame: number, art: number, reference = 0): VersionCues => ({
   frame,
   art,
   reference,
-  firstEdition: 'unknown'
+  firstEdition: 'unknown',
+  body: { ratio: 1, spread: 0 }
 })
 const FRAME_HIGH = VERSION_FRAME_FOIL_MIN * 2
 const FRAME_LOW = VERSION_FRAME_PLAIN_MAX / 2
@@ -120,6 +122,11 @@ describe('pokemonVersionCues', () => {
     const c = pokemonVersionCues(card([]), profile)!
     expect(c.firstEdition).toBe('unknown')
     expect(pokemonVersion(c, ['Normal', 'Holofoil', 'Reverse Holofoil'])).toBeNull()
+  })
+
+  it('measures the card body like bodyStats', () => {
+    const c = card([art])
+    expect(pokemonVersionCues(c, profile)!.body).toEqual(bodyStats(c))
   })
 
   it('a game with no foil boxes has no cues', () => {

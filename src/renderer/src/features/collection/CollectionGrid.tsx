@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import { printingReverseLook } from '@shared/reverseHolo'
 import { useTileImage } from '@/lib/cardSize'
 import type { EntryView } from '@shared/types'
 import { Badge } from '@/components/ui/badge'
@@ -92,6 +93,7 @@ const GridTile = memo(
               size={tileImage}
               alt={e.card.name}
               className="w-full rounded-[4px] shadow-[0_8px_20px_rgb(0_0_0/0.45)]"
+              reverse={printingReverseLook(e.printing, e.card)}
             />
             <Badge className="absolute right-1.5 top-1.5 font-mono shadow">×{e.quantity}</Badge>
           </TiltCard>

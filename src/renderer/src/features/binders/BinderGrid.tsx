@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { printingReverseLook } from '@shared/reverseHolo'
 import { ChevronLeftIcon, ChevronRightIcon, XIcon } from 'lucide-react'
 import type { BinderCard } from '@shared/types'
 import { cssAspect } from '@shared/games'
@@ -131,6 +132,7 @@ function Pocket({
                 size={tileImage}
                 alt=""
                 className="w-full"
+                reverse={printingReverseLook(c.printing, c.card)}
               />
             </div>
           ) : (

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { reverseLook } from '@shared/reverseHolo'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Ellipsis } from 'lucide-react'
 import { toast } from 'sonner'
@@ -634,6 +635,10 @@ export function SetChecklist({
                           size={tileImage}
                           alt=""
                           className="w-full"
+                          reverse={reverseLook(t.rarity, data.set.setCode, {
+                            category: t.card.type,
+                            types: t.card.pokemonTypes
+                          })}
                         />
                       </TiltCard>
                       {owned && (

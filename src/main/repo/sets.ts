@@ -6,7 +6,7 @@ import type { Language } from '../../shared/languages'
 import type { GameId } from '../../shared/games'
 import { setImageKey } from '../../shared/setImages'
 import { addEntry, CollectionError } from './collection'
-import { printingArtImageId } from './cards'
+import { parseTypes, printingArtImageId } from './cards'
 import { LOCAL, scopeGame, type Scope } from './scope'
 import { twinPrice } from './enTwin'
 import { isMarketOnly, MARKET_ONLY_PRICE } from './priceRule'
@@ -314,6 +314,7 @@ interface PrintingDbRow {
   level: number | null
   card_rarity: string | null
   hp: number | null
+  card_types: string | null
 }
 
 interface EntryDbRow {
@@ -384,7 +385,7 @@ function checklistCards(
               c.atk, c.def, COALESCE(c.level, c.linkval) AS level,
               (SELECT i.image_id FROM card_images i WHERE i.card_id = c.id AND +i.game = ${scope.game}
                ORDER BY i.sort_order, i.image_id LIMIT 1) AS image_id,
-              pc.rarity AS card_rarity, pc.hp
+              pc.rarity AS card_rarity, pc.hp, pc.types AS card_types
        FROM card_printings p JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
        LEFT JOIN intl_prices ip ON ip.printing_id = p.id AND ${scope.ebayPrices}
        LEFT JOIN pokemon_cards pc ON pc.card_id = p.card_id AND ${scope.game} = 'pkm'
@@ -467,7 +468,13 @@ function checklistCards(
       def: rows[0].def,
       level: rows[0].level,
       // Pokémon only: the card's own rarity, apart from its finishes in `rarities`.
-      ...(pkm ? { cardRarity: rows[0].card_rarity, hp: rows[0].hp } : {})
+      ...(pkm
+        ? {
+            cardRarity: rows[0].card_rarity,
+            hp: rows[0].hp,
+            pokemonTypes: parseTypes(rows[0].card_types)
+          }
+        : {})
     })
   }
   return cards.sort((a, b) => {

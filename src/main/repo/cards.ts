@@ -101,7 +101,7 @@ export const gameFactsRead = (game: GameId): { cols: string; join: string } =>
     mtg: { cols: `, ${MTG_COLS}`, join: 'LEFT JOIN mtg_cards mc ON mc.card_id = c.id' }
   })
 
-function parseTypes(json: string | null | undefined): string[] {
+export function parseTypes(json: string | null | undefined): string[] {
   try {
     const v: unknown = JSON.parse(json ?? '[]')
     return Array.isArray(v) ? v.filter((t): t is string => typeof t === 'string') : []

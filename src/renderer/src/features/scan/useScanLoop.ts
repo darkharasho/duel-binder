@@ -8,6 +8,7 @@ import type { Language } from '@shared/languages'
 import type { CardLanguage } from '@shared/scan/language'
 import { tellPokemonLanguage, type PokemonTextLanguage } from '@shared/scan/pokemonLanguage'
 import { SCAN_PROFILES } from '@shared/scan/profiles'
+import { reverseRefStats } from '@shared/scan/reverseHolo'
 import {
   ABSENT_MS,
   ART_MAX_DISTANCE,
@@ -28,6 +29,7 @@ import {
 import type { FingerprintStatus, OcrBand, ScanPrinting } from '@shared/scan/types'
 import type { PokemonLanguage, ScanStatus } from '@shared/scanWindow'
 import { api } from '@/lib/api'
+import { isPhone } from '@/lib/platform'
 import { centreCrop, type CropRect } from './crop'
 import { shiftQuad } from './vision/framing'
 import type { EngineFactory, FrameSignals, RawSignals, ScanEngine } from './engine'
@@ -907,7 +909,8 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
               const reads = api.scan.readText(raw.nameBands ?? [], 'jpn')
               return within(reads, LANGUAGE_TIMEOUT_MS).catch(() => [] as string[])
             },
-            lookups: api.scan
+            lookups: api.scan,
+            reverseRefs: o.game === 'pkm' && !isPhone() ? reverseRefStats : undefined
           }),
           LOOKUP_TIMEOUT_MS
         ).catch(() => null)
@@ -1064,7 +1067,8 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
                   ? async () => o.language ?? null
                   : () => pokemonLanguageOf(raw.quad, raw.textBands),
                 readLocalName: () => pokemonNamesOf(raw.quad, raw.nameBands ?? []),
-                lookups: api.scan
+                lookups: api.scan,
+                reverseRefs: o.game === 'pkm' && !isPhone() ? reverseRefStats : undefined
               }),
               LOOKUP_TIMEOUT_MS
             )

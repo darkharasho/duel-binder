@@ -39,6 +39,7 @@ import {
   type PokemonTextLanguage
 } from '../../src/shared/scan/pokemonLanguage'
 import { scanProfile } from '../../src/shared/scan/profiles'
+import { reverseRefStats } from '../../src/shared/scan/reverseHolo'
 import type { OcrBand, RgbaImage } from '../../src/shared/scan/types'
 import { createOcr } from '../../src/main/scan/ocr'
 import {
@@ -77,6 +78,8 @@ interface Row {
   result: string
   /** What was named: card, language, version (or "any version") and slab. */
   got: string
+  /** The rarity named when it was named for sure (flag null); '' otherwise. */
+  namedRarity: string
   /** Why it is wrong, when it is. */
   why: string
   number: string
@@ -311,7 +314,8 @@ describe.skipIf(!READY)('the Pokémon scanner on real photos', () => {
           artDistance: async (a, b) => index.distanceBetween(a, b),
           lookups,
           readLanguage: langOnce,
-          readLocalName: namesOnce
+          readLocalName: namesOnce,
+          reverseRefs: reverseRefStats
         }
       )
       const ms = Math.round(performance.now() - start)
@@ -327,6 +331,7 @@ describe.skipIf(!READY)('the Pokémon scanner on real photos', () => {
       let result: string = outcome.kind
       let got = '-'
       let why = ''
+      let namedRarity = ''
       if (outcome.kind === 'recognized') {
         const { item } = outcome
         const lang = item.options.find((o) => o.printingId === item.printingId)?.language
@@ -334,6 +339,7 @@ describe.skipIf(!READY)('the Pokémon scanner on real photos', () => {
         const problems = problemsOf(t, cardId, item)
         result = problems.length ? 'wrong' : 'right'
         why = problems.join(', ')
+        if (item.flag === null) namedRarity = item.rarity ?? ''
         got = `${item.name} ${lang} ${sure ? item.rarity : 'any version'}${item.slab ? ' slab' : ''}`
       }
       const top = signals.art[0]
@@ -352,6 +358,7 @@ describe.skipIf(!READY)('the Pokémon scanner on real photos', () => {
         version: t.unclear === 'version' ? '?' : (t.version ?? '-'),
         result,
         got,
+        namedRarity,
         why,
         number: codes.filter(Boolean).join(' | '),
         name: names
@@ -427,6 +434,13 @@ describe.skipIf(!READY)('the Pokémon scanner on real photos', () => {
 
   it(`names at most ${PKM_MAX_WRONG_SHARE * 100}% of the cards it names wrong`, () => {
     expect(overBudget(rows)).toEqual([])
+  })
+
+  it('never names a Normal photo Reverse Holofoil for sure', () => {
+    const swapped = rows
+      .filter((r) => r.version === 'Normal' && r.namedRarity === 'Reverse Holofoil')
+      .map((r) => `${r.file} (${r.card})`)
+    expect(swapped).toEqual([])
   })
 
   it(`names the right card on at least ${MIN_RIGHT_SHARE * 100}% of the photos`, () => {

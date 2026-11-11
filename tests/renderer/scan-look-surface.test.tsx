@@ -101,7 +101,7 @@ describe('the rarity look model by scanner', () => {
 
   it("the desktop's in-page scanner keeps to the rules and doesn't measure the look", async () => {
     const engine = showing()
-    await scan(<InPageScanner engineFactory={() => engine} onCamera={() => {}} controls={null} />)
+    await scan(<InPageScanner engineFactory={() => engine} onCamera={() => {}} />)
     expect(saved()[0]).toMatchObject({ printingId: 101, rarity: 'Ultimate Rare' })
     expect(saved()[0].flag).toBe('check-rarity')
     expect(engine.analyze).toHaveBeenCalled()

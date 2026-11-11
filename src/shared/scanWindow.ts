@@ -54,46 +54,6 @@ export interface ScanWindowSettings {
   fit: ScanFit
   /** How far the picture is zoomed in on its centre, 1 (not at all) to SCAN_ZOOM_MAX. */
   zoom: number
-  /** The picture controls set for each camera, by device id; a camera with none keeps its own. */
-  cameraControls: Record<string, CameraControlValues>
-}
-
-/** The camera picture controls with a range, as Chromium names them (Image Capture). */
-export const CAMERA_RANGES = [
-  'exposureTime',
-  'brightness',
-  'contrast',
-  'saturation',
-  'sharpness',
-  'colorTemperature'
-] as const
-export type CameraRange = (typeof CAMERA_RANGES)[number]
-
-/**
- * Picture controls set for a camera. Only those set are applied, over what the camera had when
- * first opened. exposureTime is in 100 microsecond units and only applies with autoExposure off;
- * colorTemperature (kelvin) likewise with autoWhiteBalance off.
- */
-export type CameraControlValues = Partial<Record<CameraRange, number>> & {
-  autoExposure?: boolean
-  autoWhiteBalance?: boolean
-}
-
-export interface CameraControlRange {
-  min: number
-  max: number
-  step: number
-  /** What the camera is set to now. */
-  value: number
-}
-
-/** The picture controls the open camera offers, with what each is set to now. */
-export interface CameraControls {
-  deviceId: string
-  /** Whether exposure is automatic; null where the camera has no choice. */
-  autoExposure: boolean | null
-  autoWhiteBalance: boolean | null
-  ranges: Partial<Record<CameraRange, CameraControlRange>>
 }
 
 /** A camera track's real picture size and frame rate (frameRate null where it isn't said). */
@@ -130,8 +90,6 @@ export interface ScanWindowState {
   openDeviceId: string | null
   /** What the open camera really delivers, from its track settings; null while none is open. */
   resolution?: CameraResolution | null
-  /** The open camera's picture controls; null while none is open or it offers none. */
-  cameraControls?: CameraControls | null
   cameraError: 'denied' | 'none' | 'lost' | 'busy' | null
   loop: ScanStatus
   artReady: boolean | null

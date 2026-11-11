@@ -135,12 +135,18 @@ export function MakeReplay({
           Make replay
         </button>
       ) : (
-        <Button variant="outline" size="sm" disabled={empty} onClick={start}>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={empty}
+          title={empty ? 'No pulls to replay yet' : undefined}
+          onClick={start}
+        >
           Make replay
         </Button>
       )}
       {!empty && formatToggle}
-      {empty && (
+      {empty && variant === 'phone' && (
         <span
           className={cn('text-xs', variant === 'phone' ? 'text-white/60' : 'text-muted-foreground')}
         >

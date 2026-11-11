@@ -42,7 +42,7 @@ describe('MakeReplay', () => {
   it('is disabled with no pulls', () => {
     render(<MakeReplay source={src(row(0.5), row(null))} variant="desktop" make={vi.fn()} />)
     expect(screen.getByRole('button', { name: 'Make replay' })).toBeDisabled()
-    expect(screen.getByText('No pulls to replay')).toBeInTheDocument()
+    expect(screen.getByTitle('No pulls to replay yet')).toBeInTheDocument()
   })
 
   it('passes the same source to make', async () => {
@@ -56,7 +56,7 @@ describe('MakeReplay', () => {
   it('is disabled when the source has no pulls', () => {
     render(<MakeReplay source={{ pulls: [], header: 'Nov 4' }} variant="desktop" make={vi.fn()} />)
     expect(screen.getByRole('button', { name: 'Make replay' })).toBeDisabled()
-    expect(screen.getByText('No pulls to replay')).toBeInTheDocument()
+    expect(screen.getByTitle('No pulls to replay yet')).toBeInTheDocument()
   })
 
   it('makes a video by default', async () => {

@@ -194,6 +194,10 @@ const run = (ms = 0): Promise<void> =>
 const user = (): ReturnType<typeof userEvent.setup> =>
   userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
 
+/** Hit price, sound and the scan window's picture settings sit behind the Options button. */
+const openOptions = async (): Promise<void> =>
+  user().click(screen.getByRole('button', { name: 'Scan options' }))
+
 const report = (s: Partial<ScanWindowState> = {}): void =>
   act(() => bridge.emit({ kind: 'state', state: { ...STATE, ...s } }))
 
@@ -234,6 +238,7 @@ describe('Scan page', () => {
     await renderScan()
     await run()
     const u = user()
+    await openOptions()
     await u.click(screen.getByRole('button', { name: 'Sound off' }))
     expect(localStorage.getItem('scan.ping')).toBe('1')
     const on = screen.getByRole('button', { name: 'Sound on' })
@@ -256,8 +261,7 @@ describe('Scan page', () => {
       defaultRarity: 'Secret Rare',
       hitPrice: 20,
       fit: 'fill',
-      zoom: 1,
-      cameraControls: {}
+      zoom: 1
     })
   })
 
@@ -572,6 +576,7 @@ describe('Scan page', () => {
     expect(container.querySelector('video')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Pause' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Open scan window' })).toBeInTheDocument()
+    await openOptions()
     expect(screen.getByLabelText('Hit price')).toBeInTheDocument()
 
     // With it open the page is the list and controls, and the window's state is shown.
@@ -848,31 +853,6 @@ describe('Scan page', () => {
     expect(screen.queryByLabelText('Camera resolution')).not.toBeInTheDocument()
     await openWindow({ resolution: { width: 3840, height: 2160, frameRate: 30 } })
     expect(screen.getByLabelText('Camera resolution')).toHaveTextContent('3840×2160 · 30 fps')
-  })
-
-  it("sets the scan window's camera controls from Camera settings, saved per camera", async () => {
-    bridge = fakeBridge(true)
-    await renderScan()
-    await run()
-    expect(screen.queryByRole('button', { name: 'Camera settings' })).not.toBeInTheDocument()
-    await openWindow({
-      cameraControls: {
-        deviceId: 'cam1',
-        autoExposure: true,
-        autoWhiteBalance: null,
-        ranges: { brightness: { min: -9, max: 9, step: 1, value: 4 } }
-      }
-    })
-    act(() => screen.getByRole('button', { name: 'Camera settings' }).click())
-    fireEvent.change(screen.getByRole('slider', { name: 'Brightness' }), {
-      target: { value: '2' }
-    })
-    expect(lastSettings().cameraControls).toEqual({ cam1: { brightness: 2 } })
-    expect(JSON.parse(localStorage.getItem('scan.cameraControls')!)).toEqual({
-      cam1: { brightness: 2 }
-    })
-    act(() => screen.getByRole('button', { name: 'Reset' }).click())
-    expect(lastSettings().cameraControls).toEqual({})
   })
 
   it('draws no outline round a card-shaped thing far from any artwork', async () => {
@@ -1394,6 +1374,7 @@ describe('Scan page', () => {
     await renderScan()
     await run()
     const u = user()
+    await openOptions()
     const input = screen.getByLabelText('Hit price')
     expect(input).toHaveValue(20)
     await u.clear(input)
@@ -1424,6 +1405,7 @@ describe('Scan page', () => {
     localStorage.setItem('scan.zoom', '1.5')
     await renderScan()
     await run()
+    await openOptions()
     expect(screen.getByRole('combobox', { name: 'Picture' })).toHaveTextContent('Whole picture')
     expect(screen.getByRole('slider', { name: 'Zoom' })).toHaveValue('1.5')
     expect(screen.getByText('1.50×')).toBeInTheDocument()
@@ -1435,6 +1417,7 @@ describe('Scan page', () => {
     bridge = fakeBridge(true)
     await renderScan()
     await run()
+    await openOptions()
     fireEvent.change(screen.getByRole('slider', { name: 'Zoom' }), { target: { value: '1.35' } })
     expect(lastSettings()).toMatchObject({ zoom: 1.35 })
     expect(localStorage.getItem('scan.zoom')).toBe('1.35')
@@ -1444,6 +1427,7 @@ describe('Scan page', () => {
     bridge = fakeBridge(true)
     await renderScan()
     await openWindow({ size: { width: 1920, height: 1080 } })
+    await openOptions()
     const size = screen.getByRole('combobox', { name: 'Window size' })
     expect(size).toHaveTextContent('1920 × 1080')
     report({ size: { width: 1111, height: 700 } })
@@ -1459,6 +1443,7 @@ describe('Scan page', () => {
     bridge = fakeBridge(true)
     await renderScan()
     await openWindow({ size: { width: 1111, height: 700 } })
+    await openOptions()
     const width = screen.getByRole('textbox', { name: 'Window width' })
     fireEvent.change(width, { target: { value: '99999' } })
     fireEvent.blur(width)
@@ -1471,6 +1456,7 @@ describe('Scan page', () => {
     localStorage.setItem('scan.zoom', '7')
     await renderScan()
     await run()
+    await openOptions()
     expect(screen.getByRole('slider', { name: 'Zoom' })).toHaveValue('1')
   })
 
@@ -1481,6 +1467,7 @@ describe('Scan page', () => {
     await renderScan()
     await run()
     expect(screen.getByRole('combobox', { name: 'Sets' })).toHaveTextContent('Metal Raiders')
+    await openOptions()
     expect(screen.getByLabelText('Hit price')).toHaveValue(50)
     act(() => bridge.emit({ kind: 'ready' }))
     expect(lastSettings()).toMatchObject({

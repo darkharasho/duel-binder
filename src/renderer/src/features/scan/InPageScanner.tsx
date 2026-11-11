@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { TILT_MODELS } from '@shared/scan/tiltModel'
-import type { CameraControls, CameraResolution } from '@shared/scanWindow'
+import type { CameraResolution } from '@shared/scanWindow'
 import { defaultEngine, type EngineFactory } from './engine'
 import { useScanHub } from './ScanHub'
 import { FoundBurst } from './FoundBurst'
@@ -8,7 +8,6 @@ import { clampZoom, ScanViewport, ZoomSlider } from './ScanViewport'
 import { ArtDataNotice } from './ArtDataNotice'
 import { SET_UNREADABLE, setsSkippedText } from './scanText'
 import { cameraResolution, useCamera, type CameraError } from './useCamera'
-import { useCameraControls } from './cameraControls'
 import { useHubScan } from './useHubScan'
 
 const CAMERA_MESSAGES: Record<CameraError, string> = {
@@ -56,28 +55,23 @@ export interface InPageCamera {
   retry: () => void
   /** What the open camera really delivers; null while none is open. */
   resolution: CameraResolution | null
-  /** The open camera's picture controls; null while none is open or it offers none. */
-  controls: CameraControls | null
 }
 
 /**
  * The Scan page's own scanner: camera preview, outline, status and the recognition loop. It
  * owns the camera, so unmounting it (leaving the page, or opening the scan window) releases it.
- * Pulls go through the hub, like the scan window's. `controls` render under the preview.
+ * Pulls go through the hub, like the scan window's.
  */
 export function InPageScanner({
   engineFactory = defaultEngine,
-  onCamera,
-  controls
+  onCamera
 }: {
   engineFactory?: EngineFactory
   onCamera: (camera: InPageCamera | null) => void
-  controls: React.ReactNode
 }): React.JSX.Element {
   const { settings } = useScanHub()
   const videoRef = useRef<HTMLVideoElement>(null)
   const camera = useCamera(settings.deviceId)
-  const cameraControls = useCameraControls(camera.stream, settings.cameraControls)
   const [zoom, setZoom] = usePageZoom()
   const { loop, setUnreadable, setsSkipped, found } = useHubScan({
     videoRef,
@@ -95,12 +89,12 @@ export function InPageScanner({
   const { width = 0, height = 0, frameRate = null } = res ?? {}
   useEffect(() => {
     const resolution = width ? { width, height, frameRate } : null
-    onCamera({ devices, openDeviceId, error, retry, resolution, controls: cameraControls })
-  }, [onCamera, devices, openDeviceId, error, retry, width, height, frameRate, cameraControls])
+    onCamera({ devices, openDeviceId, error, retry, resolution })
+  }, [onCamera, devices, openDeviceId, error, retry, width, height, frameRate])
   useEffect(() => () => onCamera(null), [onCamera])
 
   return (
-    <section aria-label="Camera" className="flex w-min shrink-0 flex-col gap-3">
+    <section aria-label="Camera" className="flex min-h-0 shrink-0 flex-col gap-3">
       <ScanViewport
         smooth
         videoRef={videoRef}
@@ -110,7 +104,7 @@ export function InPageScanner({
         loop={loop}
         zoom={zoom}
         onZoom={setZoom}
-        className="aspect-[3/4] h-[calc(100vh-15rem)] min-h-72 rounded-lg border-2 border-white/10"
+        className="aspect-[3/4] min-h-0 flex-1 rounded-lg border-2 border-white/10"
       >
         {found && <FoundBurst key={found.key} name={found.name} price={found.price} />}
       </ScanViewport>
@@ -121,7 +115,6 @@ export function InPageScanner({
       {loop.artReady === false && <ArtDataNotice status={loop.artData} />}
       {/* Only what's shown: the scan still reads the camera's whole picture. */}
       <ZoomSlider value={zoom} onChange={setZoom} />
-      {controls}
     </section>
   )
 }

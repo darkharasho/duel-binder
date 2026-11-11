@@ -1,4 +1,5 @@
 import type { RgbaImage } from './types'
+import refs from './reverseRefs.json'
 import { REVERSE_BODY_LUM_MAX, REVERSE_SPREAD_MIN } from './thresholds'
 
 /** Body brightness of an upright card relative to its art, and how uneven the body is. */
@@ -88,4 +89,12 @@ export function reverseVersion(photo: BodyStats, ref: BodyStats): 'Normal' | 'Re
   const bodyLum = photo.ratio / ref.ratio
   const spread = photo.spread - ref.spread
   return bodyLum < REVERSE_BODY_LUM_MAX || spread > REVERSE_SPREAD_MIN ? 'Reverse Holofoil' : 'Normal'
+}
+
+const REFS: Record<string, number[]> = refs.refs
+
+/** The shipped reference stats of an image, or null when its set isn't covered. */
+export function reverseRefStats(imageId: number): BodyStats | null {
+  const r = REFS[String(imageId)]
+  return r ? { ratio: r[0], spread: r[1] } : null
 }

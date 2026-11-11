@@ -74,7 +74,21 @@ describe('applyReverseCheck', () => {
       opt(2, 'Reverse Holofoil', { setCode: 'DRI 001/182' })
     ])
     expect(applyReverseCheck(dri, READS_REVERSE, refs)).toBe(dri)
+    const split = draftOf([
+      opt(1, 'Normal'),
+      opt(2, 'Reverse Holofoil', { setCode: 'DRI 002/182' })
+    ])
+    expect(applyReverseCheck(split, READS_REVERSE, refs)).toBe(split)
     const three = draftOf([opt(1, 'Normal'), opt(2, 'Reverse Holofoil'), opt(3, 'Holofoil')])
     expect(applyReverseCheck(three, READS_REVERSE, refs)).toBe(three)
+  })
+
+  it('also settles a draft that already has no flag', () => {
+    const item = { ...draftOf(), flag: null }
+    expect(applyReverseCheck(item, READS_REVERSE, refs)).toMatchObject({
+      printingId: 2,
+      rarity: 'Reverse Holofoil',
+      flag: null
+    })
   })
 })

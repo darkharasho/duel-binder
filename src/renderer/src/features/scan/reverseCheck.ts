@@ -22,7 +22,9 @@ export function applyReverseCheck(
   if (options.length !== 2 || options.some((o) => o.language !== 'en')) return item
   const normal = options.find((o) => o.rarity === 'Normal')
   const reverse = options.find((o) => o.rarity === 'Reverse Holofoil')
-  if (!normal || !reverse || !reverseChecked(item.setCode)) return item
+  if (!normal || !reverse || !options.every((o) => reverseChecked(o.setCode))) return item
+  // On purpose this also settles a draft already unflagged: the body cue replaces the
+  // frame-cue verdict for this pair.
   const named = reverseVersion(cues.body, ref) === 'Normal' ? normal : reverse
   return {
     ...item,

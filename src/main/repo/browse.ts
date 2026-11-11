@@ -219,13 +219,25 @@ function whereClause(
         where.push(m.sql)
         params.push(...m.args)
       }
-      // Finish is a printing's, on the language filter like the other printing filters.
+      // Rarity and finish are a printing's: one printing has to match both, on the language filter
+      // like the other printing filters. Rarity is the base rarity: Rare also takes the foil and
+      // etched printings, and Rare with Foil only a Rare (Foil) one.
+      const labels: { sql: string; args: unknown[] }[] = []
+      if (f.rarities?.length) {
+        labels.push({
+          sql: `${mtgBaseRaritySql('set_rarity')} IN (${f.rarities.map(() => '?').join(',')})`,
+          args: f.rarities
+        })
+      }
       const fin = mtgFinishWhere(f.mtgFinishes, 'set_rarity')
-      if (fin) {
+      if (fin) labels.push(fin)
+      if (labels.length) {
         where.push(
-          `c.id IN (SELECT card_id FROM card_printings WHERE +game = ${scope.game} AND contributed = 0${lang} AND ${fin.sql})`
+          `c.id IN (SELECT card_id FROM card_printings WHERE +game = ${scope.game} AND contributed = 0${lang} AND ${labels
+            .map((l) => l.sql)
+            .join(' AND ')})`
         )
-        params.push(...fin.args)
+        params.push(...labels.flatMap((l) => l.args))
       }
     }
   })()
@@ -239,14 +251,8 @@ function whereClause(
     params.push(...values)
   }
   printingFilter('set_name', f.setNames)
-  if (f.rarities?.length && game === 'mtg') {
-    // Magic's rarity is the base rarity: Rare also takes the foil and etched printings.
-    where.push(
-      `c.id IN (SELECT card_id FROM card_printings WHERE +game = ${scope.game} AND contributed = 0${lang}
-         AND ${mtgBaseRaritySql('set_rarity')} IN (${f.rarities.map(() => '?').join(',')}))`
-    )
-    params.push(...f.rarities)
-  } else if (f.rarities?.length) {
+  // Magic's rarity goes with its finish, above.
+  if (f.rarities?.length && game !== 'mtg') {
     // The stored rarity narrows by its index first; the label then picks the variant.
     const stored = storedRarities(f.rarities)
     where.push(
@@ -329,6 +335,13 @@ export function browseCards(db: SqlDb, f: BrowseFilters, scope: Scope = LOCAL): 
          GROUP BY p.card_id) o ON o.card_id = c.id${sql}`
     )
     .get(...params) as { n: number }
+  const magic =
+    game === 'mtg'
+      ? magicLanguages(
+          db,
+          rows.map((r) => r.id)
+        )
+      : null
   return {
     total: n,
     cards: rows.map((r): BrowseCard => ({
@@ -346,9 +359,39 @@ export function browseCards(db: SqlDb, f: BrowseFilters, scope: Scope = LOCAL): 
       price: pagePriced ? (r.page_price ?? null) : r.price,
       releasedAt: r.released_at,
       owned: r.owned,
-      defaultPrintingId: r.default_printing_id
+      defaultPrintingId: r.default_printing_id,
+      ...magic?.get(r.id)
     }))
   }
+}
+
+/**
+ * Each Magic card's language and printed name, so same-named tiles (one per language) can be told
+ * apart in Browse with every language shown.
+ */
+function magicLanguages(
+  db: SqlDb,
+  ids: number[]
+): Map<number, Pick<BrowseCard, 'language' | 'localName'>> {
+  if (!ids.length) return new Map()
+  const rows = db
+    .prepare(
+      `SELECT card_id, lang, local_name FROM mtg_cards WHERE card_id IN (SELECT value FROM json_each(?))`
+    )
+    .all(JSON.stringify(ids)) as {
+    card_id: number
+    lang: string | null
+    local_name: string | null
+  }[]
+  return new Map(
+    rows.map((r) => [
+      r.card_id,
+      {
+        ...(isLanguage(r.lang) ? { language: r.lang } : {}),
+        ...(r.local_name ? { localName: r.local_name } : {})
+      }
+    ])
+  )
 }
 
 /** Bump when browseFacets changes what it produces: stored rollups aren't rebuilt otherwise. */

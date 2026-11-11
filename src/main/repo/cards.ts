@@ -11,7 +11,7 @@ import type {
   Printing
 } from '../../shared/types'
 import { byGame, gameOfId, mtgImageId, type GameId } from '../../shared/games'
-import { magicNameSearchKey } from '../../shared/games/magic'
+import { MAGIC_LANGUAGE_COUNT, magicNameSearchKey } from '../../shared/games/magic'
 import { opPrintingImageId } from '../../shared/games/onePiece'
 import { isLanguage, LANGUAGES } from '../../shared/languages'
 import { setPrice } from './priceRule'
@@ -237,16 +237,28 @@ const NAME_POOL = 300
 
 export const escapeLike = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\${c}`)
 
-export function searchCards(db: SqlDb, q: string, limit = 20, scope: Scope = LOCAL): CardSearchResult[] {
+export function searchCards(
+  db: SqlDb,
+  q: string,
+  limit = 20,
+  scope: Scope = LOCAL
+): CardSearchResult[] {
   const text = q.trim()
   if (!text) return []
+  const mtg = scopeGame(db, scope) === 'mtg'
+  // Every language of a Magic card is its own card under the English name, so Magic's limit counts
+  // names: each query fetches enough rows for that many names in every language, and a name already
+  // listed takes its other languages past the limit.
+  const rowLimit = mtg ? limit * MAGIC_LANGUAGE_COUNT : limit
   const results: CardSearchResult[] = []
   const seen = new Set<number>()
+  const names = new Set<string>()
   const push = (r: CardSearchResult): void => {
-    if (results.length < limit && !seen.has(r.id)) {
-      seen.add(r.id)
-      results.push(r)
-    }
+    if (seen.has(r.id)) return
+    if (mtg ? !names.has(r.name) && names.size >= limit : results.length >= limit) return
+    seen.add(r.id)
+    names.add(r.name)
+    results.push(r)
   }
   const defaultImage = `COALESCE((SELECT image_id FROM card_images WHERE card_id = c.id AND +game = ${scope.game} AND sort_order = 0), c.id)`
 
@@ -261,7 +273,7 @@ export function searchCards(db: SqlDb, q: string, limit = 20, scope: Scope = LOC
          WHERE +p.game = ${scope.game} AND p.contributed = 0 AND ${pkmNumber.sql}
          ORDER BY c.name, p.set_code, p.id LIMIT ?`
       )
-      .all(...pkmNumber.params, limit) as DbHit[]
+      .all(...pkmNumber.params, rowLimit) as DbHit[]
     rows.forEach((r) => push(toResult(r)))
     return results
   }
@@ -276,7 +288,7 @@ export function searchCards(db: SqlDb, q: string, limit = 20, scope: Scope = LOC
          WHERE +p.game = ${scope.game} AND p.contributed = 0 AND ${named.sql}
          ORDER BY c.name, p.set_code, p.id LIMIT ?`
       )
-      .all(...named.params, limit) as DbHit[]
+      .all(...named.params, rowLimit) as DbHit[]
     rows.forEach((r) => push(toResult(r)))
   }
 
@@ -288,7 +300,7 @@ export function searchCards(db: SqlDb, q: string, limit = 20, scope: Scope = LOC
          WHERE +p.game = ${scope.game} AND p.contributed = 0 AND p.set_code LIKE ? ESCAPE '\\'
          ORDER BY p.set_code, p.id LIMIT ?`
       )
-      .all(`${escapeLike(text)}%`, limit) as DbHit[]
+      .all(`${escapeLike(text)}%`, rowLimit) as DbHit[]
     rows.forEach((r) => push(toResult(r)))
   }
 
@@ -305,11 +317,11 @@ export function searchCards(db: SqlDb, q: string, limit = 20, scope: Scope = LOC
             WHERE p.card_id = c.id AND +p.game = ${scope.game} AND p.contributed = 0) AS newest
          FROM (SELECT cards_fts.rowid AS id, bm25(cards_fts) AS rank FROM cards_fts
                JOIN cards c0 ON c0.id = cards_fts.rowid
-               WHERE cards_fts MATCH ? AND +c0.game = ${scope.game} ORDER BY rank LIMIT ${NAME_POOL}) f
+               WHERE cards_fts MATCH ? AND +c0.game = ${scope.game} ORDER BY rank LIMIT ${mtg ? NAME_POOL * MAGIC_LANGUAGE_COUNT : NAME_POOL}) f
          JOIN cards c ON c.id = f.id
          ORDER BY (c.name = ? COLLATE NOCASE) DESC, newest IS NULL, newest DESC, f.rank, c.name LIMIT ?`
       )
-      .all(fts, text, limit) as DbHit[]
+      .all(fts, text, rowLimit) as DbHit[]
     rows.forEach((r) => push(toResult(r)))
   }
   const localNames = byGame<{ table: string; col: string; text: string } | null>(
@@ -330,10 +342,10 @@ export function searchCards(db: SqlDb, q: string, limit = 20, scope: Scope = LOC
          FROM ${localNames.table} lc JOIN cards c ON c.id = lc.card_id AND +c.game = ${scope.game}
          WHERE lc.${localNames.col} LIKE ? ESCAPE '\\' ORDER BY c.name LIMIT ?`
       )
-      .all(`%${escapeLike(localNames.text)}%`, limit) as DbHit[]
+      .all(`%${escapeLike(localNames.text)}%`, rowLimit) as DbHit[]
     rows.forEach((r) => push(toResult(r)))
   }
-  return scopeGame(db, scope) === 'mtg' ? withMagicLanguages(db, results) : results
+  return mtg ? withMagicLanguages(db, results) : results
 }
 
 const LANGUAGE_ORDER = new Map<string, number>(LANGUAGES.map((l, i) => [l.code, i]))
@@ -448,9 +460,7 @@ export function getCardDetail(db: SqlDb, cardId: number, scope: Scope = LOCAL): 
       `SELECT c.*, ${POKEMON_COLS}${op.cols} FROM cards c LEFT JOIN pokemon_cards pc ON pc.card_id = c.id
        ${op.join} WHERE c.id = ? AND +c.game = ${scope.game}`
     )
-    .get(cardId) as
-    | CardDbRow
-    | undefined
+    .get(cardId) as CardDbRow | undefined
   if (!row) return null
   if (row.mtg_oracle_id !== undefined && row.mtg_oracle_id !== null) {
     const artists = db

@@ -261,7 +261,8 @@ describe('Scan page', () => {
       defaultRarity: 'Secret Rare',
       hitPrice: 20,
       fit: 'fill',
-      zoom: 1
+      zoom: 1,
+      frameRate: 60
     })
   })
 
@@ -466,6 +467,19 @@ describe('Scan page', () => {
     await u.click(screen.getByRole('button', { name: 'Show summary' }))
     act(() => bridge.emitOpen(false))
     expect(summaries().at(-1)).toMatchObject({ summary: null })
+  })
+
+  it('picks 30 or 60 fps for the camera, sent to the scan window and remembered', async () => {
+    await renderScan()
+    await openWindow()
+    const u = user()
+    const picker = screen.getByRole('combobox', { name: 'Frame rate' })
+    expect(picker).toHaveTextContent('60 fps')
+    await u.click(picker)
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['30 fps', '60 fps'])
+    await u.click(screen.getByRole('option', { name: '30 fps' }))
+    expect(lastSettings().frameRate).toBe(30)
+    expect(localStorage.getItem('scan.frameRate')).toBe('30')
   })
 
   it("lists the scan window's cameras; a different pick sends settings only, the current one retries", async () => {

@@ -54,7 +54,17 @@ export interface ScanWindowSettings {
   fit: ScanFit
   /** How far the picture is zoomed in on its centre, 1 (not at all) to SCAN_ZOOM_MAX. */
   zoom: number
+  /**
+   * The frame rate asked of the camera. 60 halves the blur of a card held in the hand, but each
+   * frame then gets at most 1/60 s of light, so in a dim room the camera boosts its signal and the
+   * picture grains (Elgato's Facecam 4K visibly); 30 gives it twice the light.
+   */
+  frameRate: ScanFrameRate
 }
+
+/** The frame rates the scanner offers, slowest first. */
+export const SCAN_FRAME_RATES = [30, 60] as const
+export type ScanFrameRate = (typeof SCAN_FRAME_RATES)[number]
 
 /** A camera track's real picture size and frame rate (frameRate null where it isn't said). */
 export interface CameraResolution {

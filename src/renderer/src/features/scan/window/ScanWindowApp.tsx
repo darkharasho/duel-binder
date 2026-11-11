@@ -83,7 +83,7 @@ function Scanner({
 }): React.JSX.Element {
   const videoRef = useRef<HTMLVideoElement>(null)
   const { game } = useGame()
-  const camera = useCamera(settings.deviceId)
+  const camera = useCamera(settings.deviceId, undefined, { frameRate: settings.frameRate })
   const { overlay, push, clear } = useOverlay()
   const [scanned, setScanned] = useState<Readonly<Record<string, number>>>({})
   const pulls = useRef(0)

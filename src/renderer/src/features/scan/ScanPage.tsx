@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { Settings2 } from 'lucide-react'
 import { Popover } from 'radix-ui'
 import {
+  SCAN_FRAME_RATES,
   SCAN_SIZES,
   SCAN_SIZE_MAX,
   resolutionText,
   type ScanFit,
+  type ScanFrameRate,
   type ScanWindowState
 } from '@shared/scanWindow'
 import { SCAN_PROFILES } from '@shared/scan/profiles'
@@ -190,6 +192,27 @@ export function ScanPage({
               {devices.map((d, i) => (
                 <SelectItem key={d.deviceId || i} value={d.deviceId || `${UNNAMED_CAMERA}${i}`}>
                   {d.label || `Camera ${i + 1}`}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {/* 60 blurs a moving card less; 30 lets the camera take in twice the light, so less grain. */}
+          <Select
+            value={String(settings.frameRate)}
+            onValueChange={(v) => setSettings({ frameRate: Number(v) as ScanFrameRate })}
+          >
+            <SelectTrigger
+              size="sm"
+              aria-label="Frame rate"
+              title="60 fps blurs a moving card less; 30 fps is less grainy in dim light"
+              className="w-24"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SCAN_FRAME_RATES.map((r) => (
+                <SelectItem key={r} value={String(r)}>
+                  {r} fps
                 </SelectItem>
               ))}
             </SelectContent>

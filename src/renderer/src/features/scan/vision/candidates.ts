@@ -68,6 +68,20 @@ const MERGE_OFFSET = 2.5
 const MAX_LINES = 80
 /** Opposite sides are this close to parallel, adjacent sides this close to square. */
 const PARALLEL = (5 * Math.PI) / 180
+/**
+ * The tilted look's limit (tiltedLook): a card tipped back toward the camera, as one held up
+ * to a stream camera often is, has opposite edges converging by 6–7°. Allowing that in the first
+ * search loses right matches elsewhere (a looser pairing builds more wrong quads that win), so it
+ * is only tried once nothing else matched.
+ */
+const TILTED_PARALLEL = (8 * Math.PI) / 180
+/**
+ * How many of the tilted look's new outlines, largest first, are nudged (nudgeOutline) onto the
+ * card: found this way they sit a few percent off its edges, and at PICK_WIDTH an outline that far
+ * off scores no better than a wrong one. The card's own outline is the largest on the 2026-11
+ * stream frames; the closest nudged one is matched at full size.
+ */
+const TILTED_NUDGE = 3
 const SQUARE = (11 * Math.PI) / 180
 /** Opposite sides are at least this far apart, as a share of the search height. */
 const MIN_SEPARATION = 0.08
@@ -435,7 +449,8 @@ function lineQuads(
   thick: Mat,
   max: number,
   windows: readonly Box[],
-  shape: QuadShape = CARD_SHAPE
+  shape: QuadShape = CARD_SHAPE,
+  parallel = PARALLEL
 ): Quad[] {
   const w = thick.cols
   const h = thick.rows
@@ -461,7 +476,7 @@ function lineQuads(
   for (let i = 0; i < lines.length; i++) {
     for (let j = i + 1; j < lines.length; j++) {
       const [a, b] = [lines[i], lines[j]]
-      if (angleBetween(a.theta, b.theta) > PARALLEL) continue
+      if (angleBetween(a.theta, b.theta) > parallel) continue
       // b's offset measured along a's normal.
       const separation = Math.abs(b.rho * (b.nx * a.nx + b.ny * a.ny) - a.rho)
       if (separation < MIN_SEPARATION * h || separation > h) continue
@@ -536,7 +551,8 @@ function searchCandidates(
   cv: CV,
   img: FrameSource,
   profile: ScanProfile,
-  maxLines = MAX_LINES
+  maxLines = MAX_LINES,
+  parallel = PARALLEL
 ): { quads: Quad[]; windows: Quad[] } {
   const scale = Math.min(1, SEARCH_WIDTH / frameWidth(img))
   const small = searchImage(cv, img, scale)
@@ -546,12 +562,21 @@ function searchCandidates(
       const thick = thicken(cv, edges)
       return using([thick], () => {
         const splitLines = mergeLines(splitSegments(cv, small, edges), maxLines)
-        const split = lineQuads(splitLines, thick, SPLIT_CANDIDATES, profile.windows)
+        const split = lineQuads(
+          splitLines,
+          thick,
+          SPLIT_CANDIDATES,
+          profile.windows,
+          CARD_SHAPE,
+          parallel
+        )
         const plain = lineQuads(
           mergeLines(segments(cv, edges), maxLines),
           thick,
           PLAIN_CANDIDATES + split.length,
-          profile.windows
+          profile.windows,
+          CARD_SHAPE,
+          parallel
         )
           .filter((q) => !split.some((k) => sameQuad(q, k)))
           .slice(0, PLAIN_CANDIDATES)
@@ -1065,6 +1090,16 @@ export function recognizeArt(
           break
         }
       }
+    // Still nothing: the card may be tipped back, its edges too far from parallel for the first
+    // search. Looked for again allowing that, its new outlines only; a live frame gets it only
+    // when it gets the holder search (holderBudget).
+    if (holderPass && (!final || topDistance(final) > ART_MAX_DISTANCE)) {
+      const tilted = tiltedLook(cv, frame, quads, pickDistance, ranked, profile)
+      if (tilted && topDistance(tilted) <= ART_MAX_DISTANCE) {
+        final = tilted
+        via = undefined
+      }
+    }
     if (!final) return null
     const { card, matches, upsideDown } = final
     if (topDistance(final) > ART_MAX_DISTANCE) {
@@ -1086,6 +1121,32 @@ export function recognizeArt(
       ...backAt(final.quad, final.back)
     }
   })
+}
+
+/**
+ * The tilted look, for a frame nothing else matched in: the card's outlines searched for again
+ * with opposite edges allowed up to TILTED_PARALLEL apart. Of those not already tried, the
+ * TILTED_NUDGE largest are nudged onto the card and the closest matched at full size; null when
+ * it found nothing new. Bounded: one search, TILTED_NUDGE nudges (nudgeOutline's bound each) and
+ * one full-size match.
+ */
+function tiltedLook(
+  cv: CV,
+  frame: Mat,
+  tried: readonly Quad[],
+  pickDistance: (quad: Quad) => number,
+  ranked: (quad: Quad) => Ranked,
+  profile: ScanProfile
+): Ranked | null {
+  let best: { quad: Quad; distance: number } | null = null
+  for (const quad of searchCandidates(cv, frame, profile, MAX_LINES, TILTED_PARALLEL)
+    .quads.filter((q) => !tried.some((t) => sameQuad(q, t)))
+    .sort((a, b) => area(b) - area(a))
+    .slice(0, TILTED_NUDGE)) {
+    const moved = nudgeOutline({ quad, distance: pickDistance(quad) }, pickDistance)
+    if (!best || moved.distance < best.distance) best = moved
+  }
+  return best && ranked(best.quad)
 }
 
 /**

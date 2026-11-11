@@ -1199,3 +1199,48 @@ describe('the name read, in a picked set the art matched nothing in', () => {
     expect(out).toMatchObject({ cardId: 71, via: 'art' })
   })
 })
+
+describe('Normal or Reverse Holofoil from the card body', () => {
+  const art = twins
+  const version = (ratio: number): RawSignals['version'] => ({
+    frame: 0,
+    art: 0,
+    reference: 0,
+    firstEdition: 'unknown',
+    body: { ratio, spread: 0.1 }
+  })
+  const withDlr = (base: ResolveContext): ResolveContext => {
+    const [eevee] = PKM.filter((p) => p.cardId === 1)
+    return {
+      ...base,
+      reverseRefs: () => ({ ratio: 1, spread: 0.1 }),
+      lookups: {
+        ...base.lookups,
+        printingsForCards: async (ids) =>
+          ids[0] === 1
+            ? ['Normal', 'Reverse Holofoil'].map((rarity, i) => ({
+                ...eevee,
+                printingId: 900 + i,
+                setCode: 'DLR 002/103',
+                rarity,
+                price: 2 + i,
+                imageIds: [101]
+              }))
+            : base.lookups.printingsForCards(ids)
+      }
+    }
+  }
+
+  it('a sure English card with a reverse-reading body is the Reverse Holofoil, unflagged', async () => {
+    const out = await recognized(raw({ art, version: version(0.5) }), withDlr(pkm('en')))
+    expect(out).toMatchObject({ rarity: 'Reverse Holofoil', printingId: 901, flag: null })
+  })
+
+  it('the same card named through the language-default guess stays check-rarity', async () => {
+    const out = await recognized(
+      raw({ art, version: version(0.5) }),
+      withDlr({ ...guessing(null), guessRules: ['language-default'] })
+    )
+    expect(out).toMatchObject({ guess: true, flag: 'check-rarity', rarity: 'Normal' })
+  })
+})

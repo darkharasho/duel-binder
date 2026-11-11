@@ -5,6 +5,7 @@ import { artVariantName } from '@shared/scan/fingerprintRefs'
 import type { CardLanguage } from '@shared/scan/language'
 import { lookCandidate, pickRarityByLook, type LookModel } from '@shared/scan/look'
 import { pickRarity, pickRarityByCues, type RarityCues } from '@shared/scan/rarity'
+import type { BodyStats } from '@shared/scan/reverseHolo'
 import { setCodeCandidates } from '@shared/scan/setCode'
 import { tiltFinish, type TiltModel } from '@shared/scan/tilt'
 import { readFinishes, TILT_READ_PAIRS } from '@shared/scan/tiltRead'
@@ -52,6 +53,11 @@ export interface ResolveContext {
    * code read; null when it can't be told. Without it, such a card is taken in its first language.
    */
   cardLanguage?: (cardId: number) => Promise<CardLanguage | null>
+  /**
+   * For Pokémon, desktop only: the reference body stats of an artwork (reverseRefStats), which
+   * let the body brightness name Normal or Reverse Holofoil. The check is off when absent.
+   */
+  reverseRefs?: (imageId: number) => BodyStats | null
   /** For a card like that, the language the user said they're scanning: taken over reading it. */
   filterLanguage?: Language | null
   /** How far apart two artworks' fingerprints are; null when either has none. Without it, unknown. */

@@ -30,6 +30,16 @@ describe('reverseRefStats', () => {
   it('is null for an unknown id', () => {
     expect(reverseRefStats(-1)).toBeNull()
   })
+  it('every shipped entry is a finite ratio above 0 and a finite spread', () => {
+    const entries = Object.entries(refs.refs)
+    expect(entries.length).toBeGreaterThan(0)
+    for (const [id, v] of entries) {
+      expect(Number.isInteger(Number(id)), id).toBe(true)
+      expect(v, id).toHaveLength(2)
+      expect(Number.isFinite(v[0]) && v[0] > 0, id).toBe(true)
+      expect(Number.isFinite(v[1]) && v[1] >= 0, id).toBe(true)
+    }
+  })
   it('reads a shipped id', () => {
     const id = Number(Object.keys(refs.refs)[0])
     const s = reverseRefStats(id)!

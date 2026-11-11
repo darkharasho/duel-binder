@@ -13,8 +13,9 @@ const cues = (body: BodyStats): VersionCues => ({
   firstEdition: 'unknown',
   body
 })
-const READS_REVERSE = cues({ ratio: 0.5, spread: 0.1 })
-const READS_NORMAL = cues({ ratio: 1, spread: 0.1 })
+const rawOf = (version: VersionCues | null | undefined, extra = {}) => ({ version, ...extra })
+const READS_REVERSE = rawOf(cues({ ratio: 0.5, spread: 0.1 }))
+const READS_NORMAL = rawOf(cues({ ratio: 1, spread: 0.1 }))
 const refs = (): BodyStats | null => REF
 
 const opt = (printingId: number, rarity: string, extra = {}) =>
@@ -64,8 +65,8 @@ describe('applyReverseCheck', () => {
   it('leaves the draft alone when the check does not apply', () => {
     const item = draftOf()
     expect(applyReverseCheck(item, READS_REVERSE, undefined)).toBe(item)
-    expect(applyReverseCheck(item, null, refs)).toBe(item)
-    expect(applyReverseCheck(item, undefined, refs)).toBe(item)
+    expect(applyReverseCheck(item, rawOf(null), refs)).toBe(item)
+    expect(applyReverseCheck(item, rawOf(undefined), refs)).toBe(item)
     expect(applyReverseCheck(item, READS_REVERSE, () => null)).toBe(item)
     const ja = draftOf([opt(1, 'Normal', { language: 'ja' }), opt(2, 'Reverse Holofoil')])
     expect(applyReverseCheck(ja, READS_REVERSE, refs)).toBe(ja)
@@ -81,6 +82,13 @@ describe('applyReverseCheck', () => {
     expect(applyReverseCheck(split, READS_REVERSE, refs)).toBe(split)
     const three = draftOf([opt(1, 'Normal'), opt(2, 'Reverse Holofoil'), opt(3, 'Holofoil')])
     expect(applyReverseCheck(three, READS_REVERSE, refs)).toBe(three)
+  })
+
+  it('leaves a graded slab and holder-search art alone', () => {
+    const item = draftOf()
+    const body = READS_REVERSE.version
+    expect(applyReverseCheck(item, rawOf(body, { slab: true }), refs)).toBe(item)
+    expect(applyReverseCheck(item, rawOf(body, { artVia: 'holder' as const }), refs)).toBe(item)
   })
 
   it('also settles a draft that already has no flag', () => {

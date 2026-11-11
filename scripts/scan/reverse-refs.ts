@@ -12,15 +12,16 @@
 import { writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { dirname } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { pokemonImageUrl } from '../catalog/fingerprints'
 import { decodeImage } from '../catalog/references'
 import { REVERSE_CHECKED_SETS, bodyStats } from '../../src/shared/scan/reverseHolo'
 import type { RgbaImage } from '../../src/shared/scan/types'
 import { upright } from '../../src/shared/upright'
 
-/** Relative to the repo root, where the script is run from (it runs bundled, so not import.meta.url). */
-const OUT = resolve('src/shared/scan/reverseRefs.json')
+/** From the repo root, two levels up from both scripts/scan/ and the bundle in out/catalog/. */
+const OUT = resolve(dirname(fileURLToPath(import.meta.url)), '../..', 'src/shared/scan/reverseRefs.json')
 const ROUND = 10000
 
 const round = (n: number): number => Math.round(n * ROUND) / ROUND

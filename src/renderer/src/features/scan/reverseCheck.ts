@@ -1,5 +1,6 @@
 import { reverseChecked, reverseVersion } from '@shared/scan/reverseHolo'
 import type { ScanDraft } from '@shared/scan/types'
+import type { RawSignals } from './engine'
 import type { ResolveContext } from './resolve'
 import type { VersionCues } from './vision/pokemonVersion'
 
@@ -8,13 +9,16 @@ import type { VersionCues } from './vision/pokemonVersion'
  * its body brightness reads as (reverseVersion), flag cleared: the foil boxes can't tell them.
  * `item` itself when the check doesn't apply: it is off (no refs), no body was measured, no
  * reference covers the image, the options are anything but that pair in English, or the set isn't
- * a checked one. The caller leaves out a best guess.
+ * a checked one, or the card is in a graded slab or its art was found only by the holder search
+ * (the body measure is off there). The caller leaves out a best guess.
  */
 export function applyReverseCheck(
   item: ScanDraft,
-  cues: VersionCues | null | undefined,
+  raw: Pick<RawSignals, 'slab' | 'artVia'> & { version?: VersionCues | null },
   refs: ResolveContext['reverseRefs']
 ): ScanDraft {
+  if (raw.slab || raw.artVia === 'holder') return item
+  const cues = raw.version
   if (!refs || !cues?.body) return item
   const ref = refs(item.imageId)
   if (!ref) return item

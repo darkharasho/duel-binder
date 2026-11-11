@@ -472,14 +472,16 @@ export async function resolvePokemonSignals(
   const named = async (cardId: number, via: ScanDraft['via']): Promise<ScanOutcome> => {
     const drafted = await draft(cardId, raw, ctx, via)
     if (!drafted) return unsure
-    // A best guess is left as it is: its language is assumed, not read.
-    const item = guess ? drafted : applyReverseCheck(drafted, raw.version, ctx.reverseRefs)
     // A Chinese card named through its twin is told from its reprints by the number already
     // (two Chinese cards at one name and number name neither), and having no art of its own, nor
     // an illustrator on record, every Chinese card of its name looks like an unseen twin.
-    const twinned = stand.has(cardId) ? [] : item.options.filter((p) => p.unseenTwin)
+    const twinned = stand.has(cardId) ? [] : drafted.options.filter((p) => p.unseenTwin)
     const twin = twinned.length ? await untold(twinned[0]) : false
     if (twin && !may(twin === 'maybe' ? 'twin-maybe' : 'twin')) return unsure
+    // A best guess is left as it is: its language is assumed, not read. Judged only now, as the
+    // twin decision above can make it one. The check leaves the options alone, so that decision
+    // is the same either way.
+    const item = guess ? drafted : applyReverseCheck(drafted, raw, ctx.reverseRefs)
     const reprints = await reprintsOf(raw, item, ctx)
     const offered = reprints.length ? { ...item, options: [...item.options, ...reprints] } : item
     return { kind: 'recognized', item: guess ? { ...offered, guess: true } : offered }

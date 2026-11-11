@@ -1243,4 +1243,25 @@ describe('Normal or Reverse Holofoil from the card body', () => {
     )
     expect(out).toMatchObject({ guess: true, flag: 'check-rarity', rarity: 'Normal' })
   })
+
+  it('a card that becomes a guess through an unseen twin is left unchecked and flagged', async () => {
+    const base = withDlr(pkm('en'))
+    const ctx: ResolveContext = {
+      ...base,
+      artDistance: async () => 110,
+      guessRules: ['twin-maybe'],
+      lookups: {
+        ...base.lookups,
+        printingsForCards: async (ids) =>
+          (await base.lookups.printingsForCards(ids)).map((p) => ({
+            ...p,
+            unseenTwin: true as const,
+            unseenTwinCodes: ['X 1'],
+            unseenTwinImages: [7]
+          }))
+      }
+    }
+    const out = await recognized(raw({ art, version: version(0.5) }), ctx)
+    expect(out).toMatchObject({ guess: true, flag: 'check-rarity', rarity: 'Normal' })
+  })
 })

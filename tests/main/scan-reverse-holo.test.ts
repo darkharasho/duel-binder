@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { bodyStats, reverseChecked, reverseVersion } from '../../src/shared/scan/reverseHolo'
+import { REVERSE_BODY_LUM_MAX, REVERSE_SPREAD_MIN } from '../../src/shared/scan/thresholds'
 import type { RgbaImage } from '../../src/shared/scan/types'
 
 function make(w: number, h: number, art: (x: number) => number, body: (x: number) => number, bodyAlpha = 255): RgbaImage {
@@ -43,8 +44,19 @@ describe('reverseVersion', () => {
   it('dark body is Reverse', () => expect(reverseVersion({ ratio: 0.3, spread: 0.1 }, ref)).toBe('Reverse Holofoil'))
   it('similar body is Normal', () => expect(reverseVersion({ ratio: 0.4, spread: 0.1 }, ref)).toBe('Normal'))
   it('wide spread is Reverse', () => expect(reverseVersion({ ratio: 0.5, spread: 0.35 }, ref)).toBe('Reverse Holofoil'))
-  it('thresholds are strict', () =>
-    expect(reverseVersion({ ratio: 0.345, spread: 0.3 }, { ratio: 0.5, spread: 0.1 })).toBe('Normal'))
+  it('thresholds are strict', () => {
+    // Built to sit exactly on each threshold (ref ratio 1 and spread 0 make the differences exact).
+    const flatRef = { ratio: 1, spread: 0 }
+    expect(
+      reverseVersion({ ratio: REVERSE_BODY_LUM_MAX, spread: REVERSE_SPREAD_MIN }, flatRef)
+    ).toBe('Normal')
+    expect(
+      reverseVersion({ ratio: REVERSE_BODY_LUM_MAX - 0.001, spread: 0 }, flatRef)
+    ).toBe('Reverse Holofoil')
+    expect(
+      reverseVersion({ ratio: 1, spread: REVERSE_SPREAD_MIN + 0.001 }, flatRef)
+    ).toBe('Reverse Holofoil')
+  })
 })
 
 describe('reverseChecked', () => {

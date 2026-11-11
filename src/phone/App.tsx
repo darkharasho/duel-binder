@@ -9,7 +9,6 @@ import { OPEN_ELSEWHERE, UNSUPPORTED } from './copy'
 import { PhoneContext, type PhoneSession } from './context'
 import { DB_OPEN_ELSEWHERE } from './data/openRetry'
 import type { PhoneStore } from './data/store'
-import { FirstRun } from './FirstRun'
 import { PhoneScreen } from './PhoneScreen'
 import { PhoneShell } from './PhoneShell'
 import { claimSavedScans } from './savedScans'
@@ -21,7 +20,6 @@ type View =
   | { kind: 'unsupported' }
   | { kind: 'open-elsewhere' }
   | { kind: 'signed-out' }
-  | { kind: 'first-run'; user: Me }
   | { kind: 'ready'; user: Me }
 
 /** The screen for the data worker's fatal message: another tab holds the database, or it can't run. */
@@ -69,14 +67,16 @@ export function App({
   useEffect(() => onFatal((message) => setView(fatalView(message))), [onFatal])
   const show = useCallback((next: View) => setView((v) => (isFatal(v) ? v : next)), [])
 
-  /** Where a signed-in user goes: first run until the catalog is filled, else the app. */
+  /**
+   * Where a signed-in user goes: straight into the app. Card data still missing comes down in the
+   * background (see useReadyChecks), and the status line says so.
+   */
   const enter = useCallback(
     async (user: Me): Promise<void> => {
-      const catalog = await store.catalog()
       claimSavedScans(user.id)
-      show(catalog.filled ? { kind: 'ready', user } : { kind: 'first-run', user })
+      show({ kind: 'ready', user })
     },
-    [store, show]
+    [show]
   )
 
   useEffect(() => {
@@ -122,7 +122,7 @@ export function App({
     })
   }, [ready, signedOut])
 
-  const user = view.kind === 'ready' || view.kind === 'first-run' ? view.user : null
+  const user = view.kind === 'ready' ? view.user : null
   const session = useMemo<PhoneSession | null>(
     () => (user ? { store, user, signedOut } : null),
     [store, user, signedOut]
@@ -164,15 +164,6 @@ export function App({
           onSignedIn={(u) => {
             void enter(u).catch(() => show({ kind: 'unsupported' }))
           }}
-        />
-      )
-      break
-    case 'first-run':
-      screen = (
-        <FirstRun
-          store={store}
-          onDone={() => show({ kind: 'ready', user: view.user })}
-          onSignedOut={signedOut}
         />
       )
       break

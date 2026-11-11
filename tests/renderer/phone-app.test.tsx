@@ -3,9 +3,6 @@ import { MAGIC_FAN_CONTENT, SCRYFALL_CREDIT } from '@shared/legal'
 import userEvent from '@testing-library/user-event'
 import { App } from '../../src/phone/App'
 import {
-  FIRST_RUN_CELLULAR,
-  FIRST_RUN_SIZE,
-  FIRST_RUN_STOPPED,
   scanStillDownloading,
   OPEN_ELSEWHERE,
   SIGN_IN_COPY,
@@ -217,75 +214,18 @@ describe('phone app', () => {
     expect(await screen.findByRole('link', { name: 'Sign in with Discord' })).toBeInTheDocument()
   })
 
-  it('first run shows progress then the scanner', async () => {
-    let finish: () => void = () => {}
+  it('a phone with no card data yet opens the app at once and downloads behind it', async () => {
     const store = fakeStore(
-      {
-        fillCatalog: vi.fn(
-          (onProgress: (p: { game: 'ygo'; cursor: number; latest: number }) => void) =>
-            new Promise<void>((resolve) => {
-              // The bar runs from the first page's position to the end of the feed.
-              onProgress({ game: 'ygo', cursor: 10, latest: 100 })
-              onProgress({ game: 'ygo', cursor: 55, latest: 100 })
-              finish = resolve
-            })
-        )
-      },
+      { updateCatalog: vi.fn(() => new Promise<boolean>(() => {})) },
       { catalog: { filled: false, cursor: 0, latest: null, lastSyncAt: null, dbVersion: null } }
     )
     installPhoneApi(store)
     renderApp(store)
-    expect(
-      await screen.findByRole('heading', { name: 'Downloading card data' })
-    ).toBeInTheDocument()
-    expect(screen.getByText(FIRST_RUN_SIZE)).toBeInTheDocument()
-    // The size covers the app's own files too (about 20 MB in all, measured).
-    expect(FIRST_RUN_SIZE).toBe('About 20 MB. Use Wi-Fi if you can.')
-    await waitFor(() =>
-      expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '50')
-    )
-    await act(async () => finish())
     expect(await screen.findByRole('navigation', { name: 'Tabs' })).toBeInTheDocument()
     expect(tab('Home')).toHaveAttribute('aria-current', 'page')
-    expect(store.refreshFingerprints).toHaveBeenCalled()
-  })
-
-  it('first run on mobile data says so before downloading', async () => {
-    Object.defineProperty(navigator, 'connection', {
-      configurable: true,
-      value: { type: 'cellular' }
-    })
-    const user = userEvent.setup()
-    const store = fakeStore(
-      {},
-      { catalog: { filled: false, cursor: 0, latest: null, lastSyncAt: null, dbVersion: null } }
-    )
-    installPhoneApi(store)
-    renderApp(store)
-    expect(await screen.findByText(FIRST_RUN_CELLULAR)).toBeInTheDocument()
-    expect(FIRST_RUN_CELLULAR).toBe("You're on mobile data. This download is about 20 MB.")
+    expect(store.updateCatalog).toHaveBeenCalled()
     expect(store.fillCatalog).not.toHaveBeenCalled()
-    await user.click(screen.getByRole('button', { name: 'Download' }))
-    expect(await screen.findByRole('navigation', { name: 'Tabs' })).toBeInTheDocument()
-    Reflect.deleteProperty(navigator, 'connection')
-  })
-
-  it('first run failure offers Retry and resumes', async () => {
-    const user = userEvent.setup()
-    const fillCatalog = vi
-      .fn()
-      .mockRejectedValueOnce(new Error('Failed to fetch'))
-      .mockResolvedValueOnce(undefined)
-    const store = fakeStore(
-      { fillCatalog },
-      { catalog: { filled: false, cursor: 40, latest: 100, lastSyncAt: null, dbVersion: null } }
-    )
-    installPhoneApi(store)
-    renderApp(store)
-    expect(await screen.findByText(FIRST_RUN_STOPPED)).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Retry' }))
-    expect(await screen.findByRole('navigation', { name: 'Tabs' })).toBeInTheDocument()
-    expect(fillCatalog).toHaveBeenCalledTimes(2)
+    expect(store.refreshFingerprints).toHaveBeenCalled()
   })
 
   it('status line shows Offline · 2 waiting to sync', async () => {

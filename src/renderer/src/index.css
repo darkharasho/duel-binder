@@ -214,7 +214,7 @@
   }
 }
 
-/* The phone's sign-in and first-run screens (PhoneScreen): blobs drifting slowly behind them. */
+/* The phone's sign-in screen (PhoneScreen): blobs drifting slowly behind them. */
 @keyframes phone-blob-a {
   to { transform: translate(18vw, 14vh) scale(1.15); }
 }

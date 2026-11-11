@@ -336,3 +336,14 @@ export function printingReverseLook(
     types: card?.pokemon?.types
   })
 }
+
+/**
+ * The CSS mask size that crops a mask drawn over a whole image the way `object-cover` crops that
+ * image in a frame: one side 100%, the other overflowing. Null when they're the same shape.
+ */
+export function coverFit(frame: number, image: number | null): string | null {
+  if (!image || Math.abs(image / frame - 1) < 0.002) return null
+  return image < frame
+    ? `100% ${((frame / image) * 100).toFixed(2)}%`
+    : `${((image / frame) * 100).toFixed(2)}% 100%`
+}

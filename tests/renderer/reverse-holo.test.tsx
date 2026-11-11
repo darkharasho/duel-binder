@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { ReverseLayer } from '@/components/ReverseLayer'
-import { isReverseFinish, printingReverseLook, reverseLook } from '@shared/reverseHolo'
+import { coverFit, isReverseFinish, printingReverseLook, reverseLook } from '@shared/reverseHolo'
 import { eraPattern } from '@shared/reversePatterns'
 
 const TYPES = [
@@ -178,5 +178,25 @@ describe('ReverseLayer', () => {
     render(<ReverseLayer look={look} />)
     expect(screen.getByTestId('reverse-layer').dataset.pattern).toBe('no')
     expect(screen.queryByTestId('reverse-pattern')).toBeNull()
+  })
+})
+
+describe('coverFit', () => {
+  it("crops the look like object-cover crops art of another shape: Delta Reign's in a TCGdex frame", () => {
+    // 733 × 1024 art in a 600 × 825 frame loses a strip off the top and the bottom.
+    expect(coverFit(600 / 825, 733 / 1024)).toBe('100% 101.60%')
+    expect(coverFit(600 / 825, 0.8)).toBe('110.00% 100%')
+    expect(coverFit(600 / 825, 600 / 825)).toBeNull()
+    expect(coverFit(600 / 825, null)).toBeNull()
+  })
+
+  it('sizes every mask of the layer by it', () => {
+    const look = reverseLook('Reverse Holofoil', 'DLR 001/103', {
+      category: 'Pokemon',
+      types: ['Grass']
+    })!
+    render(<ReverseLayer look={look} fit="100% 101.60%" />)
+    const layers = screen.getByTestId('reverse-layer').querySelectorAll<HTMLElement>('span')
+    expect([...layers].map((l) => l.style.maskSize)).toEqual(['100% 101.60%', '100% 101.60%'])
   })
 })

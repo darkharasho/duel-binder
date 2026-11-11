@@ -8,8 +8,8 @@ const BLOBS = [
 ]
 
 /**
- * A full-screen panel in the phone's safe area, for the screens before the app (sign-in, first
- * run): the brand on its own (the binder mark without the icon's tile, the name set big beneath
+ * A full-screen panel in the phone's safe area, for the screens before the app (sign-in, and
+ * the waits and errors around it): the brand on its own (the binder mark without the icon's tile, the name set big beneath
  * it) in the middle, and the screen's own part (`children`) at the bottom, under the thumb.
  */
 export function PhoneScreen({ children }: { children: React.ReactNode }): React.JSX.Element {

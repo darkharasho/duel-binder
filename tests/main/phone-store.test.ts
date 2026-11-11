@@ -1171,6 +1171,22 @@ describe('phone store: background card data', () => {
     expect(db.prepare('PRAGMA foreign_keys').get()).toEqual({ foreign_keys: 1 })
   })
 
+  it('without a first run, the background download brings the game shown first, then the others', async () => {
+    await owner()
+    await store.signIn(token, me)
+    expect((await store.catalog()).filled).toBe(false)
+    expect(await store.updateCatalog()).toBe(true)
+    // The game shown came first, and the user's entries came down before the next game.
+    const games = catalogRequests().map((u) => new URL(u).searchParams.get('game'))
+    expect(games[0]).toBe('ygo')
+    const sync = requests.findIndex((r) => r.url.includes('/api/sync'))
+    expect(sync).toBeGreaterThan(-1)
+    expect(sync).toBeLessThan(requests.findIndex((r) => r.url.includes('game=pkm')))
+    expect((await store.catalog()).filled).toBe(true)
+    expect(pkmCards()).toBe(2)
+    expect((await store.catalogStatus()).missing).toEqual([])
+  })
+
   it('an add made while a game downloads lands at once, between its pages', async () => {
     await owner()
     await store.signIn(token, me)

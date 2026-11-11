@@ -800,8 +800,11 @@ export function createPhoneStore(deps: {
 
     updateCatalog: ({ force = false } = {}) => {
       catalogRun ??= online(async () => {
-        if (token() === null || !formatCurrent() || getState('catalog_loaded') === null)
-          return false
+        if (token() === null) return false
+        // The first download (or a fresh one after a data format change) runs here too, behind
+        // the app: nothing waits on it.
+        const first = !formatCurrent() || getState('catalog_loaded') === null
+        if (first) await serial(() => resetOldFormat())
         const last = Date.parse(getMeta(db, 'last_sync_at') ?? '')
         // A game not fully down yet goes on at once. So does a game with no cards here yet (its
         // catalog wasn't up at the day's check), so new card data for a game reaches the phone on
@@ -811,7 +814,7 @@ export function createPhoneStore(deps: {
             !gameDone(g) ||
             db.prepare('SELECT 1 FROM cards WHERE game = ? LIMIT 1').get(g) === undefined
         )
-        if (!force && !pending && !Number.isNaN(last) && now().getTime() - last < DAY_MS)
+        if (!first && !force && !pending && !Number.isNaN(last) && now().getTime() - last < DAY_MS)
           return false
         const c = signedInClient()
         const shown = activeGame(db, games())
@@ -819,7 +822,7 @@ export function createPhoneStore(deps: {
         const order = [...(await syncedGames(c))].sort(
           (a, b) => Number(b === shown) - Number(a === shown)
         )
-        return pullCatalog(c, order, serial, (p) => {
+        const progress = (p: CatalogProgress): void => {
           // Only a game's first download shows; a day's few changes don't.
           downloading = gameDone(p.game)
             ? null
@@ -829,7 +832,18 @@ export function createPhoneStore(deps: {
                 cursor: p.cursor,
                 latest: p.latest
               }
-        })
+        }
+        const head = order[0] === shown ? order.slice(0, 1) : []
+        let changed = await pullCatalog(c, head, serial, progress)
+        // The game shown is down: the user's entries come down next (a sync after this finishes
+        // first run, see syncNow), then the other games.
+        if (first && gameDone(shown))
+          await serial(async () => {
+            setState('catalog_loaded', '1')
+            await syncNow(c)
+          })
+        if (await pullCatalog(c, order.slice(head.length), serial, progress)) changed = true
+        return changed
       }).finally(() => {
         catalogRun = null
         downloading = null

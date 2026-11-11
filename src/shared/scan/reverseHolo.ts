@@ -24,7 +24,7 @@ export function reverseChecked(setCode: string | null): boolean {
   return REVERSE_CHECKED_SETS.includes(setCode.split(' ')[0])
 }
 
-const bounds = (r: typeof ART) => ({
+const bounds = (r: typeof ART): typeof ART => ({
   x0: Math.round(r.x0 * W),
   x1: Math.round(r.x1 * W),
   y0: Math.round(r.y0 * H),

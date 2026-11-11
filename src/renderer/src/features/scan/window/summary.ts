@@ -4,10 +4,13 @@ import type { ScanRow } from '../session'
 
 const card = (row: ScanRow): ScanSummaryCard => ({
   key: row.key,
+  cardId: row.cardId,
   name: row.name,
   imageId: row.imageId,
   photoId: shownPhoto(row),
   detail: [row.setCode, row.rarity].filter(Boolean).join(' · '),
+  setCode: row.setCode,
+  rarity: row.rarity,
   quantity: row.quantity,
   price: priceOf(row) ?? null,
   raw: row.slab === true,

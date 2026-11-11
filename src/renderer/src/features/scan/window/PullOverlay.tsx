@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { CopyIcon, StarIcon } from 'lucide-react'
 import { englishSetName } from '@shared/setNames'
 import { CardArt } from '@/components/CardArt'
+import { useReverseLook } from '@/components/useReverseLook'
 import { formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { FoundBurst } from '../FoundBurst'
@@ -66,6 +67,7 @@ function Bar({
   const sub = [pull.setCode, pull.setName === null ? null : englishSetName(pull.setName)]
     .filter((s) => s !== null)
     .join(' · ')
+  const reverse = useReverseLook(pull, pull.rarity, pull.setCode)
   return (
     <div
       role="status"
@@ -80,6 +82,7 @@ function Bar({
       <CardArt
         imageId={pull.imageId}
         printingId={pull.photoId}
+        reverse={reverse}
         size="small"
         alt=""
         className={

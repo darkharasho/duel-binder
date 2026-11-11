@@ -224,7 +224,8 @@ export interface CollectionFilters {
  * 'atk', 'def' and 'level' are Yu-Gi-Oh! only, 'hp' is Pokémon only and 'cost' and 'power' are One
  * Piece only; on another game each sorts by name.
  */
-export type BrowseSort = 'name' | 'released' | 'price' | 'atk' | 'def' | 'level' | 'hp' | 'cost' | 'power'
+export type BrowseSort =
+  'name' | 'released' | 'price' | 'atk' | 'def' | 'level' | 'hp' | 'cost' | 'power'
 
 /** Filters for the Browse page: every card in the database, not just owned ones. */
 export interface BrowseFilters {
@@ -632,6 +633,13 @@ export interface BinderSummary {
    * the desktop or phone app, this catalog's twin of it (friendPrintings.ts). Absent from an older server.
    */
   coverPrintingId?: number | null
+  /** A Pokémon Reverse Holofoil cover printing's finish, set code and card, for its reverse look. */
+  coverReverse?: {
+    finish: string
+    setCode: string
+    category: string | null
+    types: string[]
+  } | null
 }
 
 /** One slot of a binder, owned or missing. */

@@ -35,6 +35,7 @@ function fakeStore(over: Partial<PhoneStore> = {}): PhoneStore {
     })),
     fillCatalog: vi.fn(async () => {}),
     updateCatalog: vi.fn(async () => false),
+    catalogStatus: vi.fn(async () => ({ downloading: null, missing: [] })),
     sync: vi.fn(async () => ({
       waiting: 0,
       problems: 0,

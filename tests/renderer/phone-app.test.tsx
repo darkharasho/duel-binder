@@ -6,6 +6,7 @@ import {
   FIRST_RUN_CELLULAR,
   FIRST_RUN_SIZE,
   FIRST_RUN_STOPPED,
+  scanStillDownloading,
   OPEN_ELSEWHERE,
   SIGN_IN_COPY,
   SIGN_IN_FAILED,
@@ -221,9 +222,11 @@ describe('phone app', () => {
     const store = fakeStore(
       {
         fillCatalog: vi.fn(
-          (onProgress: (p: { cursor: number; latest: number }) => void) =>
+          (onProgress: (p: { game: 'ygo'; cursor: number; latest: number }) => void) =>
             new Promise<void>((resolve) => {
-              onProgress({ cursor: 25, latest: 100 })
+              // The bar runs from the first page's position to the end of the feed.
+              onProgress({ game: 'ygo', cursor: 10, latest: 100 })
+              onProgress({ game: 'ygo', cursor: 55, latest: 100 })
               finish = resolve
             })
         )
@@ -239,7 +242,7 @@ describe('phone app', () => {
     // The size covers the app's own files too (about 20 MB in all, measured).
     expect(FIRST_RUN_SIZE).toBe('About 20 MB. Use Wi-Fi if you can.')
     await waitFor(() =>
-      expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '25')
+      expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '50')
     )
     await act(async () => finish())
     expect(await screen.findByRole('navigation', { name: 'Tabs' })).toBeInTheDocument()
@@ -299,6 +302,21 @@ describe('phone app', () => {
     await user.click(tab('Scan'))
     await screen.findByRole('region', { name: 'Last scan' })
     expect(screen.queryByText('Offline · 2 waiting to sync')).not.toBeInTheDocument()
+  })
+
+  it("status line shows a game's card data coming down; the scanner says it is still downloading", async () => {
+    const store = fakeStore({
+      catalogStatus: vi.fn(async () => ({
+        downloading: { game: 'ygo' as const, percent: 62 },
+        missing: ['ygo' as const]
+      }))
+    })
+    const user = userEvent.setup()
+    installPhoneApi(store)
+    renderApp(store)
+    expect(await screen.findByText('Downloading Yu-Gi-Oh! cards… 62%')).toBeInTheDocument()
+    await user.click(tab('Scan'))
+    expect(await screen.findByText(scanStillDownloading('Yu-Gi-Oh!'))).toBeInTheDocument()
   })
 
   it('status line stays hidden when all is synced', async () => {
@@ -518,7 +536,9 @@ describe('phone app', () => {
     expect(await screen.findByText(/Version dev/)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Refresh card data' }))
     await waitFor(() => expect(store.updateCatalog).toHaveBeenCalledWith({ force: true }))
-    await waitFor(() => expect(store.refreshFingerprints).toHaveBeenCalledWith({ game: 'ygo', force: true }))
+    await waitFor(() =>
+      expect(store.refreshFingerprints).toHaveBeenCalledWith({ game: 'ygo', force: true })
+    )
     expect(await screen.findByText('Card data is up to date.')).toBeInTheDocument()
   })
 

@@ -78,7 +78,7 @@ describe('phone store protocol', () => {
   it('progress callbacks arrive in order', async () => {
     const client = pair({
       fillCatalog: async (onProgress) => {
-        for (let cursor = 1; cursor <= 3; cursor++) onProgress({ cursor, latest: 3 })
+        for (let cursor = 1; cursor <= 3; cursor++) onProgress({ game: 'ygo', cursor, latest: 3 })
       }
     })
     const seen: number[] = []

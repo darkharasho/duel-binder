@@ -61,6 +61,21 @@ export interface CatalogState {
   dbVersion: string | null
 }
 
+/** Where one game's catalog download stands: the feed position it reached, of the newest. */
+export interface CatalogProgress {
+  game: GameId
+  cursor: number
+  latest: number
+}
+
+/** The catalog downloads still to finish, for the status line and the scanner. */
+export interface CatalogStatus {
+  /** The game downloading for the first time now, and how far it is (0–100; null before a page lands). */
+  downloading: { game: GameId; percent: number | null } | null
+  /** The account's games whose card data hasn't fully come down yet. */
+  missing: GameId[]
+}
+
 export interface PhoneSyncState {
   /** The shown account's entries not yet on the server (adds, edits and removals). */
   waiting: number
@@ -83,8 +98,19 @@ export interface PhoneStore {
   signOut(): Promise<{ waiting: number }>
   deleteAccount(): Promise<void>
   catalog(): Promise<CatalogState>
-  fillCatalog(onProgress: (p: { cursor: number; latest: number }) => void): Promise<void>
+  /**
+   * First run: downloads the card data of the game shown (holding the serial queue, as nothing else
+   * runs yet), then syncs the collection. The other games come down afterwards in updateCatalog.
+   */
+  fillCatalog(onProgress: (p: CatalogProgress) => void): Promise<void>
+  /**
+   * Downloads the games whose card data hasn't fully come down (at once), and every game's changes
+   * (once a day, or when forced), in the background: each page is its own step in the serial queue,
+   * so an add or a sync never waits for a whole download. One run at a time; a call during a run
+   * joins it. Resolves whether anything changed.
+   */
   updateCatalog(opts?: { force?: boolean }): Promise<boolean>
+  catalogStatus(): Promise<CatalogStatus>
   /**
    * Syncs the shown account; `changed` tells whether anything the user can see may have changed,
    * `awaitingPrices` whether printings asked for a moment ago still wait for a price (sync again soon).
@@ -136,8 +162,9 @@ export interface PhoneStore {
  * - `token`: the Bearer token; absent when signed out.
  * - `user`: the signed-in `Me` as JSON (kept after a sign-out, for the account's name).
  * - `format`: the phone data format (see PHONE_FORMAT).
- * - `catalog_loaded`: '1' once the catalog download has reached the end of the feed.
+ * - `catalog_loaded`: '1' once first run's download (the game shown) reached the end of its feed.
  * - `catalog_filled`: '1' once a sync has succeeded after that: first run is done.
+ * - `catalog_done:<game>`: '1' once that game's download reached the end of its feed.
  * - `catalog_latest`: the server's newest catalog seq at the last page.
  * - `catalog_needs_finish`: '1' while committed card changes wait for the search index rebuild.
  */
@@ -149,6 +176,7 @@ type StateKey =
   | 'catalog_filled'
   | 'catalog_latest'
   | 'catalog_needs_finish'
+  | `catalog_done:${GameId}`
 
 const DAY_MS = 24 * 60 * 60 * 1000
 /**
@@ -446,72 +474,110 @@ export function createPhoneStore(deps: {
         'catalog_needs_finish'
       ] as const)
         deleteState(k)
+      for (const g of GAME_IDS) deleteState(doneKey(g))
       setState('format', String(PHONE_FORMAT))
     })()
   }
 
+  /** Runs a step of a download: at once (first run, already in the queue) or queued (the background). */
+  type Step = <T>(fn: () => T | Promise<T>) => Promise<T>
+  const direct: Step = async (fn) => fn()
+
+  const doneKey = (game: GameId): `catalog_done:${GameId}` => `catalog_done:${game}`
+  const gameDone = (game: GameId): boolean => getState(doneKey(game)) !== null
+
+  // A phone from before the per-game marks, whose download had finished: every game it pulled
+  // reached the end of its feed then, so it isn't sent through a first download again.
+  if (getState('catalog_loaded') !== null && !GAME_IDS.some(gameDone))
+    db.transaction(() => {
+      for (const g of GAME_IDS)
+        if (getMeta(db, catalogCursorKey(g)) !== null) setState(doneKey(g), '1')
+    })()
+
   /**
-   * Downloads the change feed for the phone tables of each of the account's games from that
-   * game's cursor to its end (a game never pulled starts from 0). Each page commits with its
-   * cursor, so a failure resumes from the last page that landed. Progress follows the Yu-Gi-Oh!
-   * feed. Foreign keys are off meanwhile: a page may hold rows pointing at a row a later page brings
-   * (a card changed after its new printings is listed at its later seq). The serial queue keeps every other write out;
-   * reads may run between pages, and see each page's rows whole.
-   * Returns whether anything changed.
+   * Downloads the change feed for the phone tables of one game from its cursor to the end (a game
+   * never pulled starts from 0). The network waits happen outside `step`; each page lands in a step
+   * of its own and commits with its cursor, so a failure resumes from the last page that landed and
+   * whatever else is queued runs between pages. Foreign keys are off while a page lands: a page may
+   * hold rows pointing at a row a later page brings (a card changed after its new printings is
+   * listed at its later seq). Reads may run between pages, and see each page's rows whole. The
+   * search index is rebuilt once the game's feed ends. Returns whether anything changed.
    */
-  async function pullCatalog(
+  async function pullGame(
     c: CloudClient,
-    onProgress: (p: { cursor: number; latest: number }) => void
+    game: GameId,
+    step: Step,
+    onProgress: (p: CatalogProgress) => void
   ): Promise<boolean> {
     let changed = false
-    const pass = async (game: GameId): Promise<void> => {
-      const key = catalogCursorKey(game)
-      let cursor = Number(getMeta(db, key) ?? 0)
-      for (;;) {
-        const page = await c.catalogChanges(cursor, undefined, PHONE_TABLES, game)
-        if (page.more && page.cursor <= cursor)
-          throw new Error('The catalog feed stopped advancing')
-        db.transaction(() => {
-          const r = applyChanges(db, page.changes)
-          if (r.applied > 0) changed = true
-          if (r.cardsChanged) setState('catalog_needs_finish', '1')
-          setMeta(db, key, String(page.cursor))
-          if (game === 'ygo') setState('catalog_latest', String(page.latest))
-          if (page.dbVersion !== null) setMeta(db, 'db_version', page.dbVersion)
-        })()
-        cursor = page.cursor
-        if (game === 'ygo') onProgress({ cursor, latest: page.latest })
-        if (!page.more) break
-      }
+    const key = catalogCursorKey(game)
+    let cursor = Number(getMeta(db, key) ?? 0)
+    for (;;) {
+      const from = cursor
+      const page = await c.catalogChanges(from, undefined, PHONE_TABLES, game)
+      if (page.more && page.cursor <= from) throw new Error('The catalog feed stopped advancing')
+      const landed = await step(() => {
+        // A format reset moved the cursor meanwhile: this page belongs to the old download.
+        if (Number(getMeta(db, key) ?? 0) !== from) return false
+        db.exec('PRAGMA foreign_keys = OFF')
+        try {
+          db.transaction(() => {
+            const r = applyChanges(db, page.changes)
+            if (r.applied > 0) changed = true
+            if (r.cardsChanged) setState('catalog_needs_finish', '1')
+            setMeta(db, key, String(page.cursor))
+            if (game === 'ygo') setState('catalog_latest', String(page.latest))
+            if (page.dbVersion !== null) setMeta(db, 'db_version', page.dbVersion)
+            if (!page.more) setState(doneKey(game), '1')
+          })()
+        } finally {
+          db.exec('PRAGMA foreign_keys = ON')
+        }
+        return true
+      })
+      if (!landed) return changed
+      cursor = page.cursor
+      onProgress({ game, cursor, latest: page.latest })
+      if (!page.more) break
     }
-    db.exec('PRAGMA foreign_keys = OFF')
-    try {
-      // Yu-Gi-Oh! first, which every account has; then the account's other games.
-      await pass('ygo')
-      for (const game of await syncedGames(c)) {
-        if (game === 'pkm') {
+    await step(() => {
+      db.transaction(() => {
+        if (getState('catalog_needs_finish') !== null) {
+          finishApply(db, { applied: 1, cardsChanged: true, imagesChanged: false })
+          deleteState('catalog_needs_finish')
+        }
+        setMeta(db, 'last_sync_at', now().toISOString())
+      })()
+      // Entries pulled before the catalog had their printing can land now.
+      if (changed) applyPending(db)
+    })
+    return changed
+  }
+
+  /** pullGame for each of `games` in turn, Pokémon's backfills first. Returns whether anything changed. */
+  async function pullCatalog(
+    c: CloudClient,
+    games: readonly GameId[],
+    step: Step,
+    onProgress: (p: CatalogProgress) => void
+  ): Promise<boolean> {
+    let changed = false
+    for (const game of games) {
+      if (game === 'pkm')
+        await step(async () => {
           await backfillArtTwins(db, (since) =>
             c.catalogChanges(since, undefined, ['pokemon_cards'], game)
           )
           await backfillSetSeries(db, (since) => c.catalogChanges(since, undefined, ['sets'], game))
-        }
-        if (game !== 'ygo') await pass(game)
-      }
-    } finally {
-      db.exec('PRAGMA foreign_keys = ON')
+        })
+      if (await pullGame(c, game, step, onProgress)) changed = true
     }
-    db.transaction(() => {
-      if (getState('catalog_needs_finish') !== null) {
-        finishApply(db, { applied: 1, cardsChanged: true, imagesChanged: false })
-        deleteState('catalog_needs_finish')
-      }
-      setMeta(db, 'last_sync_at', now().toISOString())
-      setState('catalog_loaded', '1')
-    })()
-    // Entries pulled before the catalog had their printing can land now.
-    if (changed) applyPending(db)
     return changed
   }
+
+  /** The background download under way (see updateCatalog), and the first download it is making. */
+  let catalogRun: Promise<boolean> | null = null
+  let downloading: { game: GameId; base: number; cursor: number; latest: number } | null = null
 
   /**
    * One sync of the shown account; a success after the catalog download finishes first run.
@@ -724,28 +790,67 @@ export function createPhoneStore(deps: {
         online(async () => {
           const c = signedInClient()
           resetOldFormat()
-          await pullCatalog(c, onProgress)
+          // The game shown; the account's others come down in the background (updateCatalog).
+          await pullGame(c, activeGame(db, games()), direct, onProgress)
+          setState('catalog_loaded', '1')
           // The user's entries come down before the first scan, so an add raises a pulled entry.
           await syncNow(c)
         })
       ),
 
-    updateCatalog: ({ force = false } = {}) =>
-      serial(() =>
-        online(async () => {
-          if (token() === null || !formatCurrent() || getState('catalog_loaded') === null)
-            return false
-          const last = Date.parse(getMeta(db, 'last_sync_at') ?? '')
-          // A game with no cards here yet (its catalog wasn't up at the day's check) skips the
-          // daily limit, so new card data for a game reaches the phone on the next launch.
-          const empty = games().some(
-            (g) => db.prepare('SELECT 1 FROM cards WHERE game = ? LIMIT 1').get(g) === undefined
-          )
-          if (!force && !empty && !Number.isNaN(last) && now().getTime() - last < DAY_MS)
-            return false
-          return pullCatalog(signedInClient(), () => {})
+    updateCatalog: ({ force = false } = {}) => {
+      catalogRun ??= online(async () => {
+        if (token() === null || !formatCurrent() || getState('catalog_loaded') === null)
+          return false
+        const last = Date.parse(getMeta(db, 'last_sync_at') ?? '')
+        // A game not fully down yet goes on at once. So does a game with no cards here yet (its
+        // catalog wasn't up at the day's check), so new card data for a game reaches the phone on
+        // the next launch.
+        const pending = games().some(
+          (g) =>
+            !gameDone(g) ||
+            db.prepare('SELECT 1 FROM cards WHERE game = ? LIMIT 1').get(g) === undefined
+        )
+        if (!force && !pending && !Number.isNaN(last) && now().getTime() - last < DAY_MS)
+          return false
+        const c = signedInClient()
+        const shown = activeGame(db, games())
+        // The game shown first: it is the one the user is looking at.
+        const order = [...(await syncedGames(c))].sort(
+          (a, b) => Number(b === shown) - Number(a === shown)
+        )
+        return pullCatalog(c, order, serial, (p) => {
+          // Only a game's first download shows; a day's few changes don't.
+          downloading = gameDone(p.game)
+            ? null
+            : {
+                game: p.game,
+                base: downloading?.game === p.game ? downloading.base : p.cursor,
+                cursor: p.cursor,
+                latest: p.latest
+              }
         })
-      ),
+      }).finally(() => {
+        catalogRun = null
+        downloading = null
+      })
+      return catalogRun
+    },
+
+    catalogStatus: () =>
+      read(() => {
+        const d = downloading
+        const span = d ? d.latest - d.base : 0
+        return {
+          downloading: d
+            ? {
+                game: d.game,
+                percent: span > 0 ? Math.round(((d.cursor - d.base) / span) * 100) : null
+              }
+            : null,
+          missing: token() === null ? [] : games().filter((g) => !gameDone(g))
+        }
+      }),
 
     sync: () =>
       serial(async () => {

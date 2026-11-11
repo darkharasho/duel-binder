@@ -4,6 +4,7 @@ import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { SYNC_STATE_KEY, usePhone } from './context'
 import { SyncProblems } from './SyncProblems'
+import { downloadText, useCatalogStatus } from './useCatalogStatus'
 
 const POLL_MS = 5_000
 
@@ -24,7 +25,8 @@ function useOnline(): boolean {
 
 /**
  * One line when the collection isn't in step with the server: offline, adds waiting, or entries it
- * can't take (which opens their list). Nothing shows when all is synced.
+ * can't take (which opens their list), and while a game's card data is still coming down. Nothing
+ * shows when all is synced and downloaded.
  */
 export function StatusLine({ className }: { className?: string }): React.JSX.Element | null {
   const { store } = usePhone()
@@ -47,6 +49,7 @@ export function StatusLine({ className }: { className?: string }): React.JSX.Ele
     [qc]
   )
 
+  const download = downloadText(useCatalogStatus())
   const waiting = sync.data?.waiting ?? 0
   const problems = sync.data?.problems ?? 0
   const text = !online
@@ -56,33 +59,46 @@ export function StatusLine({ className }: { className?: string }): React.JSX.Ele
     : waiting > 0
       ? `${waiting} waiting to sync`
       : null
-  if (!sync.data || (!text && problems === 0)) return null
+  if (!download && (!sync.data || (!text && problems === 0))) return null
 
   return (
     <div className={cn('px-4 py-2 text-[13px] text-muted-foreground', className)}>
-      <div className="flex min-h-6 items-center gap-2">
-        {text && (
-          <>
-            <span
-              aria-hidden
-              className={cn(
-                'size-1.5 shrink-0 rounded-full',
-                online ? 'bg-sky-400' : 'bg-amber-400'
-              )}
-            />
-            <span role="status">{text}</span>
-          </>
-        )}
-        {problems > 0 && (
-          <button
-            type="button"
-            onClick={() => setProblemsOpen(true)}
-            className="-my-2 rounded-md px-1 py-2 font-medium text-amber-300 underline-offset-2 active:underline"
-          >
-            {problems} can&apos;t sync
-          </button>
-        )}
-      </div>
+      {download && (
+        <div className="flex min-h-6 items-center gap-2">
+          <span
+            aria-hidden
+            className="size-1.5 shrink-0 animate-pulse rounded-full bg-violet-400"
+          />
+          <span role="status" className="tabular-nums">
+            {download}
+          </span>
+        </div>
+      )}
+      {(text || problems > 0) && (
+        <div className="flex min-h-6 items-center gap-2">
+          {text && (
+            <>
+              <span
+                aria-hidden
+                className={cn(
+                  'size-1.5 shrink-0 rounded-full',
+                  online ? 'bg-sky-400' : 'bg-amber-400'
+                )}
+              />
+              <span role="status">{text}</span>
+            </>
+          )}
+          {problems > 0 && (
+            <button
+              type="button"
+              onClick={() => setProblemsOpen(true)}
+              className="-my-2 rounded-md px-1 py-2 font-medium text-amber-300 underline-offset-2 active:underline"
+            >
+              {problems} can&apos;t sync
+            </button>
+          )}
+        </div>
+      )}
       <SyncProblems open={problemsOpen} onOpenChange={setProblemsOpen} />
     </div>
   )

@@ -105,6 +105,7 @@ export function fakeStore(
       state.catalog = { ...state.catalog, filled: true }
     }),
     updateCatalog: vi.fn(async () => false),
+    catalogStatus: vi.fn(async () => ({ downloading: null, missing: [] })),
     sync: vi.fn(async () => ({ ...state.sync, changed: false, awaitingPrices: false })),
     syncState: vi.fn(async () => state.sync),
     syncProblems: vi.fn(async () => []),

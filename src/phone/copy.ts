@@ -17,6 +17,9 @@ export const FIRST_RUN_TITLE = 'Downloading card data'
 export const FIRST_RUN_SIZE = 'About 20 MB. Use Wi-Fi if you can.'
 export const FIRST_RUN_CELLULAR = "You're on mobile data. This download is about 20 MB."
 export const FIRST_RUN_STOPPED = 'Download stopped. It will pick up where it left off.'
+/** On the scanner while the game shown's card data is still coming down in the background. */
+export const scanStillDownloading = (game: string): string =>
+  `${game} cards are still downloading. Scanning works once they're in.`
 
 export const PRIVACY_URL = 'https://duelbinder.com/privacy'
 

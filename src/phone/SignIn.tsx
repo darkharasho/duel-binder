@@ -12,7 +12,7 @@ import { PhoneScreen } from './PhoneScreen'
 import { useMounted, useOnce } from './useOnce'
 
 const BUTTON =
-  'flex h-12 w-full max-w-xs items-center justify-center gap-2 rounded-xl text-base font-semibold transition-opacity active:opacity-80'
+  'flex h-[52px] w-full items-center justify-center gap-2 rounded-[14px] text-base font-semibold transition-opacity active:opacity-80'
 const DISCORD_BUTTON = `${BUTTON} bg-[#5865F2] text-white`
 /** Apple's white style, for dark backgrounds. */
 const APPLE_BUTTON = `${BUTTON} bg-white text-black`
@@ -137,12 +137,11 @@ export function SignIn({
 
   return (
     <PhoneScreen>
-      <div className="space-y-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Duel Binder</h1>
-        <p className="max-w-xs text-base text-muted-foreground">
-          {native ? NATIVE_SIGN_IN_COPY : SIGN_IN_COPY}
-        </p>
-      </div>
+      {/* The name is set big above, as the brand; this names the page for screen readers. */}
+      <h1 className="sr-only">Duel Binder</h1>
+      <p className="max-w-xs text-[15px] text-muted-foreground">
+        {native ? NATIVE_SIGN_IN_COPY : SIGN_IN_COPY}
+      </p>
       {failed && (
         <p role="alert" className="text-sm text-destructive">
           {SIGN_IN_FAILED}

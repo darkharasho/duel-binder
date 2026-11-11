@@ -137,7 +137,8 @@ export function BulkMode({ cards, setName, pending, adjust }: BulkModeProps): Re
         setCode: rarity.codes.find((c) => c.printingId === printingId)?.setCode ?? '',
         imageId: card.imageId,
         category: card.type,
-        types: card.pokemonTypes
+        types: card.pokemonTypes,
+        stage: card.pokemonStage
       }
       setStrip((list) => [...list, item])
       const save = adjustRef.current(card.cardId, printingId, 1)

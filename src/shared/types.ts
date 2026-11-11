@@ -526,6 +526,7 @@ export interface ChecklistCard {
   cardRarity?: string | null // Pokémon only: the card's own rarity (null when unknown), apart from its finishes
   hp?: number | null // Pokémon only
   pokemonTypes?: string[] // Pokémon only: the card's Energy types
+  pokemonStage?: string | null // Pokémon only: "Basic", "Stage1"…
 }
 
 export interface SetChecklist {
@@ -639,6 +640,7 @@ export interface BinderSummary {
     setCode: string
     category: string | null
     types: string[]
+    stage?: string | null
   } | null
 }
 

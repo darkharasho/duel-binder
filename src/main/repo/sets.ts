@@ -158,10 +158,13 @@ function coverImages(
   scope: Scope,
   only?: { language: Language; setName: string }
 ): Map<string, number> {
-  const sql = coversSql(scope, gameTerm(db)).replace('%WHERE%', only ? 'AND p.language = ? AND p.set_name = ?' : '')
-  const rows = (only
-    ? db.prepare(sql).all(only.language, only.setName)
-    : db.prepare(sql).all()) as { language: string; set_name: string; image_id: number | null }[]
+  const sql = coversSql(scope, gameTerm(db)).replace(
+    '%WHERE%',
+    only ? 'AND p.language = ? AND p.set_name = ?' : ''
+  )
+  const rows = (
+    only ? db.prepare(sql).all(only.language, only.setName) : db.prepare(sql).all()
+  ) as { language: string; set_name: string; image_id: number | null }[]
   const out = new Map<string, number>()
   for (const r of rows) if (r.image_id !== null) out.set(`${r.language}|${r.set_name}`, r.image_id)
   return out
@@ -213,7 +216,13 @@ export function findPokemonSetArtUrl(db: SqlDb, key: string): string | null {
 
 export function listSets(db: SqlDb, scope: Scope = LOCAL): SetSummary[] {
   const covers = coverImages(db, scope)
-  return (db.prepare(`${summary(scope)} WHERE +p.game = ${scope.game} AND p.contributed = 0 AND ${shownPrinting(scope)} GROUP BY p.language, p.set_name ORDER BY p.set_name, p.language <> 'en', p.language`).all() as SummaryDbRow[]).map((r) => toSummary(r, covers))
+  return (
+    db
+      .prepare(
+        `${summary(scope)} WHERE +p.game = ${scope.game} AND p.contributed = 0 AND ${shownPrinting(scope)} GROUP BY p.language, p.set_name ORDER BY p.set_name, p.language <> 'en', p.language`
+      )
+      .all() as SummaryDbRow[]
+  ).map((r) => toSummary(r, covers))
 }
 
 /** Bump when `catalogSets` or `toSummary` change what they produce: stored rollups aren't rebuilt otherwise. */
@@ -247,9 +256,16 @@ export function catalogSets(db: SqlDb, scope: Scope): SetSummary[] {
 }
 
 /** A set's summary with the scope's ownership; null when it lists no printing. */
-function setSummary(db: SqlDb, setName: string, language: Language, scope: Scope): SetSummary | null {
+function setSummary(
+  db: SqlDb,
+  setName: string,
+  language: Language,
+  scope: Scope
+): SetSummary | null {
   const row = db
-    .prepare(`${summary(scope)} WHERE +p.game = ${scope.game} AND p.contributed = 0 AND ${shownPrinting(scope)} AND p.language = ? AND p.set_name = ? GROUP BY p.language, p.set_name`)
+    .prepare(
+      `${summary(scope)} WHERE +p.game = ${scope.game} AND p.contributed = 0 AND ${shownPrinting(scope)} AND p.language = ? AND p.set_name = ? GROUP BY p.language, p.set_name`
+    )
     .get(language, setName) as SummaryDbRow | undefined
   return row ? toSummary(row, coverImages(db, scope, { language, setName })) : null
 }
@@ -266,7 +282,8 @@ export function listSetsFast(
   known?: SetSummary[]
 ): SetSummary[] {
   const game = scopeGame(db, scope)
-  const catalog = known ?? catalogRollup(db, setsRollupKey(game), game, () => catalogSets(db, scope))
+  const catalog =
+    known ?? catalogRollup(db, setsRollupKey(game), game, () => catalogSets(db, scope))
   const owned = db
     .prepare(
       `SELECT p.language, p.set_name, COUNT(DISTINCT p.card_id) AS cards,
@@ -276,7 +293,13 @@ export function listSetsFast(
        WHERE ${scope.where('e')} AND p.contributed = 0
        GROUP BY p.language, p.set_name`
     )
-    .all() as { language: Language; set_name: string; cards: number; rarities: number; flagged: 0 | 1 }[]
+    .all() as {
+    language: Language
+    set_name: string
+    cards: number
+    rarities: number
+    flagged: 0 | 1
+  }[]
   const byKey = new Map(owned.map((o) => [`${o.language}|${o.set_name}`, o]))
   const sets = catalog.map((s) => {
     const o = byKey.get(`${s.language}|${s.setName}`)
@@ -315,6 +338,7 @@ interface PrintingDbRow {
   card_rarity: string | null
   hp: number | null
   card_types: string | null
+  card_stage: string | null
 }
 
 interface EntryDbRow {
@@ -361,7 +385,9 @@ const sum = (entries: EntryDbRow[]): number => entries.reduce((n, e) => n + e.qu
 function cardImage(db: SqlDb, imageId: number | null, cardId: number, scope: Scope): number | null {
   if (imageId === null) return null
   const row = db
-    .prepare(`SELECT image_id FROM card_images WHERE image_id = ? AND card_id = ? AND +game = ${scope.game}`)
+    .prepare(
+      `SELECT image_id FROM card_images WHERE image_id = ? AND card_id = ? AND +game = ${scope.game}`
+    )
     .get(imageId, cardId) as { image_id: number } | undefined
   return row?.image_id ?? null
 }
@@ -385,7 +411,7 @@ function checklistCards(
               c.atk, c.def, COALESCE(c.level, c.linkval) AS level,
               (SELECT i.image_id FROM card_images i WHERE i.card_id = c.id AND +i.game = ${scope.game}
                ORDER BY i.sort_order, i.image_id LIMIT 1) AS image_id,
-              pc.rarity AS card_rarity, pc.hp, pc.types AS card_types
+              pc.rarity AS card_rarity, pc.hp, pc.types AS card_types, pc.stage AS card_stage
        FROM card_printings p JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
        LEFT JOIN intl_prices ip ON ip.printing_id = p.id AND ${scope.ebayPrices}
        LEFT JOIN pokemon_cards pc ON pc.card_id = p.card_id AND ${scope.game} = 'pkm'
@@ -451,7 +477,9 @@ function checklistCards(
     // One Piece: the art of the card's first version in the set, by label (the base L before
     // L (Alternate Art)), when the card has that image; else its base image. The rows here are
     // never contributed.
-    const first = [...rows].sort((a, b) => cmp(a.set_rarity, b.set_rarity) || cmp(a.set_code, b.set_code))[0]
+    const first = [...rows].sort(
+      (a, b) => cmp(a.set_rarity, b.set_rarity) || cmp(a.set_code, b.set_code)
+    )[0]
     const art = cardImage(db, printingArtImageId({ ...first, contributed: 0 }), id, scope)
     cards.push({
       cardId: id,
@@ -472,7 +500,8 @@ function checklistCards(
         ? {
             cardRarity: rows[0].card_rarity,
             hp: rows[0].hp,
-            pokemonTypes: parseTypes(rows[0].card_types)
+            pokemonTypes: parseTypes(rows[0].card_types),
+            pokemonStage: rows[0].card_stage
           }
         : {})
     })
@@ -520,7 +549,13 @@ export function adjustPrinting(
          WHERE id = ? AND +game = ${scope.game}`
       )
       .get(printingId) as
-      | { card_id: number; set_name: string; language: Language; set_rarity_code: string; contributed: number }
+      | {
+          card_id: number
+          set_name: string
+          language: Language
+          set_rarity_code: string
+          contributed: number
+        }
       | undefined
     if (!p || p.set_name !== setName || p.language !== language)
       throw new CollectionError(`Printing ${printingId} is not in ${setName} (${language})`)

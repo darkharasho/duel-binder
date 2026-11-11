@@ -379,12 +379,19 @@ function coverReverse(
   if (printingId === null || scopeGame(db, scope) !== 'pkm') return null
   const row = db
     .prepare(
-      `SELECT ${RARITY_LABEL} AS finish, p.set_code, pc.category, pc.types
+      `SELECT ${RARITY_LABEL} AS finish, p.set_code, pc.category, pc.types, pc.stage
        FROM card_printings p LEFT JOIN pokemon_cards pc ON pc.card_id = p.card_id
        WHERE p.id = ? AND +p.game = ${scope.game}`
     )
     .get(printingId) as
-    { finish: string; set_code: string; category: string | null; types: string | null } | undefined
+    | {
+        finish: string
+        set_code: string
+        category: string | null
+        types: string | null
+        stage: string | null
+      }
+    | undefined
   if (!row || !isReverseFinish(row.finish)) return null
   let types: string[] = []
   try {
@@ -393,7 +400,13 @@ function coverReverse(
   } catch {
     // A malformed types column draws the plain pattern.
   }
-  return { finish: row.finish, setCode: row.set_code, category: row.category, types }
+  return {
+    finish: row.finish,
+    setCode: row.set_code,
+    category: row.category,
+    types,
+    stage: row.stage
+  }
 }
 
 function summarize(

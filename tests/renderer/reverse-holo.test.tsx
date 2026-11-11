@@ -1,6 +1,12 @@
 import { render, screen } from '@testing-library/react'
 import { ReverseLayer } from '@/components/ReverseLayer'
-import { coverFit, isReverseFinish, printingReverseLook, reverseLook } from '@shared/reverseHolo'
+import {
+  coverFit,
+  isReverseFinish,
+  layoutFor,
+  printingReverseLook,
+  reverseLook
+} from '@shared/reverseHolo'
 import { eraPattern } from '@shared/reversePatterns'
 
 const TYPES = [
@@ -18,12 +24,12 @@ const TYPES = [
 ]
 
 const svgOf = (url: string): string => decodeURIComponent(url.replace(/^data:image\/svg\+xml,/, ''))
-const holes = (region: string): number =>
-  (
-    decodeURIComponent(region)
-      .match(/d='([^']+)'/)?.[1]
-      .match(/M/g) ?? []
-  ).length - 1
+// The region's cut-outs: one path each in its mask.
+const paths = (region: string): string[] =>
+  [...(svgOf(region).match(/<g fill='#000'>(.*)<\/g>/)?.[1] ?? '').matchAll(/d='([^']+)'/g)].map(
+    (m) => m[1]
+  )
+const cuts = (region: string): number => paths(region).length
 
 describe('isReverseFinish', () => {
   it('takes every reverse finish and nothing else', () => {
@@ -95,32 +101,72 @@ describe('reverseLook', () => {
 
   it("leaves Sword & Shield's and Sun & Moon's stat bars plain, but not Scarlet & Violet's row", () => {
     const pokemon = { category: 'Pokemon', types: ['Grass'] }
-    // The art and the Pokédex strip are cut on every modern Pokémon; the bars only on these two.
-    expect(holes(reverseLook('Reverse Holofoil', 'SSH 011/202', pokemon)!.region)).toBe(3)
-    expect(holes(reverseLook('Reverse Holofoil', 'SUM 010/149', pokemon)!.region)).toBe(3)
-    expect(holes(reverseLook('Reverse Holofoil', 'SVI 001/198', pokemon)!.region)).toBe(2)
+    // The art and the Pokédex strip are cut on every modern Pokémon (one plate on Sun & Moon's);
+    // the bars only on these two.
+    expect(cuts(reverseLook('Reverse Holofoil', 'SSH 011/202', pokemon)!.region)).toBe(3)
+    expect(cuts(reverseLook('Reverse Holofoil', 'SUM 010/149', pokemon)!.region)).toBe(2)
+    expect(cuts(reverseLook('Reverse Holofoil', 'SVI 001/198', pokemon)!.region)).toBe(2)
     expect(
-      holes(reverseLook('Reverse Holofoil', 'SSH 178/202', { category: 'Trainer' })!.region)
+      cuts(reverseLook('Reverse Holofoil', 'SSH 178/202', { category: 'Trainer' })!.region)
     ).toBe(1)
   })
 
   it("fits Mega Evolution's frame: the body nearer the edge, the Pokédex bar's ends drawn", () => {
     const svg = (code: string, category = 'Pokemon'): string =>
       svgOf(reverseLook('Reverse Holofoil', code, { category })!.region)
-    // The body runs 3.65% from the sides and 2.65% from the top (733 × 1024): x 26.8 + the corner.
-    expect(svg('DLR 002/103')).toContain("d='M40.8 27.1H")
-    expect(svg('MEG 019/132')).toContain("d='M40.8 27.1H")
-    expect(svg('DLR 090/103', 'Trainer')).toContain("d='M40.8 27.1H")
-    // Scarlet & Violet keep theirs.
-    expect(svg('SVI 001/198')).toContain("d='M43.3 28.7H")
+    const body = (code: string, category?: string): string =>
+      svg(code, category).match(/mask='url\(#c\)' d='M([\d.]+ [\d.]+)/)![1]
+    // Mega Evolution's body: the same on every set, Pokémon and Trainer.
+    expect(body('DLR 002/103')).toBe(body('MEG 019/132'))
+    expect(body('DLR 090/103', 'Trainer')).toBe(body('DLR 002/103'))
     // The bar's rounded left end and tapering right tail are traced, not boxed.
-    const strip = svg('DLR 002/103')
-      .match(/d='[^']+'/)![0]
-      .split('M')[3]
+    const strip = paths(
+      reverseLook('Reverse Holofoil', 'DLR 002/103', { category: 'Pokemon' })!.region
+    )[1]
     expect(strip.match(/L/g)!.length).toBeGreaterThan(6)
+  })
+
+  it('cuts the evolution badge out on Stage 1, Stage 2 and Restored Pokémon only', () => {
+    const look = (code: string, stage: string | null, category = 'Pokemon'): number =>
+      cuts(reverseLook('Reverse Holofoil', code, { category, stage })!.region)
+    for (const code of ['GRI 002/145', 'EVO 004/108', 'DLR 002/103', 'NVI 002/101', 'PL 040/127']) {
+      expect(look(code, 'Stage 1')).toBe(look(code, 'Basic') + 1)
+      expect(look(code, 'Stage 2')).toBe(look(code, 'Basic') + 1)
+      expect(look(code, 'Restored')).toBe(look(code, 'Basic') + 1)
+      expect(look(code, null)).toBe(look(code, 'Basic'))
+    }
+    expect(look('GRI 120/145', 'Stage 1', 'Trainer')).toBe(look('GRI 120/145', null, 'Trainer'))
     expect(
-      holes(reverseLook('Reverse Holofoil', 'DLR 002/103', { category: 'Pokemon' })!.region)
-    ).toBe(2)
+      printingReverseLook(
+        { setRarity: 'Reverse Holofoil', setCode: 'GRI 002/145' },
+        { pokemon: { category: 'Pokemon', types: [], stage: 'Stage 1' } }
+      )
+    ).toEqual(
+      reverseLook('Reverse Holofoil', 'GRI 002/145', {
+        category: 'Pokemon',
+        types: [],
+        stage: 'Stage 1'
+      })
+    )
+  })
+
+  it('fits each era its own frame, and the Sun & Moon sets whose art is cropped differently', () => {
+    expect(layoutFor('BS 004/102', 'Pokemon')).toBe('wotc')
+    expect(layoutFor('RS 001/109', 'Pokemon')).toBe('ex')
+    expect(layoutFor('PL 040/127', 'Trainer')).toBe('dp-trainer')
+    expect(layoutFor('HS 001/123', 'Pokemon')).toBe('hgss')
+    expect(layoutFor('NVI 002/101', 'Pokemon')).toBe('bw')
+    expect(layoutFor('GEN 001/083', 'Pokemon')).toBe('xy')
+    expect(layoutFor('EVO 004/108', 'Pokemon')).toBe('evo')
+    expect(layoutFor('GRI 002/145', 'Pokemon')).toBe('sm')
+    expect(layoutFor('UNB 002/214', 'Pokemon')).toBe('sm-late')
+    expect(layoutFor('LOT 002/214', 'Trainer')).toBe('sm-lot-trainer')
+    expect(layoutFor('TEU 002/181', 'Pokemon')).toBe('sm-teu')
+    expect(layoutFor('SSH 011/202', 'Pokemon')).toBe('swsh')
+    expect(layoutFor('SVI 001/198', 'Pokemon')).toBe('sv')
+    expect(layoutFor('DLR 002/103', 'Pokemon')).toBe('me')
+    expect(layoutFor('SHF:SV 001', 'Pokemon')).toBe('swsh')
+    expect(layoutFor('ZZZ 001', 'Pokemon')).toBe('sv')
   })
 })
 

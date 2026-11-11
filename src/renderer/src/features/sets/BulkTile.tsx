@@ -87,7 +87,8 @@ export const BulkTile = memo(function BulkTile({
               className="w-full"
               reverse={reverseLook(rarity.rarity, selected?.setCode ?? '', {
                 category: card.type,
-                types: card.pokemonTypes
+                types: card.pokemonTypes,
+                stage: card.pokemonStage
               })}
             />
           </button>

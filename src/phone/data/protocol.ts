@@ -1,5 +1,5 @@
 import { CloudAuthError, CloudOfflineError } from '../../main/cloud/client'
-import type { PhoneStore } from './store'
+import type { CatalogProgress, PhoneStore } from './store'
 
 /** The part of a MessagePort (or a worker's global scope, or a Worker) the protocol uses. */
 export interface MessagePortLike {
@@ -19,6 +19,7 @@ export const STORE_METHODS = [
   'catalog',
   'fillCatalog',
   'updateCatalog',
+  'catalogStatus',
   'sync',
   'syncState',
   'syncProblems',
@@ -56,7 +57,7 @@ export type StoreReply =
   | { id: number; ok: true; value: unknown }
   | { id: number; ok: false; error: { name: string; message: string } }
   /** A fillCatalog progress callback. */
-  | { id: number; progress: { cursor: number; latest: number } }
+  | { id: number; progress: CatalogProgress }
 
 /** Posted by the worker when the database can't be opened; every call fails with it. */
 export interface StoreFatal {
@@ -106,7 +107,7 @@ function revive({ name, message }: { name: string; message: string }): Error {
 interface Pending {
   resolve(value: unknown): void
   reject(err: Error): void
-  onProgress?: (p: { cursor: number; latest: number }) => void
+  onProgress?: (p: CatalogProgress) => void
 }
 
 /** A PhoneStore whose calls go over port to an exposeStore on the other end (the page side). */

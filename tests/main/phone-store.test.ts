@@ -98,10 +98,11 @@ afterEach(() => {
   portal.serverDb.close()
 })
 
-/** Signed in and filled: the state after first run. */
+/** Signed in and filled, and the background download of the account's other games done. */
 async function ready(): Promise<void> {
   await store.signIn(token, me)
   await store.fillCatalog(() => {})
+  await store.updateCatalog()
 }
 
 /** Dark Magician's first printing and artwork, on the phone. */
@@ -875,6 +876,9 @@ describe('phone store', () => {
     net = real
     requests = []
     await store.fillCatalog(() => {})
+    // First run brings the game shown; Pokémon follows in the background.
+    expect(pkmSinces()).toEqual([])
+    await store.updateCatalog()
     expect(pkmSinces()[0]).toBe(0)
     expect(pkm('pokemon_cards')).toBe(2)
     expect(Number(getMeta(db, 'catalog_cursor:pkm'))).toBe(pkmCursor)
@@ -1132,6 +1136,117 @@ function phoneUids(...ids: number[]): string[] {
       (db.prepare('SELECT uid FROM collection_entries WHERE id = ?').get(id) as { uid: string }).uid
   )
 }
+
+describe('phone store: background card data', () => {
+  /** The owner, who sees Pokémon too, with a Pokémon catalog on the portal. */
+  async function owner(): Promise<void> {
+    portal.serverDb.close()
+    portal = await inProcessPortal({ ADMIN_DISCORD_ID: 'discord-1-alice' })
+    userId = portal.addUser('alice')
+    token = await portal.desktopToken(userId)
+    me = { ...me, id: userId }
+    seedPokemon(portal.serverDb)
+  }
+  const pkmRequests = (): string[] =>
+    catalogRequests().filter((u) => new URL(u).searchParams.get('game') === 'pkm')
+  const pkmCards = (): number =>
+    Number(
+      (db.prepare("SELECT COUNT(*) AS n FROM cards WHERE game = 'pkm'").get() as { n: number }).n
+    )
+
+  it('first run brings the game shown; the other games come down after, in the background', async () => {
+    await owner()
+    await store.signIn(token, me)
+    await store.fillCatalog(() => {})
+    expect((await store.catalog()).filled).toBe(true)
+    expect(pkmRequests()).toEqual([])
+    expect(pkmCards()).toBe(0)
+    expect((await store.catalogStatus()).missing).toContain('pkm')
+    expect((await store.catalogStatus()).missing).not.toContain('ygo')
+
+    expect(await store.updateCatalog()).toBe(true)
+    expect(pkmCards()).toBe(2)
+    expect(await store.catalogStatus()).toMatchObject({ downloading: null })
+    expect((await store.catalogStatus()).missing).not.toContain('pkm')
+    expect(db.prepare('PRAGMA foreign_keys').get()).toEqual({ foreign_keys: 1 })
+  })
+
+  it('an add made while a game downloads lands at once, between its pages', async () => {
+    await owner()
+    await store.signIn(token, me)
+    await store.fillCatalog(() => {})
+    let release!: () => void
+    const gate = new Promise<void>((r) => (release = r))
+    let stalled = false
+    net = (async (input, init) => {
+      const url = String(input)
+      if (url.includes('/api/catalog/changes') && url.includes('game=pkm') && since(url) > 0) {
+        stalled = true
+        await gate
+      }
+      return real(input, init)
+    }) as typeof fetch
+    const update = store.updateCatalog()
+    await vi.waitFor(() => expect(stalled).toBe(true))
+
+    // The first Pokémon page is in: the status line shows the download.
+    expect((await store.catalogStatus()).downloading).toMatchObject({ game: 'pkm' })
+    const added = await Promise.race([
+      add(dmPick()).then(() => 'added'),
+      new Promise((r) => setTimeout(() => r('waiting'), 500))
+    ])
+    expect(added).toBe('added')
+
+    release()
+    expect(await update).toBe(true)
+    expect(pkmCards()).toBe(2)
+  })
+
+  it('a background download cut off resumes from its last page', async () => {
+    await owner()
+    await store.signIn(token, me)
+    await store.fillCatalog(() => {})
+    let pkmPages = 0
+    net = (async (input, init) => {
+      const url = String(input)
+      if (url.includes('/api/catalog/changes') && url.includes('game=pkm') && ++pkmPages === 2)
+        throw new TypeError('Failed to fetch')
+      return real(input, init)
+    }) as typeof fetch
+    await expect(store.updateCatalog()).rejects.toBeInstanceOf(CloudOfflineError)
+    const cursor = Number(getMeta(db, 'catalog_cursor:pkm'))
+    expect(cursor).toBeGreaterThan(0)
+    expect((await store.catalogStatus()).missing).toContain('pkm')
+
+    net = real
+    requests = []
+    expect(await store.updateCatalog()).toBe(true)
+    expect(since(pkmRequests()[0])).toBe(cursor)
+    expect(pkmCards()).toBe(2)
+    expect((await store.catalogStatus()).missing).not.toContain('pkm')
+  })
+
+  it('a call while a download runs joins it', async () => {
+    await owner()
+    await store.signIn(token, me)
+    await store.fillCatalog(() => {})
+    requests = []
+    const [a, b] = await Promise.all([store.updateCatalog(), store.updateCatalog({ force: true })])
+    expect(a).toBe(true)
+    expect(b).toBe(true)
+    expect(pkmRequests().filter((u) => since(u) === 0)).toHaveLength(1)
+  })
+
+  it('a phone from before the per-game marks counts the games it pulled as done', async () => {
+    await owner()
+    await ready()
+    db.prepare("DELETE FROM phone_state WHERE key LIKE 'catalog_done:%'").run()
+    store = createPhoneStore({ db, portal: PORTAL, fetch: real, now: () => clock })
+    const missing = (await store.catalogStatus()).missing
+    expect(missing).not.toContain('ygo')
+    expect(missing).not.toContain('pkm')
+  })
+})
 
 describe('phone store: active game', () => {
   const activeGameMeta = (): string | null => getMeta(db, 'active_game')

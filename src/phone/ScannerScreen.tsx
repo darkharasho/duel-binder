@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { englishSetName } from '@shared/setNames'
-import { printingNoun } from '@shared/games'
+import { GAMES, printingNoun } from '@shared/games'
 import {
   ArrowRightIcon,
   CopyIcon,
@@ -31,7 +31,9 @@ import { useGame } from '@/lib/game'
 import { formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { FoundBurst } from '@/features/scan/FoundBurst'
+import { scanStillDownloading } from './copy'
 import { PhoneCamera } from './PhoneCamera'
+import { useGameDownloading } from './useCatalogStatus'
 import { PickerSheet } from './PickerSheet'
 import { PrintingSheet } from './PrintingSheet'
 import { ReviewSheet } from './ReviewSheet'
@@ -251,6 +253,7 @@ export function ScannerScreen({
   const [pingOn, setPingOn] = useScanPingSetting()
   const [codeOn, setCodeOn] = useCodeModeSetting()
   const codeMode = codeOn && codeModeGame(game)
+  const downloading = useGameDownloading(game)
 
   const last = session.rows.reduce<ScanRow | null>(
     (a, r) => (a === null || r.addedAt > a.addedAt ? r : a),
@@ -334,6 +337,14 @@ export function ScannerScreen({
         >
           <SettingsIcon aria-hidden className="size-5" />
         </button>
+        {downloading && (
+          <p
+            role="status"
+            className="absolute inset-x-3 top-14 rounded-xl bg-black/60 px-3 py-2 text-center text-sm text-white backdrop-blur-md"
+          >
+            {scanStillDownloading(GAMES[game].name)}
+          </p>
+        )}
         {burst > 0 && last && <FoundBurst key={burst} name={last.name} price={priceOf(last)} />}
       </PhoneCamera>
       <div className="shrink-0 px-3.5 pt-3">

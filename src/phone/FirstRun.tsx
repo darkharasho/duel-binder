@@ -2,8 +2,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { CloudAuthError } from '../main/cloud/client'
 import { FIRST_RUN_CELLULAR, FIRST_RUN_SIZE, FIRST_RUN_STOPPED, FIRST_RUN_TITLE } from './copy'
-import type { PhoneStore } from './data/store'
-import { refreshAllFingerprints } from './refreshFingerprints'
+import type { CatalogProgress, PhoneStore } from './data/store'
 import { PhoneScreen } from './PhoneScreen'
 import { useMounted, useOnce } from './useOnce'
 
@@ -30,23 +29,18 @@ export function FirstRun({
 }): React.JSX.Element {
   const [cellular] = useState(onCellular)
   const [phase, setPhase] = useState<Phase>(cellular ? 'ask' : 'downloading')
-  const [progress, setProgress] = useState<{ cursor: number; latest: number | null }>({
-    cursor: 0,
-    latest: null
-  })
+  /** The first page's position (the feed's seqs are shared by every game), and the last one's. */
+  const [progress, setProgress] = useState<{ base: number; at: CatalogProgress } | null>(null)
 
   const live = useMounted()
 
   const download = async (): Promise<void> => {
     setPhase('downloading')
     try {
-      const c = await store.catalog()
-      if (live.current) setProgress({ cursor: c.cursor, latest: c.latest })
+      // The game shown only: the others, and the scan data, come down in the app's background.
       await store.fillCatalog((p) => {
-        if (live.current) setProgress(p)
+        if (live.current) setProgress((old) => ({ base: old?.base ?? p.cursor, at: p }))
       })
-      // Artwork matching needs them; scanning by set code and name works without.
-      await refreshAllFingerprints(store)
       if (live.current) onDone()
     } catch (e) {
       if (!live.current) return
@@ -59,47 +53,48 @@ export function FirstRun({
     if (!cellular) void download()
   })
 
+  const span = progress ? progress.at.latest - progress.base : 0
   const percent =
-    progress.latest && progress.latest > 0
-      ? Math.min(100, Math.round((progress.cursor / progress.latest) * 100))
+    progress && span > 0
+      ? Math.min(100, Math.round(((progress.at.cursor - progress.base) / span) * 100))
       : null
 
   return (
     <PhoneScreen>
-      <div className="w-full max-w-xs space-y-2">
-        <h1 className="text-2xl font-semibold tracking-tight">{FIRST_RUN_TITLE}</h1>
-        <p className="text-base text-muted-foreground">
+      <div className="w-full space-y-1.5">
+        <h1 className="text-lg font-semibold tracking-tight">{FIRST_RUN_TITLE}</h1>
+        <p className="text-sm text-muted-foreground">
           {cellular ? FIRST_RUN_CELLULAR : FIRST_RUN_SIZE}
         </p>
       </div>
       {phase === 'ask' ? (
         <Button
           size="lg"
-          className="h-12 w-full max-w-xs text-base"
+          className="h-[52px] w-full rounded-[14px] text-base"
           onClick={() => void download()}
         >
           Download
         </Button>
       ) : (
-        <div className="w-full max-w-xs space-y-3">
+        <div className="w-full space-y-3">
           <div
             role="progressbar"
             aria-label={FIRST_RUN_TITLE}
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={percent ?? undefined}
-            className="h-2 overflow-hidden rounded-full bg-white/10"
+            className="h-1.5 overflow-hidden rounded-full bg-white/[0.08]"
           >
             <div
               className={
                 percent === null
-                  ? 'h-full w-1/3 animate-pulse rounded-full bg-primary'
-                  : 'h-full rounded-full bg-primary transition-[width] duration-300'
+                  ? 'h-full w-1/3 animate-pulse rounded-full bg-gradient-to-r from-[#f0523a] to-amber-500'
+                  : 'h-full rounded-full bg-gradient-to-r from-[#f0523a] to-amber-500 transition-[width] duration-300'
               }
               style={percent === null ? undefined : { width: `${percent}%` }}
             />
           </div>
-          <p className="text-sm text-muted-foreground tabular-nums">
+          <p className="text-right text-sm text-muted-foreground tabular-nums">
             {percent === null ? 'Starting…' : `${percent}%`}
           </p>
           {phase === 'stopped' && (
@@ -107,7 +102,11 @@ export function FirstRun({
               <p role="alert" className="text-sm">
                 {FIRST_RUN_STOPPED}
               </p>
-              <Button size="lg" className="h-12 w-full text-base" onClick={() => void download()}>
+              <Button
+                size="lg"
+                className="h-[52px] w-full rounded-[14px] text-base"
+                onClick={() => void download()}
+              >
                 Retry
               </Button>
             </div>

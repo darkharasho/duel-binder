@@ -41,6 +41,7 @@ import { refreshAllFingerprints } from './refreshFingerprints'
 import { ScannerScreen } from './ScannerScreen'
 import { Settings } from './Settings'
 import { StatusLine } from './StatusLine'
+import { useReloadAsGamesLand } from './useCatalogStatus'
 import { ContributeScreen } from './training/ContributeScreen'
 import { trainingOutbox } from './training/outbox'
 import { UpdateBanner } from './UpdateBanner'
@@ -80,8 +81,9 @@ function drainTraining(store: PhoneStore, userId: number): void {
 }
 
 /**
- * Once the app is ready: a sync, a daily card data check, the fingerprints, persistent storage and
- * the training photo outbox (again whenever the phone comes back online).
+ * Once the app is ready: a sync, the card data still to come down (the account's other games after
+ * first run) and the daily check, the fingerprints, persistent storage and the training photo
+ * outbox. The card data and the outbox go on again whenever the phone comes back online.
  */
 function useReadyChecks(): void {
   const { store, user } = usePhone()
@@ -104,8 +106,13 @@ function useReadyChecks(): void {
     void refreshAllFingerprints(store).catch(() => undefined)
     drainTraining(store, user.id)
   }, [store, qc, user.id])
+  useReloadAsGamesLand()
   useEffect(() => {
-    const online = (): void => drainTraining(store, user.id)
+    const online = (): void => {
+      drainTraining(store, user.id)
+      // A download cut off by going offline picks up where it stopped.
+      void store.updateCatalog().catch(() => undefined)
+    }
     window.addEventListener('online', online)
     return () => window.removeEventListener('online', online)
   }, [store, user.id])

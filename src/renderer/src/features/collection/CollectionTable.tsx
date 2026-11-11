@@ -1,4 +1,5 @@
 import { createContext, useContext } from 'react'
+import { printingReverseLook } from '@shared/reverseHolo'
 import { createColumnHelper, tableFeatures, useTable } from '@tanstack/react-table'
 import { ArrowDown, ArrowUp } from 'lucide-react'
 import { englishSetName } from '@shared/setNames'
@@ -78,6 +79,7 @@ const columns = helper.columns([
         size="small"
         alt=""
         className="w-8"
+        reverse={printingReverseLook(row.original.printing, row.original.card)}
       />
     )
   }),

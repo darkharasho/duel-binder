@@ -17,6 +17,7 @@ import {
   XIcon
 } from 'lucide-react'
 import { CardArt } from '@/components/CardArt'
+import { useReverseLook } from '@/components/useReverseLook'
 import type { EngineFactory } from '@/features/scan/engine'
 import { useScanLanguage, useScanPickers, type PickerProps } from '@/features/scan/pickerOptions'
 import { copiesOnList, ownedText, surePrinting, useOwned } from '@/features/scan/owned'
@@ -62,6 +63,7 @@ function LastScan({ row, burst }: { row: ScanRow; burst: number }): React.JSX.El
   const current = printingOf(row)
   const at = choices.findIndex((c) => c.key === String(current))
   const printing = row.options.find((o) => o.printingId === current)
+  const reverse = useReverseLook(row, printing?.rarity, printing?.setCode)
   const price = priceOf(row)
   const range = versionToPick(row) ? priceRange(row) : null
   const flag = flagText(row)
@@ -81,6 +83,7 @@ function LastScan({ row, burst }: { row: ScanRow; burst: number }): React.JSX.El
         printingId={photoFor(row)}
         size="small"
         alt=""
+        reverse={reverse}
         className={cn(
           'w-14 shrink-0 self-start',
           burst > 0 && 'motion-safe:animate-[scan-drop_500ms_ease-in_both]'

@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Ellipsis } from 'lucide-react'
 import { toast } from 'sonner'
 import { CardArt } from '@/components/CardArt'
+import { useReverseLook } from '@/components/useReverseLook'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -57,6 +58,7 @@ function Tile({
   ring: boolean
   onOpen: () => void
 }): React.JSX.Element {
+  const reverse = useReverseLook(card, card.rarity, card.setCode)
   return (
     <button
       type="button"
@@ -77,6 +79,7 @@ function Tile({
           size="small"
           alt=""
           className="w-full"
+          reverse={reverse}
         />
         {card.quantity > 1 && (
           <span className="absolute right-1 top-1 rounded-full bg-black/75 px-1.5 text-[11px] font-semibold leading-5 text-white">

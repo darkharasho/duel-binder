@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import { reverseLook } from '@shared/reverseHolo'
 import { Minus, Plus } from 'lucide-react'
 import type { ChecklistCard, ChecklistRarity } from '@shared/types'
 import { CardArt } from '@/components/CardArt'
@@ -84,6 +85,10 @@ export const BulkTile = memo(function BulkTile({
               alt={card.name}
               printingId={printingId}
               className="w-full"
+              reverse={reverseLook(rarity.rarity, selected?.setCode ?? '', {
+                category: card.type,
+                types: card.pokemonTypes
+              })}
             />
           </button>
           <span

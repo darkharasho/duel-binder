@@ -9,6 +9,7 @@ import {
   XIcon
 } from 'lucide-react'
 import { CardArt } from '@/components/CardArt'
+import { useReverseLook } from '@/components/useReverseLook'
 import { photoFor } from '@/features/scan/scanLook'
 import { useScanLanguage } from '@/features/scan/pickerOptions'
 import { useScanHub } from '@/features/scan/ScanHub'
@@ -116,6 +117,8 @@ function ReviewRow({ row, disabled }: { row: ScanRow; disabled: boolean }): Reac
   const range = versionToPick(row) ? priceRange(row) : null
   const current = printingOf(row)
   const picked = choices.find((c) => c.key === String(current))
+  const chosen = row.options.find((o) => o.printingId === current)
+  const reverse = useReverseLook(row, chosen?.rarity, chosen?.setCode)
   const flag = flagText(row)
   const where = setLabelFor(row)
   return (
@@ -133,6 +136,7 @@ function ReviewRow({ row, disabled }: { row: ScanRow; disabled: boolean }): Reac
         size="small"
         alt=""
         className="w-12 shrink-0 self-start"
+        reverse={reverse}
       />
       <div className="min-w-0 flex-1 text-[13px] leading-[18px]">
         <p className="truncate text-[15px] font-semibold leading-5">{row.name}</p>

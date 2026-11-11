@@ -7,6 +7,7 @@ import {
   VERSION_OTHER_RATIO,
   VERSION_REFERENCE_RATIO
 } from '@shared/scan/thresholds'
+import { bodyStats, type BodyStats } from '@shared/scan/reverseHolo'
 import type { RgbaImage } from '@shared/scan/types'
 import { texture } from './foil'
 
@@ -19,6 +20,8 @@ export interface VersionCues {
   reference: number
   /** The "1st Edition" stamp; never read yet, so a 1st Edition version is never named from it. */
   firstEdition: 'unknown'
+  /** Body brightness against the art, and body evenness: the reverse holo check's input. */
+  body: BodyStats
 }
 
 /**
@@ -32,7 +35,8 @@ export function pokemonVersionCues(card: RgbaImage, profile: ScanProfile): Versi
     frame: strips.reduce((a, b) => a + b, 0) / strips.length,
     art: texture(card, profile.foil.art).floor,
     reference: texture(card, profile.foil.reference).floor,
-    firstEdition: 'unknown'
+    firstEdition: 'unknown',
+    body: bodyStats(card)
   }
 }
 

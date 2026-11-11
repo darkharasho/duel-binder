@@ -1003,7 +1003,8 @@ describe('Pokémon version cues (rule 7)', () => {
     frame,
     art,
     reference: 0,
-    firstEdition: 'unknown'
+    firstEdition: 'unknown',
+    body: { ratio: 1, spread: 0 }
   })
 
   /** Card 4 with its versions replaced by labels (priced 2, 3, ...). */

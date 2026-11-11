@@ -104,6 +104,17 @@ const PKM_WINDOWS: readonly Box[] = [
 ]
 
 /**
+ * The art panels of the two-card "spread" Stadiums (Delta Reign's Legendary Pyroduct, Summit and
+ * Trench, me06 094-099): the art runs to the edge where the halves join, inside a silver frame,
+ * so the panel is itself about a card's shape (0.71) and is often found in place of the card.
+ * Left half (094, 096, 098), then right half (095, 097, 099); measured on TCGdex's renders.
+ */
+const PKM_SPREAD_PANELS: readonly Box[] = [
+  [0.19, 0.135, 1, 0.955],
+  [0, 0.135, 0.81, 0.955]
+]
+
+/**
  * One Piece (63 x 88 mm, like Pokémon). Its art and number are matched by the scanner
  * (resolveOnePiece.ts) and its number read by the Contribute photos screen too; the name and
  * text are where Bandai prints them, the text box read only to tell English from Japanese. Measured on Bandai's renders
@@ -181,7 +192,8 @@ export const SCAN_PROFILES: Record<'ygo' | 'pkm', ScanProfile> &
     windowArt: true,
     // A held card's outline is often lost under fingers, a sleeve or a holder's rim, while its
     // art window's crisp border is found: about a card's shape itself.
-    innerFrames: PKM_WINDOWS,
+    // So is a spread Stadium's card-shaped art panel.
+    innerFrames: [...PKM_WINDOWS, ...PKM_SPREAD_PANELS],
     // The windows' short over long side on a 63 x 88 mm card: 0.62 (Scarlet & Violet) to 0.71
     // (base set), about a third of the card's area.
     windowShape: { aspect: 0.66, tolerance: 0.065, minArea: 0.012 },

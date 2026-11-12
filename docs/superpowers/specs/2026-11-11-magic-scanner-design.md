@@ -159,6 +159,23 @@ Which cards to shoot (ask the owner): this week's packs as they come, plus a sta
 (`2003` and `1997` frames, black and white borders), a handful of foils, two-faced cards and a few
 non-English cards if they have any.
 
+### Training photos (as built, 2026-11-11)
+
+- Contribute for Magic takes a typed code only: `mh3 123`, `MH3-0123`, `mh3 #123` and
+  `plst xln-217` all work (`normalizeMagicCode`), and set codes are suggested as you type. The
+  info-line reader comes with step 4's `frameMagicCode`; the One Piece reader and guide box stay
+  off for Magic.
+- The finish is picked in the version list, which already lists each finish as its own printing
+  (`Rare`, `Rare (Foil)`). Nothing is picked until the tester taps one.
+- The Contribute button opens the game shown when that game is open to testers, so a tester with
+  both One Piece and Magic gets Magic while on Magic.
+- Pull the photos with `PORTAL_URL=… PORTAL_ADMIN_TOKEN=… npm run scan:pull-training -- --game mtg`,
+  which writes `~/scan-capture/shots-mtg/` and `~/scan-capture/mtg-truth.json`.
+- Rip capture frames are labelled by hand into the same `TruthRow` shape (`src/shared/training.ts`),
+  with `tester` set to `rip-<session folder>` so they can be told apart from Contribute photos.
+- Fingerprint size, measured on the desktop catalog (543,269 Magic images): 69,565 records (66,090
+  looks and 3,475 back faces), 2.65 MB, and 1.4 ms per art lookup on the desktop.
+
 ## Step 4: the resolver (my calls)
 
 `src/renderer/src/features/scan/resolveMagic.ts`, called where `resolve.ts` now leaves

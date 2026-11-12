@@ -10,7 +10,7 @@ import { useGame } from '@/lib/game'
 import { rarityColor, rarityTextColor } from '@/lib/rarityColors'
 import { cn } from '@/lib/utils'
 import { CodeOptions, CodeValue } from './CodePicker'
-import { versionArt } from './setsView'
+import { rarityKey, versionArt } from './setsView'
 
 interface BulkTileProps {
   card: ChecklistCard
@@ -61,7 +61,7 @@ export const BulkTile = memo(function BulkTile({
         role="group"
         aria-label={label}
         aria-current={highlighted || undefined}
-        data-tile-key={`${card.cardId}:${rarity.rarity}`}
+        data-tile-key={`${card.cardId}:${rarityKey(rarity)}`}
         data-highlighted={highlighted}
         data-owned={owned}
         className={cn(

@@ -51,6 +51,14 @@ const SET_JOINS = `LEFT JOIN sets s ON s.game = p.game AND s.language = p.langua
   LEFT JOIN pokemon_set_art pl ON p.game = 'pkm' AND pl.language = p.language AND pl.set_name = p.set_name
     AND pl.kind = 'logo' AND pl.sort_order = 0`
 
+/**
+ * What the rarity count counts: a card's rarity, and for Magic each version of it too. A Magic
+ * card's borderless, showcase and full-art versions share a rarity name ("Mythic (Foil)") but
+ * are different cards to collect, with their own art and price (FRA 444 $10, FRA 453 $366).
+ * Matches checklistCards' split.
+ */
+const VERSION_KEY = `p.card_id || '|' || p.set_rarity || CASE WHEN p.game = 'mtg' THEN '|' || p.set_code ELSE '' END`
+
 // One row per distinct (language, set_name); callers limit it to the scope's game with `p.game = <game>`.
 // A (card, rarity) pair is keyed as "<card_id>|<rarity>"; card_id is an integer, so the first "|"
 // always ends it. Yu-Gi-Oh! pack art and logos are English only, keyed by set name alone; Pokémon
@@ -66,8 +74,8 @@ const summary = (scope: Scope): string => {
   SELECT p.language, p.set_name, MIN(NULLIF(p.set_code, '')) AS min_code, ${SET_ART},
          COUNT(DISTINCT p.card_id) AS total_cards,
          COUNT(DISTINCT CASE WHEN ${owned} THEN p.card_id END) AS owned_cards,
-         COUNT(DISTINCT p.card_id || '|' || p.set_rarity) AS total_rarities,
-         COUNT(DISTINCT CASE WHEN ${owned} THEN p.card_id || '|' || p.set_rarity END)
+         COUNT(DISTINCT ${VERSION_KEY}) AS total_rarities,
+         COUNT(DISTINCT CASE WHEN ${owned} THEN ${VERSION_KEY} END)
            AS owned_rarities
   FROM card_printings p
   ${SET_JOINS}`
@@ -226,7 +234,7 @@ export function listSets(db: SqlDb, scope: Scope = LOCAL): SetSummary[] {
 }
 
 /** Bump when `catalogSets` or `toSummary` change what they produce: stored rollups aren't rebuilt otherwise. */
-const SETS_ROLLUP = 4
+const SETS_ROLLUP = 5
 
 /** Where listSetsFast stores a game's catalog Sets list. */
 export const setsRollupKey = (game: GameId): string => `sets:${SETS_ROLLUP}:${game}`
@@ -241,7 +249,7 @@ export function catalogSets(db: SqlDb, scope: Scope): SetSummary[] {
       `WITH p AS (
          SELECT p.game, p.language, p.set_name, MIN(NULLIF(p.set_code, '')) AS min_code,
            COUNT(DISTINCT p.card_id) AS total_cards,
-           COUNT(DISTINCT p.card_id || '|' || p.set_rarity) AS total_rarities
+           COUNT(DISTINCT ${VERSION_KEY}) AS total_rarities
          FROM card_printings p
          WHERE ${gameTerm(db)} = ${scope.game} AND p.contributed = 0 AND (p.game <> 'pkm' OR p.missing_from_api = 0)
          GROUP BY p.language, p.set_name)
@@ -287,7 +295,7 @@ export function listSetsFast(
   const owned = db
     .prepare(
       `SELECT p.language, p.set_name, COUNT(DISTINCT p.card_id) AS cards,
-         COUNT(DISTINCT p.card_id || '|' || p.set_rarity) AS rarities,
+         COUNT(DISTINCT ${VERSION_KEY}) AS rarities,
          MAX(p.game = 'pkm' AND p.missing_from_api = 1) AS flagged
        FROM collection_entries e JOIN card_printings p ON p.id = e.printing_id AND +p.game = ${scope.game}
        WHERE ${scope.where('e')} AND p.contributed = 0
@@ -402,7 +410,9 @@ function checklistCards(
 ): ChecklistCard[] {
   const cardFilter = cardId === undefined ? '' : ' AND p.card_id = ?'
   const params = cardId === undefined ? [language, setName] : [language, setName, cardId]
-  const pkm = scopeGame(db, scope) === 'pkm'
+  const game = scopeGame(db, scope)
+  const pkm = game === 'pkm'
+  const mtg = game === 'mtg'
   const printings = db
     .prepare(
       `SELECT p.id, p.card_id, p.set_code, ${RARITY_LABEL} AS set_rarity, p.set_rarity_code, p.language, c.name, c.type,
@@ -441,15 +451,23 @@ function checklistCards(
 
   const cards: ChecklistCard[] = []
   for (const [id, rows] of byCard) {
+    // Magic: one entry per version (rarity and code), as VERSION_KEY counts them.
     const byRarity = new Map<string, PrintingDbRow[]>()
     for (const p of rows) {
-      const list = byRarity.get(p.set_rarity) ?? []
+      const key = mtg ? `${p.set_rarity}|${p.set_code}` : p.set_rarity
+      const list = byRarity.get(key) ?? []
       list.push(p)
-      byRarity.set(p.set_rarity, list)
+      byRarity.set(key, list)
     }
     const rarities: ChecklistRarity[] = [...byRarity]
-      .sort(([a], [b]) => cmp(a, b))
-      .map(([rarity, ps]) => {
+      .sort(
+        ([a, pa], [b, pb]) =>
+          cmp(pa[0].set_rarity, pb[0].set_rarity) ||
+          (setNumber(pa[0].set_code).number ?? 0) - (setNumber(pb[0].set_code).number ?? 0) ||
+          cmp(a, b)
+      )
+      .map(([key, ps]) => {
+        const rarity = ps[0].set_rarity
         const codes = ps
           .map((p) => {
             const art = cardImage(db, printingArtImageId({ ...p, contributed: 0 }), id, scope)
@@ -462,8 +480,10 @@ function checklistCards(
           })
           .sort((a, b) => cmp(a.setCode, b.setCode))
         const rarityEntries = ps.flatMap((p) => entriesByPrinting.get(p.id) ?? [])
+        const version = mtg ? setNumber(ps[0].set_code) : null
         return {
           rarity,
+          ...(version ? { key, number: version.number, numberLabel: version.label } : {}),
           owned: sum(rarityEntries),
           price: maxPrice(ps),
           codes,

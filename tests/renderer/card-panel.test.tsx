@@ -268,9 +268,10 @@ describe('one card panel, owned or not', () => {
     expect(await screen.findByLabelText('Quantity')).toBeInTheDocument()
     qc.setQueryData(queryKeys.forCard(1), [])
     await waitFor(() => expect(screen.queryByLabelText('Quantity')).not.toBeInTheDocument())
-    expect(
-      within(await showAll(await list())).getByRole('group', { name: /LOB-001/ })
-    ).toHaveAttribute('aria-current', 'true')
+    expect(within(await list()).getByRole('group', { name: /LOB-001/ })).toHaveAttribute(
+      'aria-current',
+      'true'
+    )
   })
 
   it('keeps a notes draft when the row changes the quantity', async () => {
@@ -375,6 +376,31 @@ describe('your copies first', () => {
     expect(
       within(section).getByRole('button', { name: 'Show all 3 printings' })
     ).toBeInTheDocument()
+  })
+
+  it('keeps the line at 0, with + on, once the copies come back without it', async () => {
+    const { adjust, qc } = setup([entry(5, a, { quantity: 1 })], { entryId: 5 })
+    const section = await list()
+    const row = within(section).getByRole('group', { name: /LOB-001/ })
+    await userEvent.click(within(row).getByRole('button', { name: /^Remove one/ }))
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+    await waitFor(() => expect(adjust).toHaveBeenCalledWith('Legend of Blue Eyes', 'en', 1, -1))
+    qc.setQueryData(queryKeys.forCard(1), [])
+    await waitFor(() => expect(screen.queryByLabelText('Quantity')).not.toBeInTheDocument())
+    const line = within(section).getByRole('group', { name: /LOB-001/ })
+    expect(line.querySelector('[aria-busy]')).toHaveTextContent('0')
+    expect(within(line).getByRole('button', { name: /^Add one/ })).toBeEnabled()
+    // Still the collapsed view: the other printings stay behind Show all.
+    expect(within(section).getAllByRole('group')).toHaveLength(1)
+    expect(
+      within(section).getByRole('button', { name: 'Show all 3 printings' })
+    ).toBeInTheDocument()
+  })
+
+  it('names a single printing in the singular', async () => {
+    setup([entry(5, a)], { entryId: 5 }, [a])
+    const section = await list()
+    expect(within(section).getByRole('button', { name: 'Show all 1 printing' })).toBeInTheDocument()
   })
 
   it('marks a wished owned printing with a heart, without a toggle', async () => {

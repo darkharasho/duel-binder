@@ -11,9 +11,14 @@ import { cn } from '@/lib/utils'
 import type { CardTypeRow } from './cardTypes'
 
 interface OwnedCopiesProps {
-  /** The rows with an entry on them, in the list's order. */
+  /**
+   * The rows with an entry on them, and those of a printing owned at open whose last copy has
+   * gone, in the list's order.
+   */
   rows: CardTypeRow[]
   cardName: string
+  /** The card's original art, for a line whose entry has gone. */
+  originalImageId: number | undefined
   selectedKey?: string
   onSelect: (row: CardTypeRow) => void
   ownedOf: (row: CardTypeRow) => number
@@ -36,11 +41,13 @@ const rowLabel = (row: CardTypeRow, cardName: string): string => {
 
 /**
  * The user's copies of a card, one line per entry: its own art, so a copy on other art is told
- * apart at a glance, with set, rarity and a −/count/+. A line is picked as the full list's rows are.
+ * apart at a glance, with set, rarity and a −/count/+. A printing owned at open keeps its line, at
+ * 0, once its last copy goes. A line is picked as the full list's rows are.
  */
 export function OwnedCopies({
   rows,
   cardName,
+  originalImageId,
   selectedKey,
   onSelect,
   ownedOf,
@@ -53,9 +60,13 @@ export function OwnedCopies({
     <div className="space-y-1">
       {rows.map((row) => {
         const { entry, printing: p } = row
-        if (!entry) return null
         const label = rowLabel(row, cardName)
-        const year = (p.releaseDate ?? entry.releaseDate)?.slice(0, 4)
+        const year = (p.releaseDate ?? entry?.releaseDate)?.slice(0, 4)
+        // A line whose entry has gone shows the printing's own scan over the card's art.
+        const art = entry
+          ? { imageId: entry.imageId, printingId: scanFor(entry) }
+          : { imageId: p.artImageId ?? originalImageId, printingId: p.id }
+        const price = entry ? entry.unitPrice : p.setPrice
         return (
           <div
             key={row.key}
@@ -67,13 +78,17 @@ export function OwnedCopies({
               'flex flex-wrap items-center gap-x-2 gap-y-1'
             )}
           >
-            <CardArt
-              imageId={entry.imageId}
-              printingId={scanFor(entry)}
-              size="small"
-              alt=""
-              className={cn('shrink-0 rounded-[4px]', compact ? 'w-7' : 'w-9')}
-            />
+            {art.imageId !== undefined ? (
+              <CardArt
+                imageId={art.imageId}
+                printingId={art.printingId}
+                size="small"
+                alt=""
+                className={cn('shrink-0 rounded-[4px]', compact ? 'w-7' : 'w-9')}
+              />
+            ) : (
+              <span aria-hidden className={cn('shrink-0', compact ? 'w-7' : 'w-9')} />
+            )}
             <div className="min-w-0 flex-1 space-y-0.5 text-xs">
               <div className="flex items-center gap-1.5">
                 <span className="font-mono text-[11px]">{p.setCode}</span>
@@ -98,7 +113,7 @@ export function OwnedCopies({
                 <span
                   className={cn(
                     'inline-flex min-w-0 items-center gap-1 rounded-full border px-1.5 py-px text-[11px]',
-                    // Gold while owned; a line taken to 0 greys until its entry goes.
+                    // Gold while owned; a line taken to 0 greys.
                     ownedOf(row) > 0 ? 'border-amber-400/50' : 'border-border text-muted-foreground'
                   )}
                 >
@@ -114,10 +129,8 @@ export function OwnedCopies({
                 )}
               </div>
             </div>
-            {!compact && entry.unitPrice !== null && (
-              <span className="text-xs text-muted-foreground tabular-nums">
-                {formatUsd(entry.unitPrice)}
-              </span>
+            {!compact && price !== null && (
+              <span className="text-xs text-muted-foreground tabular-nums">{formatUsd(price)}</span>
             )}
             {stepper(row, label)}
           </div>

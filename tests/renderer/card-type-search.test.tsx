@@ -34,6 +34,7 @@ const show = (ps: Printing[]): ReturnType<typeof renderWithProviders> =>
       selectedKey={undefined}
       onSelect={() => {}}
       originalImageId={undefined}
+      ownedAtOpen={new Set()}
       // As the panel opens a card with no copies.
       startExpanded
     />,

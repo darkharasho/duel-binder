@@ -54,6 +54,8 @@ interface CardPanelProps {
   nav?: PanelNav
 }
 
+const NONE_OWNED: ReadonlySet<number> = new Set()
+
 /** The row the user picked, for the card and page entry they picked it on. */
 interface Pick {
   cardId: number
@@ -93,11 +95,12 @@ export function CardPanel({
   const [ownedAtOpen, setOwnedAtOpen] = useState<{ cardId: number; ids: Set<number> } | null>(null)
   if (copies.data && ownedAtOpen?.cardId !== cardId)
     setOwnedAtOpen({ cardId, ids: new Set(copies.data.map((c) => c.printing.id)) })
+  const openOwned = ownedAtOpen?.cardId === cardId ? ownedAtOpen.ids : NONE_OWNED
   const rows = cardTypeRows({
     printings: detail.data?.printings ?? [],
     copies: copies.data ?? [],
     originalImageId: detail.data?.images[0]?.imageId,
-    ownedAtOpen: ownedAtOpen?.cardId === cardId ? ownedAtOpen.ids : new Set(),
+    ownedAtOpen: openOwned,
     preferSet,
     onlySet,
     openedPrintingId: printingId ?? seed?.defaultPrintingId
@@ -205,6 +208,7 @@ export function CardPanel({
       selectedKey={selected?.key}
       onSelect={selectRow}
       originalImageId={detail.data?.images[0]?.imageId}
+      ownedAtOpen={openOwned}
       // A set's list is short, so it needs no gate.
       startExpanded={!!onlySet || !(copies.data ?? []).length}
     />

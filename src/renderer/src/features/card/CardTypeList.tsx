@@ -32,6 +32,8 @@ interface CardTypeListProps {
   onSelect: (row: CardTypeRow) => void
   /** The card's original art; undefined until the card's details load. */
   originalImageId: number | undefined
+  /** Printings owned when the panel opened: their lines stay, at 0, once the last copy goes. */
+  ownedAtOpen: ReadonlySet<number>
   /** Opens on every printing rather than on the user's copies. Read once, on mount. */
   startExpanded: boolean
 }
@@ -106,6 +108,8 @@ export function CardTypeList({
   copies,
   selectedKey,
   onSelect,
+  originalImageId,
+  ownedAtOpen,
   startExpanded
 }: CardTypeListProps): React.JSX.Element {
   const { def } = useGame()
@@ -268,8 +272,14 @@ export function CardTypeList({
   }
 
   const selected = rows.find((r) => r.key === selectedKey)
-  const owned = rows.filter((r) => r.entry)
-  const value = owned.reduce((sum, r) => sum + ownedOf(r) * (r.entry?.unitPrice ?? 0), 0)
+  // A printing owned at open keeps its line after its last copy goes, so a − can be undone.
+  const isOwnedLine = (r: CardTypeRow): boolean =>
+    r.entry !== undefined || (r.viaPrinting && ownedAtOpen.has(r.printing.id))
+  const owned = rows.filter(isOwnedLine)
+  const value = owned.reduce(
+    (sum, r) => sum + ownedOf(r) * ((r.entry ? r.entry.unitPrice : r.printing.setPrice) ?? 0),
+    0
+  )
   // Reset per card: the list is keyed by card.
   const [expanded, setExpanded] = useState(startExpanded)
   // A printing with several entries is still one printing.
@@ -287,13 +297,14 @@ export function CardTypeList({
   const wished = (printingId: number): boolean =>
     wishes.data?.some((w) => w.printingId === printingId) ?? false
   const [query, setQuery] = useState('')
-  const rest = rows.filter((r) => !r.entry)
+  const rest = rows.filter((r) => !isOwnedLine(r))
   const searchable = def.id === 'ygo' && rows.length > SEARCH_FROM
   const shown = searchable && query.trim() ? rest.filter((r) => rowMatches(r, query)) : rest
   const ownedCopies = (compact: boolean): React.JSX.Element => (
     <OwnedCopies
       rows={owned}
       cardName={cardName}
+      originalImageId={originalImageId}
       selectedKey={selectedKey}
       onSelect={onSelect}
       ownedOf={ownedOf}
@@ -322,7 +333,7 @@ export function CardTypeList({
               className="w-full"
               onClick={() => setExpanded(true)}
             >
-              Show all {summary.printings} printings
+              Show all {summary.printings} {summary.printings === 1 ? 'printing' : 'printings'}
             </Button>
             {summaryLine && (
               <p className="text-center text-xs text-muted-foreground">{summaryLine}</p>

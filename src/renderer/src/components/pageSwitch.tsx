@@ -1,4 +1,5 @@
 import { Fragment, Suspense, lazy, useCallback, useState } from 'react'
+import type { Language } from '@shared/languages'
 import type { CardSearchResult } from '@shared/types'
 import type { NavigateFn, Page } from '@/components/AppShell'
 import { useDataChanged } from '@/components/useDataChanged'
@@ -22,16 +23,16 @@ const AdminPage = lazy(() =>
   import('@/features/admin/AdminPage').then((m) => ({ default: m.AdminPage }))
 )
 
-export interface AddInitial {
-  card: CardSearchResult
-  printingId: number
-}
+/** Open Add card at this card's printing step, or at the search step with this text typed. */
+export type AddInitial = { card: CardSearchResult; printingId: number } | { query: string }
 
 /** The signed-in app's page state: which page shows, the Add card dialog, and data-changed refetches. */
 export interface Pages {
   page: Page
   adminTab: AdminPageTab
   entryId: number | undefined
+  /** The set the Sets page opens on, when a link elsewhere asked for one. */
+  openSet: { setName: string; language: Language } | undefined
   friendsKey: number
   onNavigate: NavigateFn
   openAdd: (initial?: AddInitial | null) => void
@@ -45,6 +46,7 @@ export interface Pages {
 export function usePages(initial: Page = 'dashboard'): Pages {
   const [chosenPage, setPage] = useState<Page>(initial)
   const [entryId, setEntryId] = useState<number | undefined>()
+  const [openSet, setOpenSet] = useState<Pages['openSet']>()
   const [adminTab, setAdminTab] = useState<AdminPageTab>('overview')
   const [friendsKey, setFriendsKey] = useState(0)
   const friendsAvailable = useFriendsAvailable()
@@ -61,6 +63,7 @@ export function usePages(initial: Page = 'dashboard'): Pages {
 
   const onNavigate: NavigateFn = useCallback((next, opts) => {
     setEntryId(opts?.entryId)
+    setOpenSet(opts?.set)
     if (opts?.adminTab) setAdminTab(opts.adminTab)
     if (next === 'friends') setFriendsKey((k) => k + 1)
     setPage(next)
@@ -70,6 +73,7 @@ export function usePages(initial: Page = 'dashboard'): Pages {
     page,
     adminTab,
     entryId,
+    openSet,
     friendsKey,
     onNavigate,
     openAdd,
@@ -93,7 +97,7 @@ export function PageSwitch({
   scan: React.ReactNode
   settings: React.ReactNode
 }): React.JSX.Element {
-  const { entryId, friendsKey, onNavigate, openAdd, adminTab } = pages
+  const { entryId, openSet, friendsKey, onNavigate, openAdd, adminTab } = pages
   const { game, def } = useGame()
   // A page the shown game lacks (Scan on One Piece) falls back to the dashboard in this same render;
   // the shell's effect then moves `page` itself.
@@ -101,13 +105,19 @@ export function PageSwitch({
   return (
     <Fragment key={game}>
       {page === 'dashboard' && (
-        <DashboardPage onNavigate={onNavigate} onAddCard={() => openAdd()} />
+        <DashboardPage
+          onNavigate={onNavigate}
+          onAddCard={() => openAdd()}
+          onSearch={(query) => openAdd({ query })}
+        />
       )}
       {page === 'collection' && (
         <CollectionPage
           key={entryId ?? 'all'}
           initialEntryId={entryId}
           onAddCard={() => openAdd()}
+          onSearch={(query) => openAdd({ query })}
+          onNavigate={onNavigate}
         />
       )}
       {page === 'wishlist' && <WishlistPage />}
@@ -118,6 +128,8 @@ export function PageSwitch({
       )}
       {page === 'sets' && (
         <SetsPage
+          key={openSet ? `${openSet.language}:${openSet.setName}` : 'list'}
+          initialSet={openSet}
           onAddCard={() => openAdd()}
           onAddMissing={(card, printingId) => openAdd({ card, printingId })}
         />

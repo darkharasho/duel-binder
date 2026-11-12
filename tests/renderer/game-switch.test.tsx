@@ -277,11 +277,11 @@ describe('desktop game switch', () => {
     await renderDesktop(api)
     expect(await screen.findByText('1234')).toBeInTheDocument()
     await choose('Pokémon')
-    expect(await screen.findByText('Your collection is empty')).toBeInTheDocument()
+    expect(await screen.findByText("What's in your binder?")).toBeInTheDocument()
     ygo = () => new Promise(() => {})
     await choose('Yu-Gi-Oh!')
     expect(await screen.findByText('1234')).toBeInTheDocument()
-    expect(screen.queryByText('Your collection is empty')).not.toBeInTheDocument()
+    expect(screen.queryByText("What's in your binder?")).not.toBeInTheDocument()
   })
 
   it("an account change forgets the games' last pages", async () => {
@@ -290,12 +290,12 @@ describe('desktop game switch', () => {
     await renderDesktop(api)
     await screen.findByText('1234')
     await choose('Pokémon')
-    await screen.findByText('Your collection is empty')
+    await screen.findByText("What's in your binder?")
     act(() => accountChanged())
     ygo = () => new Promise(() => {})
     await choose('Yu-Gi-Oh!')
     await waitFor(() =>
-      expect(screen.queryByText('Your collection is empty')).not.toBeInTheDocument()
+      expect(screen.queryByText("What's in your binder?")).not.toBeInTheDocument()
     )
     expect(screen.queryByText('1234')).not.toBeInTheDocument()
   })
@@ -307,7 +307,7 @@ describe('desktop game switch', () => {
     await screen.findByText('1234')
     const before = vi.mocked(api.stats.get).mock.calls.length
     await choose('Pokémon')
-    await screen.findByText('Your collection is empty')
+    await screen.findByText("What's in your binder?")
     await new Promise((r) => setTimeout(r, 50))
     expect(vi.mocked(api.stats.get).mock.calls.length - before).toBe(1)
   })

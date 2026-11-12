@@ -183,6 +183,19 @@ describe('AddCardDialog languages', () => {
 describe('AddCardDialog', () => {
   beforeEach(() => vi.mocked(toast.success).mockClear())
 
+  it('opened with typed text searches for it and keeps typing from there', async () => {
+    const api = createMockApi({
+      cards: { search: async (q: string) => (q.toLowerCase().startsWith('pot') ? [pot] : []) }
+    })
+    renderWithProviders(<AddCardDialog open onOpenChange={() => {}} initial={{ query: 'p' }} />, {
+      api
+    })
+    const input = await screen.findByPlaceholderText(/Search cards/)
+    expect(input).toHaveValue('p')
+    await userEvent.type(input, 'ot')
+    expect(await screen.findByText('Pot of Greed')).toBeInTheDocument()
+  })
+
   it('single-art card skips art step', async () => {
     const { add } = setup()
     await userEvent.type(await screen.findByPlaceholderText(/Search cards/), 'pot')

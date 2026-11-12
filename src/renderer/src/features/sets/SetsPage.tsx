@@ -101,11 +101,17 @@ function readTypes(game: GameId): SetType[] {
 }
 
 interface SetsPageProps {
+  /** A set to open straight away, from a link on another page. */
+  initialSet?: { setName: string; language: Language }
   onAddCard: () => void
   onAddMissing: (card: CardSearchResult, printingId: number) => void
 }
 
-export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.Element {
+export function SetsPage({
+  initialSet,
+  onAddCard,
+  onAddMissing
+}: SetsPageProps): React.JSX.Element {
   const [storedView, setView] = useState<View>(readView)
   // The phone is too narrow for the grid's columns, so it always lists sets in one column.
   const phone = isPhone()
@@ -121,7 +127,9 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
   // Collapsing the banner while a search forces it open lasts until the search changes.
   const [searchCollapsed, setSearchCollapsed] = useState(false)
   const [sort, setSort] = useState<SetSort>('date')
-  const [openSet, setOpenSetState] = useState<{ setName: string; language: Language } | null>(null)
+  const [openSet, setOpenSetState] = useState<{ setName: string; language: Language } | null>(
+    initialSet ?? null
+  )
   const main = useMainScroll()
   // Where the list was scrolled when a set was opened, restored on the way back.
   const listScroll = useRef<number | null>(null)

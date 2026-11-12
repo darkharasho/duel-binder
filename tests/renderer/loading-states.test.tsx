@@ -61,7 +61,7 @@ describe('loading states', () => {
   it('the dashboard shows a skeleton, not an empty collection, while its stats load', async () => {
     renderWithProviders(<DashboardPage onNavigate={() => {}} />, { api: pendingApi() })
     expect(await screen.findByRole('status', { name: /Loading your collection/ })).toBeVisible()
-    expect(screen.queryByText('Your collection is empty')).not.toBeInTheDocument()
+    expect(screen.queryByText("What's in your binder?")).not.toBeInTheDocument()
     expectNoEmptyText()
   })
 

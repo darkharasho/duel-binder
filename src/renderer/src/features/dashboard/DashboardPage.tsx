@@ -9,7 +9,6 @@ import { CardSheet } from '@/components/CardSheet'
 import { GameChip } from '@/components/GameSwitch'
 import { TiltCard } from '@/components/TiltCard'
 import { scanFor } from '@/components/scanFor'
-import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/loading'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { UnderlineTabs } from '@/components/UnderlineTabs'
@@ -22,11 +21,14 @@ import { isPhone } from '@/lib/platform'
 import { useGame } from '@/lib/game'
 import { rarityColors } from '@/lib/rarityColors'
 import { cn } from '@/lib/utils'
+import { StartHere } from './StartHere'
 import { ValueChart } from './ValueChart'
 
 interface Props {
   onNavigate: NavigateFn
   onAddCard?: () => void
+  /** Opens Add card with this text typed. */
+  onSearch?: (query: string) => void
 }
 
 // Card types keep colours a collector would expect (rarities live in lib/rarityColors); anything else falls back in order.
@@ -421,7 +423,7 @@ function DashboardSkeleton(): React.JSX.Element {
   )
 }
 
-export function DashboardPage({ onNavigate, onAddCard }: Props): React.JSX.Element {
+export function DashboardPage({ onNavigate, onAddCard, onSearch }: Props): React.JSX.Element {
   const stats = useQuery({ queryKey: queryKeys.stats, queryFn: () => api.stats.get() })
   const data = stats.data
   const top = data?.topEntries[0]
@@ -441,11 +443,11 @@ export function DashboardPage({ onNavigate, onAddCard }: Props): React.JSX.Eleme
           </div>
         )}
         {data && data.totalCards === 0 ? (
-          <div className="flex flex-col items-start gap-3 py-16">
-            <p className="text-2xl font-semibold">Your collection is empty</p>
-            <p className="text-sm text-muted-foreground">Add a card to see your stats here.</p>
-            <Button onClick={onAddCard}>Add your first card</Button>
-          </div>
+          <StartHere
+            onNavigate={onNavigate}
+            onSearch={onSearch ?? (() => onAddCard?.())}
+            blurb="Add your first cards and this page fills with your collection's value, priciest cards and set progress."
+          />
         ) : data ? (
           <Content stats={data} onNavigate={onNavigate} />
         ) : stats.isPending ? (

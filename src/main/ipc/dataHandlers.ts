@@ -25,6 +25,7 @@ import {
   printingsByCode,
   printingsByNumber,
   printingsForCards,
+  printingsOfArt,
   printingsForSet
 } from '../repo/scan'
 import { getStats, recordSnapshot } from '../repo/stats'
@@ -95,6 +96,7 @@ export const DATA_CHANNELS = [
   'scan:printingsByNumber',
   'scan:printingsForSet',
   'scan:printingsForCards',
+  'scan:printingsOfArt',
   'scan:matchName',
   'scan:cardsForImages',
   'scan:imagesForLanguage',
@@ -274,6 +276,11 @@ export function createDataHandlers({
     'scan:numberPrefixes': async () => numberPrefixes(db),
     'scan:imagesForLanguage': async (language: Language) =>
       imagesForLanguage(db, checkLanguage(language)),
+    'scan:printingsOfArt': async (imageIds: unknown) => {
+      if (!Array.isArray(imageIds) || !imageIds.every((i) => Number.isInteger(i)))
+        throw new Error('Image ids must be a list of integers')
+      return printingsOfArt(db, imageIds)
+    },
     'scan:cardsForImages': async (imageIds: unknown) => {
       if (!Array.isArray(imageIds) || !imageIds.every((i) => Number.isInteger(i)))
         throw new Error('Image ids must be a list of integers')

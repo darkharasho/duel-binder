@@ -8,6 +8,8 @@ import { encodeFingerprints } from '../../src/shared/scan/fingerprintFile'
 import { upright } from '../../src/shared/upright'
 import { encodeFingerprintRefs } from '../../src/shared/scan/fingerprintRefs'
 import { isTokenId, TOKEN_ID_MIN } from '../../src/shared/games/ids'
+import { lookRepresentative, type MagicLookRow } from '../../src/shared/scan/magicLook'
+export { mtgLookKey, type MagicLookRow } from '../../src/shared/scan/magicLook'
 import type { YugipediaClient } from '../../src/main/yugipedia/client'
 import {
   buildReferences,
@@ -408,25 +410,6 @@ export async function buildFingerprints(opts: FingerprintOptions): Promise<Finge
   }
 }
 
-/** The facts that make a Magic image's art look as it does; rows sharing them share a record. */
-export interface MagicLookRow {
-  illustration_id: string | null
-  frame: string | null
-  border_color: string | null
-  full_art: number
-  image_id: number
-}
-
-/**
- * The key of a Magic artwork's look: its illustration in one frame, border and full-art or not.
- * An image with no illustration id is a look of its own.
- */
-export function mtgLookKey(row: MagicLookRow): string {
-  return row.illustration_id === null
-    ? `img:${row.image_id}`
-    : `${row.illustration_id}|${row.frame}|${row.border_color}|${row.full_art}`
-}
-
 /**
  * The Magic records to build, by image id: one front per look (mtgLookKey) among the images with
  * art of their own (`art_from` NULL), from the look's English row, else its lowest image id; and
@@ -445,13 +428,7 @@ export function magicFingerprintTargets(
        WHERE m.art_from IS NULL ORDER BY m.image_id`
     )
     .all() as (MagicLookRow & { scryfall_id: string; back_image_id: number | null; lang: string })[]
-  const looks = new Map<string, (typeof rows)[number]>()
-  for (const r of rows) {
-    const key = mtgLookKey(r)
-    const was = looks.get(key)
-    // Rows come lowest id first, so the first English row (else the first row) stays.
-    if (!was || (was.lang !== 'en' && r.lang === 'en')) looks.set(key, r)
-  }
+  const looks = lookRepresentative(rows)
   const targets = new Map<number, { url: string; scryfallId: string }>()
   for (const r of looks.values()) {
     const front = scryfallArtUrl(r.scryfall_id, 'full', 'front')

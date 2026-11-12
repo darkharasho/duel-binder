@@ -6,7 +6,8 @@ import {
   printingsByCode,
   printingsByNumber,
   printingsForCards,
-  printingsForSet
+  printingsForSet,
+  printingsOfArt
 } from '../../src/main/repo/scan'
 import { scanRefs } from '../../src/main/repo/scanRefs'
 import type Database from 'better-sqlite3'
@@ -14,7 +15,13 @@ import { seededDb } from './helpers'
 import { getMeta, setMeta } from '../../src/main/db/meta'
 import { localScope } from '../../src/main/repo/scope'
 import { seedPokemon } from '../fixtures/pokemon'
-import { onePieceCardId, onePieceImageId } from '../../src/shared/games/ids'
+import {
+  mtgBackImageId,
+  mtgCardId,
+  mtgImageId,
+  onePieceCardId,
+  onePieceImageId
+} from '../../src/shared/games/ids'
 
 const LOB = 'Legend of Blue Eyes White Dragon'
 
@@ -510,5 +517,116 @@ describe('One Piece printings', () => {
       'SEC (Parallel)': [onePieceImageId('en', 'OP01-120'), onePieceImageId('en', 'OP01-120_p1')]
     })
     expect(printingsByCode(db, 'OP01-120', OP)[0]).not.toHaveProperty('rarityCode')
+  })
+})
+
+describe('printingsOfArt', () => {
+  const MTG = localScope("'mtg'")
+  const sid = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`
+
+  /**
+   * Lightning Strike: FRA 107 (en, foil and not) and an XYZ 5 reprint with the same look; a
+   * borderless FRA 346 (another look); a Japanese FRA 107 whose image borrows the English art.
+   * Delver: a two-faced card with a back face.
+   */
+  async function magicDb(): Promise<{
+    db: Database.Database
+    img: Record<string, number>
+    back: number
+    ygoImage: number
+  }> {
+    const db = await seededDb()
+    const ygoImage = (db.prepare("SELECT image_id AS id FROM card_images WHERE game = 'ygo' LIMIT 1").get() as { id: number }).id
+    const card = (lang: string, oracle: string, name: string): number => {
+      const id = mtgCardId(lang, oracle)
+      db.prepare(
+        `INSERT INTO cards (id, game, name, type, frame_type, race, "desc", updated_at)
+         VALUES (?, 'mtg', ?, 'Instant', 'mtg', '', '', '2026-11-12')`
+      ).run(id, name)
+      db.prepare("INSERT INTO mtg_cards (card_id, oracle_id, lang) VALUES (?, ?, ?)").run(id, oracle, lang)
+      return id
+    }
+    const image = (
+      cardId: number,
+      n: number,
+      o: { ill?: string; border?: string; artFrom?: string; back?: number } = {}
+    ): number => {
+      const id = mtgImageId(sid(n))
+      db.prepare(
+        "INSERT INTO card_images (image_id, card_id, sort_order, game) VALUES (?, ?, ?, 'mtg')"
+      ).run(id, cardId, n)
+      db.prepare(
+        `INSERT INTO mtg_images (image_id, scryfall_id, illustration_id, frame, border_color, full_art,
+           back_image_id, art_from) VALUES (?, ?, ?, '2015', ?, 0, ?, ?)`
+      ).run(id, sid(n), o.ill ?? 'ill-strike', o.border ?? 'black', o.back ?? null, o.artFrom ?? null)
+      return id
+    }
+    const printing = (cardId: number, lang: string, set: string, code: string, rarity: string, n: number): void => {
+      db.prepare(
+        `INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity, set_rarity_code)
+         VALUES ('mtg', ?, ?, ?, ?, ?, ?)`
+      ).run(cardId, lang, set, code, rarity, sid(n))
+    }
+    const en = card('en', 'o-strike', 'Lightning Strike')
+    const ja = card('ja', 'o-strike', 'Lightning Strike')
+    const delver = card('en', 'o-delver', 'Delver of Secrets')
+    const img = {
+      fra107: image(en, 1),
+      xyz5: image(en, 2),
+      fra346: image(en, 3, { border: 'borderless' }),
+      ja107: image(ja, 4, { artFrom: sid(1) }),
+      delver: image(delver, 5, { ill: 'ill-delver', back: mtgBackImageId(sid(5)) })
+    }
+    for (const r of ['Uncommon', 'Uncommon (Foil)']) {
+      printing(en, 'en', 'Reality Fracture', 'FRA 107', r, 1)
+      printing(en, 'en', 'Xyz Set', 'XYZ 5', r, 2)
+      printing(en, 'en', 'Reality Fracture', 'FRA 346', r, 3)
+      printing(ja, 'ja', 'Reality Fracture', 'FRA 107', r, 4)
+      printing(delver, 'en', 'Innistrad', 'ISD 51', r, 5)
+    }
+    return { db, img, back: mtgBackImageId(sid(5)), ygoImage }
+  }
+
+  it('finds every printing of a look from its representative id', async () => {
+    const { db, img } = await magicDb()
+    const found = printingsOfArt(db, [img.fra107], MTG)
+    expect(found.map((p) => `${p.setCode}|${p.language}|${p.rarity}`).sort()).toEqual([
+      'FRA 107|en|Uncommon',
+      'FRA 107|en|Uncommon (Foil)',
+      'FRA 107|ja|Uncommon',
+      'FRA 107|ja|Uncommon (Foil)',
+      'XYZ 5|en|Uncommon',
+      'XYZ 5|en|Uncommon (Foil)'
+    ])
+  })
+
+  it('reaches a printing that borrows its art', async () => {
+    const { db, img } = await magicDb()
+    const ja = printingsOfArt(db, [img.fra107], MTG).filter((p) => p.language === 'ja')
+    expect(ja).toHaveLength(2)
+    expect(ja.every((p) => p.imageIds.length === 1 && p.imageIds[0] === img.ja107)).toBe(true)
+    const own = printingsOfArt(db, [img.fra107], MTG).find((p) => p.setCode === 'XYZ 5')!
+    expect(own.imageIds).toEqual([img.xyz5])
+  })
+
+  it('leads a back face id to the same printings as the front', async () => {
+    const { db, img, back } = await magicDb()
+    const front = printingsOfArt(db, [img.delver], MTG)
+    expect(front.map((p) => p.setCode)).toEqual(['ISD 51', 'ISD 51'])
+    expect(printingsOfArt(db, [back], MTG)).toEqual(front)
+  })
+
+  it('gives each printing the look ids it is matched by', async () => {
+    const { db, img, back } = await magicDb()
+    expect(printingsOfArt(db, [img.delver], MTG)[0].artIds).toEqual([img.delver, back])
+    const strike = printingsOfArt(db, [img.xyz5], MTG)
+    // The look's representative is its lowest-id English image, whichever of its ids was matched.
+    expect(strike.every((p) => p.artIds?.length === 1 && p.artIds[0] === img.fra107)).toBe(true)
+    expect(printingsOfArt(db, [img.fra346], MTG).every((p) => p.artIds![0] === img.fra346)).toBe(true)
+  })
+
+  it('ignores ids that are not Magic looks', async () => {
+    const { db, ygoImage } = await magicDb()
+    expect(printingsOfArt(db, [ygoImage, 12345], MTG)).toEqual([])
   })
 })

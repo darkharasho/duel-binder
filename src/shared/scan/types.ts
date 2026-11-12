@@ -23,6 +23,11 @@ export interface ScanPrinting {
   /** The card's artworks, in sort order. */
   imageIds: number[]
   /**
+   * A Magic printing's look ids (printingsOfArt): the fingerprint ids its art is matched by, the
+   * look's representative front and its back. Left out elsewhere; there imageIds are matched.
+   */
+  artIds?: number[]
+  /**
    * A Pokémon card's name as printed, when the catalog's name is another (a Japanese card is
    * named in English); left out otherwise, and on every Yu-Gi-Oh printing.
    */

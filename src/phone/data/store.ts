@@ -221,6 +221,7 @@ const READ_CHANNELS: ReadonlySet<DataChannel> = new Set<DataChannel>([
   'scan:printingsByNumber',
   'scan:printingsForSet',
   'scan:printingsForCards',
+  'scan:printingsOfArt',
   'scan:matchName',
   'scan:cardsForImages',
   'scan:imagesForLanguage',

@@ -186,6 +186,8 @@ export interface Api {
     printingsByNumber(n: CollectorNumber): Promise<ScanPrinting[]>
     printingsForSet(setName: string, language: Language): Promise<ScanPrinting[]>
     printingsForCards(cardIds: number[]): Promise<ScanPrinting[]>
+    /** Every Magic printing showing the look of one of these fingerprint ids, with its artIds. */
+    printingsOfArt(imageIds: number[]): Promise<ScanPrinting[]>
     matchName(text: string): Promise<{ cardId: number; name: string; score: number } | null>
     /** The card of each artwork id that is in the catalog. */
     cardsForImages(imageIds: number[]): Promise<{ imageId: number; cardId: number }[]>
@@ -490,6 +492,7 @@ export const INVOKE_CHANNELS = [
   'scan:printingsByNumber',
   'scan:printingsForSet',
   'scan:printingsForCards',
+  'scan:printingsOfArt',
   'scan:matchName',
   'scan:cardsForImages',
   'scan:imagesForLanguage',

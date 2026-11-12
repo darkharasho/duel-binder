@@ -12,6 +12,7 @@ import { twinPrice } from './enTwin'
 import { isMarketOnly, MARKET_ONLY_PRICE } from './priceRule'
 import { LOCAL, type Scope } from './scope'
 import { shownPrinting } from './shownPrinting'
+import { lookRepresentative, mtgLookKey, type MagicLookRow } from '../../shared/scan/magicLook'
 
 interface PrintingRow {
   printingId: number
@@ -212,14 +213,15 @@ function withImages(db: SqlDb, rows: PrintingRow[], scope: Scope, twins = false)
           : {})
       }
     })
-    .sort(
-      (a, b) =>
-        a.setCode.localeCompare(b.setCode) ||
-        languageRank(a.language) - languageRank(b.language) ||
-        rarityRank(a.rarity) - rarityRank(b.rarity) ||
-        a.printingId - b.printingId
-    )
+    .sort(byPrinting)
 }
+
+/** Set code, then language, then rarity tier. */
+const byPrinting = (a: ScanPrinting, b: ScanPrinting): number =>
+  a.setCode.localeCompare(b.setCode) ||
+  languageRank(a.language) - languageRank(b.language) ||
+  rarityRank(a.rarity) - rarityRank(b.rarity) ||
+  a.printingId - b.printingId
 
 export function printingsByCode(db: SqlDb, code: string, scope: Scope = LOCAL): ScanPrinting[] {
   const rows = db
@@ -397,6 +399,131 @@ export function chineseOfArt(
     twinId: twinOf.get(printing.cardId)!,
     printing
   }))
+}
+
+interface MtgImageRow extends MagicLookRow {
+  scryfall_id: string
+  back_image_id: number | null
+  art_from: string | null
+  card_id: number
+  lang: string
+}
+
+const mtgImages = (scope: Scope): string =>
+  `SELECT m.image_id, m.scryfall_id, m.illustration_id, m.frame, m.border_color, m.full_art,
+     m.back_image_id, m.art_from, i.card_id, COALESCE(c.lang, '') AS lang
+   FROM mtg_images m JOIN card_images i ON i.image_id = m.image_id AND +i.game = ${scope.game}
+   LEFT JOIN mtg_cards c ON c.card_id = i.card_id`
+
+/** Rows of mtg_images matching `column IN (values)`, 500 values a query. */
+function mtgImagesWhere(
+  db: SqlDb,
+  scope: Scope,
+  column: string,
+  values: (string | number)[]
+): MtgImageRow[] {
+  const out: MtgImageRow[] = []
+  const all = [...new Set(values)]
+  for (let i = 0; i < all.length; i += 500) {
+    const chunk = all.slice(i, i + 500)
+    out.push(
+      ...(db
+        .prepare(`${mtgImages(scope)} WHERE m.${column} IN (${chunk.map(() => '?').join(',')})`)
+        .all(...chunk) as MtgImageRow[])
+    )
+  }
+  return out
+}
+
+/**
+ * Every Magic printing, in every language and finish, whose own image shows the look of one of
+ * imageIds: the fingerprint file's ids, a look's representative front or its back_image_id. A
+ * printing's own image is the mtg_images row of its Scryfall object (set_rarity_code); a row whose
+ * art_from names another Scryfall object shows that object's look, and 'none' shows no art at all.
+ * Each printing carries its own image (imageIds) and the ids its look is matched by (artIds: the
+ * representative's front, then its back). Ids that are no Magic look are left out.
+ *
+ * Borrowed art is found through the illustration id the borrowing row shares with its source, as
+ * all but a few dozen rows do; one with another illustration id is missed.
+ */
+export function printingsOfArt(
+  db: SqlDb,
+  imageIds: number[],
+  scope: Scope = LOCAL
+): ScanPrinting[] {
+  if (!imageIds.length) return []
+  const seeds = [
+    ...mtgImagesWhere(db, scope, 'image_id', imageIds),
+    ...mtgImagesWhere(db, scope, 'back_image_id', imageIds)
+  ]
+  if (!seeds.length) return []
+  // The look a row shows: its own, its source's, or none.
+  const sources = new Map<string, MtgImageRow>()
+  const fetchSources = (rows: MtgImageRow[]): void => {
+    const wanted = rows
+      .map((r) => r.art_from)
+      .filter((a): a is string => a !== null && a !== 'none' && !sources.has(a))
+    for (const r of mtgImagesWhere(db, scope, 'scryfall_id', wanted)) sources.set(r.scryfall_id, r)
+  }
+  const lookOf = (r: MtgImageRow): string | null => {
+    if (r.art_from === null) return mtgLookKey(r)
+    if (r.art_from === 'none') return null
+    const src = sources.get(r.art_from)
+    return src && src.art_from === null ? mtgLookKey(src) : null
+  }
+  fetchSources(seeds)
+  const keys = new Set(seeds.map(lookOf).filter((k): k is string => k !== null))
+  if (!keys.size) return []
+  const lookRows = (rows: MtgImageRow[]): MtgImageRow[] =>
+    rows.map((r) => (r.art_from === null ? r : sources.get(r.art_from)!)).filter(Boolean)
+  const illustrations = lookRows(seeds).flatMap((r) => r.illustration_id ?? [])
+  const lone = lookRows(seeds).filter((r) => r.illustration_id === null).map((r) => r.image_id)
+  const candidates = [
+    ...mtgImagesWhere(db, scope, 'illustration_id', illustrations),
+    ...mtgImagesWhere(db, scope, 'image_id', lone)
+  ]
+  fetchSources(candidates)
+  const shown = new Map<number, { row: MtgImageRow; key: string }>()
+  for (const r of candidates) {
+    const key = lookOf(r)
+    if (key !== null && keys.has(key)) shown.set(r.image_id, { row: r, key })
+  }
+  const reps = lookRepresentative(
+    [...shown.values()].filter((s) => s.row.art_from === null).map((s) => s.row)
+  )
+  const artIdsOf = new Map(
+    [...reps].map(([key, r]) => [key, r.back_image_id === null ? [r.image_id] : [r.image_id, r.back_image_id]])
+  )
+  // A printing's own image, by card and (lowercase) Scryfall id.
+  const own = new Map<string, { row: MtgImageRow; key: string }>()
+  for (const s of shown.values()) own.set(`${s.row.card_id}|${s.row.scryfall_id.toLowerCase()}`, s)
+  const cards = [...new Set([...shown.values()].map((s) => s.row.card_id))]
+  const rows: PrintingRow[] = []
+  for (let i = 0; i < cards.length; i += 500) {
+    const chunk = cards.slice(i, i + 500)
+    rows.push(
+      ...(db
+        .prepare(`${select(scope)} AND p.card_id IN (${chunk.map(() => '?').join(',')})`)
+        .all(...chunk) as PrintingRow[])
+    )
+  }
+  return rows
+    .flatMap(({ rawPrice, localName, printedRarity, rarityCode, ...r }) => {
+      const mine = own.get(`${r.cardId}|${(rarityCode ?? '').toLowerCase()}`)
+      const artIds = mine && artIdsOf.get(mine.key)
+      if (!mine || !artIds) return []
+      return [
+        {
+          ...r,
+          price: parsePrice(rawPrice),
+          imageIds: [mine.row.image_id],
+          artIds,
+          ...(localName ? { localName } : {}),
+          ...(printedRarity ? { printedRarity } : {})
+        }
+      ]
+    })
+    .sort(byPrinting)
 }
 
 /** Every artwork of a card printed in the language, for narrowing the art search to it. */

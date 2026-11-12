@@ -93,8 +93,9 @@ export function useHubScan({
     setKey,
     setPrintings,
     defaultRarity: settings.defaultRarity,
+    finishLock: settings.finishLock,
     language: game === 'pkm' ? liveLanguage(settings) : null,
-    filterLanguage: game === 'ygo' || game === 'op' ? printedLanguage(filter) : null,
+    filterLanguage: game === 'pkm' ? null : printedLanguage(filter),
     lookModel,
     tiltModels,
     onDraft,
@@ -111,7 +112,8 @@ export function useHubScan({
     game,
     setPrintings: setPrintings ?? null,
     defaultRarity: settings.defaultRarity,
-    filterLanguage: game === 'ygo' || game === 'op' ? printedLanguage(filter) : null,
+    finishLock: settings.finishLock,
+    filterLanguage: game === 'pkm' ? null : printedLanguage(filter),
     onDraft
   })
 

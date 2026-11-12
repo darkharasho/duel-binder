@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { isLanguage, LANGUAGES, languageInfo, type Language } from '@shared/languages'
+import { FINISH_LOCK_OPTIONS, isFinishLock } from '@shared/scan/finish'
 import { RARITY_TIERS } from '@shared/scan/rarity'
 import { englishSetName, setNameTooltip } from '@shared/setNames'
 import { setPrefix } from '@shared/sets'
@@ -77,6 +78,8 @@ export function useScanPickers(): {
   set: PickerProps
   sets: MultiPickerProps
   rarity: PickerProps
+  /** Magic's finish lock (FinishLock), for this session only. */
+  finish: PickerProps
 } {
   const { settings, setSettings } = useScanHub()
   const [shared, setLanguage] = useLanguageFilter()
@@ -205,6 +208,13 @@ export function useScanPickers(): {
     [setSettings]
   )
 
+  const pickFinish = useCallback(
+    (value: string): void => {
+      if (isFinishLock(value)) setSettings({ finishLock: value })
+    },
+    [setSettings]
+  )
+
   return {
     language: { value: language, options: languageOptions, onPick: pickLanguage },
     set: {
@@ -219,6 +229,7 @@ export function useScanPickers(): {
       onToggle: toggleSet,
       onClear: clearSets
     },
-    rarity: { value: settings.defaultRarity ?? AUTO, options: RARITY_OPTIONS, onPick: pickRarity }
+    rarity: { value: settings.defaultRarity ?? AUTO, options: RARITY_OPTIONS, onPick: pickRarity },
+    finish: { value: settings.finishLock ?? 'auto', options: FINISH_LOCK_OPTIONS, onPick: pickFinish }
   }
 }

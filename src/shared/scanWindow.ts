@@ -1,3 +1,4 @@
+import type { FinishLock } from './scan/finish'
 import type { Language } from './languages'
 import type { FingerprintStatus, ScanDraft } from './scan/types'
 
@@ -60,6 +61,11 @@ export interface ScanWindowSettings {
    * picture grains (Elgato's Facecam 4K visibly); 30 gives it twice the light.
    */
   frameRate: ScanFrameRate
+  /**
+   * Magic's finish for printings that come in both (FinishLock); 'auto' when left out. Never
+   * saved: every session starts at 'auto'.
+   */
+  finishLock?: FinishLock
 }
 
 /** The frame rates the scanner offers, slowest first. */

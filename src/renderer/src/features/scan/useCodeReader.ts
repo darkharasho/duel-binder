@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
+import type { FinishLock } from '@shared/scan/finish'
 import type { GameId } from '@shared/games'
 import type { Language } from '@shared/languages'
 import type { RgbaImage, ScanPrinting } from '@shared/scan/types'
@@ -99,6 +100,8 @@ export function useCodeReader(o: {
   game: GameId
   setPrintings: ScanPrinting[] | null
   defaultRarity: string | null
+  /** Magic only: the session's finish lock; 'auto' when left out. */
+  finishLock?: FinishLock
   filterLanguage: Language | null
   onDraft: (draft: ScanDraft) => string
   /** For tests: what the aim box reads on a frame, band by band; readAim when left out. */
@@ -143,6 +146,7 @@ export function useCodeReader(o: {
             game,
             setPrintings: ctx.setPrintings,
             defaultRarity: ctx.defaultRarity,
+            finishLock: ctx.finishLock,
             filterLanguage: ctx.filterLanguage,
             lookups: api.scan
           })

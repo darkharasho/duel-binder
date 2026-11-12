@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import type { FinishLock } from '@shared/scan/finish'
 import type { GameId } from '@shared/games/types'
 import type { LookModel } from '@shared/scan/look'
 import type { TiltModel } from '@shared/scan/tilt'
@@ -111,6 +112,8 @@ export interface ScanLoopOptions {
   /** The picked sets' printings, together; null for any set, undefined while they load. */
   setPrintings: ScanPrinting[] | null | undefined
   defaultRarity: string | null
+  /** Magic only: the session's finish lock; 'auto' when left out. */
+  finishLock?: FinishLock
   /**
    * Pokémon only: the language live frames take every card to be in, so its art alone is searched
    * and no frame waits on reading its language. A photo still reads it, this being its fallback.
@@ -893,6 +896,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
             reprintLead: PKM_PHOTO_REPRINT_LEAD,
             setPrintings: o.setPrintings ?? null,
             defaultRarity: o.defaultRarity,
+            finishLock: o.finishLock,
             cardLanguage: (cardId) => languageOf(cardId, raw.textBands),
             filterLanguage: o.filterLanguage,
             artDistance: (x, y) => engine.artDistance?.(x, y) ?? Promise.resolve(null),
@@ -1060,6 +1064,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
                 game: o.game,
                 setPrintings,
                 defaultRarity: o.defaultRarity,
+            finishLock: o.finishLock,
                 cardLanguage: (cardId) => languageOf(cardId, raw.textBands),
                 filterLanguage: o.filterLanguage,
                 artDistance: (x, y) => engine.artDistance?.(x, y) ?? Promise.resolve(null),

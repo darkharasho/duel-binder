@@ -33,6 +33,7 @@ import { SET_UNREADABLE, setsSkippedText, statusText } from './scanText'
 import { ScanSoundToggle } from './ScanSoundToggle'
 import { SessionList } from './SessionList'
 import { MultiSearchPicker, SearchPicker } from './SearchPicker'
+import { ScanFinishPicker } from './FinishPicker'
 import { PhotoButton } from './PhotoButton'
 import { useScanPickers } from './pickerOptions'
 import { useGame } from '@/lib/game'
@@ -275,6 +276,7 @@ export function ScanPage({
         )}
         <span className="ml-auto flex items-center gap-2">
           {newScansAs}
+          <ScanFinishPicker />
           {options}
         </span>
       </div>

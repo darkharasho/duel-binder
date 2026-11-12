@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils'
 import { ownedText, surePrinting, useOwned } from './owned'
 import type { ScanDraft } from './resolve'
 import { GLASS, photoFor, priceOf, priceRange, printingOf, versionToPick } from './scanLook'
+import { FoilToggle } from './FoilToggle'
 import { PrintingPicker } from './PrintingPicker'
 import { OptionLabel, type PickerOption } from './SearchPicker'
 import type { ScanRow } from './session'
@@ -194,28 +195,36 @@ export const ScanRowItem = memo(function ScanRowItem({
             </span>
           )}
         </p>
-        <PrintingPicker
-          label={pickerLabel(row)}
-          value={current === null ? null : String(current)}
-          options={choices}
-          onPick={pick}
-          searchPlaceholder="Search code, rarity or set…"
-          disabled={disabled}
-          className="mt-1.5 h-8 max-w-full justify-start gap-1.5 rounded-full border-white/[0.12] bg-white/[0.08] px-2.5 text-xs shadow-none dark:bg-white/[0.08] dark:hover:bg-white/[0.14]"
-          renderTrigger={(picked) => (
-            <>
-              <StarIcon aria-hidden className="size-3.5 shrink-0 text-white/60" />
-              {picked ? (
-                <OptionLabel option={picked} compact />
-              ) : (
-                <span className="truncate text-muted-foreground">
-                  {`Choose a ${printingNoun(row.game ?? 'ygo')}`}
-                </span>
-              )}
-              <ChevronDownIcon aria-hidden className="size-3.5 shrink-0 opacity-60" />
-            </>
-          )}
-        />
+        <div className="mt-1.5 flex min-w-0 items-center gap-1.5">
+          <PrintingPicker
+            label={pickerLabel(row)}
+            value={current === null ? null : String(current)}
+            options={choices}
+            onPick={pick}
+            searchPlaceholder="Search code, rarity or set…"
+            disabled={disabled}
+            className="h-8 min-w-0 max-w-full justify-start gap-1.5 rounded-full border-white/[0.12] bg-white/[0.08] px-2.5 text-xs shadow-none dark:bg-white/[0.08] dark:hover:bg-white/[0.14]"
+            renderTrigger={(picked) => (
+              <>
+                <StarIcon aria-hidden className="size-3.5 shrink-0 text-white/60" />
+                {picked ? (
+                  <OptionLabel option={picked} compact />
+                ) : (
+                  <span className="truncate text-muted-foreground">
+                    {`Choose a ${printingNoun(row.game ?? 'ygo')}`}
+                  </span>
+                )}
+                <ChevronDownIcon aria-hidden className="size-3.5 shrink-0 opacity-60" />
+              </>
+            )}
+          />
+          <FoilToggle
+            row={row}
+            onPick={(id) => setPrinting(key, id)}
+            disabled={disabled}
+            className="shrink-0"
+          />
+        </div>
         {owned && (
           <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
             <CopyIcon aria-hidden className="size-3.5 shrink-0" />

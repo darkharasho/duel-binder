@@ -11,6 +11,7 @@ import {
   ScanTextIcon,
   SettingsIcon,
   ShuffleIcon,
+  SparklesIcon,
   StarIcon,
   Volume2Icon,
   VolumeXIcon,
@@ -32,6 +33,7 @@ import { useGame } from '@/lib/game'
 import { formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { FoundBurst } from '@/features/scan/FoundBurst'
+import { FoilToggle } from '@/features/scan/FoilToggle'
 import { scanStillDownloading } from './copy'
 import { PhoneCamera } from './PhoneCamera'
 import { useGameDownloading } from './useCatalogStatus'
@@ -149,6 +151,12 @@ function LastScan({ row, burst }: { row: ScanRow; burst: number }): React.JSX.El
         <div className="flex min-w-0 flex-1 gap-3">{details}</div>
       )}
       <div className="flex shrink-0 items-center">
+        <FoilToggle
+          row={row}
+          onPick={(id) => session.setPrinting(row.key, id)}
+          disabled={session.committing}
+          className="mr-1 h-9"
+        />
         {choices.length > 1 && (
           <button
             type="button"
@@ -401,6 +409,17 @@ export function ScannerScreen({
           shown={(p) => (pickers.set.value === 'any' || !p ? 'Any set' : p.label)}
           searchPlaceholder="Search sets"
         />
+        {game === 'mtg' && (
+          <Chip
+            label="Finish"
+            name="Finish"
+            title="Finish"
+            icon={SparklesIcon}
+            picker={pickers.finish}
+            shown={(p) => (!p || p.key === 'auto' ? 'Auto finish' : p.label)}
+            searchPlaceholder="Search finishes"
+          />
+        )}
         {rarities && (
           <Chip
             label="New scans as"

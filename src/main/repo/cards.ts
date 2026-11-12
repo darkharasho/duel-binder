@@ -406,6 +406,9 @@ const toResult = (r: DbHit): CardSearchResult => ({
 /**
  * `[image id, the image id it shows]` of each card linked by `column`, only to `language`'s cards if
  * given. Art of its own wins.
+ *
+ * CROSS JOIN pins the loop order to start from the linked Pokémon cards: left to plain JOINs, SQLite
+ * planned it from all of card_images (mostly Magic's), 66–82 ms on a full catalog against 4–22 ms.
  */
 function artLinks(
   db: SqlDb,
@@ -415,9 +418,9 @@ function artLinks(
   const rows = db
     .prepare(
       `SELECT i.image_id AS own, t.image_id AS twin FROM pokemon_cards p
-       JOIN card_images i ON i.card_id = p.card_id AND i.sort_order = 0
-       JOIN card_images t ON t.card_id = p.${column} AND t.sort_order = 0
-       ${language ? `JOIN pokemon_cards l ON l.card_id = p.${column} AND l.source_id LIKE ?` : ''}
+       CROSS JOIN card_images i ON i.card_id = p.card_id AND i.sort_order = 0
+       CROSS JOIN card_images t ON t.card_id = p.${column} AND t.sort_order = 0
+       ${language ? `CROSS JOIN pokemon_cards l ON l.card_id = p.${column} AND l.source_id LIKE ?` : ''}
        WHERE p.${column} IS NOT NULL AND p.image_url IS NULL`
     )
     .all(...(language ? [`${language}/%`] : [])) as { own: number; twin: number }[]

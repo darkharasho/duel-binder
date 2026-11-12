@@ -70,6 +70,8 @@ export type MetaKey =
   | 'price_feed_cursor'
   /** The game this device shows ('ygo' or 'pkm'); absent means 'ygo'. Read in SQL as ACTIVE_GAME. */
   | 'active_game'
+  /** The language Browse last asked its filters in ('all' or a language), so they're built ahead. */
+  | 'browse_language'
   /**
    * Account N, merged into another, has unsent collection rows held here; the value is the account
    * they go to once it has been pulled (see adoptMergedData).

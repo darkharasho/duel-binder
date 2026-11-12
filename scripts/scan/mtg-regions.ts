@@ -13,9 +13,11 @@ import { createInterface } from 'node:readline'
 import { createGunzip } from 'node:zlib'
 import jpeg from 'jpeg-js'
 import { PNG } from 'pngjs'
-import { scryfallArtUrl } from '../../src/shared/imageSources.ts'
 
 type Box = readonly [number, number, number, number]
+
+/** scryfallArtUrl(id, 'full') (src/shared/imageSources.ts), inlined: Node's type stripping can't load extensionless imports. */
+const scryfallLarge = (id: string): string => `https://cards.scryfall.io/large/front/${id[0]}/${id[1]}/${id}.jpg`
 
 interface ScryCard {
   id: string
@@ -95,8 +97,7 @@ async function main(): Promise<void> {
   if (!out) throw new Error('usage: mtg-regions.ts <out-dir> [all-cards.jsonl.gz]')
   mkdirSync(out, { recursive: true })
   for (const [name, card] of await pick(bulk)) {
-    const url = scryfallArtUrl(card.id, 'full')
-    if (!url) continue
+    const url = scryfallLarge(card.id)
     const res = await fetch(url, { headers: { 'User-Agent': 'DuelBinder/dev' } })
     if (!res.ok) throw new Error(`${url}: ${res.status}`)
     const img = jpeg.decode(new Uint8Array(await res.arrayBuffer()), { useTArray: true })

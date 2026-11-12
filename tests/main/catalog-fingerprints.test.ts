@@ -5,7 +5,7 @@ import Database from 'better-sqlite3'
 import { decode, encode } from 'jpeg-js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { runJob } from '../../scripts/catalog/build'
-import { upright, buildFingerprints, uploadFingerprints } from '../../scripts/catalog/fingerprints'
+import { upright, buildFingerprints, mtgLookKey, uploadFingerprints } from '../../scripts/catalog/fingerprints'
 import { openDatabase } from '../../src/main/db/database'
 import { scanProfile } from '../../src/shared/scan/profiles'
 import { NEW_ART_VARIANT } from '../../src/main/yugipedia/parse'
@@ -14,7 +14,7 @@ import { decodeFingerprints, encodeFingerprints } from '../../src/shared/scan/fi
 import { hashHex, parseFingerprintRefs } from '../../src/shared/scan/fingerprintRefs'
 import { PNG } from 'pngjs'
 import { pokemonId } from '../../src/shared/games'
-import { onePieceCardId, onePieceImageId, tokenId } from '../../src/shared/games/ids'
+import { MTG_ID_MIN, onePieceCardId, onePieceImageId, tokenId } from '../../src/shared/games/ids'
 import type { RgbaImage } from '../../src/shared/scan/types'
 
 let dir: string
@@ -852,5 +852,165 @@ describe('One Piece fingerprints', () => {
     expect(await build()).toMatchObject({ count: 2, fetched: 0 })
     work.prepare('UPDATE onepiece_images SET bandai_id = ? WHERE image_id = ?').run('OP01-001_p1', en)
     expect(await build()).toMatchObject({ count: 2, fetched: 1 })
+  })
+})
+
+describe('buildFingerprints for Magic', () => {
+  const NOW = new Date('2026-11-11T00:00:00Z')
+  const daysAgo = (n: number): string => new Date(NOW.getTime() - n * 86400000).toISOString().slice(0, 10)
+  /** A Scryfall id whose last hex digits are `n`, so each row's URL is its own. */
+  const sid = (n: number): string => `00000000-0000-4000-8000-${n.toString(16).padStart(12, '0')}`
+  let setNo = 0
+  const addMtg = (o: {
+    n: number
+    lang?: string
+    illustration?: string | null
+    frame?: string
+    border?: string
+    fullArt?: number
+    back?: number | null
+    artFrom?: string | null
+    setDate?: string
+  }): number => {
+    const imageId = MTG_ID_MIN + o.n
+    const cardId = MTG_ID_MIN + 1000 + o.n
+    const lang = o.lang ?? 'en'
+    work
+      .prepare(
+        `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at, game)
+         VALUES (?, 'Siren Lookout', 'Creature', 'mtg', '', '', '2026-01-01', 'mtg')`
+      )
+      .run(cardId)
+    work
+      .prepare("INSERT INTO mtg_cards (card_id, oracle_id, lang) VALUES (?, 'oracle', ?)")
+      .run(cardId, lang)
+    work
+      .prepare("INSERT INTO card_images (image_id, card_id, sort_order, game) VALUES (?, ?, 0, 'mtg')")
+      .run(imageId, cardId)
+    work
+      .prepare(
+        `INSERT INTO mtg_images (image_id, scryfall_id, illustration_id, frame, border_color, full_art,
+           back_image_id, art_from) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        imageId,
+        sid(o.n),
+        o.illustration === undefined ? 'ill-1' : o.illustration,
+        o.frame ?? '2015',
+        o.border ?? 'black',
+        o.fullArt ?? 0,
+        o.back ?? null,
+        o.artFrom ?? null
+      )
+    const set = `Set ${++setNo}`
+    work
+      .prepare(
+        "INSERT INTO sets (game, language, set_name, set_code, tcg_date) VALUES ('mtg', ?, ?, ?, ?)"
+      )
+      .run(lang, set, `S${setNo}`, o.setDate ?? '2020-01-01')
+    work
+      .prepare(
+        `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_rarity_code, language, game)
+         VALUES (?, ?, ?, 'Rare', ?, ?, 'mtg')`
+      )
+      .run(cardId, set, `S${setNo} ${o.n}`, sid(o.n), lang)
+    return imageId
+  }
+  const build = (
+    urls: string[] = [],
+    extra: { budget?: number } = {}
+  ): ReturnType<typeof buildFingerprints> =>
+    buildFingerprints({
+      work,
+      cachePath: join(dir, 'fingerprints-mtg.sqlite'),
+      game: 'mtg',
+      now: () => NOW,
+      ...extra,
+      fetch: (async (input: RequestInfo | URL) => {
+        const url = String(input)
+        urls.push(url)
+        return new Response(jpeg(url.includes('/back/')) as BodyInit)
+      }) as typeof fetch
+    })
+  const idsOf = (bytes: Uint8Array): number[] => {
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+    const v2 = view.getUint8(4) === 2
+    const size = (v2 ? 8 : 4) + HASH_WORDS * 4
+    const ids: number[] = []
+    for (let i = 0, o = 11; i < view.getUint32(7, true); i++, o += size)
+      ids.push(view.getUint32(o, true) + (v2 ? view.getUint32(o + 4, true) * 2 ** 32 : 0))
+    expect(decodeFingerprints(bytes).count).toBe(ids.length)
+    return ids.sort()
+  }
+
+  it('hashes one record per look, preferring the English row', async () => {
+    addMtg({ n: 1, lang: 'ja' })
+    const en = addMtg({ n: 2, lang: 'en' })
+    const other = addMtg({ n: 3, frame: '2003' })
+    const urls: string[] = []
+    const out = await build(urls)
+    expect(out).toMatchObject({ count: 2, fetched: 2, failed: 0 })
+    expect(idsOf(out.bytes)).toEqual([en, other].sort())
+    expect(urls.sort()).toEqual([
+      `https://cards.scryfall.io/large/front/0/0/${sid(2)}.jpg`,
+      `https://cards.scryfall.io/large/front/0/0/${sid(3)}.jpg`
+    ])
+  })
+
+  it('hashes a back face under back_image_id from the back URL', async () => {
+    const back = MTG_ID_MIN + 500
+    const front = addMtg({ n: 1, back })
+    const urls: string[] = []
+    const out = await build(urls)
+    expect(idsOf(out.bytes)).toEqual([front, back].sort())
+    expect(urls).toContain(`https://cards.scryfall.io/large/back/0/0/${sid(1)}.jpg`)
+    expect(urls).toContain(`https://cards.scryfall.io/large/front/0/0/${sid(1)}.jpg`)
+  })
+
+  it('leaves out rows that borrow art or have none', async () => {
+    addMtg({ n: 1, illustration: 'a', artFrom: sid(9) })
+    addMtg({ n: 2, illustration: 'b', artFrom: 'none' })
+    const own = addMtg({ n: 3, illustration: 'c' })
+    const urls: string[] = []
+    const out = await build(urls)
+    expect(idsOf(out.bytes)).toEqual([own])
+    expect(urls).toEqual([`https://cards.scryfall.io/large/front/0/0/${sid(3)}.jpg`])
+  })
+
+  it('gives a row with no illustration id its own record', async () => {
+    const a = addMtg({ n: 1, illustration: null })
+    const b = addMtg({ n: 2, illustration: null })
+    expect(idsOf((await build()).bytes)).toEqual([a, b].sort())
+  })
+
+  it('stops at the nightly budget and carries on next run', async () => {
+    addMtg({ n: 1, illustration: 'a' })
+    addMtg({ n: 2, illustration: 'b' })
+    addMtg({ n: 3, illustration: 'c' })
+    expect(await build([], { budget: 1 })).toMatchObject({ count: 1, fetched: 1 })
+    expect(await build([], { budget: 1 })).toMatchObject({ count: 2, fetched: 1 })
+  })
+
+  it('hashes images of sets from the last 21 days again', async () => {
+    addMtg({ n: 1, illustration: 'a', setDate: daysAgo(5) })
+    addMtg({ n: 2, illustration: 'b', setDate: daysAgo(60) })
+    await build()
+    const urls: string[] = []
+    expect(await build(urls)).toMatchObject({ count: 2, fetched: 1 })
+    expect(urls).toEqual([`https://cards.scryfall.io/large/front/0/0/${sid(1)}.jpg`])
+  })
+
+  it('writes format v2', async () => {
+    const id = addMtg({ n: 1 })
+    const out = await build()
+    expect(new DataView(out.bytes.buffer, out.bytes.byteOffset).getUint8(4)).toBe(2)
+    expect(idsOf(out.bytes)).toEqual([id])
+    expect(id).toBeGreaterThan(2 ** 32)
+  })
+
+  it('mtgLookKey keys by illustration, frame, border and full art, else the image', () => {
+    const row = { illustration_id: 'x', frame: '2015', border_color: 'black', full_art: 0, image_id: 7 }
+    expect(mtgLookKey(row)).toBe('x|2015|black|0')
+    expect(mtgLookKey({ ...row, illustration_id: null })).toBe('img:7')
   })
 })

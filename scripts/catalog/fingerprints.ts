@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3'
 import { decode } from 'jpeg-js'
 import type { GameId } from '../../src/shared/games'
-import { imageUrl, opBandaiArtUrl, opTcgArtUrl } from '../../src/shared/imageSources'
+import { imageUrl, opBandaiArtUrl, opTcgArtUrl, scryfallArtUrl } from '../../src/shared/imageSources'
 import { scanProfile, type ScanProfile } from '../../src/shared/scan/profiles'
 import { HASH_WORDS, artHash, fingerprintSource, hamming } from '../../src/shared/scan/fingerprint'
 import { encodeFingerprints } from '../../src/shared/scan/fingerprintFile'
@@ -32,6 +32,17 @@ const HASH_VERSION = '3'
 const PKM_HASH_VERSION = '1'
 /** One Piece's, likewise: bump when its art crop (OP_PROFILE) changes. */
 const OP_HASH_VERSION = '1'
+/** Magic's, likewise: bump when its art crop (MTG_PROFILE) changes. */
+const MTG_HASH_VERSION = '1'
+/** Scryfall's image host is a CDN with no rate limit, but asked gently all the same. */
+const MTG_CONCURRENCY = 4
+/**
+ * New Magic hashes a night: about 70k looks would take one run past the job's timeout, so the
+ * first file fills over a few nights (the cache keeps each night's work).
+ */
+const MTG_FINGERPRINT_BUDGET = 20000
+/** Sets released this recently have their images hashed again each night: previews get replaced. */
+const MTG_RECENT_DAYS = 21
 /**
  * A token with a hash this close to another card's gets no records. Its art is often that card's,
  * and a whole-card scan sits nearer a photo than the art crop does, so it would win the match in
@@ -57,6 +68,10 @@ export interface FingerprintOptions {
   references?: Omit<ReferenceOptions, 'work' | 'cache' | 'log'>
   /** Finds the scans of token ids, which YGOPRODeck has no art for; they are left out without it. */
   tokenArt?: Pick<YugipediaClient, 'imageUrlsByPageId'>
+  /** Magic only: the most new hashes this run (MTG_FINGERPRINT_BUDGET without it). */
+  budget?: number
+  /** Magic only: today, for which sets count as recent. */
+  now?: () => Date
 }
 
 export interface FingerprintResult {
@@ -168,8 +183,7 @@ export async function buildFingerprints(opts: FingerprintOptions): Promise<Finge
   const game = opts.game ?? 'ygo'
   const pkm = game === 'pkm'
   const op = game === 'op'
-  // mtg: scanner step. scanProfile throws for Magic (no profile yet), so it stops here before the
-  // Yu-Gi-Oh! hash version and YGOPRODeck image URLs below.
+  if (game === 'mtg') return buildMagicFingerprints(opts, fetchFn, log)
   const profile = game === 'ygo' ? undefined : scanProfile(game)
   const hashVersion = pkm ? PKM_HASH_VERSION : op ? OP_HASH_VERSION : HASH_VERSION
   const cache = new Database(opts.cachePath)
@@ -292,7 +306,6 @@ export async function buildFingerprints(opts: FingerprintOptions): Promise<Finge
       while (next < todo.length) {
         const id = todo[next++]
         try {
-          // mtg: scanner step (it would need its Scryfall URLs here, not YGOPRODeck's).
           const url = pkm || op ? urls.get(id) : imageUrl('cropped', id)
           if (!url) throw new Error('no image URL')
           const hash = await hashImage(fetchFn, url, frames.get(id)!, profile)
@@ -382,6 +395,166 @@ export async function buildFingerprints(opts: FingerprintOptions): Promise<Finge
       failed,
       count: finalRecords.length,
       references
+    }
+  } finally {
+    cache.close()
+  }
+}
+
+/** The facts that make a Magic image's art look as it does; rows sharing them share a record. */
+export interface MagicLookRow {
+  illustration_id: string | null
+  frame: string | null
+  border_color: string | null
+  full_art: number
+  image_id: number
+}
+
+/**
+ * The key of a Magic artwork's look: its illustration in one frame, border and full-art or not.
+ * An image with no illustration id is a look of its own.
+ */
+export function mtgLookKey(row: MagicLookRow): string {
+  return row.illustration_id === null
+    ? `img:${row.image_id}`
+    : `${row.illustration_id}|${row.frame}|${row.border_color}|${row.full_art}`
+}
+
+/**
+ * Magic's file: one record per look (mtgLookKey) among the images with art of their own
+ * (`art_from` NULL), hashed from Scryfall's `large` image of the look's English row (else its
+ * lowest image id), cut to MTG_PROFILE's art box; a two-faced card's back is hashed under its
+ * `back_image_id`. At most `budget` new hashes a run; images of sets released in the last
+ * MTG_RECENT_DAYS are hashed again each run, and a look whose row or URL changes is hashed again.
+ */
+async function buildMagicFingerprints(
+  opts: FingerprintOptions,
+  fetchFn: typeof fetch,
+  log: (s: string) => void
+): Promise<FingerprintResult> {
+  const profile = scanProfile('mtg')
+  const budget = opts.budget ?? MTG_FINGERPRINT_BUDGET
+  const now = opts.now?.() ?? new Date()
+  const rows = opts.work
+    .prepare(
+      `SELECT m.image_id, m.scryfall_id, m.illustration_id, m.frame, m.border_color, m.full_art,
+              m.back_image_id, COALESCE(c.lang, '') AS lang
+       FROM mtg_images m JOIN card_images i ON i.image_id = m.image_id
+       LEFT JOIN mtg_cards c ON c.card_id = i.card_id
+       WHERE m.art_from IS NULL ORDER BY m.image_id`
+    )
+    .all() as (MagicLookRow & { scryfall_id: string; back_image_id: number | null; lang: string })[]
+  const looks = new Map<string, (typeof rows)[number]>()
+  for (const r of rows) {
+    const key = mtgLookKey(r)
+    const was = looks.get(key)
+    // Rows come lowest id first, so the first English row (else the first row) stays.
+    if (!was || (was.lang !== 'en' && r.lang === 'en')) looks.set(key, r)
+  }
+  // Each record's image id and the URL it is hashed from, and the Scryfall object it shows.
+  const targets = new Map<number, { url: string; scryfallId: string }>()
+  for (const r of looks.values()) {
+    const front = scryfallArtUrl(r.scryfall_id, 'full', 'front')
+    if (!front) continue
+    targets.set(r.image_id, { url: front, scryfallId: r.scryfall_id.toLowerCase() })
+    const back = r.back_image_id === null ? null : scryfallArtUrl(r.scryfall_id, 'full', 'back')
+    if (back) targets.set(r.back_image_id!, { url: back, scryfallId: r.scryfall_id.toLowerCase() })
+  }
+  // Printings point at their Scryfall object by set_rarity_code (magic/write.ts).
+  const since = new Date(now.getTime() - MTG_RECENT_DAYS * 86400000).toISOString().slice(0, 10)
+  const recent = new Set(
+    (
+      opts.work
+        .prepare(
+          `SELECT DISTINCT lower(p.set_rarity_code) FROM card_printings p
+           JOIN sets s ON s.game = 'mtg' AND s.language = p.language AND s.set_name = p.set_name
+           WHERE p.game = 'mtg' AND s.tcg_date >= ?`
+        )
+        .pluck()
+        .all(since) as string[]
+    )
+  )
+
+  const cache = new Database(opts.cachePath)
+  try {
+    cache.exec('CREATE TABLE IF NOT EXISTS fp (image_id INTEGER PRIMARY KEY, hash BLOB NOT NULL)')
+    cache.exec('CREATE TABLE IF NOT EXISTS src (image_id INTEGER PRIMARY KEY, url TEXT NOT NULL)')
+    cache.exec('CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
+    cache.prepare('DELETE FROM fp WHERE length(hash) != ?').run(HASH_WORDS * 4)
+    const version = cache.prepare("SELECT value FROM meta WHERE key = 'hash_version'").pluck().get()
+    if (version !== MTG_HASH_VERSION) {
+      cache.transaction(() => {
+        cache.exec('DELETE FROM fp; DELETE FROM src')
+        cache
+          .prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('hash_version', ?)")
+          .run(MTG_HASH_VERSION)
+      })()
+    }
+    const srcOf = new Map(
+      (cache.prepare('SELECT image_id, url FROM src').all() as { image_id: number; url: string }[]).map(
+        (r) => [r.image_id, r.url]
+      )
+    )
+    const cached = new Set(
+      (cache.prepare('SELECT image_id FROM fp').pluck().all() as number[]).filter(
+        (id) => targets.has(id) && srcOf.get(id) === targets.get(id)!.url
+      )
+    )
+    const ids = [...targets.keys()].sort((a, b) => a - b)
+    // New looks first, up to the budget; then this month's sets again, whose old hash stays
+    // until a new one replaces it.
+    const todo = [
+      ...ids.filter((id) => !cached.has(id)).slice(0, budget),
+      ...ids.filter((id) => cached.has(id) && recent.has(targets.get(id)!.scryfallId))
+    ]
+    const insert = cache.prepare('INSERT OR REPLACE INTO fp (image_id, hash) VALUES (?, ?)')
+    const putSrc = cache.prepare('INSERT OR REPLACE INTO src (image_id, url) VALUES (?, ?)')
+    let pending = 0
+    let fetched = 0
+    let failed = 0
+    let next = 0
+    cache.exec('BEGIN')
+    const worker = async (): Promise<void> => {
+      while (next < todo.length) {
+        const id = todo[next++]
+        const { url } = targets.get(id)!
+        try {
+          const hash = await hashImage(fetchFn, url, '', profile)
+          insert.run(id, Buffer.from(hash.buffer, hash.byteOffset, hash.byteLength))
+          putSrc.run(id, url)
+          fetched++
+          if (++pending >= COMMIT_EVERY) {
+            cache.exec('COMMIT; BEGIN')
+            pending = 0
+          }
+        } catch (e) {
+          failed++
+          log(`Fingerprint for image ${id} failed: ${e instanceof Error ? e.message : e}`)
+        }
+      }
+    }
+    const workers = Math.max(1, opts.concurrency ?? MTG_CONCURRENCY)
+    await Promise.all(Array.from({ length: Math.min(workers, todo.length) }, worker))
+    cache.exec('COMMIT')
+    const left = ids.filter((id) => !cached.has(id)).length - Math.min(budget, ids.length)
+    if (left > 0) log(`Magic fingerprints: ${left} looks left for the next runs`)
+
+    const entries: { imageId: number; hash: Uint32Array }[] = []
+    // Only hashes of this run's targets, from the URL each is hashed from today.
+    for (const row of cache
+      .prepare('SELECT f.image_id, f.hash, s.url FROM fp f JOIN src s USING (image_id) ORDER BY f.image_id')
+      .all() as { image_id: number; hash: Buffer; url: string }[]) {
+      if (targets.get(row.image_id)?.url !== row.url) continue
+      const bytes = new Uint8Array(row.hash)
+      entries.push({ imageId: row.image_id, hash: new Uint32Array(bytes.buffer) })
+    }
+    return {
+      bytes: encodeFingerprints(entries),
+      refs: encodeFingerprintRefs([]),
+      fetched,
+      failed,
+      count: entries.length,
+      references: { count: 0, fetched: 0, failed: 0 }
     }
   } finally {
     cache.close()

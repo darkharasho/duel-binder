@@ -27,6 +27,13 @@ export const PKM_ART_MIN_MARGIN = 24
 export const OP_ART_MIN_MARGIN = 24
 export const OP_SAME_ART = 24
 /**
+ * Magic (resolveMagic.ts): the lead a look needs over the closest look of another card, and how
+ * close another look of the same card must be to be taken along as a choice. 16 (One Piece's 24
+ * left two near Reality Fracture photos unsure; 16 named them, 0 wrong across the 435).
+ */
+export const MTG_ART_MIN_MARGIN = 16
+export const MTG_SAME_ART = 24
+/**
  * A Japanese card's printed name is evidence of its language (readsJapaneseName) with this many
  * kana and kanji or more, and may be read one letter off with JA_NAME_FUZZY_LENGTH.
  */

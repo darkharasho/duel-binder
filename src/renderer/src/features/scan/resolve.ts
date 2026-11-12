@@ -23,6 +23,7 @@ import {
 import type { ScanDraft, ScanPrinting } from '@shared/scan/types'
 import type { ArtMatch, RawSignals } from './engine'
 import { resolveOnePieceSignals } from './resolveOnePiece'
+import { resolveMagicSignals, type FinishLock } from './resolveMagic'
 import { resolvePokemonSignals } from './resolvePokemon'
 import type { PokemonTextLanguage } from '@shared/scan/pokemonLanguage'
 
@@ -48,6 +49,8 @@ export interface ResolveContext {
    */
   setPrintings: ScanPrinting[] | null
   defaultRarity: string | null
+  /** For Magic: the session's finish lock (FinishLock); 'auto' when left out. */
+  finishLock?: FinishLock
   /**
    * The language the card's text reads as, for a card with printings in several languages and no
    * code read; null when it can't be told. Without it, such a card is taken in its first language.
@@ -78,7 +81,9 @@ export interface ResolveContext {
     'printingsByCode' | 'printingsByNumber' | 'printingsForCards' | 'matchName' | 'cardsForImages'
   > &
     /** For Simplified Chinese: without it, a Chinese card stands in only by number (chineseTwins). */
-    Partial<Pick<Api['scan'], 'chineseOfArt'>>
+    Partial<Pick<Api['scan'], 'chineseOfArt'>> &
+    /** For Magic: without it, a Magic card is named by its info line only. */
+    Partial<Pick<Api['scan'], 'printingsOfArt'>>
 }
 
 /** The art's best match when it is one of the card's artworks, else the card's first. */
@@ -357,7 +362,7 @@ export async function resolveSignals(raw: RawSignals, ctx: ResolveContext): Prom
   if (raw.found && cardBackInView(raw)) return { kind: 'none' }
   if (ctx.game === 'pkm') return resolvePokemonSignals(raw, ctx)
   if (ctx.game === 'op') return resolveOnePieceSignals(raw, ctx)
-  // mtg: scanner step (Magic has no scanner yet; it would fall into the Yu-Gi-Oh! path below).
+  if (ctx.game === 'mtg') return resolveMagicSignals(raw, ctx)
   if (!raw.found) return { kind: 'none' }
   const artCard = await confidentArt(raw, ctx)
   const code = await byCode(raw, ctx)

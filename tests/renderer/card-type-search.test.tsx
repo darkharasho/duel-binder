@@ -33,6 +33,9 @@ const show = (ps: Printing[]): ReturnType<typeof renderWithProviders> =>
       copies={[]}
       selectedKey={undefined}
       onSelect={() => {}}
+      originalImageId={undefined}
+      // As the panel opens a card with no copies.
+      startExpanded
     />,
     { api: createMockApi() }
   )

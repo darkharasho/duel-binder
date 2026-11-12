@@ -180,7 +180,8 @@ describe('X wants this', () => {
       throw new Error('unknown-channel')
     })
     panel({ friends: { wanting } }, [copy])
-    expect(await screen.findByRole('button', { name: /Want .*LOB-001/ })).toBeInTheDocument()
+    // An owned card opens on its copies, whose lines carry no heart.
+    expect(await screen.findByRole('group', { name: /LOB-001/ })).toBeInTheDocument()
     await waitFor(() => expect(wanting).toHaveBeenCalled())
     expect(screen.queryByRole('region', { name: 'Friends who want this card' })).toBeNull()
   })

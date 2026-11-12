@@ -190,8 +190,9 @@ export function CardPanel({
   const pokemonVersion = def.id === 'pkm' ? shown?.setRarity : undefined
 
   const moreFor = shown?.id ?? seed?.defaultPrintingId ?? rows[0]?.printing.id
-  // Until the card and its copies arrive, a spinner rather than "You have none yet".
-  const loadingRows = rows.length === 0 && (detail.isPending || copies.isPending)
+  // Until the card and its copies arrive, a spinner rather than "You have none yet". The list also
+  // waits for the copies, as they decide whether it opens on them or on every printing.
+  const loadingRows = copies.isPending || (rows.length === 0 && detail.isPending)
   const list = loadingRows ? (
     <LoadingState label="Loading printings…" className="py-8" />
   ) : (
@@ -203,6 +204,9 @@ export function CardPanel({
       copies={copies.data}
       selectedKey={selected?.key}
       onSelect={selectRow}
+      originalImageId={detail.data?.images[0]?.imageId}
+      // A set's list is short, so it needs no gate.
+      startExpanded={!!onlySet || !(copies.data ?? []).length}
     />
   )
   // The phone's full-screen sheet is long, so its list comes before the card text.

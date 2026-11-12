@@ -19,6 +19,8 @@ import { rarityColor } from '@/lib/rarityColors'
 import { useCardWishes } from '@/lib/wishlist'
 import { cn } from '@/lib/utils'
 import type { CardTypeRow } from './cardTypes'
+import { OwnedCopies } from './OwnedCopies'
+import { printingSummary } from './printingGroups'
 
 interface CardTypeListProps {
   cardId: number
@@ -28,6 +30,10 @@ interface CardTypeListProps {
   /** The row the panel shows. */
   selectedKey: string | undefined
   onSelect: (row: CardTypeRow) => void
+  /** The card's original art; undefined until the card's details load. */
+  originalImageId: number | undefined
+  /** Opens on every printing rather than on the user's copies. Read once, on mount. */
+  startExpanded: boolean
 }
 
 /** The list's clicks not yet answered, in queue order, over the server's last count per stepper. */
@@ -99,7 +105,8 @@ export function CardTypeList({
   rows,
   copies,
   selectedKey,
-  onSelect
+  onSelect,
+  startExpanded
 }: CardTypeListProps): React.JSX.Element {
   const { def } = useGame()
   const qc = useQueryClient()
@@ -191,17 +198,145 @@ export function CardTypeList({
       })
   }
 
+  /**
+   * A row's −/count/+, and the confirm under it when the − would take an entry's last copy. Each
+   * place a row is edited calls this, so the count logic is one.
+   */
+  const renderStepper = (row: CardTypeRow, label: string): React.ReactNode => {
+    const owned = ownedOf(row)
+    return (
+      <>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <Button
+            variant="outline"
+            size="icon-sm"
+            aria-label={`Remove one ${label}`}
+            disabled={owned === 0}
+            onClick={() => {
+              if (owned === 1 && row.entry) setConfirming(row.key)
+              else adjust(row, -1)
+            }}
+          >
+            <Minus />
+          </Button>
+          <span
+            aria-busy={pending > 0}
+            className={cn(
+              'w-6 text-center text-sm tabular-nums',
+              owned === 0 ? 'text-muted-foreground' : 'font-semibold',
+              pending > 0 && 'text-muted-foreground'
+            )}
+          >
+            {owned}
+          </span>
+          <Button
+            variant="outline"
+            size="icon-sm"
+            aria-label={`Add one ${label}`}
+            // A removed entry has nothing left to add to; its row goes on the next refresh.
+            disabled={owned === 0 && !row.viaPrinting}
+            onClick={() => {
+              setConfirming(null)
+              adjust(row, 1)
+            }}
+          >
+            <Plus />
+          </Button>
+        </div>
+        {confirming === row.key && row.entry && (
+          <div className="flex basis-full flex-wrap items-center gap-2 pl-2">
+            <span className="text-sm">
+              {row.entry.notes ? 'Remove this entry and its notes?' : 'Remove this entry?'}
+            </span>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                setConfirming(null)
+                adjust(row, -1)
+              }}
+            >
+              Confirm
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setConfirming(null)}>
+              Cancel
+            </Button>
+          </div>
+        )}
+      </>
+    )
+  }
+
   const selected = rows.find((r) => r.key === selectedKey)
+  const owned = rows.filter((r) => r.entry)
+  const value = owned.reduce((sum, r) => sum + ownedOf(r) * (r.entry?.unitPrice ?? 0), 0)
+  // Reset per card: the list is keyed by card.
+  const [expanded, setExpanded] = useState(startExpanded)
+  // A printing with several entries is still one printing.
+  const summary = printingSummary(
+    rows.map((r) => r.printing).filter((p, i, all) => all.findIndex((x) => x.id === p.id) === i),
+    def.id
+  )
+  const summaryLine = [
+    summary.arts > 1 && `${summary.arts} artworks`,
+    summary.sets > 1 && `${summary.sets} sets`,
+    summary.languages > 1 && `${summary.languages} languages`
+  ]
+    .filter(Boolean)
+    .join(' · ')
+  const wished = (printingId: number): boolean =>
+    wishes.data?.some((w) => w.printingId === printingId) ?? false
   const [query, setQuery] = useState('')
+  const rest = rows.filter((r) => !r.entry)
   const searchable = def.id === 'ygo' && rows.length > SEARCH_FROM
-  const shown = searchable && query.trim() ? rows.filter((r) => rowMatches(r, query)) : rows
+  const shown = searchable && query.trim() ? rest.filter((r) => rowMatches(r, query)) : rest
+  const ownedCopies = (compact: boolean): React.JSX.Element => (
+    <OwnedCopies
+      rows={owned}
+      cardName={cardName}
+      selectedKey={selectedKey}
+      onSelect={onSelect}
+      ownedOf={ownedOf}
+      pending={pending > 0}
+      wished={wished}
+      stepper={renderStepper}
+      compact={compact}
+    />
+  )
 
   return (
     <section aria-label="Printings" className="space-y-2">
       <h3 className="text-sm font-medium">
         {total > 0 ? `You have ${total}` : 'You have none yet'}
+        {total > 0 && value > 0 && (
+          <span className="text-muted-foreground"> · worth {formatUsd(value)}</span>
+        )}
       </h3>
-      {searchable && (
+      {!expanded && (
+        <>
+          {ownedCopies(false)}
+          <div className="space-y-1 pt-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={() => setExpanded(true)}
+            >
+              Show all {summary.printings} printings
+            </Button>
+            {summaryLine && (
+              <p className="text-center text-xs text-muted-foreground">{summaryLine}</p>
+            )}
+          </div>
+        </>
+      )}
+      {expanded && owned.length > 0 && (
+        <>
+          <p className="text-xs font-medium text-muted-foreground">Your copies</p>
+          {ownedCopies(true)}
+        </>
+      )}
+      {expanded && searchable && (
         <SearchInput
           label="Search printings"
           placeholder="Search by set, code or rarity"
@@ -210,19 +345,19 @@ export function CardTypeList({
           debounceMs={0}
         />
       )}
-      {shown.length === 0 && <p className="text-xs text-muted-foreground">No prints match</p>}
-      {shown.map((row) => {
-        const p = row.printing
-        const name = `${cardName} ${p.setCode} ${p.setRarity}`
-        // Rows of one printing need telling apart.
-        const label = row.key.startsWith('e') ? `${name} entry ${row.entry?.id}` : name
-        const owned = ownedOf(row)
-        const price = row.entry ? row.entry.unitPrice : p.setPrice
-        return (
-          <div key={row.key} className="space-y-1">
+      {expanded && rest.length > 0 && shown.length === 0 && (
+        <p className="text-xs text-muted-foreground">No prints match</p>
+      )}
+      {expanded &&
+        shown.map((row) => {
+          const p = row.printing
+          const name = `${cardName} ${p.setCode} ${p.setRarity}`
+          const price = p.setPrice
+          return (
             <div
+              key={row.key}
               role="group"
-              aria-label={label}
+              aria-label={name}
               {...pickableRow(
                 row.key === selectedKey,
                 () => onSelect(row),
@@ -262,76 +397,16 @@ export function CardTypeList({
                   {formatUsd(price)}
                 </span>
               )}
-              {/* One heart per printing: its other rows are only other art. */}
-              {row.key.startsWith('p') ? (
-                <WishToggle
-                  cardId={cardId}
-                  printingId={p.id}
-                  wanted={wishes.data?.some((w) => w.printingId === p.id) ?? false}
-                  label={name}
-                />
-              ) : (
-                <span aria-hidden className="size-8 shrink-0" />
-              )}
-              <Button
-                variant="outline"
-                size="icon-sm"
-                aria-label={`Remove one ${label}`}
-                disabled={owned === 0}
-                onClick={() => {
-                  if (owned === 1 && row.entry) setConfirming(row.key)
-                  else adjust(row, -1)
-                }}
-              >
-                <Minus />
-              </Button>
-              <span
-                aria-busy={pending > 0}
-                className={cn(
-                  'w-6 text-center text-sm tabular-nums',
-                  owned === 0 ? 'text-muted-foreground' : 'font-semibold',
-                  pending > 0 && 'text-muted-foreground'
-                )}
-              >
-                {owned}
-              </span>
-              <Button
-                variant="outline"
-                size="icon-sm"
-                aria-label={`Add one ${label}`}
-                // A removed entry has nothing left to add to; its row goes on the next refresh.
-                disabled={owned === 0 && !row.viaPrinting}
-                onClick={() => {
-                  setConfirming(null)
-                  adjust(row, 1)
-                }}
-              >
-                <Plus />
-              </Button>
+              <WishToggle cardId={cardId} printingId={p.id} wanted={wished(p.id)} label={name} />
+              {renderStepper(row, name)}
             </div>
-            {confirming === row.key && row.entry && (
-              <div className="flex flex-wrap items-center gap-2 pl-2">
-                <span className="text-sm">
-                  {row.entry.notes ? 'Remove this entry and its notes?' : 'Remove this entry?'}
-                </span>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => {
-                    setConfirming(null)
-                    adjust(row, -1)
-                  }}
-                >
-                  Confirm
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => setConfirming(null)}>
-                  Cancel
-                </Button>
-              </div>
-            )}
-          </div>
-        )
-      })}
+          )
+        })}
+      {expanded && owned.length > 0 && (
+        <Button variant="link" size="sm" className="h-auto px-0" onClick={() => setExpanded(false)}>
+          Show less
+        </Button>
+      )}
       <AddToBinder
         cardId={cardId}
         printing={

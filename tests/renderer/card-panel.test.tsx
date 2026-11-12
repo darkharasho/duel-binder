@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import type { QueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import type { GameId } from '@shared/games'
-import type { CardDetail, ChecklistCard, EntryView, Printing } from '@shared/types'
+import type { CardDetail, CardWish, ChecklistCard, EntryView, Printing } from '@shared/types'
 import { CardSheet } from '@/components/CardSheet'
 import { CardPanel } from '@/features/card/CardPanel'
 import { cardTypeRows } from '@/features/card/cardTypes'
@@ -67,7 +67,8 @@ function setup(
   props: Partial<React.ComponentProps<typeof CardPanel>> = {},
   printings = [a, b, c],
   game: GameId = 'ygo',
-  collection: { remove?: (id: number) => Promise<void> } = {}
+  collection: { remove?: (id: number) => Promise<void> } = {},
+  wishes: CardWish[] = []
 ): { adjust: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn>; qc: QueryClient } {
   const adjust = vi.fn(async () => ({ rarities: [] }) as unknown as ChecklistCard)
   const update = vi.fn(async (id: number) => copies.find((e) => e.id === id)!)
@@ -85,6 +86,7 @@ function setup(
         },
         collection: { forCard: async () => copies, update, ...collection },
         sets: { adjust },
+        wishlist: { forCard: async () => wishes },
         games: { available: async () => [game], active: async () => game }
       })
     }
@@ -92,9 +94,21 @@ function setup(
   return { adjust, update, qc }
 }
 
+/** The list, once it shows an owned line or the Show all button. */
 const list = async (): Promise<HTMLElement> => {
   const section = await screen.findByRole('region', { name: 'Printings' })
-  await within(section).findByRole('group', { name: /LOB-002/ })
+  await waitFor(() =>
+    expect(
+      within(section).queryAllByRole('group').length +
+        within(section).queryAllByRole('button', { name: /^Show all/ }).length
+    ).toBeGreaterThan(0)
+  )
+  return section
+}
+/** Opens every printing, when the list opened on the user's copies. */
+const showAll = async (section: HTMLElement): Promise<HTMLElement> => {
+  const button = within(section).queryByRole('button', { name: /^Show all/ })
+  if (button) await userEvent.click(button)
   return section
 }
 const rowNames = (section: HTMLElement): (string | null)[] =>
@@ -116,7 +130,7 @@ describe('one card panel, owned or not', () => {
     const unowned = rowNames(await list())
     cleanup()
     setup([entry(5, a)], { entryId: 5 })
-    const section = await list()
+    const section = await showAll(await list())
     expect(rowNames(section)).toEqual(unowned)
     expect(
       within(section)
@@ -128,7 +142,7 @@ describe('one card panel, owned or not', () => {
 
   it('highlights the entry it opened on, and a click moves it and the price', async () => {
     setup([entry(5, a)], { entryId: 5 })
-    const section = await list()
+    const section = await showAll(await list())
     const owned = within(section).getByRole('group', { name: /LOB-001/ })
     const other = within(section).getByRole('group', { name: /LOB-002/ })
     expect(owned).toHaveAttribute('aria-current', 'true')
@@ -163,7 +177,7 @@ describe('one card panel, owned or not', () => {
 
   it('adds a type in one click, through sets.adjust', async () => {
     const { adjust } = setup([entry(5, a)], { entryId: 5 })
-    const section = await list()
+    const section = await showAll(await list())
     await userEvent.click(
       within(section).getByRole('button', { name: 'Add one Dark Magician DP-JP003 Ultra Rare' })
     )
@@ -254,10 +268,9 @@ describe('one card panel, owned or not', () => {
     expect(await screen.findByLabelText('Quantity')).toBeInTheDocument()
     qc.setQueryData(queryKeys.forCard(1), [])
     await waitFor(() => expect(screen.queryByLabelText('Quantity')).not.toBeInTheDocument())
-    expect(within(await list()).getByRole('group', { name: /LOB-001/ })).toHaveAttribute(
-      'aria-current',
-      'true'
-    )
+    expect(
+      within(await showAll(await list())).getByRole('group', { name: /LOB-001/ })
+    ).toHaveAttribute('aria-current', 'true')
   })
 
   it('keeps a notes draft when the row changes the quantity', async () => {
@@ -308,6 +321,68 @@ describe('one card panel, owned or not', () => {
     await list()
     await screen.findByText('No price')
     expect(screen.queryByText('$50.00')).not.toBeInTheDocument()
+  })
+})
+
+describe('your copies first', () => {
+  it('opens an owned card on its copies only, with the count and value', async () => {
+    setup([entry(10, a, { unitPrice: 1 })])
+    const section = await list()
+    expect(within(section).getByRole('heading')).toHaveTextContent('You have 2 · worth $2.00')
+    const groups = within(section).getAllByRole('group')
+    expect(groups).toHaveLength(1)
+    expect(groups[0]).toHaveAccessibleName(/LOB-001/)
+    expect(
+      within(section).getByRole('button', { name: 'Show all 3 printings' })
+    ).toBeInTheDocument()
+    expect(within(section).getByText(/2 languages/)).toBeInTheDocument()
+  })
+
+  it('opens an unowned card straight on every printing', async () => {
+    setup([], { seed })
+    const section = await list()
+    expect(within(section).queryByRole('button', { name: /^Show all/ })).not.toBeInTheDocument()
+    expect(rowNames(section)).toHaveLength(3)
+    for (const code of [/LOB-001/, /LOB-002/, /DP-JP003/])
+      expect(within(section).getByRole('group', { name: code })).toBeInTheDocument()
+  })
+
+  it('opens on every printing from a set page', async () => {
+    setup([entry(5, a)], {
+      entryId: 5,
+      onlySet: true,
+      preferSet: { setName: 'Legend of Blue Eyes', language: 'en' }
+    })
+    const section = await list()
+    expect(within(section).queryByRole('button', { name: /^Show all/ })).not.toBeInTheDocument()
+    expect(within(section).getByRole('group', { name: /LOB-002/ })).toBeInTheDocument()
+  })
+
+  it('keeps the line, at 0, after its last copy is removed', async () => {
+    const { adjust } = setup([entry(5, a, { quantity: 1 })], { entryId: 5 })
+    const section = await list()
+    const row = within(section).getByRole('group', { name: /LOB-001/ })
+    await userEvent.click(within(row).getByRole('button', { name: /^Remove one/ }))
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+    await waitFor(() => expect(adjust).toHaveBeenCalledWith('Legend of Blue Eyes', 'en', 1, -1))
+    await waitFor(() =>
+      expect(
+        within(section)
+          .getByRole('group', { name: /LOB-001/ })
+          .querySelector('[aria-busy]')
+      ).toHaveTextContent('0')
+    )
+    expect(
+      within(section).getByRole('button', { name: 'Show all 3 printings' })
+    ).toBeInTheDocument()
+  })
+
+  it('marks a wished owned printing with a heart, without a toggle', async () => {
+    setup([entry(5, a)], { entryId: 5 }, [a, b, c], 'ygo', {}, [{ printingId: 1, quantity: null }])
+    const section = await list()
+    const row = within(section).getByRole('group', { name: /LOB-001/ })
+    expect(await within(row).findByLabelText('On your wishlist')).toBeInTheDocument()
+    expect(within(row).queryByRole('button', { name: /^Want/ })).not.toBeInTheDocument()
   })
 })
 

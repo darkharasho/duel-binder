@@ -166,8 +166,59 @@ const OP_PROFILE: ScanProfile = {
   keepOutline: false
 }
 
-// mtg: scanner step (scan is off for Magic, so it has no profile yet).
-// The Record<'ygo' | 'pkm'> part lists the games every build has a profile for; op's is OP_PROFILE.
+/**
+ * Magic (63 x 88 mm). Measured with scripts/scan/mtg-regions.ts on Scryfall's `large` images
+ * (672 x 936): 2015-frame cards (XLN 78 creature, WHO 57 instant, MH2 192 planeswalker, WHO 704
+ * saga, FRA 358 borderless, MSC 414 extended art, BLB 280 full-art land), a 2003-frame card
+ * (TSP 157) and a 1997-frame card (ME4 186). The art box is what the plain frames' art windows
+ * share: the 1997 window is the narrowest (0.104 to 0.9 across) and a planeswalker's art stops at
+ * its type line (0.495). Borderless, extended-art and full-art cards are all art there, and a
+ * saga's art is its right half, so the box takes in its chapter text too: references are cut to
+ * the same box, so they match all the same.
+ */
+const MTG_ART = [0.11, 0.12, 0.89, 0.49] as const satisfies Box
+
+/** The art window's printed border, by frame. */
+const MTG_WINDOWS: readonly Box[] = [
+  // 2015 (XLN 78, WHO 57) and 2003 (TSP 157).
+  [0.075, 0.105, 0.925, 0.553],
+  // 2015 planeswalkers (MH2 192): the art stops at the type line.
+  [0.075, 0.1, 0.925, 0.497],
+  // 1997 (ME4 186).
+  [0.104, 0.096, 0.9, 0.54]
+]
+
+const MTG_PROFILE: ScanProfile = {
+  game: 'mtg',
+  artBoxes: [MTG_ART],
+  windows: MTG_WINDOWS,
+  windowArt: true,
+  // A held card's outline is often lost under fingers or a sleeve, while its art window's border
+  // or its text box's is found instead.
+  innerFrames: [...MTG_WINDOWS, [0.067, 0.6, 0.933, 0.915]],
+  windowShape: null,
+  codeBands: [
+    // 2015 frame's info line, bottom left: "078/279 C" over "XLN • EN" (0.935 to 0.972; foils
+    // print ★ for the dot, WHO 704).
+    [0.025, 0.925, 0.5, 0.99],
+    // Older frames print the collector number in the copyright line: bottom middle on 2003
+    // (TSP 157, 0.54 to 0.62 across, 0.96 down), right of middle on 1997 reprints (ME4 186, 0.73
+    // to 0.77, 0.925 to 0.94).
+    [0.2, 0.915, 0.85, 0.99]
+  ],
+  codeReach: 0.06,
+  // The name, top left, short of the mana cost (0.043 to 0.098 down across the frames).
+  nameBand: [0.06, 0.035, 0.7, 0.105],
+  // The rules text, read whole to tell the card's language.
+  textBox: [0.08, 0.62, 0.92, 0.9],
+  rarityLook: false,
+  foil: null,
+  holderSearch: false,
+  keepOutline: true
+}
+
+// The Record<'ygo' | 'pkm'> part lists the games every build has a profile for; op's is OP_PROFILE
+// and mtg's MTG_PROFILE.
 export const SCAN_PROFILES: Record<'ygo' | 'pkm', ScanProfile> &
   Partial<Record<GameId, ScanProfile>> = {
   ygo: {
@@ -228,7 +279,8 @@ export const SCAN_PROFILES: Record<'ygo' | 'pkm', ScanProfile> &
     holderSearch: true,
     keepOutline: true
   },
-  op: OP_PROFILE
+  op: OP_PROFILE,
+  mtg: MTG_PROFILE
 }
 
 export function scanProfile(game: GameId): ScanProfile {

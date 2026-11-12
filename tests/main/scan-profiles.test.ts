@@ -27,11 +27,13 @@ describe('scan profiles', () => {
   })
 
   it('a game with no profile throws', () => {
-    expect(() => scanProfile('mtg' as never)).toThrow('No scan profile for mtg')
+    expect(() => scanProfile('xyz' as never)).toThrow('No scan profile for xyz')
   })
 
   it('every scanning game has a profile of boxes on the card', () => {
-    for (const game of GAME_IDS.filter((g) => GAMES[g].features.scan)) {
+    const games = new Set([...GAME_IDS.filter((g) => GAMES[g].features.scan), ...Object.keys(SCAN_PROFILES)])
+    expect(games.has('mtg')).toBe(true)
+    for (const game of games as Set<keyof typeof SCAN_PROFILES>) {
       const p = scanProfile(game)
       expect(p).toBe(SCAN_PROFILES[game])
       expect(p.game).toBe(game)
@@ -136,6 +138,38 @@ describe('scan profiles', () => {
         expect(0 <= x0 && x0 < x1 && x1 <= 1 && 0 <= y0 && y0 < y1 && y1 <= 1).toBe(true)
         expect((x1 - x0) * (y1 - y0)).toBeLessThan(1)
       }
+    })
+  })
+
+  describe('mtg', () => {
+    it('mtg has a profile', () => {
+      expect(scanProfile('mtg').game).toBe('mtg')
+    })
+
+    it('mtg art box sits inside every window', () => {
+      const p = scanProfile('mtg')
+      const [art] = p.artBoxes
+      expect(p.windows.length).toBeGreaterThan(0)
+      for (const w of p.windows) {
+        expect(art[0]).toBeGreaterThanOrEqual(w[0])
+        expect(art[1]).toBeGreaterThanOrEqual(w[1])
+        expect(art[2]).toBeLessThanOrEqual(w[2])
+        expect(art[3]).toBeLessThanOrEqual(w[3])
+      }
+    })
+
+    it('mtg reads codes at the bottom', () => {
+      for (const b of scanProfile('mtg').codeBands) expect(b[1]).toBeGreaterThanOrEqual(0.9)
+    })
+
+    it('mtg flags', () => {
+      const p = scanProfile('mtg')
+      expect(p.windowArt).toBe(true)
+      expect(p.rarityLook).toBe(false)
+      expect(p.foil).toBeNull()
+      expect(p.holderSearch).toBe(false)
+      expect(p.keepOutline).toBe(true)
+      expect(p.codeReach).toBe(0.06)
     })
   })
 })

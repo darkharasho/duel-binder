@@ -31,9 +31,7 @@ const CHECKLIST_SORTS = [
 
 /** Sort choices for a set's cards: ATK, DEF and Level are Yu-Gi-Oh!'s, HP is Pokémon's. */
 export const checklistSorts = (game: GameId): SortOption<ChecklistSort>[] =>
-  sortOptions<ChecklistSort>(
-    CHECKLIST_SORTS.filter((s) => !HIDDEN_SORTS[game].includes(s.value))
-  )
+  sortOptions<ChecklistSort>(CHECKLIST_SORTS.filter((s) => !HIDDEN_SORTS[game].includes(s.value)))
 
 export interface Progress {
   owned: number
@@ -193,6 +191,26 @@ export function splitUpcoming(
   for (const s of sets) (isUpcoming(s, cutoff) ? upcoming : current).push(s)
   return { current, upcoming }
 }
+
+/**
+ * The art a checklist version shows: its own (One Piece, Magic: an Alternate Art, a showcase
+ * Mythic), else the card's. `printingId` defaults to the rarity's default version; a card tile
+ * (no rarity) shows the card's art.
+ */
+export function versionArt(
+  card: ChecklistCard,
+  rarity: ChecklistRarity | undefined,
+  printingId: number | undefined = rarity?.defaultPrintingId
+): number {
+  return rarity?.codes.find((c) => c.printingId === printingId)?.imageId ?? card.imageId
+}
+
+/** A tile's art: its rarity's default version's own, or the card's for a card tile. */
+export const tileArt = (t: Tile): number =>
+  versionArt(
+    t.card,
+    t.rarity === null ? undefined : t.card.rarities.find((r) => r.rarity === t.rarity)
+  )
 
 export function checklistTiles(cl: SetChecklist, mode: CountMode): Tile[] {
   if (mode === 'cards') {

@@ -451,11 +451,15 @@ function checklistCards(
       .sort(([a], [b]) => cmp(a, b))
       .map(([rarity, ps]) => {
         const codes = ps
-          .map((p) => ({
-            printingId: p.id,
-            setCode: p.set_code,
-            owned: sum(entriesByPrinting.get(p.id) ?? [])
-          }))
+          .map((p) => {
+            const art = cardImage(db, printingArtImageId({ ...p, contributed: 0 }), id, scope)
+            return {
+              printingId: p.id,
+              setCode: p.set_code,
+              owned: sum(entriesByPrinting.get(p.id) ?? []),
+              ...(art !== null ? { imageId: art } : {})
+            }
+          })
           .sort((a, b) => cmp(a.setCode, b.setCode))
         const rarityEntries = ps.flatMap((p) => entriesByPrinting.get(p.id) ?? [])
         return {

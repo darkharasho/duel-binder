@@ -10,6 +10,7 @@ import { useGame } from '@/lib/game'
 import { rarityColor, rarityTextColor } from '@/lib/rarityColors'
 import { cn } from '@/lib/utils'
 import { CodeOptions, CodeValue } from './CodePicker'
+import { versionArt } from './setsView'
 
 interface BulkTileProps {
   card: ChecklistCard
@@ -80,7 +81,7 @@ export const BulkTile = memo(function BulkTile({
             className="block w-full cursor-pointer rounded-[6px]"
           >
             <CardArt
-              imageId={card.imageId}
+              imageId={versionArt(card, rarity, printingId)}
               size="small"
               alt={card.name}
               printingId={printingId}

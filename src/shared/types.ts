@@ -500,6 +500,8 @@ export interface ChecklistCode {
   printingId: number
   setCode: string
   owned: number
+  /** One Piece, Magic: the version's own art, when the card has that image; else the card's imageId. */
+  imageId?: number
 }
 
 export interface ChecklistRarity {

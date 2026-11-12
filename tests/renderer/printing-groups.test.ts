@@ -68,6 +68,48 @@ describe('artKind', () => {
   })
 })
 
+describe('artKind comma variants', () => {
+  it('sends a comma variant to the first part the allow-list knows', () => {
+    for (const r of [
+      'Ultra Rare (Alternate Art, Blue)',
+      'Ultra Rare (Alternate Art, Silver)',
+      'Secret Rare (A, Alternate Art)'
+    ])
+      expect(kindOf(r)).toEqual({ key: 'alternate', label: 'Alternate art' })
+  })
+  it('keeps a list of artwork numbers Original', () => {
+    expect(kindOf('Ultra Rare (2nd, 5th, and 6th artwork)')).toEqual({
+      key: 'original',
+      label: 'Original'
+    })
+  })
+  it('still reads manga-style on the whole variant', () => {
+    expect(kindOf('Secret Rare (Manga-Style, Alternate Art)').key).toBe('manga')
+  })
+})
+
+describe('One Piece original art id', () => {
+  const base = 707803726786
+  const alt = 622925937316
+  const sp = 870161211952
+  const ps = [
+    printing(1, { setRarity: 'SR', artImageId: base }),
+    printing(2, { setRarity: 'SR (Alternate Art)', artImageId: alt }),
+    printing(3, { setRarity: 'SP', artImageId: sp })
+  ]
+  it('files the printing on the original image under Original', () => {
+    const groups = artGroups(ps, 'op', base)
+    expect(groups.map((g) => g.kind.label)).toEqual([
+      'Original',
+      'Alternate art 1',
+      'Alternate art 2'
+    ])
+    expect(groups[0].printings.map((p) => p.id)).toEqual([1])
+    expect(artKind(ps[0], 'op', base).key).toBe('original')
+    expect(printingSummary(ps, 'op', base).arts).toBe(3)
+  })
+})
+
 describe('artGroups', () => {
   it('labels One Piece alternate arts', () => {
     const ps = [printing(1), printing(2, { artImageId: 1 }), printing(3, { artImageId: 2 })]
@@ -99,6 +141,26 @@ describe('artGroups', () => {
       printing(4)
     ]
     expect(artGroups(ps, 'ygo').map((g) => g.kind.key)).toEqual(['original', 'anime', 'chibi'])
+  })
+})
+
+describe('space-separated codes', () => {
+  it('takes the prefix before the first space or dash', () => {
+    const pkm = setRows([printing(1, { setName: 'Dual', setCode: 'DLR 012/103' })], 'pkm')
+    expect(pkm[0].codePrefix).toBe('DLR')
+    const mtg = setRows([printing(1, { setName: 'S', setCode: 'SOS 113' })], 'mtg')
+    expect(mtg[0].codePrefix).toBe('SOS')
+    expect(setRows([printing(1, { setCode: 'ABC' })], 'pkm')[0].codePrefix).toBe('ABC')
+  })
+  it('labels colliding pills by the code past the space', () => {
+    const rows = setRows(
+      [
+        printing(1, { setName: 'S', setCode: 'SOS 113', setRarity: 'Mythic' }),
+        printing(2, { setName: 'S', setCode: 'SOS 332', setRarity: 'Mythic' })
+      ],
+      'mtg'
+    )
+    expect(rows[0].pills.map((p) => p.label)).toEqual(['Mythic · 113', 'Mythic · 332'])
   })
 })
 

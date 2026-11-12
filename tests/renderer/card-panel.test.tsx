@@ -454,10 +454,18 @@ describe('your copies first', () => {
     ).toBeInTheDocument()
   })
 
-  it('names a single printing in the singular', async () => {
+  it('has no Show all, or summary, when every printing is already an owned line', async () => {
+    setup([entry(5, a), entry(6, b)], { entryId: 5 }, [a, b])
+    const section = await list()
+    expect(within(section).getAllByRole('group')).toHaveLength(2)
+    expect(within(section).queryByRole('button', { name: /^Show all/ })).not.toBeInTheDocument()
+    expect(within(section).queryByText(/artworks|sets|languages/)).not.toBeInTheDocument()
+  })
+
+  it('has no Show all for a single owned printing', async () => {
     setup([entry(5, a)], { entryId: 5 }, [a])
     const section = await list()
-    expect(within(section).getByRole('button', { name: 'Show all 1 printing' })).toBeInTheDocument()
+    expect(within(section).queryByRole('button', { name: /^Show all/ })).not.toBeInTheDocument()
   })
 
   it('marks a wished owned printing with a heart, without a toggle', async () => {
@@ -492,6 +500,31 @@ describe('the full list, grouped', () => {
     const ja = rows.find((r) => within(r).queryByRole('button', { name: /DP-JP003/ }))!
     expect(ja).toHaveTextContent('Legend of Blue Eyes')
     expect(within(ja).getByTitle('Japanese')).toBeInTheDocument()
+  })
+
+  it('tags a non-English set row in English mode, and never an English one', async () => {
+    setup([entry(5, c)], { entryId: 5, preferSet: { setName: c.setName, language: 'ja' } }, [
+      a,
+      b,
+      c
+    ])
+    const section = await list()
+    await showAll(section)
+    expect(within(section).getByRole('button', { name: 'English' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+    const rows = within(setList(section)).getAllByRole('listitem')
+    expect(rows).toHaveLength(2)
+    const ja = rows.find((r) =>
+      within(r).queryByRole('button', { name: /^Dark Magician DP-JP003/ })
+    )!
+    const en = rows.find((r) =>
+      within(r).queryByRole('button', { name: /^Dark Magician LOB-001/ })
+    )!
+    expect(within(ja).getByTitle('Japanese')).toBeInTheDocument()
+    expect(within(en).queryByTitle('English')).not.toBeInTheDocument()
+    expect(within(en).queryByTitle('Japanese')).not.toBeInTheDocument()
   })
 
   it('adds a printing from its pill, through sets.adjust', async () => {

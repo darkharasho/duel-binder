@@ -139,7 +139,7 @@ export function PrintingGroups({
     searchable && query.trim() ? printings.filter((p) => printingMatches(p, query)) : printings
   const inLanguage =
     mode === 'all' || !mixed ? searched : searched.filter((p) => english.has(p.language))
-  const groups = artGroups(inLanguage, game)
+  const groups = artGroups(inLanguage, game, originalImageId)
   const artOn = groups.length > 1 && groups.some((g) => g.kind.key === art) ? art : null
   const shown = artOn ? (groups.find((g) => g.kind.key === artOn)?.printings ?? []) : inLanguage
   const sets = setRows(shown, game, preferSet)
@@ -228,7 +228,7 @@ export function PrintingGroups({
               <div className="flex min-w-0 items-center gap-1.5">
                 <span className="shrink-0 font-mono text-[11px]">{set.codePrefix}</span>
                 <span className="min-w-0 truncate text-muted-foreground">{setName}</span>
-                {mode === 'all' && <LanguageTag language={set.language} />}
+                <LanguageTag language={set.language} />
                 {set.year && (
                   <span className="ml-auto shrink-0 text-muted-foreground tabular-nums">
                     {set.year}

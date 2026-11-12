@@ -285,8 +285,12 @@ export function CardTypeList({
   // A printing with several entries is still one printing.
   const summary = printingSummary(
     rows.map((r) => r.printing).filter((p, i, all) => all.findIndex((x) => x.id === p.id) === i),
-    def.id
+    def.id,
+    originalImageId
   )
+  // Nothing to show past Your copies when every printing is already one of its lines.
+  const ownedIds = new Set(owned.map((r) => r.printing.id))
+  const hasUnowned = rows.some((r) => !ownedIds.has(r.printing.id))
   const summaryLine = [
     summary.arts > 1 && `${summary.arts} artworks`,
     summary.sets > 1 && `${summary.sets} sets`,
@@ -323,19 +327,21 @@ export function CardTypeList({
       {!expanded && (
         <>
           {ownedCopies(false)}
-          <div className="space-y-1 pt-1">
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full"
-              onClick={() => setExpanded(true)}
-            >
-              Show all {summary.printings} {summary.printings === 1 ? 'printing' : 'printings'}
-            </Button>
-            {summaryLine && (
-              <p className="text-center text-xs text-muted-foreground">{summaryLine}</p>
-            )}
-          </div>
+          {hasUnowned && (
+            <div className="space-y-1 pt-1">
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => setExpanded(true)}
+              >
+                Show all {summary.printings} {summary.printings === 1 ? 'printing' : 'printings'}
+              </Button>
+              {summaryLine && (
+                <p className="text-center text-xs text-muted-foreground">{summaryLine}</p>
+              )}
+            </div>
+          )}
         </>
       )}
       {expanded && pinned.length > 0 && (

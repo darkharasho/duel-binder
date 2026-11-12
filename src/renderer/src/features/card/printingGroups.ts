@@ -22,6 +22,17 @@ export function splitRarity(setRarity: string): { rarity: string; variant: strin
 
 function ygoKind(variant: string | null): ArtKind {
   if (!variant) return ORIGINAL
+  const whole = ygoPart(variant)
+  if (whole) return whole
+  for (const part of variant.split(',')) {
+    const k = ygoPart(part)
+    if (k) return k
+  }
+  return ORIGINAL
+}
+
+/** The art kind one piece of a variant names, or null when it names none. */
+function ygoPart(variant: string): ArtKind | null {
   const v = variant.toLowerCase().trim()
   if (/^chibi( artwork)?$/.test(v)) return { key: 'chibi', label: 'Chibi' }
   if (/^overframe$/.test(v)) return { key: 'overframe', label: 'Overframe' }
@@ -33,12 +44,14 @@ function ygoKind(variant: string | null): ArtKind {
     return { key: 'international', label: 'International artwork' }
   const o = /^(\d+)(st|nd|rd|th) artwork$/.exec(v)
   if (o) return { key: `art-${o[1]}`, label: `${o[1]}${o[2]} artwork` }
-  return ORIGINAL
+  return null
 }
 
-export function artKind(p: Printing, game: GameId): ArtKind {
+/** originalImageId is the card's own first image: a One Piece printing on it is the original, not an alt art. */
+export function artKind(p: Printing, game: GameId, originalImageId?: number): ArtKind {
   if (game === 'ygo') return ygoKind(splitRarity(p.setRarity).variant)
-  if (game === 'op' && p.artImageId) return { key: `op${p.artImageId}`, label: 'Alternate art' }
+  if (game === 'op' && p.artImageId && p.artImageId !== originalImageId)
+    return { key: `op${p.artImageId}`, label: 'Alternate art' }
   return ORIGINAL
 }
 
@@ -56,10 +69,14 @@ function newer(a: Printing, b: Printing): boolean {
 }
 
 /** Original first, then by printing count desc, then label. Empty-safe. */
-export function artGroups(printings: Printing[], game: GameId): ArtGroup[] {
+export function artGroups(
+  printings: Printing[],
+  game: GameId,
+  originalImageId?: number
+): ArtGroup[] {
   const map = new Map<string, ArtGroup>()
   for (const p of printings) {
-    const kind = artKind(p, game)
+    const kind = artKind(p, game, originalImageId)
     const g = map.get(kind.key)
     if (g) {
       g.printings.push(p)
@@ -99,8 +116,9 @@ export interface SetRow {
   pills: Pill[]
 }
 
+/** The code's text before its first dash or space ("RA01-EN001", "DLR 012/103", "SOS 113"), else the whole code. */
 const codePrefixOf = (code: string): string => {
-  const i = code.indexOf('-')
+  const i = code.search(/[-\s]/)
   return i < 0 ? code : code.slice(0, i)
 }
 
@@ -117,9 +135,11 @@ function baseLabel(p: Printing, game: GameId): string {
   return p.setRarity
 }
 
-/** A printing's code past its set's prefix ("RA01-EN001" → "EN001"), or the whole code when it has another prefix or none. */
+/** A printing's code past its set's prefix and separator ("RA01-EN001" → "EN001"), or the whole code when it has another prefix or none. */
 const codeSuffix = (code: string, prefix: string): string =>
-  code.startsWith(`${prefix}-`) ? code.slice(prefix.length + 1) : code
+  code.startsWith(`${prefix}-`) || code.startsWith(`${prefix} `)
+    ? code.slice(prefix.length + 1)
+    : code
 
 function pillLabels(printings: Printing[], game: GameId, prefix: string): string[] {
   const base = printings.map((p) => baseLabel(p, game))
@@ -201,11 +221,12 @@ export function englishModeLanguages(
 
 export function printingSummary(
   printings: Printing[],
-  game: GameId
+  game: GameId,
+  originalImageId?: number
 ): { printings: number; arts: number; sets: number; languages: number } {
   return {
     printings: printings.length,
-    arts: artGroups(printings, game).length,
+    arts: artGroups(printings, game, originalImageId).length,
     sets: new Set(printings.map((p) => `${p.language}|${p.setName}`)).size,
     languages: new Set(printings.map((p) => p.language)).size
   }

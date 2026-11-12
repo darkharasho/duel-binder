@@ -297,7 +297,7 @@ describe('DashboardPage', () => {
       coverImageId: null,
       totalCards,
       ownedCards: 0,
-      totalRarities: totalCards,
+      totalRarities: totalCards * 2,
       ownedRarities: 0,
       listRows: null,
       unmatchedRows: null,
@@ -336,5 +336,48 @@ describe('DashboardPage', () => {
     })
     await userEvent.click(screen.getByRole('button', { name: 'All sets →' }))
     expect(onNavigate).toHaveBeenLastCalledWith('sets')
+  })
+
+  it('counts recent sets the way the Sets page last counted them', async () => {
+    localStorage.setItem('sets.countMode', 'rarities')
+    try {
+      const empty = stats({
+        totalCards: 0,
+        uniqueCards: 0,
+        totalValue: 0,
+        byRarity: [],
+        byFrameType: [],
+        topEntries: []
+      })
+      const api = createMockApi({
+        stats: { get: async () => empty },
+        sets: {
+          list: async () => [
+            {
+              language: 'en' as const,
+              setName: 'Pitch Black',
+              setCode: 'PBK',
+              tcgDate: '2026-10-01',
+              imageKey: null,
+              packImageKey: null,
+              logoImageKey: null,
+              coverImageId: null,
+              totalCards: 120,
+              ownedCards: 0,
+              totalRarities: 201,
+              ownedRarities: 0,
+              listRows: null,
+              unmatchedRows: null,
+              series: null
+            }
+          ]
+        }
+      })
+      renderWithProviders(<DashboardPage onNavigate={vi.fn()} onSearch={vi.fn()} />, { api })
+      const [tile] = await screen.findAllByRole('listitem')
+      expect(tile).toHaveTextContent('0 of 201 versions')
+    } finally {
+      localStorage.removeItem('sets.countMode')
+    }
   })
 })

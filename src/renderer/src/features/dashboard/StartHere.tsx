@@ -7,6 +7,7 @@ import type { SetSummary } from '@shared/types'
 import type { NavigateFn } from '@/components/AppShell'
 import { Skeleton } from '@/components/ui/loading'
 import { SetArt } from '@/features/sets/SetArt'
+import { progressFor, readCountMode } from '@/features/sets/setsView'
 import { api, queryKeys } from '@/lib/api'
 import { pageInGame, useGame } from '@/lib/game'
 import { matchesLanguage, useLanguageFilter } from '@/lib/languageFilter'
@@ -48,6 +49,9 @@ function RecentSet({
   s: SetSummary
   onOpen: (s: SetSummary) => void
 }): React.JSX.Element {
+  // Counted the way the set's checklist will count it, so the two agree.
+  const mode = readCountMode()
+  const p = progressFor(s, mode)
   return (
     <li>
       <button
@@ -71,7 +75,7 @@ function RecentSet({
             {englishSetName(s.setName, s.setCode)}
           </p>
           <p className="font-mono text-xs text-muted-foreground">
-            {s.ownedCards} of {s.totalCards} cards
+            {p.owned} of {p.total} {mode === 'cards' ? 'cards' : 'versions'}
           </p>
         </div>
       </button>

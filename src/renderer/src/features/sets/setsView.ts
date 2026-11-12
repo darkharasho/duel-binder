@@ -50,6 +50,18 @@ export interface Tile {
   entryId: number | null
 }
 
+/** Where the Sets page keeps its count mode, which the checklist and recent-set tiles share. */
+export const COUNT_MODE_KEY = 'sets.countMode'
+
+/** The count mode last picked on the Sets page: single cards unless "Every rarity" was chosen. */
+export function readCountMode(): CountMode {
+  try {
+    return localStorage.getItem(COUNT_MODE_KEY) === 'rarities' ? 'rarities' : 'cards'
+  } catch {
+    return 'cards'
+  }
+}
+
 export function progressFor(s: SetSummary, mode: CountMode): Progress {
   const owned = mode === 'cards' ? s.ownedCards : s.ownedRarities
   const total = mode === 'cards' ? s.totalCards : s.totalRarities

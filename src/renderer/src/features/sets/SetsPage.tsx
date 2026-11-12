@@ -28,7 +28,9 @@ import { useUpcomingCutoff } from './useUpcomingCutoff'
 import {
   filterSets,
   setsHeader,
+  readCountMode,
   sortSets,
+  COUNT_MODE_KEY,
   splitUpcoming,
   typeCounts,
   type SetFilter,
@@ -37,7 +39,6 @@ import {
 
 type View = 'grid' | 'list'
 const VIEW_KEY = 'sets.view'
-const MODE_KEY = 'sets.countMode'
 const FILTER_KEY = 'sets.filter'
 /** Set types are each game's own, so each game keeps its own; Yu-Gi-Oh! keeps the original key. */
 const typesKey = (game: GameId): string => (game === 'ygo' ? 'sets.types' : `sets.types:${game}`)
@@ -54,14 +55,6 @@ function readView(): View {
     return localStorage.getItem(VIEW_KEY) === 'grid' ? 'grid' : 'list'
   } catch {
     return 'list'
-  }
-}
-
-function readMode(): CountMode {
-  try {
-    return localStorage.getItem(MODE_KEY) === 'rarities' ? 'rarities' : 'cards'
-  } catch {
-    return 'cards'
   }
 }
 
@@ -116,7 +109,7 @@ export function SetsPage({
   // The phone is too narrow for the grid's columns, so it always lists sets in one column.
   const phone = isPhone()
   const view: View = phone ? 'list' : storedView
-  const [mode, setMode] = useState<CountMode>(readMode)
+  const [mode, setMode] = useState<CountMode>(readCountMode)
   const [filter, setFilterState] = useState<SetFilter>(readFilter)
   // The page remounts on a game switch (PageSwitch), so the types are read for the game shown.
   const { game } = useGame()
@@ -199,7 +192,7 @@ export function SetsPage({
   const changeMode = (m: string): void => {
     if (m !== 'cards' && m !== 'rarities') return
     setMode(m)
-    persist(MODE_KEY, m)
+    persist(COUNT_MODE_KEY, m)
   }
   // A search that only matches upcoming sets shows them open, without touching the saved choice.
   const searchForcesOpen = q.trim() !== '' && visible.length === 0 && upcoming.length > 0

@@ -654,9 +654,14 @@ describe('Magic', () => {
     })
   const RARE = mtgPrinting({})
   const FOIL = mtgPrinting({ id: 602, setRarity: 'Rare (Foil)' })
+  /** A code the catalog writes with a capital suffix. */
+  const PROMO = mtgPrinting({ id: 603, setCode: 'OLGC 2018NA', setName: 'Legacy Championship', setRarity: 'Promo' })
+  /** One code in two languages, Japanese first as the catalog may list it. */
+  const JA = mtgPrinting({ id: 604, setCode: 'MH3 124', language: 'ja' })
+  const EN = mtgPrinting({ id: 605, setCode: 'MH3 124' })
   const MTG_DETAIL: CardDetail = {
     card: { id: MTG_CARD, name: 'Siren Lookout' } as CardDetail['card'],
-    printings: [RARE, FOIL],
+    printings: [RARE, FOIL, PROMO, JA, EN],
     images: [{ imageId: 8001, cardId: MTG_CARD, sortOrder: 0 }]
   }
   const asked: unknown[] = []
@@ -673,7 +678,14 @@ describe('Magic', () => {
       if (channel === 'scan:numberPrefixes') return ['MH1', 'MH2', 'MH3', 'NEO']
       if (channel === 'scan:printingsByCode') {
         asked.push(args[0])
-        return args[0] === 'MH3 123' ? [scanPrinting(RARE), scanPrinting(FOIL)] : []
+        const code = String(args[0]).toUpperCase()
+        return code === 'MH3 123'
+          ? [scanPrinting(RARE), scanPrinting(FOIL)]
+          : code === 'OLGC 2018NA'
+            ? [scanPrinting(PROMO)]
+            : code === 'MH3 124'
+              ? [scanPrinting(JA), scanPrinting(EN)]
+              : []
       }
       if (channel === 'cards:get') return args[0] === MTG_CARD ? MTG_DETAIL : null
       return fallback(channel as never, args)
@@ -700,6 +712,23 @@ describe('Magic', () => {
     await waitFor(async () => expect(await uploads()).toHaveLength(1))
     const [shot] = await uploads()
     expect(shot.label).toMatchObject({ game: 'mtg', cardId: MTG_CARD, printingId: 9101 })
+  })
+
+  it('finds a code whatever its case', async () => {
+    const user = userEvent.setup()
+    renderScreen(mtgStore(), undefined, { game: 'mtg' })
+    await user.type(numberBox(), 'olgc 2018na')
+    expect(await screen.findByRole('button', { name: 'Promo' })).toBeInTheDocument()
+  })
+
+  it('names the language when a code has versions in several, English first', async () => {
+    const user = userEvent.setup()
+    renderScreen(mtgStore(), undefined, { game: 'mtg' })
+    await user.type(numberBox(), 'mh3 124')
+    const en = await screen.findByRole('button', { name: 'Rare, English' })
+    const ja = screen.getByRole('button', { name: 'Rare, Japanese' })
+    expect(en.compareDocumentPosition(ja) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(within(ja).getByText(/Japanese/)).toBeInTheDocument()
   })
 
   it('Magic set-code chips end in a space', async () => {

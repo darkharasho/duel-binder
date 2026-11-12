@@ -25,6 +25,7 @@ import { cn } from '@/lib/utils'
 import type { GameId } from '@shared/games'
 import { normalizeOpNumber, prefixSuggestions } from '@shared/scan/onePieceNumber'
 import { normalizeMagicCode } from '@shared/scan/magicCode'
+import { languageInfo, type Language } from '@shared/languages'
 import {
   HOLDER_LABELS,
   TRAINING_HOLDERS,
@@ -161,9 +162,13 @@ interface Version {
   label: string
   setName: string
   imageId: number
+  language: Language
 }
 
-/** The versions (printings) whose set code is `number`, from the phone's own catalog. */
+/**
+ * The versions (printings) whose set code is `number`, from the phone's own catalog: English
+ * first, as a Magic code is printed in up to ten languages.
+ */
 async function versionsOf(number: string): Promise<Version[]> {
   const found = await api.scan.printingsByCode(number)
   const cardIds = [...new Set(found.map((p) => p.cardId))]
@@ -173,7 +178,7 @@ async function versionsOf(number: string): Promise<Version[]> {
     if (!d) continue
     const art = d.images[0]?.imageId
     for (const p of d.printings) {
-      if (p.setCode !== number) continue
+      if (p.setCode.toLowerCase() !== number.toLowerCase()) continue
       const imageId = p.artImageId ?? art
       if (imageId === undefined) continue
       out.push({
@@ -181,12 +186,17 @@ async function versionsOf(number: string): Promise<Version[]> {
         printingId: p.id,
         label: p.setRarity,
         setName: p.setName,
-        imageId
+        imageId,
+        language: p.language
       })
     }
   }
-  return out
+  return out.sort((a, b) => Number(b.language === 'en') - Number(a.language === 'en'))
 }
+
+/** A version's language, when the number's versions come in more than one. */
+const languageOf = (v: Version, list: readonly Version[]): string | null =>
+  list.some((o) => o.language !== v.language) ? languageInfo(v.language).label : null
 
 type Selected = Version & { serverId: number | null | undefined }
 
@@ -679,8 +689,18 @@ export function ContributeScreen({
   // The desktop's keys, so a run of cards never needs the mouse.
   const keys = useRef({ shoot, deleteLast, nextCard, readNumber, choose, setHolder, onClose })
   keys.current = { shoot, deleteLast, nextCard, readNumber, choose, setHolder, onClose }
-  const state = useRef({ canShoot, canSnap, read, text, versions: versions.data, selected })
-  state.current = { canShoot, canSnap, read, text, versions: versions.data, selected }
+  // A Magic code has a space in it ("MH3 123"): Space types it until the code is whole.
+  const spaceTypes = magic && number === null
+  const state = useRef({
+    canShoot,
+    canSnap,
+    read,
+    text,
+    versions: versions.data,
+    selected,
+    spaceTypes
+  })
+  state.current = { canShoot, canSnap, read, text, versions: versions.data, selected, spaceTypes }
   useEffect(() => {
     if (!desktop) return
     const onKey = (e: KeyboardEvent): void => {
@@ -698,8 +718,11 @@ export function ContributeScreen({
       if (e.key === 'Escape') {
         e.preventDefault()
         k.onClose()
+      } else if (e.key === ' ' && typing && s.spaceTypes) {
+        return
       } else if (e.key === ' ' && !inOtherControl) {
-        // A card number has no spaces, so Space shoots even while the number box has focus.
+        // A One Piece number has no spaces, nor a whole Magic code more, so Space shoots even
+        // while the number box has focus.
         e.preventDefault()
         if (s.canShoot) k.shoot()
       } else if (e.key === 'Enter') {
@@ -965,11 +988,12 @@ export function ContributeScreen({
           <div className="grid grid-cols-3 gap-2">
             {versions.data.map((v) => {
               const on = selected?.printingId === v.printingId
+              const language = languageOf(v, versions.data)
               return (
                 <button
                   key={v.printingId}
                   type="button"
-                  aria-label={v.label}
+                  aria-label={language ? `${v.label}, ${language}` : v.label}
                   aria-pressed={on}
                   onClick={() => choose(v)}
                   className={cn(
@@ -986,7 +1010,9 @@ export function ContributeScreen({
                     className="aspect-[63/88] w-full rounded-md bg-black/30 object-cover"
                   />
                   <span className="truncate text-[13px] font-medium">{v.label}</span>
-                  <span className="truncate text-[11px] text-muted-foreground">{v.setName}</span>
+                  <span className="truncate text-[11px] text-muted-foreground">
+                    {language ? `${language} · ${v.setName}` : v.setName}
+                  </span>
                 </button>
               )
             })}

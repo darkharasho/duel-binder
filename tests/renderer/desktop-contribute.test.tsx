@@ -44,7 +44,17 @@ const DETAIL: CardDetail = {
   printings: [BASE, PARALLEL, SOLO],
   images: [{ imageId: 7001, cardId: CARD_ID, sortOrder: 0 }]
 }
-const SERVER_IDS: Record<number, number> = { 501: 9000, 502: 9001, 504: 9004 }
+const MTG_CARD = 2 ** 38 + 1005
+const mtg = (o: Partial<Printing>): Printing =>
+  printing({ id: 601, cardId: MTG_CARD, setName: 'Modern Horizons 3', setCode: 'MH3 123', setRarity: 'Rare', ...o })
+const MTG_RARE = mtg({})
+const MTG_FOIL = mtg({ id: 602, setRarity: 'Rare (Foil)' })
+const MTG_DETAIL: CardDetail = {
+  card: { id: MTG_CARD, name: 'Siren Lookout' } as CardDetail['card'],
+  printings: [MTG_RARE, MTG_FOIL],
+  images: [{ imageId: 8001, cardId: MTG_CARD, sortOrder: 0 }]
+}
+const SERVER_IDS: Record<number, number> = { 501: 9000, 502: 9001, 504: 9004, 601: 9100, 602: 9101 }
 const scanPrinting = (p: Printing): ScanPrinting =>
   ({ printingId: p.id, cardId: p.cardId, setCode: p.setCode, imageIds: [7001] }) as ScanPrinting
 
@@ -57,21 +67,29 @@ let deps: TrainingDeps & {
 function renderDesktop(
   onClose: () => void = () => {},
   grab: (v: HTMLVideoElement) => Promise<ArrayBuffer> | Grabbed = async () => JPEG(),
-  o: { engineFactory?: EngineFactory; snap?: (v: HTMLVideoElement) => Promise<SnapResult> } = {}
+  o: {
+    engineFactory?: EngineFactory
+    snap?: (v: HTMLVideoElement) => Promise<SnapResult>
+    game?: 'op' | 'mtg'
+  } = {}
 ): ReturnType<typeof renderWithProviders> {
   const api = createMockApi({
     scan: {
-      numberPrefixes: vi.fn(async () => ['OP01']),
+      numberPrefixes: vi.fn(async () => (o.game === 'mtg' ? ['MH3'] : ['OP01'])),
       printingsByCode: vi.fn(async (code: string) =>
-        [BASE, PARALLEL, SOLO].filter((p) => p.setCode === code).map(scanPrinting)
+        [BASE, PARALLEL, SOLO, MTG_RARE, MTG_FOIL]
+          .filter((p) => p.setCode.toLowerCase() === code.toLowerCase())
+          .map(scanPrinting)
       )
     },
-    cards: { get: vi.fn(async (id: number) => (id === CARD_ID ? DETAIL : null)) }
+    cards: {
+      get: vi.fn(async (id: number) => (id === CARD_ID ? DETAIL : id === MTG_CARD ? MTG_DETAIL : null))
+    }
   })
   return renderWithProviders(
     <ScanHubProvider>
       <ContributeScreen
-        game="op"
+        game={o.game ?? 'op'}
         onClose={onClose}
         outbox={outbox}
         grab={grab}
@@ -122,6 +140,19 @@ afterEach(() => {
 })
 
 describe('desktop contribute photos', () => {
+  it('Magic: Space types the space in a code, then shoots once the code is whole', async () => {
+    const user = userEvent.setup()
+    renderDesktop(undefined, undefined, { game: 'mtg' })
+    await user.keyboard('mh3 123')
+    expect(numberBox()).toHaveValue('mh3 123')
+    await user.click(await screen.findByRole('button', { name: 'Rare (Foil)' }))
+    await waitFor(() => expect(shutter()).toBeEnabled())
+    numberBox().focus()
+    await user.keyboard(' ')
+    await waitFor(async () => expect(await waiting()).toBe(1))
+    expect(numberBox()).toHaveValue('mh3 123')
+  })
+
   it('starts in the number box and picks a number with one version by itself', async () => {
     const user = userEvent.setup()
     renderDesktop()

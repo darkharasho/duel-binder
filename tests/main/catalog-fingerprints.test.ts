@@ -1057,6 +1057,22 @@ describe('buildFingerprints for Magic', () => {
     expect(urls).toEqual([`https://cards.scryfall.io/large/front/0/0/${sid(1)}.jpg`])
   })
 
+  it('asks Scryfall with the User-Agent it is given', async () => {
+    addMtg({ n: 1 })
+    const agents: (string | null)[] = []
+    await buildFingerprints({
+      work,
+      cachePath: join(dir, 'fingerprints-mtg.sqlite'),
+      game: 'mtg',
+      userAgent: 'DuelBinder/test',
+      fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
+        agents.push(new Headers(init?.headers).get('user-agent'))
+        return new Response(jpeg(false) as BodyInit)
+      }) as typeof fetch
+    })
+    expect(agents).toEqual(['DuelBinder/test'])
+  })
+
   it('writes format v2', async () => {
     const id = addMtg({ n: 1 })
     const out = await build()

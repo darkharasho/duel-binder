@@ -18,9 +18,25 @@ describe('normalizeMagicCode', () => {
     ['9ed 213★', '9ED 213★'],
     ['plst xln-217', 'PLST XLN-217'],
     ['PLST XLN-0217', 'PLST XLN-217'],
-    ['lea 0', 'LEA 0']
+    ['lea 0', 'LEA 0'],
+    // As 2015-2022 cards print it, with the set's card count.
+    ['xln 078/279', 'XLN 78'],
+    ['xln 78 / 279', 'XLN 78'],
+    // Numbers that aren't a number and a suffix are taken as typed.
+    ['8ed s1', '8ED S1'],
+    ['prwk a01', 'PRWK A01'],
+    ['por 38†', 'POR 38†'],
+    ['soi 265†a', 'SOI 265†a'],
+    ['7ed 130★s', '7ED 130★s'],
+    ['wc97 jk139sb', 'WC97 JK139SB'],
+    ['olgc 2018na', 'OLGC 2018na'],
+    ['plst jud-119†', 'PLST JUD-119†'],
+    ['plst td0-a80', 'PLST TD0-A80'],
+    // A year is no List set: its number keeps its zeros.
+    ['pwcs 2024-05', 'PWCS 2024-05'],
+    ['wc97 00', 'WC97 00']
   ])('%j reads as %s', (t, want) => expect(normalizeMagicCode(t)).toBe(want))
-  test.each(['mh3123', 'mh3', '', '123', 'mh3 abc'])('%j is not a code', (t) =>
+  test.each(['mh3123', 'mh3', '', '123'])('%j is not a code', (t) =>
     expect(normalizeMagicCode(t)).toBeNull()
   )
 })

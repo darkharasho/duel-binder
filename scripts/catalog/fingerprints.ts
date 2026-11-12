@@ -72,6 +72,8 @@ export interface FingerprintOptions {
   budget?: number
   /** Magic only: today, for which sets count as recent. */
   now?: () => Date
+  /** Magic only: the User-Agent Scryfall's images are asked for with ("DuelBinder" without it). */
+  userAgent?: string
 }
 
 export interface FingerprintResult {
@@ -183,7 +185,12 @@ export async function buildFingerprints(opts: FingerprintOptions): Promise<Finge
   const game = opts.game ?? 'ygo'
   const pkm = game === 'pkm'
   const op = game === 'op'
-  if (game === 'mtg') return buildMagicFingerprints(opts, fetchFn, log)
+  if (game === 'mtg') {
+    // Scryfall asks every client to name itself.
+    const headers = { 'User-Agent': opts.userAgent ?? 'DuelBinder' }
+    const scryfall = ((input: RequestInfo | URL) => fetchFn(input, { headers })) as typeof fetch
+    return buildMagicFingerprints(opts, scryfall, log)
+  }
   const profile = game === 'ygo' ? undefined : scanProfile(game)
   const hashVersion = pkm ? PKM_HASH_VERSION : op ? OP_HASH_VERSION : HASH_VERSION
   const cache = new Database(opts.cachePath)

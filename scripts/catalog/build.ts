@@ -286,6 +286,7 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
         cachePath: join(opts.dir, ygo ? 'fingerprints.sqlite' : `fingerprints-${game}.sqlite`),
         fetch: opts.imageFetch ?? opts.fetch,
         log,
+        userAgent: `DuelBinder/${version} (https://github.com/darkharasho/duel-binder)`,
         // Printing scans are Yu-Gi-Oh's only.
         ...(!ygo
           ? {}

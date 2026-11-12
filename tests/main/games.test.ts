@@ -102,7 +102,7 @@ describe('games', () => {
     const m = gameDef('mtg')
     expect(m.name).toBe('Magic')
     expect(m.color).toBe('#c2410c')
-    expect(m.features).toEqual({ scan: false, pokedex: false })
+    expect(m.features).toEqual({ scan: true, pokedex: false })
     expect(m.cardAspect).toEqual({ width: 488, height: 680 })
     expect([m.access, m.priceRule, m.crossLanguagePriceFallback]).toEqual(['testers', 'marketOnly', false])
     expect(new Set(Object.values(GAMES).map((g) => g.color)).size).toBe(4)

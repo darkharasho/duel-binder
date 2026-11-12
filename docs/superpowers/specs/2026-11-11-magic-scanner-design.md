@@ -239,6 +239,20 @@ with it: a foil nobody taps is priced as non-foil. In step 4:
   check (`reverse-holo-detection`) may carry over to Magic's whole-card foil. Both are measured
   on the corpus first and only turned on if they add 0 wrong.
 
+- **As built (2026-11-12):** `resolveMagic.ts`, tuned on the owner's 435 Reality Fracture
+  photos (`mtg/` in the corpus repo, replayed by `tests/main/scan-mtg-real.test.ts`). With
+  `MTG_ART_MIN_MARGIN` 16 (One Piece's 24 left two near photos unsure) and `MTG_SAME_ART` 24:
+  374/435 right (86.0%; 30 of them truth foils defaulted to non-foil), **0 wrong**, 61 unsure
+  (47 offer the right printing among the choices), 0 none. Cards 359/419 (85.7%, over the 85%
+  floor), tokens 15/16. The photo's own look is the top art match on 423/435 (97.2%). Median
+  268 ms a photo, p90 391 ms. Why the 61: most are rares whose look is shared by their promo
+  printing (FRA 11 and PFRA 11p differ only by a stamp), which art alone must not settle; the rest
+  are basic lands and art too far from any look (@84–94). The info line named no photo: each code
+  band catches only one of its two lines ("C 0007" or "FRA • EN"), never both, so the reader
+  requires the language tag and gives nothing on half a line rather than junk codes. Moving the
+  bands to take both lines is a follow-up; until then art carries Magic. The star is still not
+  used for the finish.
+
 ## Step 5: the gate, then open
 
 - **`tests/main/scan-mtg-real.test.ts`** replays the corpus `mtg/` at the app's crop, in the CI

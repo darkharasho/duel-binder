@@ -9,7 +9,8 @@ import {
   codeBands,
   createCodeGate,
   darkBands,
-  readCode
+  readCode,
+  codeModeGame
 } from '../../src/renderer/src/features/scan/codeMode'
 
 describe('createCodeGate', () => {
@@ -58,6 +59,12 @@ describe('readCode', () => {
     expect(readCode('op', 'OP05-119')).toBe('OP05-119')
   })
 })
+
+  it('reads a Magic code in code mode', () => {
+    expect(readCode('mtg', 'C 0081 FRA • EN')).toBe('FRA 81')
+    expect(readCode('mtg', 'Wizards of the Coast')).toBeNull()
+    expect(codeModeGame('mtg')).toBe(true)
+  })
 
 describe('aimRect', () => {
   it('is the aim box within the part of the frame the 3:4 preview shows', () => {

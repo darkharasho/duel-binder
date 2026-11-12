@@ -165,12 +165,12 @@ describe('desktop game switch', () => {
     }
   })
 
-  it('Magic hides Scan and the Pokédex', async () => {
+  it('Magic shows Scan and hides the Pokédex', async () => {
     await renderDesktop(desktopApi(['ygo', 'pkm', 'op', 'mtg'], 'mtg'))
     expect(await screen.findByRole('button', { name: /switch game/i })).toHaveTextContent('Magic')
-    expect(navNames()).not.toContain('Scan')
+    expect(navNames()).toContain('Scan')
     expect(navNames()).not.toContain('Pokédex')
-    expect(pageInGame('scan', GAMES.mtg)).toBe(false)
+    expect(pageInGame('scan', GAMES.mtg)).toBe(true)
     expect(pageInGame('pokedex', GAMES.mtg)).toBe(false)
     expect(pageInGame('sets', GAMES.mtg)).toBe(true)
   })

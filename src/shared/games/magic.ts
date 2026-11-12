@@ -68,7 +68,7 @@ export const MAGIC: GameDef = {
   id: 'mtg',
   name: 'Magic',
   color: '#c2410c',
-  features: { scan: false, pokedex: false },
+  features: { scan: true, pokedex: false },
   cardAspect: { width: 488, height: 680 },
   crossLanguagePriceFallback: false,
   priceRule: 'marketOnly',

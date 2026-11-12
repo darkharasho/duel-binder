@@ -1,4 +1,5 @@
 import type { GameId } from '@shared/games'
+import { frameMagicCode } from '@shared/scan/magicCode'
 import type { Box } from '@shared/scan/regions'
 import type { OcrBand, RgbaImage } from '@shared/scan/types'
 import { parseSetCode } from '@shared/scan/setCode'
@@ -15,7 +16,7 @@ import { findTextLine, maskLine, toBand, toGrayBand } from './vision/bands'
 export const CODE_AIM: Box = [0.06, 0.43, 0.94, 0.57]
 
 /** The games whose cards carry a code that names the printing on its own. */
-export const CODE_MODE_GAMES: readonly GameId[] = ['ygo', 'op']
+export const CODE_MODE_GAMES: readonly GameId[] = ['ygo', 'op', 'mtg']
 
 export const codeModeGame = (game: GameId): boolean => CODE_MODE_GAMES.includes(game)
 
@@ -228,9 +229,10 @@ export function codeBands(img: RgbaImage): OcrBand[] {
   ].filter((b) => b.width > 0 && b.height > 0)
 }
 
-/** The code a read names, in the game's own form ("LOCR-JP001", "OP05-119"); null for none. */
+/** The code a read names, in the game's own form ("LOCR-JP001", "OP05-119", "FRA 81"); null for none. */
 export function readCode(game: GameId, text: string): string | null {
   if (game === 'op') return frameNumber([text])
+  if (game === 'mtg') return frameMagicCode([text])[0]?.code ?? null
   return parseSetCode(text)
 }
 

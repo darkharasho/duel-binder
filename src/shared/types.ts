@@ -81,6 +81,8 @@ export interface Printing {
   pkey?: string
   /** One Piece only: the image of this printing's own Bandai entry (an Alternate Art's art). */
   artImageId?: number
+  /** The set's release date (ISO YYYY-MM-DD), when known. Only from the card details read. */
+  releaseDate?: string
 }
 
 /** sortOrder 0 is the original art. */

@@ -421,21 +421,15 @@ export function mtgLookKey(row: MagicLookRow): string {
 }
 
 /**
- * Magic's file: one record per look (mtgLookKey) among the images with art of their own
- * (`art_from` NULL), hashed from Scryfall's `large` image of the look's English row (else its
- * lowest image id), cut to MTG_PROFILE's art box; a two-faced card's back is hashed under its
- * `back_image_id`. At most `budget` new hashes a run; images of sets released in the last
- * MTG_RECENT_DAYS are hashed again each run, and a look whose row or URL changes is hashed again.
+ * The Magic records to build, by image id: one front per look (mtgLookKey) among the images with
+ * art of their own (`art_from` NULL), from the look's English row, else its lowest image id; and
+ * that row's back under its `back_image_id`. Each with the Scryfall URL it is hashed from and the
+ * (lowercase) Scryfall id it shows.
  */
-async function buildMagicFingerprints(
-  opts: FingerprintOptions,
-  fetchFn: typeof fetch,
-  log: (s: string) => void
-): Promise<FingerprintResult> {
-  const profile = scanProfile('mtg')
-  const budget = opts.budget ?? MTG_FINGERPRINT_BUDGET
-  const now = opts.now?.() ?? new Date()
-  const rows = opts.work
+export function magicFingerprintTargets(
+  work: Database.Database
+): Map<number, { url: string; scryfallId: string }> {
+  const rows = work
     .prepare(
       `SELECT m.image_id, m.scryfall_id, m.illustration_id, m.frame, m.border_color, m.full_art,
               m.back_image_id, COALESCE(c.lang, '') AS lang
@@ -451,7 +445,6 @@ async function buildMagicFingerprints(
     // Rows come lowest id first, so the first English row (else the first row) stays.
     if (!was || (was.lang !== 'en' && r.lang === 'en')) looks.set(key, r)
   }
-  // Each record's image id and the URL it is hashed from, and the Scryfall object it shows.
   const targets = new Map<number, { url: string; scryfallId: string }>()
   for (const r of looks.values()) {
     const front = scryfallArtUrl(r.scryfall_id, 'full', 'front')
@@ -460,6 +453,25 @@ async function buildMagicFingerprints(
     const back = r.back_image_id === null ? null : scryfallArtUrl(r.scryfall_id, 'full', 'back')
     if (back) targets.set(r.back_image_id!, { url: back, scryfallId: r.scryfall_id.toLowerCase() })
   }
+  return targets
+}
+
+/**
+ * Magic's file: one record per look (mtgLookKey) among the images with art of their own
+ * (`art_from` NULL), hashed from Scryfall's `large` image of the look's English row (else its
+ * lowest image id), cut to MTG_PROFILE's art box; a two-faced card's back is hashed under its
+ * `back_image_id`. At most `budget` new hashes a run; images of sets released in the last
+ * MTG_RECENT_DAYS are hashed again each run, and a look whose row or URL changes is hashed again.
+ */
+async function buildMagicFingerprints(
+  opts: FingerprintOptions,
+  fetchFn: typeof fetch,
+  log: (s: string) => void
+): Promise<FingerprintResult> {
+  const profile = scanProfile('mtg')
+  const budget = opts.budget ?? MTG_FINGERPRINT_BUDGET
+  const now = opts.now?.() ?? new Date()
+  const targets = magicFingerprintTargets(opts.work)
   // Printings point at their Scryfall object by set_rarity_code (magic/write.ts).
   const since = new Date(now.getTime() - MTG_RECENT_DAYS * 86400000).toISOString().slice(0, 10)
   const recent = new Set(

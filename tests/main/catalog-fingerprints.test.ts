@@ -433,6 +433,63 @@ describe('runJob', () => {
     ])
     expect(lines).toContain('Fingerprints: 2 (2 new, 1 failed)')
   })
+  describe('Magic', () => {
+    const addMagicImage = (): void => {
+      const cardId = MTG_ID_MIN + 1000
+      work
+        .prepare(
+          `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at, game)
+           VALUES (?, 'Siren Lookout', 'Creature', 'mtg', '', '', '2026-01-01', 'mtg')`
+        )
+        .run(cardId)
+      work.prepare("INSERT INTO mtg_cards (card_id, oracle_id, lang) VALUES (?, 'o', 'en')").run(cardId)
+      work
+        .prepare("INSERT INTO card_images (image_id, card_id, sort_order, game) VALUES (?, ?, 0, 'mtg')")
+        .run(MTG_ID_MIN + 1, cardId)
+      work
+        .prepare("INSERT INTO mtg_images (image_id, scryfall_id, illustration_id) VALUES (?, ?, 'ill')")
+        .run(MTG_ID_MIN + 1, '00000000-0000-4000-8000-000000000001')
+    }
+    const run = async (extra: { skipMagic?: boolean } = {}): Promise<{ puts: string[]; lines: string[] }> => {
+      const puts: string[] = []
+      const lines: string[] = []
+      await runJob({
+        dir,
+        url: 'https://portal.example',
+        token: 'tok',
+        stage: 'fingerprints-mtg',
+        ...extra,
+        fetch: (async (input: string | URL | Request, init?: RequestInit) => {
+          const url = new URL(String(input))
+          if (url.hostname !== 'portal.example') return new Response(jpeg(false) as BodyInit)
+          if (init?.method === 'PUT') puts.push(`${url.pathname}${url.search}`)
+          return Response.json({ ok: true, count: 1 })
+        }) as typeof fetch,
+        log: (l) => lines.push(l)
+      })
+      return { puts, lines }
+    }
+
+    it('uploads Magic fingerprints ungated with ?game=mtg', async () => {
+      addMagicImage()
+      const { puts, lines } = await run()
+      expect(puts).toEqual(['/admin/scan/fingerprints?game=mtg'])
+      expect(lines).toContain('Magic accuracy: no shots yet; not gated')
+      expect(lines).toContain('Magic fingerprints: 1 (1 new, 0 failed)')
+    })
+
+    it('skips Magic fingerprints with --no-magic', async () => {
+      addMagicImage()
+      const { puts } = await run({ skipMagic: true })
+      expect(puts).toEqual([])
+    })
+
+    it('skips Magic fingerprints when there are no Magic cards', async () => {
+      const { puts, lines } = await run()
+      expect(puts).toEqual([])
+      expect(lines).toContain('Magic fingerprints: no Magic cards yet')
+    })
+  })
 })
 
 describe('fingerprintSource', () => {

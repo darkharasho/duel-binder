@@ -35,7 +35,8 @@ export default defineConfig({
         'op-number-replay': `${root}scripts/scan/op-number-replay.ts`,
         'code-replay': `${root}scripts/scan/code-replay.ts`,
         'rip-picker-replay': `${root}scripts/scan/rip-picker-replay.ts`,
-        'reverse-refs': `${root}scripts/scan/reverse-refs.ts`
+        'reverse-refs': `${root}scripts/scan/reverse-refs.ts`,
+        'mtg-fingerprint-size': `${root}scripts/scan/mtg-fingerprint-size.ts`
       },
       output: { format: 'es', entryFileNames: '[name].mjs' }
     }

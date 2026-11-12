@@ -10,7 +10,7 @@
  * uploads every row; --dry-run refreshes and prints per-table counts without uploading or
  * touching the base. A refresh that would delete more than a sliver of any table (see
  * `findShrinks`) is refused unless --allow-shrink is passed, since every client applies the
- * deletes. --no-pokemon skips the Pokémon step, --no-onepiece both One Piece ones, --no-onepiece-ja only the Japanese one, --no-magic the Magic step. --refresh-sets re-reads the non-English set lists and Pokémon set art now instead of on their weekly timers. --refresh-cards reads the YGOPRODeck card list and the TCGplayer catalog now instead of on their daily and weekly timers.
+ * deletes. --no-pokemon skips the Pokémon step, --no-onepiece both One Piece ones, --no-onepiece-ja only the Japanese one, --no-magic the Magic step and its fingerprints. --refresh-sets re-reads the non-English set lists and Pokémon set art now instead of on their weekly timers. --refresh-cards reads the YGOPRODeck card list and the TCGplayer catalog now instead of on their daily and weekly timers.
  * Problems that don't stop the upload (a failed card sync, a failed fingerprint build)
  * end the run with a non-zero exit so the workflow shows red. So does a fingerprint file that fails
  * the accuracy gate (see accuracy.ts), which is held back while clients keep the last one. Each
@@ -223,7 +223,8 @@ export const STAGES = [
   'upload',
   'fingerprints-ygo',
   'fingerprints-pkm',
-  'fingerprints-op'
+  'fingerprints-op',
+  'fingerprints-mtg'
 ] as const
 export type Stage = (typeof STAGES)[number]
 
@@ -262,16 +263,20 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
   const gate =
     opts.checkAccuracy ??
     ((w: Database.Database, bytes: Uint8Array, game: GameId) =>
-      // mtg: scanner step (Magic is never fingerprinted, so it never reaches the Yu-Gi-Oh! shots).
+      // Magic's file goes up ungated (below), so it never reaches the Yu-Gi-Oh! shots.
       checkAccuracy(w, bytes, game === 'pkm' ? PKM_FIXTURES_DIR : FIXTURES_DIR, game))
   // The catalog is the job's main product, so a fingerprint failure never stops its upload; it
   // is reported as a problem instead. Each game's file is gated and uploaded on its own.
-  // mtg: scanner step. Magic has no fingerprint stage (and no scan profile, which buildFingerprints
-  // needs), so the type leaves it out rather than let it fall into the Yu-Gi-Oh! paths below.
-  const fingerprint = async (upload: boolean, game: Exclude<GameId, 'mtg'>): Promise<void> => {
+  const fingerprint = async (upload: boolean, game: GameId): Promise<void> => {
     const pkm = game === 'pkm'
     const ygo = game === 'ygo'
-    const what = pkm ? 'Pokémon fingerprints' : game === 'op' ? 'One Piece fingerprints' : 'Fingerprints'
+    const what = pkm
+      ? 'Pokémon fingerprints'
+      : game === 'op'
+        ? 'One Piece fingerprints'
+        : game === 'mtg'
+          ? 'Magic fingerprints'
+          : 'Fingerprints'
     let refs: Uint8Array
     const yugipedia = opts.yugipedia ?? createYugipediaClient({ version })
     try {
@@ -297,10 +302,11 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
       log(`${what}: ${out.count} (${out.fetched} new, ${out.failed} failed)`)
       if (ygo) log(`Printing scans: ${scans.count} (${scans.fetched} new, ${scans.failed} failed)`)
       refs = out.refs
-      if (game === 'op' && !opts.checkAccuracy) {
-        // No shots of One Piece cards to check against yet, and no app scans One Piece: the file
-        // goes up ungated so it is whole by the time scanning is turned on (step 4b gates it).
-        log('One Piece accuracy: no shots yet; not gated')
+      if ((game === 'op' && !opts.checkAccuracy) || game === 'mtg') {
+        // No shots of these cards to check against in the job, and no app scans Magic yet: the
+        // file goes up ungated so it is whole by the time scanning is turned on. Magic's photos
+        // are scored in CI instead (scanner step 5).
+        log(`${game === 'mtg' ? 'Magic' : 'One Piece'} accuracy: no shots yet; not gated`)
         if (upload) await uploadFingerprints({ url: url!, token: token!, bytes: out.bytes, game, fetch: opts.fetch })
         return
       }
@@ -326,7 +332,7 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
       problem(`${what} failed: ${e instanceof Error ? e.message : e}`)
       return
     }
-    // Refs go with Yu-Gi-Oh's printing scans; Pokémon and One Piece have none.
+    // Refs go with Yu-Gi-Oh's printing scans; the other games have none.
     if (!ygo) return
     // After the file they go with: a client holding the other file just finds no refs in it.
     try {
@@ -343,6 +349,15 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
       return
     }
     await fingerprint(upload, 'op')
+  }
+  /** Magic's file, once the catalog has Magic cards (and it isn't skipped). */
+  const magicFingerprints = async (upload: boolean): Promise<void> => {
+    if (opts.skipMagic) return
+    if (!work.prepare("SELECT 1 FROM card_images WHERE game = 'mtg' LIMIT 1").get()) {
+      log('Magic fingerprints: no Magic cards yet')
+      return
+    }
+    await fingerprint(upload, 'mtg')
   }
   /** Pokémon's file, once the catalog has Pokémon cards (and it isn't skipped). */
   const pokemonFingerprints = async (upload: boolean): Promise<void> => {
@@ -460,6 +475,7 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
       if (on('fingerprints-ygo')) await fingerprint(true, 'ygo')
       if (on('fingerprints-pkm')) await pokemonFingerprints(true)
       if (on('fingerprints-op')) await onePieceFingerprints(true)
+      if (on('fingerprints-mtg')) await magicFingerprints(true)
       return { counts: null, uploaded: null, problems }
     }
     base = !opts.full && existsSync(basePath) ? openDatabase(basePath) : null
@@ -490,6 +506,7 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
       await fingerprint(false, 'ygo')
       await pokemonFingerprints(false)
       await onePieceFingerprints(false)
+      await magicFingerprints(false)
       return { counts, uploaded: null, problems }
     }
 
@@ -529,6 +546,7 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
       await fingerprint(true, 'ygo')
       await pokemonFingerprints(true)
       await onePieceFingerprints(true)
+      await magicFingerprints(true)
     }
     return { counts: null, uploaded, problems }
   } finally {

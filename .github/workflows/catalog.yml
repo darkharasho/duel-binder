@@ -104,6 +104,13 @@ jobs:
           path: catalog-work/fingerprints-op.sqlite
           key: catalog-fpop-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: catalog-fpop-
+      # Magic's fingerprint hashes: their own cache too (catalog-fpmtg, not catalog-mtg's prefix).
+      - name: Restore Magic fingerprints
+        uses: actions/cache/restore@v4
+        with:
+          path: catalog-work/fingerprints-mtg.sqlite
+          key: catalog-fpmtg-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: catalog-fpmtg-
       # Magic's set stats: their own cache, for the same reason (nothing starts with catalog-mtg elsewhere).
       - name: Restore Magic sources
         uses: actions/cache/restore@v4
@@ -166,6 +173,16 @@ jobs:
       - name: Flag failed One Piece fingerprints
         if: steps.fingerprints-op.outcome == 'failure'
         run: echo "CATALOG_PROBLEMS=1" >> "$GITHUB_ENV"
+      # Bounded likewise: the first nights hash up to 20k Scryfall images each (kept as they go),
+      # and no app scans Magic yet.
+      - name: Magic fingerprints
+        id: fingerprints-mtg
+        timeout-minutes: 60
+        continue-on-error: true
+        run: npm run catalog:job -- --stage fingerprints-mtg
+      - name: Flag failed Magic fingerprints
+        if: steps.fingerprints-mtg.outcome == 'failure'
+        run: echo "CATALOG_PROBLEMS=1" >> "$GITHUB_ENV"
       # Small copies of the printing photos stored since last night, for grids. Its own step, and
       # never fails the run: without them the grids show the full photos, as before.
       - name: Printing photo small copies
@@ -218,6 +235,12 @@ jobs:
         with:
           path: catalog-work/fingerprints-op.sqlite
           key: catalog-fpop-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Save Magic fingerprints
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: catalog-work/fingerprints-mtg.sqlite
+          key: catalog-fpmtg-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Save Magic sources
         if: always()
         uses: actions/cache/save@v4

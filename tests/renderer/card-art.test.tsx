@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { PKM_ID_MIN, type GameId } from '@shared/games'
 import { CardArt } from '@/components/CardArt'
 import { CardSheet } from '@/components/CardSheet'
 import { PanelCardArt } from '@/components/PanelCardArt'
 import { resetBorrowedArt } from '@/lib/borrowedArt'
 import { resetPrintingPhotos } from '@/lib/printingPhotos'
-import { GameProvider } from '@/lib/game'
+import { GameProvider, useGame } from '@/lib/game'
 import { createMockApi, renderWithProviders } from './mockApi'
 
 describe('CardArt', () => {
@@ -352,6 +352,91 @@ describe('CardArt with borrowed art', () => {
     render(<CardArt imageId={own} size="small" alt="Oddish" />)
     fireEvent.error(await screen.findByAltText('Oddish (English art)'))
     expect(screen.getByTestId('card-art-placeholder')).toBeInTheDocument()
+  })
+
+  /** An api whose data-change listeners the test fires, and whose game switch fires them as main does. */
+  function watched(): {
+    asked: ReturnType<typeof vi.fn>
+    japanese: ReturnType<typeof vi.fn>
+    traditional: ReturnType<typeof vi.fn>
+    dataChanged: () => void
+    api: ReturnType<typeof createMockApi>
+  } {
+    const listeners: (() => void)[] = []
+    const dataChanged = (): void => listeners.forEach((l) => l())
+    const asked = vi.fn(async () => [[own, twin]] as [number, number][])
+    const japanese = vi.fn(async () => [] as [number, number][])
+    const traditional = vi.fn(async () => [] as [number, number][])
+    let active: GameId = 'pkm'
+    const mock = createMockApi({
+      games: {
+        available: async () => ['ygo', 'pkm'],
+        active: async () => active,
+        setActive: async (g: GameId) => {
+          active = g
+          dataChanged()
+        }
+      }
+    })
+    const api = {
+      ...mock,
+      app: {
+        ...mock.app,
+        onDataChanged: (cb: () => void) => {
+          listeners.push(cb)
+          return () => listeners.splice(listeners.indexOf(cb), 1)
+        }
+      },
+      cards: {
+        ...mock.cards,
+        borrowedArt: asked,
+        japaneseArt: japanese,
+        traditionalArt: traditional
+      }
+    }
+    return { asked, japanese, traditional, dataChanged, api }
+  }
+
+  let switchTo: (g: GameId) => Promise<void> = async () => {}
+  function Switcher(): null {
+    const { setGame } = useGame()
+    switchTo = setGame
+    return null
+  }
+
+  it('a game switch does not read the art lists again; a real data change does', async () => {
+    const { asked, japanese, traditional, dataChanged, api } = watched()
+    renderWithProviders(
+      <GameProvider fallback={null}>
+        <Switcher />
+        <CardArt imageId={own} size="small" alt="Oddish" />
+      </GameProvider>,
+      { api }
+    )
+    await screen.findByAltText('Oddish (English art)')
+    expect(asked).toHaveBeenCalledTimes(1)
+    await act(() => switchTo('ygo'))
+    await act(() => switchTo('pkm'))
+    expect(asked).toHaveBeenCalledTimes(1)
+    expect(japanese).toHaveBeenCalledTimes(1)
+    expect(traditional).toHaveBeenCalledTimes(1)
+    act(() => dataChanged())
+    await waitFor(() => expect(asked).toHaveBeenCalledTimes(2))
+    expect(japanese).toHaveBeenCalledTimes(2)
+    expect(traditional).toHaveBeenCalledTimes(2)
+  })
+
+  it('a data change with no Pokémon card showing reads the lists when one next shows', async () => {
+    const { asked, dataChanged, api } = watched()
+    window.api = api
+    const { unmount } = render(<CardArt imageId={own} size="small" alt="Oddish" />)
+    await screen.findByAltText('Oddish (English art)')
+    unmount()
+    act(() => dataChanged())
+    act(() => dataChanged())
+    expect(asked).toHaveBeenCalledTimes(1)
+    render(<CardArt imageId={own} size="small" alt="Oddish" />)
+    await waitFor(() => expect(asked).toHaveBeenCalledTimes(2))
   })
 
   it('never asks about a Yu-Gi-Oh! card', () => {

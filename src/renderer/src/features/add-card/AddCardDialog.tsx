@@ -50,8 +50,11 @@ type Step = 'search' | 'printing' | 'quantity'
 interface AddCardDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  /** Start at the printing step for this card with this printing highlighted. */
-  initial?: { card: CardSearchResult; printingId: number } | null
+  /**
+   * Start at the printing step for this card with this printing highlighted, or at the search
+   * step with this text already typed.
+   */
+  initial?: { card: CardSearchResult; printingId: number } | { query: string } | null
 }
 
 function useDebounced<T>(value: T, ms: number): T {
@@ -216,13 +219,20 @@ export function AddCardDialog({
     setSeeded(null)
   } else if (open && initial && seeded !== initial) {
     setSeeded(initial)
-    setCard(initial.card)
     setPrinting(null)
-    setText('')
     setHighlight(undefined)
-    setPreferredId(initial.printingId)
     setPickedLanguage(null)
-    setStep('printing')
+    if ('query' in initial) {
+      setCard(null)
+      setText(initial.query)
+      setPreferredId(null)
+      setStep('search')
+    } else {
+      setCard(initial.card)
+      setText('')
+      setPreferredId(initial.printingId)
+      setStep('printing')
+    }
   }
 
   const downloading = sync?.cardCount === 0

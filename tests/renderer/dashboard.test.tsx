@@ -1,6 +1,6 @@
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import type { CollectionStats, EntryView } from '@shared/types'
+import type { CollectionStats, EntryView, SetSummary } from '@shared/types'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { createMockApi, renderWithProviders } from './mockApi'
 
@@ -275,20 +275,66 @@ describe('DashboardPage', () => {
     expect(onNavigate).not.toHaveBeenCalled()
   })
 
-  it('empty state', async () => {
-    const onAddCard = vi.fn()
-    setup(
-      stats({
-        totalCards: 0,
-        uniqueCards: 0,
-        totalValue: 0,
-        byRarity: [],
-        byFrameType: [],
-        topEntries: []
-      }),
-      { onAddCard }
-    )
-    await userEvent.click(await screen.findByRole('button', { name: 'Add your first card' }))
-    expect(onAddCard).toHaveBeenCalledTimes(1)
+  it('empty state offers a search, the scanner and recent sets', async () => {
+    const onSearch = vi.fn()
+    const onNavigate = vi.fn()
+    const empty = stats({
+      totalCards: 0,
+      uniqueCards: 0,
+      totalValue: 0,
+      byRarity: [],
+      byFrameType: [],
+      topEntries: []
+    })
+    const set = (setName: string, tcgDate: string, totalCards = 100): SetSummary => ({
+      language: 'en',
+      setName,
+      setCode: setName.slice(0, 3).toUpperCase(),
+      tcgDate,
+      imageKey: null,
+      packImageKey: null,
+      logoImageKey: null,
+      coverImageId: null,
+      totalCards,
+      ownedCards: 0,
+      totalRarities: totalCards,
+      ownedRarities: 0,
+      listRows: null,
+      unmatchedRows: null,
+      series: null
+    })
+    const api = createMockApi({
+      stats: { get: async () => empty },
+      sets: {
+        list: async () => [
+          set('Old Set', '2020-01-01'),
+          set('Newest Set', '2026-10-01'),
+          set('Tiny Promo', '2026-11-01', 5),
+          set('Future Set', '2099-01-01')
+        ]
+      }
+    })
+    renderWithProviders(<DashboardPage onNavigate={onNavigate} onSearch={onSearch} />, { api })
+    expect(await screen.findByText("What's in your binder?")).toBeInTheDocument()
+
+    await userEvent.type(screen.getByRole('textbox', { name: /Search .* cards to add/ }), 'k')
+    expect(onSearch).toHaveBeenCalledWith('k')
+
+    await userEvent.click(screen.getByRole('button', { name: /scan a stack/ }))
+    expect(onNavigate).toHaveBeenLastCalledWith('scan')
+
+    // Released sets only, newest first; promos too small to tick off are left out.
+    const sets = await screen.findAllByRole('listitem')
+    expect(sets.map((li) => li.textContent)).toEqual([
+      expect.stringContaining('Newest Set'),
+      expect.stringContaining('Old Set')
+    ])
+    expect(sets[0]).toHaveTextContent('0 of 100 cards')
+    await userEvent.click(within(sets[0]).getByRole('button'))
+    expect(onNavigate).toHaveBeenLastCalledWith('sets', {
+      set: { setName: 'Newest Set', language: 'en' }
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'All sets →' }))
+    expect(onNavigate).toHaveBeenLastCalledWith('sets')
   })
 })

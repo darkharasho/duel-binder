@@ -44,6 +44,8 @@ import { CardPanel } from '../card/CardPanel'
 import { usePrefetchNeighbours } from '@/features/card/usePrefetchNeighbours'
 import { FriendEntryPanel } from '../friends/FriendEntryPanel'
 import { DEFAULT_FILTERS } from './defaultFilters'
+import { StartHere } from '@/features/dashboard/StartHere'
+import type { NavigateFn } from '@/components/AppShell'
 
 type View = 'grid' | 'table'
 const VIEW_KEY = 'collection.view'
@@ -72,6 +74,9 @@ interface Props {
   /** Opens this entry's detail panel on mount (dashboard "top entries" navigation). */
   initialEntryId?: number
   onAddCard?: () => void
+  /** Opens Add card with this text typed; with onNavigate, an empty collection offers ways to start. */
+  onSearch?: (query: string) => void
+  onNavigate?: NavigateFn
   /** Shows this friend's collection read-only instead of your own. */
   friend?: Friend
   /** Whose binder this is, shown above a friend's collection. */
@@ -82,6 +87,8 @@ interface Props {
 export function CollectionPage({
   initialEntryId,
   onAddCard,
+  onSearch,
+  onNavigate,
   friend,
   friendHeader
 }: Props): React.JSX.Element {
@@ -316,6 +323,18 @@ export function CollectionPage({
                 Retry
               </Button>
             </div>
+          ) : entries.isSuccess &&
+            list.length === 0 &&
+            !hiddenByLanguage &&
+            !filtered &&
+            !friend &&
+            onSearch &&
+            onNavigate ? (
+            <StartHere
+              onNavigate={onNavigate}
+              onSearch={onSearch}
+              blurb="Every card you add lands here, with its price, set and rarity."
+            />
           ) : entries.isSuccess && list.length === 0 ? (
             <div className="flex flex-col items-center gap-3 py-24 text-center">
               {hiddenByLanguage ? (

@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import logo from '@/assets/logo.svg'
 import { toast } from 'sonner'
+import type { Language } from '@shared/languages'
 import type { AdminPageTab } from '@/features/admin/adminTabs'
 import { useAccountUser } from '@/lib/accountUser'
 import { api } from '@/lib/api'
@@ -31,7 +32,14 @@ export type Page =
   | 'sets'
   | 'settings'
   | 'admin'
-export type NavigateFn = (page: Page, opts?: { entryId?: number; adminTab?: AdminPageTab }) => void
+export type NavigateFn = (
+  page: Page,
+  opts?: {
+    entryId?: number
+    adminTab?: AdminPageTab
+    set?: { setName: string; language: Language }
+  }
+) => void
 
 // Pages in groups, so the list reads as a few places rather than one long run. Settings sits at the
 // bottom with the other extras.

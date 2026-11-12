@@ -278,6 +278,23 @@ describe('SetsPage', () => {
     expect(await screen.findByText(/You've started/)).toBeInTheDocument()
   })
 
+  it('opens straight on a set another page linked to', async () => {
+    const api = createMockApi({
+      sets: { list: async () => [MR], checklist: async () => metalRaidersChecklist }
+    })
+    renderWithProviders(
+      <SetsPage
+        initialSet={{ setName: 'Metal Raiders', language: 'en' }}
+        onAddCard={() => {}}
+        onAddMissing={() => {}}
+      />,
+      { api }
+    )
+    expect(await screen.findByRole('button', { name: 'Alpha Dragon' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /All sets/ }))
+    expect(await screen.findByText(/You've started/)).toBeInTheDocument()
+  })
+
   it("Android's back leaves the set for the list before it leaves the page", async () => {
     const home = vi.fn()
     renderHook(() => useBackHandler(true, home))

@@ -1,0 +1,55 @@
+name: Cache cleanup
+
+# GitHub keeps 10 GB of Actions caches for the repo and evicts the least recently used past that.
+# Every release tag saved ~555 MB of npm caches only that tag can read, and every version bump a
+# new npm cache on main, so within a day or two the catalog's once-a-night caches (work database,
+# fingerprint hashes) were evicted and the 2026-11-11 run rebuilt every fingerprint from nothing.
+# This deletes the caches nothing can use again, after every build and before the catalog runs.
+
+on:
+  workflow_run:
+    workflows: [Release, Android, iOS, CI]
+    types: [completed]
+  schedule:
+    # Before the catalog (06:17).
+    - cron: '47 5 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: cache-cleanup
+  cancel-in-progress: false
+
+permissions:
+  actions: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Delete caches nothing will read again
+        run: |
+          set -euo pipefail
+          gh cache list -L 1000 --json id,key,ref,createdAt,sizeInBytes > caches.json
+          cutoff=$(date -u -d '3 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          # A tag's caches are read by that tag only, and a release tag runs once. A pull request's
+          # once it is a few days old. On main, only the newest npm cache per OS is restored (its
+          # key is the lockfile's hash, which every version bump changes).
+          jq -r --arg cutoff "$cutoff" '
+            [ (.[] | select(.ref | contains("refs/tags/"))),
+              (.[] | select((.ref | contains("refs/pull/")) and .createdAt < $cutoff)),
+              ( [ .[] | select(.ref == "refs/heads/main" and (.key | startswith("node-cache-"))) ]
+                | group_by(.key | sub("-npm-.*"; ""))
+                | .[] | sort_by(.createdAt) | .[:-1] | .[] )
+            ] | unique_by(.id) | .[] | "\(.id)\t\(.sizeInBytes)\t\(.ref)\t\(.key)"
+          ' caches.json > delete.tsv
+          freed=0
+          while IFS=$'\t' read -r id size ref key; do
+            echo "Deleting $key ($ref, $((size / 1048576)) MB)"
+            gh cache delete "$id" || echo "::warning::Could not delete cache $id ($key)"
+            freed=$((freed + size))
+          done < delete.tsv
+          echo "Freed $((freed / 1048576)) MB in $(wc -l < delete.tsv) caches"

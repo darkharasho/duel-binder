@@ -465,8 +465,19 @@ export function matchName(
   return name === undefined ? null : { cardId: best.id, name, score: best.score }
 }
 
-/** The set codes ("OP01", "ST10", "P") before the dash in the game's printed numbers, for typing a number. */
+/**
+ * The set codes ("OP01", "ST10", "P") before the dash in the game's printed numbers, for typing a
+ * number. Magic's ("MH3", "PLST") come from its sets, which are what its codes start with: reading
+ * them off its million printings took a second.
+ */
 export function numberPrefixes(db: SqlDb, scope: Scope = LOCAL): string[] {
+  const { game } = db.prepare(`SELECT ${scope.game} AS game`).get() as { game: string }
+  if (game === 'mtg')
+    return (
+      db
+        .prepare("SELECT DISTINCT upper(set_code) AS c FROM sets WHERE game = 'mtg' ORDER BY c")
+        .all() as { c: string }[]
+    ).map((r) => r.c)
   const rows = db
     .prepare(
       `SELECT DISTINCT substr(set_code, 1, instr(set_code, '-') - 1) AS prefix FROM card_printings

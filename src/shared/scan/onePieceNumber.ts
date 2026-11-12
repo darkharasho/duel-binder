@@ -11,15 +11,22 @@ export function normalizeOpNumber(text: string): string | null {
 
 /**
  * The set codes ("OP10-") a half-typed number could be heading for: nothing once there is a dash
- * or the three number digits.
+ * or the three number digits. With `sep` ' ' (Magic, "MH3 "), nothing once the set is followed by
+ * any separator a Magic code takes (normalizeMagicCode).
  */
-export function prefixSuggestions(typed: string, prefixes: readonly string[], max = 8): string[] {
-  const t = squash(typed)
-  if (t === '' || t.includes('-') || /\d{3}$/.test(t)) return []
+export function prefixSuggestions(
+  typed: string,
+  prefixes: readonly string[],
+  max = 8,
+  sep: '-' | ' ' = '-'
+): string[] {
+  const t = sep === '-' ? squash(typed) : typed.trimStart().toUpperCase()
+  const done = sep === '-' ? t.includes('-') || /\d{3}$/.test(t) : /[\s\-#/]/.test(t)
+  if (t === '' || done) return []
   return prefixes
     .filter((p) => p.startsWith(t))
     .slice(0, max)
-    .map((p) => `${p}-`)
+    .map((p) => `${p}${sep}`)
 }
 
 // ---- Numbers read off the camera ----

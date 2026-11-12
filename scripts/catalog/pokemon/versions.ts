@@ -238,13 +238,6 @@ export function withExclusives<M extends { product: TcProduct; variantSubtype: s
 /** Cards TCGdex has no cosmos variant for, whose Cosmos Holo a Dex export shows. */
 const DEX_COSMOS = new Set(['sv02-098', 'sv04-026'])
 
-/**
- * Reverse holos the owner has pulled that neither source lists yet: Delta Reign's six Legendary
- * stadium halves (Pyroduct, Summit, Trench; 094-099), sold on TCGplayer only as Normal (2026-11-06).
- * A TCGplayer row added later prices the same version.
- */
-const OWNER_REVERSE = new Set(['me06-094', 'me06-095', 'me06-096', 'me06-097', 'me06-098', 'me06-099'])
-
 /** Whether TCGdex made this variant up from its legacy booleans rather than recording it. */
 export const isGenerated = (v: TdVariant): boolean => v.variantId === GENERATED_VARIANT_ID
 
@@ -401,7 +394,6 @@ export function cardVersions(
   }
 
   if (DEX_COSMOS.has(card.id)) entry('Cosmos Holo')
-  if (OWNER_REVERSE.has(card.id)) entry('Reverse Holofoil')
 
   const versions: PkmVersion[] = []
   for (const [label, e] of entries) {

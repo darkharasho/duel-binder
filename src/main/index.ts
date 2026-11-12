@@ -45,7 +45,7 @@ import { createMainErrorReports, goneMessage } from './errorReports'
 import { describeError, type ErrorDetails } from '@shared/errorReports'
 import { createCloudClient } from './cloud/client'
 import { GAMES, GAME_IDS, isGameId, type GameId } from '@shared/games'
-import { setMeta } from './db/meta'
+import { getMeta, setMeta } from './db/meta'
 import type { FingerprintStore } from './scan/fingerprints'
 import { createFingerprintStore } from './scan/fingerprints'
 import { createOcr } from './scan/ocr'
@@ -55,8 +55,8 @@ import { emailAuthRequest, emailSignInEnabled } from './cloud/emailAuth'
 import { signInWithBrowser } from './cloud/signIn'
 import { TokenStore, electronCipher } from './cloud/tokenStore'
 import { createRollupRunner } from './rollupRunner'
+import { createRollupWarmer } from './rollupWarmer'
 import createRollupWorker from './rollupWorker?nodeWorker'
-import type { RollupJob } from './repo/rollupJobs'
 import { LOCAL, scopeGame } from './repo/scope'
 
 // Launched from a desktop menu, stdout/stderr can be closed pipes; a console.log then emits EPIPE,
@@ -325,15 +325,6 @@ async function bootstrap(): Promise<void> {
     createRollupWorker({ workerData: { file: join(userData, 'collection.db') } })
   )
   app.on('will-quit', () => rollups.dispose())
-  /** Builds the shown game's Sets list and Browse filters before they're first opened. */
-  const warmRollups = (): void => {
-    const game = scopeGame(db, LOCAL)
-    const jobs: RollupJob[] = [
-      { kind: 'sets', game },
-      { kind: 'facets', game }
-    ]
-    for (const job of jobs) rollups.build(job).catch((e) => console.warn('Rollup build failed', e))
-  }
   const portal = portalUrl(process.env, app.isPackaged)
   const tokens = new TokenStore(join(userData, 'account.json'), await electronCipher())
   const remoteIdOf = db.prepare('SELECT remote_id FROM card_printings WHERE id = ?').pluck()
@@ -499,6 +490,18 @@ async function bootstrap(): Promise<void> {
     },
     signInRequired: !fakeData
   })
+  // Every game's Sets list and Browse filters, built before they're first opened (after a start or
+  // a catalog change), off the main process.
+  const rollupWarmer = createRollupWarmer({
+    build: (job) => rollups.build(job),
+    games: () => account.games(),
+    shownGame: () => scopeGame(db, LOCAL),
+    readLanguage: () => getMeta(db, 'browse_language'),
+    saveLanguage: (value) => setMeta(db, 'browse_language', value)
+  })
+  function warmRollups(): void {
+    void rollupWarmer.warm()
+  }
   app.on('before-quit', () => account.stop())
   sendErrorReport = (details) => void account.reportError(details)
   const ocr = createOcr({ packaged: app.isPackaged })
@@ -584,7 +587,8 @@ async function bootstrap(): Promise<void> {
       fingerprints,
       ocr,
       ripCapture: createRipCapture(join(userData, 'rip-capture'), (p) => shell.openPath(p)),
-      rollups
+      rollups,
+      rollupWarmer
     })
   )
 

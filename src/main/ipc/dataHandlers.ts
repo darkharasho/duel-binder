@@ -143,7 +143,8 @@ export function createDataHandlers({
   onEdit,
   availableGames,
   onGameChanged,
-  buildRollup
+  buildRollup,
+  browsed
 }: {
   db: SqlDb
   onEdit(): void
@@ -156,6 +157,8 @@ export function createDataHandlers({
    * it fails, a missing rollup is built here, as before.
    */
   buildRollup?(job: RollupJob): Promise<unknown>
+  /** Browse asked for its filters in this language (undefined: every language). */
+  browsed?(language: Language | undefined): void
 }): Record<DataChannel, Handler> {
   /**
    * The job's rollup from `buildRollup` when none is stored yet; undefined when one is stored, the
@@ -202,6 +205,7 @@ export function createDataHandlers({
     'cards:browse': async (f) => browseCards(db, f),
     'cards:browseFacets': async (language) => {
       const lang = isLanguage(language) ? language : undefined
+      browsed?.(lang)
       const built = await offThread({ kind: 'facets', game: scopeGame(db, LOCAL), language: lang })
       return (built as BrowseFacets | undefined) ?? browseFacetsFast(db, undefined, lang)
     },

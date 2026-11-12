@@ -144,6 +144,27 @@ describe('per-game filters and facets', () => {
       expect(names(listEntries(db, { ...ALL, pkmRarities: ['Common'] }))).toHaveLength(3)
     })
 
+    it('Pokémon facets, read in one pass, match a DISTINCT per field', () => {
+      const distinct = (sql: string): string[] =>
+        (db.prepare(sql).all() as { v: string }[]).map((r) => r.v)
+      const src = `SELECT pc.* FROM pokemon_cards pc JOIN cards c ON c.id = pc.card_id AND c.game = 'pkm'`
+      const f = browseFacets(db)
+      expect(f.pkmCategories).toEqual(
+        distinct(`SELECT DISTINCT category AS v FROM (${src}) WHERE category <> '' ORDER BY v`)
+      )
+      expect(f.pkmTypes).toEqual(
+        distinct(`SELECT DISTINCT jt.value AS v FROM (${src}) s, json_each(s.types) jt ORDER BY v`)
+      )
+      expect(f.pkmStages).toEqual(
+        distinct(`SELECT DISTINCT stage AS v FROM (${src}) WHERE stage <> '' ORDER BY v`)
+      )
+      expect(f.pkmRarities).toEqual(
+        distinct(`SELECT DISTINCT rarity AS v FROM (${src}) WHERE rarity <> '' ORDER BY v`)
+      )
+      expect(f.pkmTypes!.length).toBeGreaterThan(1)
+      expect(f.pkmStages!.length).toBeGreaterThan(1)
+    })
+
     describe('search', () => {
       beforeEach(() => {
         const pineco = addPokemonCard(db, {

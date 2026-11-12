@@ -82,6 +82,20 @@ export function InPageScanner({
     wholeFrame: true
   })
 
+  // The preview fills the page's height and is 3:4 at that height. CSS aspect-ratio can't do
+  // this on a flex-grown box (its width is settled before it grows), so the height is measured.
+  const fitRef = useRef<HTMLDivElement>(null)
+  const [fitWidth, setFitWidth] = useState<number | undefined>(undefined)
+  useEffect(() => {
+    const box = fitRef.current
+    if (!box || typeof ResizeObserver === 'undefined') return
+    const fit = (): void => setFitWidth(Math.round((box.clientHeight * 3) / 4))
+    fit()
+    const watch = new ResizeObserver(fit)
+    watch.observe(box)
+    return () => watch.disconnect()
+  }, [])
+
   const { devices, error, retry, stream } = camera
   const openDeviceId =
     stream?.getVideoTracks()[0]?.getSettings().deviceId ?? settings.deviceId ?? ''
@@ -95,19 +109,21 @@ export function InPageScanner({
 
   return (
     <section aria-label="Camera" className="flex min-h-0 shrink-0 flex-col gap-3">
-      <ScanViewport
-        smooth
-        videoRef={videoRef}
-        error={camera.error}
-        messages={CAMERA_MESSAGES}
-        onRetryCamera={camera.retry}
-        loop={loop}
-        zoom={zoom}
-        onZoom={setZoom}
-        className="aspect-[3/4] min-h-0 flex-1 rounded-lg border-2 border-white/10"
-      >
-        {found && <FoundBurst key={found.key} name={found.name} price={found.price} />}
-      </ScanViewport>
+      <div ref={fitRef} className="min-h-0 flex-1" style={{ width: fitWidth }}>
+        <ScanViewport
+          smooth
+          videoRef={videoRef}
+          error={camera.error}
+          messages={CAMERA_MESSAGES}
+          onRetryCamera={camera.retry}
+          loop={loop}
+          zoom={zoom}
+          onZoom={setZoom}
+          className="h-full w-full rounded-lg border-2 border-white/10"
+        >
+          {found && <FoundBurst key={found.key} name={found.name} price={found.price} />}
+        </ScanViewport>
+      </div>
       {setUnreadable && <p className="text-xs text-muted-foreground">{SET_UNREADABLE}</p>}
       {setsSkipped.length > 0 && (
         <p className="text-xs text-muted-foreground">{setsSkippedText(setsSkipped)}</p>

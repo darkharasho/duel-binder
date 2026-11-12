@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { normalizeMagicCode } from '../../src/shared/scan/magicCode'
+import { frameMagicCode, normalizeMagicCode } from '../../src/shared/scan/magicCode'
 import { prefixSuggestions } from '../../src/shared/scan/onePieceNumber'
 import { numberPrefixes } from '../../src/main/repo/scan'
 import { setActiveGame } from '../../src/main/cloud/activeGame'
@@ -64,4 +64,64 @@ test('numberPrefixes lists Magic set codes for Magic', async () => {
   expect(numberPrefixes(db)).toEqual(['MH3', 'PLST'])
   setActiveGame(db, ['ygo', 'pkm', 'op', 'mtg'], 'op')
   expect(numberPrefixes(db)).toEqual(['OP01'])
+})
+
+describe('frameMagicCode', () => {
+  test('reads the rarity-first info line, over two lines', () => {
+    expect(frameMagicCode(['C 0081\nFRA • EN'])[0]).toEqual({
+      code: 'FRA 81',
+      language: 'en',
+      foil: false
+    })
+  })
+
+  test('reads a foil star across two bands', () => {
+    expect(frameMagicCode(['R 0107', 'FRA ★ EN'])[0]).toEqual({
+      code: 'FRA 107',
+      language: 'en',
+      foil: true
+    })
+  })
+
+  test('reads the number-first layout with the set count', () => {
+    expect(frameMagicCode(['078/279 C\nXLN • EN'])[0].code).toBe('XLN 78')
+  })
+
+  test('mends letters read for digits in the number', () => {
+    expect(frameMagicCode(['C OO8I\nFRA • EN'])[0].code).toBe('FRA 81')
+  })
+
+  test('tries a set code with a digit read as a letter after it as read', () => {
+    const codes = frameMagicCode(['U 0012\nMH5 • EN']).map((r) => r.code)
+    expect(codes).toContain('MHS 12')
+    expect(codes.indexOf('MH5 12')).toBeLessThan(codes.indexOf('MHS 12'))
+  })
+
+  test('maps the printed language tag', () => {
+    expect(frameMagicCode(['M 0291 FRA • JP'])[0].language).toBe('ja')
+  })
+
+  // Real code-band reads from the Reality Fracture photos (shot file, card): junk the catalog
+  // could know as a set code, none of them followed by a language tag.
+  test.each([
+    ['shot_0425 FRA 188', ['€ 0180', 'Cae doVTamb ad']],
+    ['FRA 67', ['FRA EN ln', 'COTS NUS TIO TIE TIT wiv ju']],
+    ['FRA 227', ['FRA + EN Ww Bvar Sala', 'CBI JST WH']],
+    ['FRA 270', ['FRA EV Hilosunn B', '§ Wi Cid uTS.']],
+    ['FRA 396', ['Ls 0200', '« 9“']]
+  ])('reads no code from a real read with no language tag (%s)', (_, texts) => {
+    expect(frameMagicCode(texts)).toEqual([])
+  })
+
+  test('takes a plus read for the dot, the two lines from two bands', () => {
+    expect(frameMagicCode(['C 0180', 'FRA + EN'])[0]).toEqual({
+      code: 'FRA 180',
+      language: 'en',
+      foil: null
+    })
+  })
+
+  test('reads nothing from text with no info line', () => {
+    expect(frameMagicCode(['', 'Wizards of the Coast'])).toEqual([])
+  })
 })

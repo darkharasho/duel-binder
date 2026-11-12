@@ -283,7 +283,7 @@ describe('BrowsePage', () => {
         })
       },
       sets: {
-        list: async () =>
+        names: async () =>
           [
             { setName: 'Legend of Blue Eyes White Dragon', setCode: 'LOB-JP', language: 'ja' },
             { setName: 'Legend of Blue Eyes White Dragon', setCode: 'LOB', language: 'en' }

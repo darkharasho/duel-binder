@@ -496,6 +496,13 @@ export interface SetSummary {
   series: string | null // the series the Sets page groups it under; Pokémon only
 }
 
+/** A set's name, language and code: what labels a set name (sets.names), without the Sets list's counts and art. */
+export interface SetNameEntry {
+  language: Language
+  setName: string
+  setCode: string
+}
+
 export interface ChecklistCode {
   printingId: number
   setCode: string

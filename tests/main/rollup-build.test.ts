@@ -5,7 +5,13 @@ import type Database from 'better-sqlite3'
 import { openDatabase } from '../../src/main/db/database'
 import { setMeta } from '../../src/main/db/meta'
 import { browseFacets, browseFacetsFast } from '../../src/main/repo/browse'
-import { listSets, listSetsFast, setsRollupKey } from '../../src/main/repo/sets'
+import {
+  listSetNames,
+  listSets,
+  listSetsFast,
+  setNamesRollupKey,
+  setsRollupKey
+} from '../../src/main/repo/sets'
 import { buildRollup, rollupJobKey, type RollupJob } from '../../src/main/repo/rollupJobs'
 import { readRollup } from '../../src/main/repo/rollup'
 import { createDataHandlers } from '../../src/main/ipc/dataHandlers'
@@ -222,6 +228,30 @@ describe('sets:list and cards:browseFacets with a rollup builder', () => {
     expect(((await h['sets:list']()) as { setName: string }[]).map((s) => s.setName)).toEqual([
       'Alpha Edition'
     ])
+  })
+
+  it('sets:names builds the Sets rollup off the main process once, then reads its own', async () => {
+    setup()
+    const build = vi.fn(async (job: RollupJob) => buildRollup(db, job))
+    const h = handlers(build)
+    const names = listSets(db).map((s) => ({
+      language: s.language,
+      setName: s.setName,
+      setCode: s.setCode
+    }))
+    expect(await h['sets:names']()).toEqual(names)
+    expect(build.mock.calls.map(([job]) => job)).toEqual([{ kind: 'sets', game: 'ygo' }])
+    expect(readRollup(db, setNamesRollupKey('ygo'))).toEqual(names)
+    expect(await h['sets:names']()).toEqual(names)
+    expect(await h['sets:list']()).toEqual(listSets(db))
+    expect(build).toHaveBeenCalledTimes(1)
+  })
+
+  it('set names follow a catalog change', () => {
+    setup()
+    expect(listSetNames(db).map((s) => s.setName)).not.toContain('Brand New')
+    printing(1, 'ygo', 'Brand New')
+    expect(listSetNames(db).map((s) => s.setName)).toContain('Brand New')
   })
 
   it('builds in line when the builder fails', async () => {

@@ -119,7 +119,7 @@ describe('the live preview', () => {
     renderForm({
       binders: { preview, fieldValues: vi.fn(async () => ['Legend of Blue Eyes White Dragon']) },
       sets: {
-        list: vi.fn(async () => [
+        names: vi.fn(async () => [
           {
             setName: 'Legend of Blue Eyes White Dragon',
             setCode: 'LOB',

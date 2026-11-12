@@ -132,7 +132,7 @@ function serverBefore12(): Database.Database {
   const db = freshDb()
   runSteps(db, [
     ...MIGRATIONS.filter((m) => m.version <= 18),
-    ...SERVER_STEPS.filter((s) => !['server-12', 'server-13', 'server-14', 'server-16', 'server-18', 'server-21', 'server-23', 'server-26', 'server-27', 'server-28', 'server-35', 'server-40', 'server-41', 'server-42', 'server-43'].includes(s.name))
+    ...SERVER_STEPS.filter((s) => !['server-12', 'server-13', 'server-14', 'server-16', 'server-18', 'server-21', 'server-23', 'server-26', 'server-27', 'server-28', 'server-35', 'server-40', 'server-41', 'server-42', 'server-43', 'server-44'].includes(s.name))
   ])
   db.exec(`
     INSERT INTO users (id, discord_id, username, created_at, updated_at) VALUES (1, 'd1', 'one', 'x', 'x');
@@ -258,7 +258,7 @@ describe('server-13 (pokemon_cards image_url and local_name)', () => {
     const fresh = freshDb()
     migrateServer(fresh)
     const old = freshDb()
-    runSteps(old, [...MIGRATIONS, ...SERVER_STEPS.filter((s) => !['server-13', 'server-16', 'server-18', 'server-21', 'server-23', 'server-28', 'server-40'].includes(s.name))])
+    runSteps(old, [...MIGRATIONS, ...SERVER_STEPS.filter((s) => !['server-13', 'server-16', 'server-18', 'server-21', 'server-23', 'server-28', 'server-40', 'server-44'].includes(s.name))])
     expect(cols(old)).not.toContain('image_url')
     seedPokemon(old)
     migrateServer(old)
@@ -306,7 +306,7 @@ describe('server-16 (pokemon_cards art_twin_id)', () => {
     const fresh = freshDb()
     migrateServer(fresh)
     const old = freshDb()
-    runSteps(old, [...MIGRATIONS, ...SERVER_STEPS.filter((s) => !['server-16', 'server-18', 'server-21', 'server-23', 'server-28', 'server-40'].includes(s.name))])
+    runSteps(old, [...MIGRATIONS, ...SERVER_STEPS.filter((s) => !['server-16', 'server-18', 'server-21', 'server-23', 'server-28', 'server-40', 'server-44'].includes(s.name))])
     expect(cols(old)).not.toContain('art_twin_id')
     seedPokemon(old)
     migrateServer(old)
@@ -337,7 +337,7 @@ describe('server-18 (pokemon_cards traditional_twin_id)', () => {
     const fresh = freshDb()
     migrateServer(fresh)
     const old = freshDb()
-    runSteps(old, [...MIGRATIONS, ...SERVER_STEPS.filter((s) => s.name !== 'server-18' && s.name !== 'server-40')])
+    runSteps(old, [...MIGRATIONS, ...SERVER_STEPS.filter((s) => s.name !== 'server-18' && s.name !== 'server-40' && s.name !== 'server-44')])
     expect(cols(old)).not.toContain('traditional_twin_id')
     seedPokemon(old)
     migrateServer(old)
@@ -373,7 +373,7 @@ describe('server-40 (pokemon_cards dex_no / dex_extra)', () => {
     const fresh = freshDb()
     migrateServer(fresh)
     const old = freshDb()
-    runSteps(old, [...MIGRATIONS.filter((m) => m.version <= 41), ...SERVER_STEPS.filter((s) => s.name !== 'server-40' && s.name !== 'server-42' && s.name !== 'server-43')])
+    runSteps(old, [...MIGRATIONS.filter((m) => m.version <= 41), ...SERVER_STEPS.filter((s) => s.name !== 'server-40' && s.name !== 'server-42' && s.name !== 'server-43' && s.name !== 'server-44')])
     expect(cols(old)).not.toContain('dex_no')
     seedPokemon(old)
     migrateServer(old)
@@ -417,7 +417,7 @@ describe('server-14 (pokemon_set_art in the change feed)', () => {
     const old = freshDb()
     runSteps(old, [
       ...MIGRATIONS.filter((m) => m.version <= 22),
-      ...SERVER_STEPS.filter((s) => s.name !== 'server-14' && s.name !== 'server-35' && s.name !== 'server-40' && s.name !== 'server-42' && s.name !== 'server-43')
+      ...SERVER_STEPS.filter((s) => s.name !== 'server-14' && s.name !== 'server-35' && s.name !== 'server-40' && s.name !== 'server-42' && s.name !== 'server-43' && s.name !== 'server-44')
     ])
     migrateServer(old)
     for (const db of [fresh, old]) {
@@ -584,7 +584,7 @@ describe('server-42 feeds mtg_cards', () => {
     ])
     expect(
       (db.prepare('SELECT name FROM server_migrations ORDER BY rowid DESC LIMIT 1').get() as { name: string }).name
-    ).toBe('server-43')
+    ).toBe('server-44')
     db.close()
   })
 })

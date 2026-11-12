@@ -9,6 +9,10 @@ import { collectStats } from './stats'
 import { collectErrors } from './errors'
 import { isSetSymbolKey, missingSetSymbols, storeSetSymbol, warmImage } from './images'
 import { MAX_SYMBOL_PNG_BYTES } from '../../../src/shared/imageSources'
+import { listSetNames } from '../../../src/main/repo/sets'
+import { browseFacetsFast } from '../../../src/main/repo/browse'
+import { userScope } from './scope'
+import { settleAllRollups, settleRollups } from './rollups'
 
 const MAX_ITEMS = 5000
 /** Keys per /admin/img/set-symbols/missing request: each is an R2 read. */
@@ -154,7 +158,31 @@ function finish(deps: AppDeps, body: Record<string, unknown>): void {
     deps.db.exec("INSERT INTO cards_fts(cards_fts) VALUES('rebuild')")
     for (const [k, v] of Object.entries(meta)) setMeta(deps.db, k as MetaKey, v as string)
   })()
+  // The upload is done: the rollups it changed, served as they were throughout, go now, once.
+  settleAllRollups(deps.db, deps.now())
 }
+
+/**
+ * Builds a game's catalog rollups now (its Sets list and set names, and its Browse filters across
+ * every language), so the first visitor after a catalog upload doesn't wait for them. Each game is its own
+ * request: Magic's Sets list is seconds of CPU on its own.
+ */
+function warm(deps: AppDeps, body: Record<string, unknown>): void {
+  if (!isGameId(body.game)) throw new BadRequest('Unknown game')
+  // Catalog only: no user's rows are read, so any id will do.
+  const scope = userScope(0, body.game)
+  settleRollups(deps.db, body.game, deps.now())
+  listSetNames(deps.db, scope)
+  browseFacetsFast(deps.db, scope)
+}
+
+/**
+ * The Sets list's game index (desktop V46): each game's list then reads only its own printings.
+ * Built on request, not in a migration, as building it over every printing is seconds of CPU,
+ * too long to risk inside the Durable Object's start-up. Safe to repeat.
+ */
+export const GAME_SET_INDEX =
+  'CREATE INDEX IF NOT EXISTS ix_printings_game_set ON card_printings(game, language, set_name, card_id, set_rarity)'
 
 /** Handles every `/admin/*` request. */
 export async function adminRoute(req: Request, deps: AppDeps): Promise<Response> {
@@ -231,7 +259,9 @@ export async function adminRoute(req: Request, deps: AppDeps): Promise<Response>
   const handlers: Record<string, (body: Record<string, unknown>) => void> = {
     '/admin/catalog/rows': (b) => upsertRows(deps, tableOf(b), listOf(b.rows, 'rows')),
     '/admin/catalog/delete': (b) => deleteKeys(deps, tableOf(b), listOf(b.keys, 'keys')),
-    '/admin/catalog/finish': (b) => finish(deps, b)
+    '/admin/catalog/finish': (b) => finish(deps, b),
+    '/admin/catalog/warm': (b) => warm(deps, b),
+    '/admin/catalog/game-index': () => deps.db.exec(GAME_SET_INDEX)
   }
   const handler = req.method === 'POST' ? handlers[path] : undefined
   if (!handler) return json({ error: 'Not found' }, 404)

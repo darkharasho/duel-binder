@@ -323,6 +323,7 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
     },
     sets: {
       list: call('sets:list'),
+      names: call('sets:names'),
       checklist: call('sets:checklist'),
       adjust: call('sets:adjust')
     },

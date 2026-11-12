@@ -425,7 +425,7 @@ describe('runJob', () => {
       refresh: async () => {},
       log: (l) => lines.push(l)
     })
-    const paths = calls.map((c) => c.path)
+    const paths = calls.map((c) => c.path).filter((p) => p !== '/admin/catalog/warm')
     expect(paths.at(-3)).toBe('/admin/catalog/finish')
     expect(calls.slice(-2)).toEqual([
       { method: 'PUT', path: '/admin/scan/fingerprints', type: 'application/octet-stream' },

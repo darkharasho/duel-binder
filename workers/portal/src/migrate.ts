@@ -383,6 +383,86 @@ function magicLanguagesStep(): ServerStep {
   }
 }
 
+/**
+ * Frozen, as of server-44: a trigger per write to `table` that notes when the row's game's catalog
+ * last changed (catalog_rollup_changes; see workers/portal/src/rollups.ts). `cols` limits an update to changes of those columns (null: any change);
+ * `game` is the SQL for the row's game; `when` an extra condition on the row (OLD/NEW as the
+ * operation has them).
+ */
+function rollupTriggers44(
+  table: string,
+  cols: string[] | null,
+  game: (row: 'OLD' | 'NEW') => string,
+  when?: (row: 'OLD' | 'NEW') => string
+): string[] {
+  const changed = cols ? cols.map((c) => `OLD.${q(c)} IS NOT NEW.${q(c)}`).join(' OR ') : null
+  const guards = {
+    INSERT: [when?.('NEW')],
+    DELETE: [when?.('OLD')],
+    UPDATE: [when ? `(${when('OLD')} OR ${when('NEW')})` : undefined, changed ? `(${changed})` : undefined]
+  }
+  const games = { INSERT: [game('NEW')], DELETE: [game('OLD')], UPDATE: [game('OLD'), game('NEW')] }
+  return (['INSERT', 'DELETE', 'UPDATE'] as const).map((op) => {
+    const guard = guards[op].filter((g): g is string => g !== undefined)
+    return `CREATE TRIGGER rollup_${table}_${op.toLowerCase()} AFTER ${op} ON ${table}${
+      guard.length ? ` WHEN ${guard.join(' AND ')}` : ''
+    } BEGIN ${games[op]
+      .map(
+        (g) =>
+          `INSERT INTO catalog_rollup_changes (game, changed_at) VALUES (${g}, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) ON CONFLICT (game) DO UPDATE SET changed_at = excluded.changed_at;`
+      )
+      .join(' ')} END;`
+  })
+}
+
+/**
+ * Catalog rollups on the server (desktop V24 and V47, which the server skips): each game's Sets
+ * list, Browse filters and set names, so the web app no longer scans the whole catalog per request
+ * (Magic's Sets list took 13 s of CPU). Unlike the desktop's, the triggers drop nothing: a catalog
+ * upload is hours of small batches, and dropping the rollups per batch would rebuild them between
+ * batches again and again. They only note the game's last catalog change in catalog_rollup_changes
+ * (one tiny upsert per changed row); the old rollups are served until /admin/catalog/finish drops
+ * them, or until the game's catalog has been quiet a while (rollups.ts). Contributed printings are in no
+ * rollup, so adding or removing one leaves them be. The update guards list what the rollups read
+ * (src/main/repo/sets.ts, browse.ts and the per-game facets), not prices, which change daily.
+ * A later step that rebuilds one of these tables must recreate its triggers.
+ */
+function rollupStep(): ServerStep {
+  const own = (r: 'OLD' | 'NEW'): string => `${r}.game`
+  return {
+    name: 'server-44',
+    sql: [
+      'CREATE TABLE catalog_rollups (key TEXT PRIMARY KEY, game TEXT, value TEXT NOT NULL);',
+      'CREATE TABLE catalog_rollup_changes (game TEXT PRIMARY KEY, changed_at TEXT NOT NULL);',
+      'CREATE INDEX ix_catalog_rollups_game ON catalog_rollups(game);',
+      ...rollupTriggers44(
+        'card_printings',
+        ['language', 'set_name', 'set_code', 'set_rarity', 'variant', 'card_id', 'game', 'contributed', 'missing_from_api'],
+        own,
+        (r) => `${r}.contributed = 0`
+      ),
+      ...rollupTriggers44('card_images', ['image_id', 'card_id', 'sort_order', 'game'], own),
+      ...rollupTriggers44('cards', ['type', 'attribute', 'race', 'archetype', 'game'], own),
+      ...rollupTriggers44(
+        'pokemon_cards',
+        ['card_id', 'category', 'types', 'stage', 'rarity', 'image_url', 'art_twin_id', 'traditional_twin_id'],
+        () => "'pkm'"
+      ),
+      ...rollupTriggers44(
+        'onepiece_cards',
+        ['card_id', 'colors', 'card_type', 'attribute', 'traits', 'block_icon'],
+        () => "'op'"
+      ),
+      ...rollupTriggers44('mtg_cards', ['card_id', 'types', 'colors', 'mana_value'], () => "'mtg'"),
+      ...rollupTriggers44('sets', null, own),
+      ...rollupTriggers44('pack_art', null, () => "'ygo'"),
+      ...rollupTriggers44('set_logos', null, () => "'ygo'"),
+      ...rollupTriggers44('konami_logos', null, () => "'ygo'"),
+      ...rollupTriggers44('pokemon_set_art', null, () => "'pkm'")
+    ].join('\n')
+  }
+}
+
 /** Frozen, as of server-16: server-13's `pokemon_cards` entry plus `art_twin_id`. */
 const SERVER_16_POKEMON_CARDS: FrozenTable = {
   name: 'pokemon_cards',
@@ -797,7 +877,8 @@ CREATE TABLE admin_handoffs (code_hash TEXT PRIMARY KEY,
   // V43's cleanup, run here because on a fresh server card_printings.game comes from a server step.
   { name: 'server-41', sql: SCHEMA_V43 },
   magicStep(),
-  magicLanguagesStep()
+  magicLanguagesStep(),
+  rollupStep()
 ]
 
 /**

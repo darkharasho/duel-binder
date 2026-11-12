@@ -15,7 +15,13 @@ import {
   removeEntry,
   updateEntry
 } from '../repo/collection'
-import { adjustPrinting, getChecklist, listSetsFast } from '../repo/sets'
+import {
+  adjustPrinting,
+  getChecklist,
+  listSetNames,
+  listSetsFast,
+  setNamesRollupKey
+} from '../repo/sets'
 import {
   cardsForImages,
   imagesForLanguage,
@@ -106,6 +112,7 @@ export const DATA_CHANNELS = [
   'pokedex:species',
   'stats:get',
   'sets:list',
+  'sets:names',
   'sets:checklist',
   'sets:adjust',
   'account:unsynced',
@@ -296,6 +303,12 @@ export function createDataHandlers({
     'sets:list': async () => {
       const built = await offThread({ kind: 'sets', game: scopeGame(db, LOCAL) })
       return listSetsFast(db, LOCAL, built as SetSummary[] | undefined)
+    },
+    'sets:names': async () => {
+      const game = scopeGame(db, LOCAL)
+      if (readRollup(db, setNamesRollupKey(game)) !== undefined) return listSetNames(db)
+      const built = await offThread({ kind: 'sets', game })
+      return listSetNames(db, LOCAL, built as SetSummary[] | undefined)
     },
     'sets:checklist': async (setName: string, language: Language) =>
       getChecklist(db, setName, checkLanguage(language)),

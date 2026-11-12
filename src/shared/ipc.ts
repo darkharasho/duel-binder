@@ -46,6 +46,7 @@ import type {
   FriendWantsCard,
   ImageDownloads,
   SetChecklist,
+  SetNameEntry,
   SetSummary,
   SyncStatus,
   UpdateEntryInput,
@@ -259,6 +260,8 @@ export interface Api {
   }
   sets: {
     list(): Promise<SetSummary[]>
+    /** Every set's name, language and code, for labelling set names: far smaller than `list`. */
+    names(): Promise<SetNameEntry[]>
     checklist(setName: string, language: Language): Promise<SetChecklist | null>
     adjust(
       setName: string,
@@ -518,6 +521,7 @@ export const INVOKE_CHANNELS = [
   'stats:get',
   'prices:request',
   'sets:list',
+  'sets:names',
   'sets:checklist',
   'sets:adjust',
   'sync:status',

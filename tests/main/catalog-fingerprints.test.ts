@@ -5,6 +5,7 @@ import Database from 'better-sqlite3'
 import { decode, encode } from 'jpeg-js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { runJob } from '../../scripts/catalog/build'
+import { NO_PAUSE } from '../../scripts/catalog/upload'
 import { upright, buildFingerprints, mtgLookKey, uploadFingerprints } from '../../scripts/catalog/fingerprints'
 import { openDatabase } from '../../src/main/db/database'
 import { scanProfile } from '../../src/shared/scan/profiles'
@@ -423,6 +424,7 @@ describe('runJob', () => {
       // The real gate runs OpenCV over the scan fixtures; this test is about the upload order.
       checkAccuracy: async () => ({ shots: 1, right: 1, wrong: [], missed: [] }),
       refresh: async () => {},
+      uploadPace: NO_PAUSE,
       log: (l) => lines.push(l)
     })
     const paths = calls.map((c) => c.path)

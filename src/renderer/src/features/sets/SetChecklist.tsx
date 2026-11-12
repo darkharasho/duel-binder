@@ -85,7 +85,9 @@ import {
   replaceChecklistCard,
   sortCards,
   sortTiles,
+  tileArt,
   tilePrice,
+  versionArt,
   versionCounts,
   type ChecklistSort,
   type SortDir,
@@ -155,14 +157,16 @@ function useBackShortcuts(onBack: () => void): void {
 }
 
 /** What the card panel shows of a checklist card until its details load; `rarity` is the opened tile's. */
-const seedOf = (card: ChecklistCard, rarity: string | null): CardPanelSeed => ({
-  name: card.name,
-  type: card.type,
-  imageId: card.imageId,
-  price: (card.rarities.find((r) => r.rarity === rarity) ?? card.rarities[0])?.price ?? card.price,
-  defaultPrintingId:
-    (card.rarities.find((r) => r.rarity === rarity) ?? card.rarities[0])?.defaultPrintingId ?? null
-})
+const seedOf = (card: ChecklistCard, rarity: string | null): CardPanelSeed => {
+  const r = card.rarities.find((x) => x.rarity === rarity) ?? card.rarities[0]
+  return {
+    name: card.name,
+    type: card.type,
+    imageId: rarity === null ? card.imageId : versionArt(card, r),
+    price: r?.price ?? card.price,
+    defaultPrintingId: r?.defaultPrintingId ?? null
+  }
+}
 
 export function SetChecklist({
   setName,
@@ -250,7 +254,7 @@ export function SetChecklist({
     useMemo(
       () =>
         tiles.map((t) => ({
-          imageId: t.card.imageId,
+          imageId: tileArt(t),
           printingId: rarityScanFor(
             t.card.rarities.find((r) => r.rarity === t.rarity) ?? t.card.rarities[0]
           )
@@ -628,7 +632,7 @@ export function SetChecklist({
                     >
                       <TiltCard className="mb-1">
                         <CardArt
-                          imageId={t.card.imageId}
+                          imageId={tileArt(t)}
                           printingId={rarityScanFor(
                             t.card.rarities.find((r) => r.rarity === t.rarity) ?? t.card.rarities[0]
                           )}

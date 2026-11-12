@@ -18,6 +18,8 @@ import {
   sortCards,
   sortSets,
   sortTiles,
+  tileArt,
+  versionArt,
   tilePrice,
   versionCounts,
   type Tile,
@@ -244,6 +246,48 @@ describe('checklistTiles', () => {
     expect(tiles.map((t) => t.key)).toEqual(['1|Common', '1|Rare'])
     expect(tiles[1]).toMatchObject({ rarity: 'Rare', owned: 2, entryId: 7 })
     expect(tiles[0]).toMatchObject({ owned: 0, entryId: null })
+  })
+})
+
+describe('tileArt', () => {
+  // A Magic card whose Mythic version is a showcase art (image 9) and whose Rare has a second
+  // printing of other art (image 8).
+  const magic: ChecklistCard = {
+    ...alpha,
+    imageId: 9,
+    rarities: [
+      {
+        ...alpha.rarities[0],
+        rarity: 'Mythic',
+        defaultPrintingId: 30,
+        codes: [{ printingId: 30, setCode: 'FRA 406', owned: 0, imageId: 9 }]
+      },
+      {
+        ...alpha.rarities[1],
+        rarity: 'Rare',
+        defaultPrintingId: 10,
+        codes: [
+          { printingId: 10, setCode: 'FRA 103', owned: 0, imageId: 7 },
+          { printingId: 11, setCode: 'FRA 345', owned: 0, imageId: 8 },
+          { printingId: 12, setCode: 'FRA 999', owned: 0 }
+        ]
+      }
+    ]
+  }
+  const tiles = checklistTiles({ set: started, cards: [magic] }, 'rarities')
+  it("shows a rarity tile's default version's own art, not the card's", () => {
+    expect(tiles.map(tileArt)).toEqual([9, 7])
+  })
+  it("shows a picked version's art, and the card's when it has none", () => {
+    expect(versionArt(magic, magic.rarities[1], 11)).toBe(8)
+    expect(versionArt(magic, magic.rarities[1], 12)).toBe(9)
+  })
+  it("keeps the card's art on a card tile and on a Yu-Gi-Oh! rarity", () => {
+    expect(checklistTiles({ set: started, cards: [magic] }, 'cards').map(tileArt)).toEqual([9])
+    expect(checklistTiles(checklist, 'rarities').map(tileArt)).toEqual([
+      alpha.imageId,
+      alpha.imageId
+    ])
   })
 })
 

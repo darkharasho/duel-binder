@@ -6,6 +6,7 @@ import { FacetMenu } from '@/components/FacetMenu'
 import { FilterOptionChip } from '@/components/FilterChip'
 import { RangeFilter } from '@/components/RangeFilter'
 import { Button } from '@/components/ui/button'
+import { InlineLoading } from '@/components/ui/loading'
 import {
   Sheet,
   SheetContent,
@@ -208,13 +209,16 @@ function FacetSection({
   options,
   selected,
   onChange,
-  labelOf = (opt) => opt
+  labelOf = (opt) => opt,
+  loading = false
 }: {
   label: string
   options: string[]
   selected: string[]
   onChange: (next: string[] | undefined) => void
   labelOf?: (opt: string) => string
+  /** The options are still on their way: no "No options" until they've arrived. */
+  loading?: boolean
 }): React.JSX.Element {
   const long = options.length > SHORT_MAX
   const toggle = (opt: string): void => {
@@ -237,7 +241,11 @@ function FacetSection({
           labelOf={labelOf}
         />
       ) : options.length === 0 && selected.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No options</p>
+        loading ? (
+          <InlineLoading label="Loading options…" />
+        ) : (
+          <p className="text-sm text-muted-foreground">No options</p>
+        )
       ) : (
         <ChipOptions>
           {/* A picked value can fall outside the options, as a set of another language does. */}
@@ -262,7 +270,8 @@ export function CardFilterSections({
   filters,
   options,
   setLabelOf,
-  onChange
+  onChange,
+  loading = false
 }: {
   facetList: { key: ListKey; label: string }[]
   ranges: (FilterDef & { key: RangeKey })[]
@@ -270,6 +279,8 @@ export function CardFilterSections({
   options: (key: ListKey) => string[]
   setLabelOf: (setName: string) => string
   onChange: (patch: CardFilterValues) => void
+  /** The facets are still loading: empty sections say so instead of "No options". */
+  loading?: boolean
 }): React.JSX.Element {
   return (
     <>
@@ -281,6 +292,7 @@ export function CardFilterSections({
           selected={filters[key] ?? []}
           onChange={(next) => onChange({ [key]: next })}
           labelOf={key === 'setNames' ? setLabelOf : undefined}
+          loading={loading}
         />
       ))}
       {ranges.map((f) => {

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { reverseLook } from '@shared/reverseHolo'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { CardGridSkeleton } from '@/components/ui/loading'
 import { ArrowLeft, Ellipsis } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Language } from '@shared/languages'
@@ -385,6 +386,7 @@ export function SetChecklist({
     return (
       <div className="space-y-4 p-8 max-md:p-4">
         <BackButton onBack={onBack} />
+        {checklist.isPending && <CardGridSkeleton label="Loading the set" count={18} />}
       </div>
     )
   }

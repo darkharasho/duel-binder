@@ -11,6 +11,7 @@ import type { PanelNav } from '@/components/panelNav'
 import { PanelPrice } from '@/components/PanelPrice'
 import { scanFor } from '@/components/scanFor'
 import { Button } from '@/components/ui/button'
+import { LoadingState } from '@/components/ui/loading'
 import { SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { EntryEditor } from '@/features/collection/EntryEditor'
 import { FriendCopies } from '@/features/friends/FriendCopies'
@@ -189,7 +190,11 @@ export function CardPanel({
   const pokemonVersion = def.id === 'pkm' ? shown?.setRarity : undefined
 
   const moreFor = shown?.id ?? seed?.defaultPrintingId ?? rows[0]?.printing.id
-  const list = (
+  // Until the card and its copies arrive, a spinner rather than "You have none yet".
+  const loadingRows = rows.length === 0 && (detail.isPending || copies.isPending)
+  const list = loadingRows ? (
+    <LoadingState label="Loading printings…" className="py-8" />
+  ) : (
     <CardTypeList
       key={cardId}
       cardId={cardId}

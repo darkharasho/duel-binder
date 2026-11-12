@@ -17,6 +17,7 @@ import { listNav } from '@/components/panelNav'
 import { SearchInput } from '@/components/SearchInput'
 import { SortControl } from '@/components/SortControl'
 import { Button } from '@/components/ui/button'
+import { CardGridSkeleton, InlineLoading } from '@/components/ui/loading'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { api, queryKeys } from '@/lib/api'
@@ -232,8 +233,11 @@ export function CollectionPage({
           {list.length} {list.length === 1 ? 'entry' : 'entries'}
         </>
       )}
-      {entries.data !== undefined && !friend && ' · '}
-      {!friend && <>Prices updated {formatRelative(stats.data?.pricesUpdatedAt ?? null)}</>}
+      {entries.data === undefined && entries.isPending && <InlineLoading label="Loading cards…" />}
+      {entries.data !== undefined && !friend && stats.data !== undefined && ' · '}
+      {!friend && stats.data !== undefined && (
+        <>Prices updated {formatRelative(stats.data.pricesUpdatedAt)}</>
+      )}
     </p>
   )
   const viewToggle = (
@@ -293,7 +297,7 @@ export function CollectionPage({
               toggle={!phone && !inFriendHeader && viewToggle}
               chips={chips}
               onClearAll={clearFilters}
-              resultCount={cardCount(list.length)}
+              resultCount={entries.data !== undefined ? cardCount(list.length) : undefined}
             />
           </PageHeader>
 
@@ -343,6 +347,8 @@ export function CollectionPage({
                 </>
               )}
             </div>
+          ) : entries.isPending ? (
+            <CardGridSkeleton label="Loading your cards" />
           ) : view === 'grid' ? (
             <CollectionGrid
               entries={list}
@@ -410,6 +416,7 @@ export function CollectionPage({
             }}
             setLabelOf={setNames.labelOf}
             onChange={onChange}
+            loading={facets.isPending}
           />
         </FilterPanel>
       </div>

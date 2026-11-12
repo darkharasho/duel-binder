@@ -5,6 +5,7 @@ import type { WishlistItem } from '@shared/types'
 import { CardSheet } from '@/components/CardSheet'
 import { PageHeader } from '@/components/PageHeader'
 import { SearchInput } from '@/components/SearchInput'
+import { RowsSkeleton } from '@/components/ui/loading'
 import { CardPanel } from '@/features/card/CardPanel'
 import { api, queryKeys } from '@/lib/api'
 import { formatUsd } from '@/lib/format'
@@ -121,6 +122,8 @@ export function WishlistPage(): React.JSX.Element {
         <p className="text-sm text-muted-foreground">
           Nothing here yet. Open a card and press the heart next to the type you want.
         </p>
+      ) : wishlist.isPending ? (
+        <RowsSkeleton label="Loading your wishlist" />
       ) : items.length > 0 && shown.length === 0 ? (
         <p className="text-sm text-muted-foreground">No cards match</p>
       ) : (

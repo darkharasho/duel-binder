@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { LoadingState } from '@/components/ui/loading'
 import type { BinderSummary, Friend } from '@shared/types'
 import { PageHeader } from '@/components/PageHeader'
 import { api, queryKeys } from '@/lib/api'
@@ -32,7 +33,9 @@ function Open({
       ) : (
         <>
           <BackToBinders onBack={onBack} />
-          {!q.isPending && (
+          {q.isPending ? (
+            <LoadingState label="Loading the binder…" />
+          ) : (
             <p className="text-sm text-muted-foreground">This binder isn&apos;t available.</p>
           )}
         </>

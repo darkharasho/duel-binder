@@ -19,6 +19,7 @@ import {
   sortSets,
   sortTiles,
   tileArt,
+  tileNumberLabel,
   versionArt,
   tilePrice,
   versionCounts,
@@ -238,7 +239,7 @@ const checklist: SetChecklist = { set: started, cards: [alpha] }
 describe('checklistTiles', () => {
   it('gives one tile per card in cards mode', () => {
     expect(checklistTiles(checklist, 'cards')).toEqual([
-      { key: '1', card: alpha, rarity: null, owned: 2, entryId: 7 }
+      { key: '1', card: alpha, rarity: null, rarityKey: null, owned: 2, entryId: 7 }
     ])
   })
   it('gives one tile per rarity in rarities mode', () => {
@@ -287,6 +288,62 @@ describe('tileArt', () => {
     expect(checklistTiles(checklist, 'rarities').map(tileArt)).toEqual([
       alpha.imageId,
       alpha.imageId
+    ])
+  })
+})
+
+describe('Magic versions of one rarity', () => {
+  // Darklight Phoenix: FRA 444 and FRA 453 are both "Mythic (Foil)", $10.82 and $365.93.
+  const version = (
+    code: string,
+    printingId: number,
+    imageId: number,
+    price: number
+  ): ChecklistCard['rarities'][number] => ({
+    rarity: 'Mythic (Foil)',
+    key: `Mythic (Foil)|${code}`,
+    number: Number(code.split(' ')[1]),
+    numberLabel: code.split(' ')[1],
+    owned: 0,
+    price,
+    codes: [{ printingId, setCode: code, owned: 0, imageId }],
+    defaultPrintingId: printingId,
+    entryId: null
+  })
+  const phoenix: ChecklistCard = {
+    ...alpha,
+    number: 53,
+    numberLabel: '53',
+    imageId: 1,
+    price: 365.93,
+    rarities: [version('FRA 444', 44, 4, 10.82), version('FRA 453', 45, 5, 365.93)]
+  }
+  const tiles = checklistTiles({ set: started, cards: [phoenix] }, 'rarities')
+
+  it("gives each its own tile, with that version's art, price and number", () => {
+    expect(
+      tiles.map((t) => ({
+        key: t.key,
+        art: tileArt(t),
+        price: tilePrice(t).price,
+        label: tileNumberLabel(t)
+      }))
+    ).toEqual([
+      { key: `${alpha.cardId}|Mythic (Foil)|FRA 444`, art: 4, price: 10.82, label: '444' },
+      { key: `${alpha.cardId}|Mythic (Foil)|FRA 453`, art: 5, price: 365.93, label: '453' }
+    ])
+  })
+
+  it('sorts by its own price and collector number', () => {
+    const labels = (ts: Tile[]): string[] => ts.map(tileNumberLabel)
+    expect(labels(sortTiles(tiles, 'price', 'desc'))).toEqual(['453', '444'])
+    expect(labels(sortTiles(tiles, 'number', 'desc'))).toEqual(['453', '444'])
+  })
+
+  it('keys bulk tiles by version', () => {
+    expect(bulkTiles([phoenix]).map((t) => t.key)).toEqual([
+      `${alpha.cardId}:Mythic (Foil)|FRA 444`,
+      `${alpha.cardId}:Mythic (Foil)|FRA 453`
     ])
   })
 })
@@ -427,12 +484,19 @@ describe('tilePrice', () => {
   } as ChecklistCard
 
   it("names a card tile's dearest rarity, not its first", () => {
-    const tile: Tile = { key: '1', card, rarity: null, owned: 0, entryId: null }
+    const tile: Tile = { key: '1', card, rarity: null, rarityKey: null, owned: 0, entryId: null }
     expect(tilePrice(tile)).toEqual({ price: 72.24, rarity: 'Secret Rare (Overframe)' })
   })
 
   it("keeps a rarity tile's own price", () => {
-    const tile: Tile = { key: '1', card, rarity: 'Common', owned: 0, entryId: null }
+    const tile: Tile = {
+      key: '1',
+      card,
+      rarity: 'Common',
+      rarityKey: 'Common',
+      owned: 0,
+      entryId: null
+    }
     expect(tilePrice(tile)).toEqual({ price: 1.23, rarity: 'Common' })
   })
 })

@@ -506,6 +506,15 @@ export interface ChecklistCode {
 
 export interface ChecklistRarity {
   rarity: string
+  /**
+   * Magic: one version of the rarity, `<rarity>|<code>`, since a card's showcase and borderless
+   * versions share a rarity name but are separate cards to collect. Absent for other games, where
+   * `rarity` alone tells a card's entries apart. See rarityKey.
+   */
+  key?: string
+  /** Magic: the version's own collector number, which the card's lowest number isn't. */
+  number?: number | null
+  numberLabel?: string
   owned: number
   codes: ChecklistCode[] // sorted by setCode
   defaultPrintingId: number // pickDefaultCode over codes

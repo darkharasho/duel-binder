@@ -85,7 +85,10 @@ import {
   replaceChecklistCard,
   sortCards,
   sortTiles,
+  rarityByKey,
   tileArt,
+  tileNumberLabel,
+  tileRarity,
   tilePrice,
   versionArt,
   versionCounts,
@@ -156,13 +159,13 @@ function useBackShortcuts(onBack: () => void): void {
   }, [])
 }
 
-/** What the card panel shows of a checklist card until its details load; `rarity` is the opened tile's. */
-const seedOf = (card: ChecklistCard, rarity: string | null): CardPanelSeed => {
-  const r = card.rarities.find((x) => x.rarity === rarity) ?? card.rarities[0]
+/** What the card panel shows of a checklist card until its details load; `key` is the opened tile's rarityKey. */
+const seedOf = (card: ChecklistCard, key: string | null): CardPanelSeed => {
+  const r = rarityByKey(card, key) ?? card.rarities[0]
   return {
     name: card.name,
     type: card.type,
-    imageId: rarity === null ? card.imageId : versionArt(card, r),
+    imageId: key === null ? card.imageId : versionArt(card, r),
     price: r?.price ?? card.price,
     defaultPrintingId: r?.defaultPrintingId ?? null
   }
@@ -190,7 +193,7 @@ export function SetChecklist({
   })
   const [selected, setSelected] = useState<{ cardId: number; entryId: number } | null>(null)
   // A card not owned yet opens with steppers instead of an entry editor.
-  const [unowned, setUnowned] = useState<{ cardId: number; rarity: string | null } | null>(null)
+  const [unowned, setUnowned] = useState<{ cardId: number; rarityKey: string | null } | null>(null)
   // The opened tile, for stepping to its neighbours (a card has one tile per rarity).
   const [openKey, setOpenKey] = useState<string | null>(null)
   const [friendCard, setFriendCard] = useState<{ cardId: number; entryId: number } | null>(null)
@@ -255,9 +258,7 @@ export function SetChecklist({
       () =>
         tiles.map((t) => ({
           imageId: tileArt(t),
-          printingId: rarityScanFor(
-            t.card.rarities.find((r) => r.rarity === t.rarity) ?? t.card.rarities[0]
-          )
+          printingId: rarityScanFor(tileRarity(t) ?? t.card.rarities[0])
         })),
       [tiles]
     )
@@ -433,7 +434,7 @@ export function SetChecklist({
       return
     }
     setSelected(null)
-    setUnowned({ cardId: t.card.cardId, rarity: t.rarity })
+    setUnowned({ cardId: t.card.cardId, rarityKey: t.rarityKey })
   }
   const close = (): void => {
     setSelected(null)
@@ -606,8 +607,7 @@ export function SetChecklist({
               {shownTiles.map((t) => {
                 const owned = t.owned > 0
                 const priced = sort.by === 'price' ? tilePrice(t) : null
-                const rarityTile =
-                  t.rarity === null ? undefined : t.card.rarities.find((r) => r.rarity === t.rarity)
+                const rarityTile = tileRarity(t)
                 return (
                   <li
                     key={t.key}
@@ -633,9 +633,7 @@ export function SetChecklist({
                       <TiltCard className="mb-1">
                         <CardArt
                           imageId={tileArt(t)}
-                          printingId={rarityScanFor(
-                            t.card.rarities.find((r) => r.rarity === t.rarity) ?? t.card.rarities[0]
-                          )}
+                          printingId={rarityScanFor(tileRarity(t) ?? t.card.rarities[0])}
                           size={tileImage}
                           alt=""
                           className="w-full"
@@ -652,7 +650,7 @@ export function SetChecklist({
                         </span>
                       )}
                       <span className="mb-1 text-xs tabular-nums text-muted-foreground">
-                        {t.card.numberLabel}
+                        {tileNumberLabel(t)}
                       </span>
                       <span className={cn('truncate text-xs font-medium', favourites && TILE_NAME)}>
                         {t.card.name}
@@ -706,7 +704,7 @@ export function SetChecklist({
               <CardPanel
                 cardId={openCardId}
                 entryId={selected?.entryId}
-                seed={unownedCard && seedOf(unownedCard, unowned?.rarity ?? null)}
+                seed={unownedCard && seedOf(unownedCard, unowned?.rarityKey ?? null)}
                 caption={
                   unownedCard && `${englishSetName(data.set.setName)} · ${unownedCard.numberLabel}`
                 }

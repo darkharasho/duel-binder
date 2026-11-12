@@ -44,6 +44,8 @@ export interface Tile {
   key: string
   card: ChecklistCard
   rarity: string | null
+  /** The tile's entry in card.rarities (rarityKey); null for a card tile. */
+  rarityKey: string | null
   owned: number
   entryId: number | null
 }
@@ -205,12 +207,24 @@ export function versionArt(
   return rarity?.codes.find((c) => c.printingId === printingId)?.imageId ?? card.imageId
 }
 
+/** What tells a card's rarity entries apart: a Magic version's key, else the rarity name. */
+export const rarityKey = (r: ChecklistRarity): string => r.key ?? r.rarity
+
+/** A card's rarity entry by rarityKey. */
+export const rarityByKey = (
+  card: ChecklistCard,
+  key: string | null
+): ChecklistRarity | undefined =>
+  key === null ? undefined : card.rarities.find((r) => rarityKey(r) === key)
+
+/** A rarity tile's entry in its card's rarities; undefined for a card tile. */
+export const tileRarity = (t: Tile): ChecklistRarity | undefined => rarityByKey(t.card, t.rarityKey)
+
+/** A tile's number label: a Magic version's own collector number, else the card's lowest. */
+export const tileNumberLabel = (t: Tile): string => tileRarity(t)?.numberLabel ?? t.card.numberLabel
+
 /** A tile's art: its rarity's default version's own, or the card's for a card tile. */
-export const tileArt = (t: Tile): number =>
-  versionArt(
-    t.card,
-    t.rarity === null ? undefined : t.card.rarities.find((r) => r.rarity === t.rarity)
-  )
+export const tileArt = (t: Tile): number => versionArt(t.card, tileRarity(t))
 
 export function checklistTiles(cl: SetChecklist, mode: CountMode): Tile[] {
   if (mode === 'cards') {
@@ -218,15 +232,17 @@ export function checklistTiles(cl: SetChecklist, mode: CountMode): Tile[] {
       key: String(card.cardId),
       card,
       rarity: null,
+      rarityKey: null,
       owned: card.owned,
       entryId: card.entryId
     }))
   }
   return cl.cards.flatMap((card) =>
     card.rarities.map((r) => ({
-      key: `${card.cardId}|${r.rarity}`,
+      key: `${card.cardId}|${rarityKey(r)}`,
       card,
       rarity: r.rarity,
+      rarityKey: rarityKey(r),
       owned: r.owned,
       entryId: r.entryId
     }))
@@ -240,8 +256,7 @@ export function checklistTiles(cl: SetChecklist, mode: CountMode): Tile[] {
 export function tilePrice(t: Tile): { price: number | null; rarity: string | null } {
   const c = t.card
   if (t.rarity !== null) {
-    const own = c.rarities.find((x) => x.rarity === t.rarity)
-    return { price: own?.price ?? c.price, rarity: t.rarity }
+    return { price: tileRarity(t)?.price ?? c.price, rarity: t.rarity }
   }
   const dearest = c.rarities.find((x) => x.price !== null && x.price === c.price)
   return { price: c.price, rarity: dearest?.rarity ?? null }
@@ -250,8 +265,11 @@ export function tilePrice(t: Tile): { price: number | null; rarity: string | nul
 function sortValue(t: Tile, sort: ChecklistSort): number | string | null {
   const c = t.card
   switch (sort) {
-    case 'number':
-      return c.number
+    case 'number': {
+      // A Magic version tile sorts by its own collector number (FRA 453, not the card's 53).
+      const own = tileRarity(t)?.number
+      return own !== undefined ? own : c.number
+    }
     case 'name':
       return c.name
     case 'price':
@@ -293,6 +311,7 @@ export function sortCards(
     key: String(card.cardId),
     card,
     rarity: null,
+    rarityKey: null,
     owned: card.owned,
     entryId: card.entryId
   }))
@@ -472,7 +491,7 @@ export interface BulkTileData {
 /** One bulk-add tile per (card, rarity), in card order. */
 export function bulkTiles(cards: ChecklistCard[]): BulkTileData[] {
   return cards.flatMap((card) =>
-    card.rarities.map((rarity) => ({ key: `${card.cardId}:${rarity.rarity}`, card, rarity }))
+    card.rarities.map((rarity) => ({ key: `${card.cardId}:${rarityKey(rarity)}`, card, rarity }))
   )
 }
 

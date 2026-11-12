@@ -11,8 +11,8 @@ on:
     workflows: [Release, Android, iOS, CI]
     types: [completed]
   schedule:
-    # Before the catalog (06:17).
-    - cron: '47 5 * * *'
+    # Before the catalog's first nightly trigger (catalog-schedule.yml, 00:17).
+    - cron: '47 23 * * *'
   workflow_dispatch:
 
 concurrency:

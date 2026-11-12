@@ -211,6 +211,7 @@ export function CardPanel({
       ownedAtOpen={openOwned}
       // A set's list is short, so it needs no gate.
       startExpanded={!!onlySet || !(copies.data ?? []).length}
+      preferSet={preferSet}
     />
   )
   // The phone's full-screen sheet is long, so its list comes before the card text.

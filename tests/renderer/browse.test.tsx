@@ -147,6 +147,10 @@ function lobServer(): {
 
 const LOB_ROW = 'Dark Magician LOB-EN0010 Ultra Rare'
 
+/** The panel's printing pills, each named for its printing. */
+const findPills = (panel: HTMLElement): Promise<HTMLElement[]> =>
+  within(panel).findAllByRole('button', { name: /^Dark Magician [A-Z]+-/ })
+
 async function openLobStepper(server: ReturnType<typeof lobServer>): Promise<{
   panel: HTMLElement
   plus: HTMLElement
@@ -234,20 +238,23 @@ describe('BrowseCardPanel picked printing', () => {
 
   it('marks the shown printing, follows clicks, and survives +', async () => {
     const server = lobServer()
-    const { panel, plus } = await openLobStepper(server)
-    const lob = within(panel).getByRole('group', { name: LOB_ROW })
-    const ja = within(panel).getByRole('group', { name: JA_ROW })
-    expect(lob).toHaveAttribute('aria-current', 'true')
-    expect(ja).not.toHaveAttribute('aria-current')
-    expect(lob).toHaveAttribute('tabindex', '0')
+    const { panel } = await openLobStepper(server)
+    await userEvent.click(within(panel).getByRole('button', { name: 'All languages' }))
+    const lob = within(panel).getByRole('button', { name: LOB_ROW })
+    const ja = within(panel).getByRole('button', { name: JA_ROW })
+    expect(lob).toHaveAttribute('aria-pressed', 'true')
+    expect(ja).toHaveAttribute('aria-pressed', 'false')
+    lob.focus()
+    expect(lob).toHaveFocus()
     await userEvent.click(ja)
-    expect(ja).toHaveAttribute('aria-current', 'true')
-    expect(lob).not.toHaveAttribute('aria-current')
-    await userEvent.click(plus)
-    expect(lob).toHaveAttribute('aria-current', 'true')
+    expect(ja).toHaveAttribute('aria-pressed', 'true')
+    expect(lob).toHaveAttribute('aria-pressed', 'false')
+    await userEvent.click(lob)
+    await userEvent.click(within(panel).getByRole('button', { name: `Add one ${LOB_ROW}` }))
+    expect(lob).toHaveAttribute('aria-pressed', 'true')
     ja.focus()
     await userEvent.keyboard(' ')
-    expect(ja).toHaveAttribute('aria-current', 'true')
+    expect(ja).toHaveAttribute('aria-pressed', 'true')
   })
 })
 
@@ -404,11 +411,20 @@ describe('BrowsePage', () => {
     await userEvent.click(await screen.findByRole('button', { name: /^Dark Magician/ }))
     const panel = await screen.findByRole('dialog')
     expect(within(panel).getByText('You have none yet')).toBeInTheDocument()
-    const rows = await within(panel).findAllByRole('group')
-    expect(rows.map((r) => r.getAttribute('aria-label'))).toEqual([
-      'Dark Magician LOB-EN0010 Ultra Rare',
-      'Dark Magician DP-JP001 Ultra Rare'
+    // English first: the Japanese printing waits behind All languages.
+    const english = await findPills(panel)
+    expect(english.map((r) => r.getAttribute('aria-label'))).toEqual([
+      'Dark Magician LOB-EN0010 Ultra Rare'
     ])
+    await userEvent.click(within(panel).getByRole('button', { name: 'All languages' }))
+    const all = await findPills(panel)
+    expect(all.map((r) => r.getAttribute('aria-label')).sort()).toEqual([
+      'Dark Magician DP-JP001 Ultra Rare',
+      'Dark Magician LOB-EN0010 Ultra Rare'
+    ])
+    await userEvent.click(
+      within(panel).getByRole('button', { name: 'Dark Magician DP-JP001 Ultra Rare' })
+    )
     await userEvent.click(
       within(panel).getByRole('button', { name: 'Add one Dark Magician DP-JP001 Ultra Rare' })
     )
@@ -419,18 +435,21 @@ describe('BrowsePage', () => {
     setup([card(1, 'Dark Magician')])
     await userEvent.click(await screen.findByRole('button', { name: /^Dark Magician/ }))
     const panel = await screen.findByRole('dialog')
-    const rows = await within(panel).findAllByRole('group')
+    await findPills(panel)
     expect(within(panel).getByText(/^Market price/).parentElement).toHaveTextContent(
       'Market price · Ultra Rare $10.00'
     )
-    for (const row of rows) expect(within(row).getByText('$10.00')).toBeInTheDocument()
+    await userEvent.click(within(panel).getByRole('button', { name: 'All languages' }))
+    const pills = await findPills(panel)
+    expect(pills).toHaveLength(2)
+    for (const pill of pills) expect(within(pill).getByText('$10.00')).toBeInTheDocument()
   })
 
   it('the panel falls back to the cheapest-printing price, saying so', async () => {
     setup([card(1, 'Dark Magician', { defaultPrintingId: null })])
     await userEvent.click(await screen.findByRole('button', { name: /^Dark Magician/ }))
     const panel = await screen.findByRole('dialog')
-    await within(panel).findAllByRole('group')
+    await findPills(panel)
     expect(within(panel).getByText(/^Market price/).parentElement).toHaveTextContent(
       'Market price · cheapest printing $7.50'
     )

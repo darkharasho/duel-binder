@@ -46,21 +46,25 @@ const many = [
   printing(10, { setName: 'Legend of Blue Eyes', setCode: 'LOB-EN005', setRarity: 'Ultra Rare' })
 ]
 
+/** The full list's pills: each is named for its printing. */
+const pills = (): HTMLElement[] => screen.queryAllByRole('button', { name: /^Dark Magician / })
+
 describe('CardTypeList search', () => {
   it('filters by set name, code and rarity, ignoring case', async () => {
     const user = userEvent.setup()
     show(many)
     const box = screen.getByRole('searchbox', { name: 'Search printings' })
     await user.type(box, 'blue eyes')
-    expect(screen.getAllByRole('group')).toHaveLength(1)
+    expect(pills()).toHaveLength(1)
     await user.clear(box)
     await user.type(box, 'lob-en005')
-    expect(screen.getAllByRole('group')).toHaveLength(1)
+    expect(pills()).toHaveLength(1)
     await user.clear(box)
     await user.type(box, 'ULTRA')
-    expect(screen.getAllByRole('group')).toHaveLength(1)
+    expect(pills()).toHaveLength(1)
+    expect(pills()[0]).toHaveAccessibleName('Dark Magician LOB-EN005 Ultra Rare')
     await user.clear(box)
-    expect(screen.getAllByRole('group')).toHaveLength(10)
+    expect(pills()).toHaveLength(10)
   })
 
   it('says so when nothing matches', async () => {
@@ -68,7 +72,7 @@ describe('CardTypeList search', () => {
     show(many)
     await user.type(screen.getByRole('searchbox', { name: 'Search printings' }), 'zzz')
     expect(screen.getByText('No prints match')).toBeInTheDocument()
-    expect(screen.queryAllByRole('group')).toHaveLength(0)
+    expect(pills()).toHaveLength(0)
   })
 
   it('is hidden for a short list', () => {

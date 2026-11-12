@@ -51,8 +51,9 @@ function renderPanel(printingId: number): void {
   )
 }
 
+/** A printing's pill in the full list, named for the printing as its row was. */
 const row = (p: Printing): Promise<HTMLElement> =>
-  screen.findByRole('group', { name: `${alpha.name} ${p.setCode} ${p.setRarity}` })
+  screen.findByRole('button', { name: `${alpha.name} ${p.setCode} ${p.setRarity}` })
 
 describe('card panel opened from a set', () => {
   it('prices the rarity whose tile was opened, naming it', async () => {
@@ -70,15 +71,15 @@ describe('card panel opened from a set', () => {
 
   it('marks the opened printing as current', async () => {
     renderPanel(ultra.id)
-    expect(await row(ultra)).toHaveAttribute('aria-current', 'true')
-    expect(await row(secret)).not.toHaveAttribute('aria-current')
+    expect(await row(ultra)).toHaveAttribute('aria-pressed', 'true')
+    expect(await row(secret)).toHaveAttribute('aria-pressed', 'false')
   })
 
   it('clicking a row moves the mark and the price', async () => {
     renderPanel(ultra.id)
     await userEvent.click(await row(secret))
-    expect(await row(secret)).toHaveAttribute('aria-current', 'true')
-    expect(await row(ultra)).not.toHaveAttribute('aria-current')
+    expect(await row(secret)).toHaveAttribute('aria-pressed', 'true')
+    expect(await row(ultra)).toHaveAttribute('aria-pressed', 'false')
     expect(screen.getByText(/^Market price/).parentElement).toHaveTextContent('Secret Rare $40.00')
   })
 
@@ -86,15 +87,16 @@ describe('card panel opened from a set', () => {
     renderPanel(ultra.id)
     ;(await row(secret)).focus()
     await userEvent.keyboard('{Enter}')
-    expect(await row(secret)).toHaveAttribute('aria-current', 'true')
+    expect(await row(secret)).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('pressing + keeps the row picked and adds through sets.adjust', async () => {
     renderPanel(ultra.id)
+    await userEvent.click(await row(secret))
     await userEvent.click(
       await screen.findByRole('button', { name: `Add one ${alpha.name} MRD-001 Secret Rare` })
     )
-    expect(await row(secret)).toHaveAttribute('aria-current', 'true')
+    expect(await row(secret)).toHaveAttribute('aria-pressed', 'true')
     expect(adjust).toHaveBeenCalledWith('Metal Raiders', 'en', secret.id, 1)
   })
 })

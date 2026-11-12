@@ -71,6 +71,13 @@ function panel(
   )
 }
 
+/** Picks a printing's pill in the panel's full list, opening its wish heart under it. */
+async function pick(code: string): Promise<void> {
+  await userEvent.click(
+    await screen.findByRole('button', { name: `Dark Magician ${code} Ultra Rare` })
+  )
+}
+
 describe('wishlist helpers', () => {
   it('counts what is left to get', () => {
     expect(stillWanted({ quantity: null, owned: 0 })).toBe(1)
@@ -110,6 +117,7 @@ describe('the heart on a card type', () => {
       wished = []
     })
     panel({ wishlist: { set, remove, forCard: async () => wished } })
+    await pick('LOB-001')
     const heart = await screen.findByRole('button', {
       name: 'Want Dark Magician LOB-001 Ultra Rare'
     })
@@ -124,8 +132,20 @@ describe('the heart on a card type', () => {
 
   it('shows a printing already wanted, on that row only', async () => {
     panel({ wishlist: { forCard: async () => [{ printingId: 2, quantity: null }] } })
-    const wanted = await screen.findByRole('button', { name: /LOB-002/, pressed: true })
+    // The pills say so before one is picked.
+    const pill2 = await screen.findByRole('button', { name: 'Dark Magician LOB-002 Ultra Rare' })
+    await waitFor(() =>
+      expect(within(pill2).getByLabelText('On your wishlist')).toBeInTheDocument()
+    )
+    expect(
+      within(
+        screen.getByRole('button', { name: 'Dark Magician LOB-001 Ultra Rare' })
+      ).queryByLabelText('On your wishlist')
+    ).toBeNull()
+    await pick('LOB-002')
+    const wanted = await screen.findByRole('button', { name: /Want .*LOB-002/, pressed: true })
     expect(wanted).toBeInTheDocument()
+    await pick('LOB-001')
     expect(screen.getByRole('button', { name: /Want .*LOB-001/ })).toHaveAttribute(
       'aria-pressed',
       'false'
@@ -137,6 +157,7 @@ describe('the heart on a card type', () => {
       throw new Error('nope')
     })
     panel({ wishlist: { set } })
+    await pick('LOB-001')
     const heart = await screen.findByRole('button', { name: /Want .*LOB-001/ })
     await userEvent.click(heart)
     await waitFor(() => expect(toast.error).toHaveBeenCalled())
@@ -171,7 +192,7 @@ describe('X wants this', () => {
   it('does not ask for a card you do not own', async () => {
     const wanting = vi.fn(async () => [wants])
     panel({ friends: { wanting } })
-    await screen.findByRole('button', { name: /Want .*LOB-001/ })
+    await screen.findByRole('button', { name: /^Dark Magician LOB-001/ })
     expect(wanting).not.toHaveBeenCalled()
   })
 
@@ -322,8 +343,13 @@ describe("a friend's binder", () => {
     )
     const list = await screen.findByRole('list', { name: 'Wanted cards' })
     await userEvent.click(within(list).getByRole('button', { name: /Dark Magician/ }))
-    await waitFor(() => expect(document.querySelector('[aria-current="true"]')).not.toBeNull())
-    expect(document.querySelector('[aria-current="true"]')).toHaveTextContent('LOB-002')
+    expect(
+      await screen.findByRole('button', { name: /^Dark Magician LOB-002/, pressed: true })
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Dark Magician LOB-001/ })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    )
   })
 
   it('a hidden list reads as an empty one, and a failure too', async () => {

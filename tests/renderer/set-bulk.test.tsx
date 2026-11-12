@@ -302,11 +302,15 @@ describe('SetChecklist bulk mode', () => {
     const panel = await screen.findByRole('dialog')
     const code = detailOf(3001).printings[0].setCode
     await userEvent.click(
-      await within(panel).findByRole('button', { name: `Add one Gamma Trap ${code} Rare` })
+      await within(panel).findByRole('button', { name: `Gamma Trap ${code} Rare` })
+    )
+    const sets = within(panel).getByRole('list', { name: 'Sets' })
+    await userEvent.click(
+      within(sets).getByRole('button', { name: `Add one Gamma Trap ${code} Rare` })
     )
     expect(within(panel).getByText('You have 1')).toBeInTheDocument()
     expect(
-      within(within(panel).getByRole('group', { name: `Gamma Trap ${code} Rare` })).getByText('1')
+      within(within(sets).getByRole('group', { name: `Gamma Trap ${code} Rare` })).getByText('1')
     ).toBeInTheDocument()
     expect(checklist).toHaveBeenCalledTimes(1)
     releaseNext()

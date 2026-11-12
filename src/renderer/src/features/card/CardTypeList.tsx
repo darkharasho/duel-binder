@@ -1,25 +1,21 @@
-import { useRef, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { useQueryClient, type InfiniteData, type QueryClient } from '@tanstack/react-query'
 import { Minus, Plus } from 'lucide-react'
 import { toast } from 'sonner'
-import { englishSetName } from '@shared/setNames'
+import type { Language } from '@shared/languages'
 import type { BrowsePage, ChecklistCard, EntryView, Printing, SetChecklist } from '@shared/types'
-import { LanguageTag } from '@/components/LanguageTag'
-import { pickableRow } from '@/components/pickableRow'
-import { SearchInput } from '@/components/SearchInput'
 import { Button } from '@/components/ui/button'
 import { AddToBinder } from '@/features/binders/AddToBinder'
 import { replaceChecklistCard } from '@/features/sets/setsView'
-import { WishToggle } from '@/features/wishlist/WishToggle'
 import { api, invalidateAfterEdit, queryKeys } from '@/lib/api'
 import { formatUsd } from '@/lib/format'
 import { createSerialQueue } from '@/lib/serialQueue'
 import { useGame } from '@/lib/game'
-import { rarityColor } from '@/lib/rarityColors'
 import { useCardWishes } from '@/lib/wishlist'
 import { cn } from '@/lib/utils'
 import type { CardTypeRow } from './cardTypes'
 import { OwnedCopies } from './OwnedCopies'
+import { PrintingGroups } from './PrintingGroups'
 import { printingSummary } from './printingGroups'
 
 interface CardTypeListProps {
@@ -36,6 +32,8 @@ interface CardTypeListProps {
   ownedAtOpen: ReadonlySet<number>
   /** Opens on every printing rather than on the user's copies. Read once, on mount. */
   startExpanded: boolean
+  /** The set the panel was opened from: its row leads the full list. */
+  preferSet?: { setName: string; language: Language }
 }
 
 /** The list's clicks not yet answered, in queue order, over the server's last count per stepper. */
@@ -52,18 +50,6 @@ function countsOf(f: InFlight): Map<string, number> {
 
 /** A Yu-Gi-Oh! card with more types than this gets a box to narrow them. */
 const SEARCH_FROM = 8
-
-/** Whether a row's set name, set code or rarity holds every word of the text, ignoring case. */
-const rowMatches = (row: CardTypeRow, text: string): boolean => {
-  const p = row.printing
-  const hay =
-    `${p.setName} ${englishSetName(p.setName, p.setCode)} ${p.setCode} ${p.setRarity}`.toLowerCase()
-  return text
-    .toLowerCase()
-    .split(/\s+/)
-    .filter(Boolean)
-    .every((w) => hay.includes(w))
-}
 
 /** What a row's −/+ counts: the printing's original-art copies, or the row's own entry. */
 const countKey = (row: CardTypeRow): string =>
@@ -110,7 +96,8 @@ export function CardTypeList({
   onSelect,
   originalImageId,
   ownedAtOpen,
-  startExpanded
+  startExpanded,
+  preferSet
 }: CardTypeListProps): React.JSX.Element {
   const { def } = useGame()
   const qc = useQueryClient()
@@ -296,10 +283,7 @@ export function CardTypeList({
     .join(' · ')
   const wished = (printingId: number): boolean =>
     wishes.data?.some((w) => w.printingId === printingId) ?? false
-  const [query, setQuery] = useState('')
-  const rest = rows.filter((r) => !isOwnedLine(r))
-  const searchable = def.id === 'ygo' && rows.length > SEARCH_FROM
-  const shown = searchable && query.trim() ? rest.filter((r) => rowMatches(r, query)) : rest
+  const yourCopiesId = useId()
   const ownedCopies = (compact: boolean): React.JSX.Element => (
     <OwnedCopies
       rows={owned}
@@ -342,77 +326,29 @@ export function CardTypeList({
         </>
       )}
       {expanded && owned.length > 0 && (
-        <>
-          <p className="text-xs font-medium text-muted-foreground">Your copies</p>
+        <section aria-labelledby={yourCopiesId} className="space-y-1">
+          <p id={yourCopiesId} className="text-xs font-medium text-muted-foreground">
+            Your copies
+          </p>
           {ownedCopies(true)}
-        </>
+        </section>
       )}
-      {expanded && searchable && (
-        <SearchInput
-          label="Search printings"
-          placeholder="Search by set, code or rarity"
-          value={query}
-          onChange={setQuery}
-          debounceMs={0}
+      {expanded && (
+        <PrintingGroups
+          game={def.id}
+          cardId={cardId}
+          cardName={cardName}
+          rows={rows}
+          originalImageId={originalImageId}
+          selectedKey={selectedKey}
+          onSelect={onSelect}
+          ownedOf={ownedOf}
+          stepper={renderStepper}
+          wished={wished}
+          preferSet={preferSet}
+          searchable={def.id === 'ygo' && rows.length > SEARCH_FROM}
         />
       )}
-      {expanded && rest.length > 0 && shown.length === 0 && (
-        <p className="text-xs text-muted-foreground">No prints match</p>
-      )}
-      {expanded &&
-        shown.map((row) => {
-          const p = row.printing
-          const name = `${cardName} ${p.setCode} ${p.setRarity}`
-          const price = p.setPrice
-          return (
-            <div
-              key={row.key}
-              role="group"
-              aria-label={name}
-              {...pickableRow(
-                row.key === selectedKey,
-                () => onSelect(row),
-                'flex items-center gap-1.5'
-              )}
-            >
-              <div className="min-w-0 flex-1 text-xs">
-                {def.id === 'pkm' ? (
-                  <>
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        aria-hidden
-                        className="size-2 shrink-0 rounded-full"
-                        style={{ backgroundColor: rarityColor(p.setRarity, 'pkm') }}
-                      />
-                      <span className="truncate text-[13px] font-semibold">{p.setRarity}</span>
-                      <LanguageTag language={p.language} />
-                    </div>
-                    <div className="truncate text-muted-foreground">
-                      {englishSetName(p.setName, p.setCode)} · {p.setCode}
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="flex items-center gap-1.5">
-                      <span className="truncate">{englishSetName(p.setName, p.setCode)}</span>
-                      <LanguageTag language={p.language} />
-                    </div>
-                    <div className="truncate text-muted-foreground">
-                      {p.setCode} · {p.setRarity}
-                    </div>
-                  </>
-                )}
-              </div>
-              {price !== null && (
-                <span className="text-xs text-muted-foreground tabular-nums">
-                  {formatUsd(price)}
-                </span>
-              )}
-              <WishToggle cardId={cardId} printingId={p.id} wanted={wished(p.id)} label={name} />
-              {renderStepper(row, name)}
-            </div>
-          )
-        })}
       {expanded && owned.length > 0 && (
         <Button variant="link" size="sm" className="h-auto px-0" onClick={() => setExpanded(false)}>
           Show less

@@ -94,13 +94,13 @@ function setup(
   return { adjust, update, qc }
 }
 
-/** The list, once it shows an owned line or the Show all button. */
+/** The list, once it shows an owned line, a printing's pill or the Show all button. */
 const list = async (): Promise<HTMLElement> => {
   const section = await screen.findByRole('region', { name: 'Printings' })
   await waitFor(() =>
     expect(
       within(section).queryAllByRole('group').length +
-        within(section).queryAllByRole('button', { name: /^Show all/ }).length
+        within(section).queryAllByRole('button', { name: /^(Show all|Dark Magician )/ }).length
     ).toBeGreaterThan(0)
   )
   return section
@@ -115,6 +115,17 @@ const rowNames = (section: HTMLElement): (string | null)[] =>
   within(section)
     .getAllByRole('group')
     .map((r) => r.getAttribute('aria-label'))
+/** The full list's pills, by name: a pill is named for its printing, as a row was. */
+const pillNames = (section: HTMLElement): (string | null)[] =>
+  within(section)
+    .queryAllByRole('button', { name: /^Dark Magician / })
+    .map((r) => r.getAttribute('aria-label'))
+/** The full list's set rows. */
+const setList = (section: HTMLElement): HTMLElement =>
+  within(section).getByRole('list', { name: 'Sets' })
+/** The user's copies, pinned above the full list. */
+const yourCopies = (section: HTMLElement): HTMLElement =>
+  within(section).getByRole('region', { name: 'Your copies' })
 
 describe('one card panel, owned or not', () => {
   it('copies the card name from beside the title', async () => {
@@ -127,27 +138,31 @@ describe('one card panel, owned or not', () => {
 
   it('lists the same types, with quantities on the owned ones', async () => {
     setup([], { seed })
-    const unowned = rowNames(await list())
+    const unowned = pillNames(await list())
     cleanup()
     setup([entry(5, a)], { entryId: 5 })
     const section = await showAll(await list())
-    expect(rowNames(section)).toEqual(unowned)
+    expect(pillNames(section)).toEqual(unowned)
     expect(
-      within(section)
+      within(yourCopies(section))
         .getByRole('group', { name: /LOB-001/ })
         .querySelector('[aria-busy]')
     ).toHaveTextContent('2')
+    expect(
+      within(section).getByRole('button', { name: 'Dark Magician LOB-001 Ultra Rare' })
+    ).toHaveTextContent('×2')
     expect(within(section).getByText('You have 2')).toBeInTheDocument()
   })
 
   it('highlights the entry it opened on, and a click moves it and the price', async () => {
     setup([entry(5, a)], { entryId: 5 })
     const section = await showAll(await list())
-    const owned = within(section).getByRole('group', { name: /LOB-001/ })
-    const other = within(section).getByRole('group', { name: /LOB-002/ })
+    const owned = within(yourCopies(section)).getByRole('group', { name: /LOB-001/ })
+    const other = within(section).getByRole('button', { name: 'Dark Magician LOB-002 Secret Rare' })
     expect(owned).toHaveAttribute('aria-current', 'true')
+    expect(other).toHaveAttribute('aria-pressed', 'false')
     await userEvent.click(other)
-    expect(other).toHaveAttribute('aria-current', 'true')
+    expect(other).toHaveAttribute('aria-pressed', 'true')
     expect(owned).not.toHaveAttribute('aria-current')
     expect(screen.getByText(/^Market price/).parentElement).toHaveTextContent(
       'Market price · Secret Rare $2.00'
@@ -178,8 +193,14 @@ describe('one card panel, owned or not', () => {
   it('adds a type in one click, through sets.adjust', async () => {
     const { adjust } = setup([entry(5, a)], { entryId: 5 })
     const section = await showAll(await list())
+    await userEvent.click(within(section).getByRole('button', { name: 'All languages' }))
     await userEvent.click(
-      within(section).getByRole('button', { name: 'Add one Dark Magician DP-JP003 Ultra Rare' })
+      within(section).getByRole('button', { name: 'Dark Magician DP-JP003 Ultra Rare' })
+    )
+    await userEvent.click(
+      within(setList(section)).getByRole('button', {
+        name: 'Add one Dark Magician DP-JP003 Ultra Rare'
+      })
     )
     expect(adjust).toHaveBeenCalledWith('Legend of Blue Eyes', 'ja', 3, 1)
   })
@@ -296,14 +317,16 @@ describe('one card panel, owned or not', () => {
     )
     const section = await list()
     expect(screen.getByText('Legend of Blue Eyes · 001')).toBeInTheDocument()
-    await userEvent.click(within(section).getByRole('group', { name: /LOB-002/ }))
+    await userEvent.click(
+      within(section).getByRole('button', { name: 'Dark Magician LOB-002 Ultra Rare' })
+    )
     expect(screen.queryByText('Legend of Blue Eyes · 001')).not.toBeInTheDocument()
   })
 
   it('offers no retired printing unless a copy is on it', async () => {
     const retired = printing(4, { setCode: 'LOB-004', missingFromApi: true })
     setup([], { seed }, [a, b, retired])
-    expect(rowNames(await list()).join()).not.toContain('LOB-004')
+    expect(pillNames(await list()).join()).not.toContain('LOB-004')
     cleanup()
     setup([entry(7, retired)], { entryId: 7 }, [a, b, retired])
     expect(rowNames(await list()).join()).toContain('LOB-004')
@@ -343,9 +366,12 @@ describe('your copies first', () => {
     setup([], { seed })
     const section = await list()
     expect(within(section).queryByRole('button', { name: /^Show all/ })).not.toBeInTheDocument()
-    expect(rowNames(section)).toHaveLength(3)
+    await userEvent.click(within(section).getByRole('button', { name: 'All languages' }))
+    expect(pillNames(section)).toHaveLength(3)
     for (const code of [/LOB-001/, /LOB-002/, /DP-JP003/])
-      expect(within(section).getByRole('group', { name: code })).toBeInTheDocument()
+      expect(
+        within(section).getByRole('button', { name: new RegExp(`^Dark Magician ${code.source}`) })
+      ).toBeInTheDocument()
   })
 
   it('opens on every printing from a set page', async () => {
@@ -356,7 +382,9 @@ describe('your copies first', () => {
     })
     const section = await list()
     expect(within(section).queryByRole('button', { name: /^Show all/ })).not.toBeInTheDocument()
-    expect(within(section).getByRole('group', { name: /LOB-002/ })).toBeInTheDocument()
+    expect(
+      within(section).getByRole('button', { name: 'Dark Magician LOB-002 Secret Rare' })
+    ).toBeInTheDocument()
   })
 
   it('keeps the line, at 0, after its last copy is removed', async () => {
@@ -412,6 +440,100 @@ describe('your copies first', () => {
   })
 })
 
+describe('the full list, grouped', () => {
+  it('groups printings into set rows with rarity pills', async () => {
+    setup([])
+    const section = await list()
+    let rows = within(setList(section)).getAllByRole('listitem')
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toHaveTextContent('LOB')
+    expect(rows[0]).toHaveTextContent('Legend of Blue Eyes')
+    expect(
+      within(rows[0])
+        .getAllByRole('button', { name: /^Dark Magician / })
+        .map((p) => p.textContent)
+    ).toEqual(['Ultra$1.00', 'Secret$2.00'])
+    expect(pillNames(section).join()).not.toContain('DP-JP003')
+    const english = within(section).getByRole('button', { name: 'English' })
+    expect(english).toHaveAttribute('aria-pressed', 'true')
+    await userEvent.click(within(section).getByRole('button', { name: 'All languages' }))
+    expect(english).toHaveAttribute('aria-pressed', 'false')
+    rows = within(setList(section)).getAllByRole('listitem')
+    expect(rows).toHaveLength(2)
+    const ja = rows.find((r) => within(r).queryByRole('button', { name: /DP-JP003/ }))!
+    expect(ja).toHaveTextContent('Legend of Blue Eyes')
+    expect(within(ja).getByTitle('Japanese')).toBeInTheDocument()
+  })
+
+  it('adds a printing from its pill, through sets.adjust', async () => {
+    const { adjust } = setup([])
+    const section = await list()
+    const pill = within(section).getByRole('button', { name: 'Dark Magician LOB-002 Secret Rare' })
+    await userEvent.click(pill)
+    expect(pill).toHaveAttribute('aria-pressed', 'true')
+    const actions = within(setList(section)).getByRole('group', {
+      name: 'Dark Magician LOB-002 Secret Rare'
+    })
+    expect(
+      within(actions).getByRole('button', { name: 'Want Dark Magician LOB-002 Secret Rare' })
+    ).toBeInTheDocument()
+    await userEvent.click(
+      within(actions).getByRole('button', { name: 'Add one Dark Magician LOB-002 Secret Rare' })
+    )
+    expect(adjust).toHaveBeenCalledWith('Legend of Blue Eyes', 'en', 2, 1)
+  })
+
+  it('shows art tiles only when a card has two arts, and filters by them', async () => {
+    const chibi = printing(4, {
+      setRarity: 'Secret Rare (Chibi artwork)',
+      setName: 'Rarity Collection',
+      setCode: 'RA01-EN004'
+    })
+    setup([], { seed }, [a, b, c, chibi])
+    const section = await list()
+    expect(within(section).getByRole('button', { name: /^Original/ })).toBeInTheDocument()
+    const tile = within(section).getByRole('button', { name: /^Chibi/ })
+    expect(tile).toHaveAttribute('aria-pressed', 'false')
+    expect(within(setList(section)).getAllByRole('listitem')).toHaveLength(2)
+    await userEvent.click(tile)
+    expect(tile).toHaveAttribute('aria-pressed', 'true')
+    const rows = within(setList(section)).getAllByRole('listitem')
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toHaveTextContent('RA01')
+    expect(pillNames(section)).toEqual(['Dark Magician RA01-EN004 Secret Rare (Chibi artwork)'])
+    cleanup()
+    setup([], { seed }, [a, b])
+    const plain = await list()
+    expect(within(plain).queryByRole('button', { name: /^Original/ })).not.toBeInTheDocument()
+  })
+
+  it('counts a different-art copy on its pill, and edits it only in your copies', async () => {
+    setup([entry(5, a, { imageId: 999 })], { entryId: 5 })
+    const section = await showAll(await list())
+    const pill = within(section).getByRole('button', { name: 'Dark Magician LOB-001 Ultra Rare' })
+    expect(pill).toHaveTextContent('×2')
+    await userEvent.click(pill)
+    const sets = setList(section)
+    const actions = within(sets).getByRole('group', { name: 'Dark Magician LOB-001 Ultra Rare' })
+    expect(within(actions).getByText('Edit in your copies above')).toBeInTheDocument()
+    expect(within(sets).queryByRole('button', { name: /^Add one/ })).not.toBeInTheDocument()
+    // Your copies still edits it.
+    expect(
+      within(yourCopies(section)).getByRole('button', { name: /^Add one/ })
+    ).toBeInTheDocument()
+  })
+
+  it('shows no year for a set with no date', async () => {
+    setup([])
+    const row = within(setList(await list())).getAllByRole('listitem')[0]
+    expect(row.textContent).not.toMatch(/\d{4}/)
+    cleanup()
+    setup([], {}, [printing(1, { releaseDate: '2002-03-08' }), b])
+    const dated = within(setList(await list())).getAllByRole('listitem')[0]
+    expect(dated).toHaveTextContent('2002')
+  })
+})
+
 describe('CardPanel versions of one art', () => {
   const normal = printing(1, { setRarity: 'Normal' })
   const reverse = printing(2, { setRarity: 'Reverse Holofoil' })
@@ -420,7 +542,9 @@ describe('CardPanel versions of one art', () => {
     setup([], { printingId: 1 }, [normal, reverse], 'pkm')
     const chip = await screen.findByTestId('selected-version')
     await waitFor(() => expect(chip).toHaveTextContent('Normal'))
-    await userEvent.click(await screen.findByText('Reverse Holofoil'))
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Dark Magician LOB-002 Reverse Holofoil' })
+    )
     await waitFor(() =>
       expect(screen.getByTestId('selected-version')).toHaveTextContent('Reverse Holofoil')
     )

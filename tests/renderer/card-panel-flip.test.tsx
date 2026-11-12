@@ -98,11 +98,11 @@ describe('CardPanel flips a two-faced Magic card', () => {
     await user.click(flipButtons('Show back face')[0])
     await shows('Delver of Secrets', back)
     const list = await screen.findByRole('region', { name: 'Printings' })
-    await user.click(within(list).getByRole('group', { name: /ISD 52/ }))
+    await user.click(within(list).getByRole('button', { name: /^Delver of Secrets ISD 52/ }))
     await shows('Delver of Secrets', plain)
     // That art has no back: no flip control.
     expect(screen.queryByRole('button', { name: /Show (back|front) face/ })).toBeNull()
-    await user.click(within(list).getByRole('group', { name: /ISD 51/ }))
+    await user.click(within(list).getByRole('button', { name: /^Delver of Secrets ISD 51/ }))
     await shows('Delver of Secrets', front)
     expect(flipButtons('Show back face').length).toBeGreaterThan(0)
   })

@@ -139,7 +139,9 @@ describe('One Piece versions in the UI', () => {
       { api: opApi() }
     )
     const section = await screen.findByRole('region', { name: /Versions|Printings/ })
-    await userEvent.click(await within(section).findByRole('group', { name: /Alternate Art/ }))
+    await userEvent.click(
+      await within(section).findByRole('button', { name: /^Monkey\.D\.Luffy .*Alternate Art/ })
+    )
     await waitFor(() =>
       expect(screen.getByAltText('Monkey.D.Luffy').getAttribute('src')).toMatch(
         new RegExp(`/${ALT_ART}(\\?|$)`)

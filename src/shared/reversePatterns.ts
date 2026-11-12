@@ -129,7 +129,8 @@ const BIG_PLACE: Record<string, { x: number; y: number; size: number }> = {
 
 /**
  * Sun & Moon: one huge symbol low on the left, partly off the card, and a dense grid of small
- * symbols in staggered rows over the whole card, fainter where they run behind the big one.
+ * symbols in staggered rows over the whole card, cut off at the big one's outline: its inside is
+ * left empty, so it reads as a hollow outline the small ones run up to.
  */
 function symbols(type: string, glyph: string | null): string {
   // Trainers and Energy: filled Poké Balls in the grid, and the big one an outlined ring.
@@ -140,9 +141,15 @@ function symbols(type: string, glyph: string | null): string {
   const place = BIG_PLACE[type] ?? BIG_PLACE.default
   const big = (WIDTH * place.size) / 24
   const [bx, by] = [WIDTH * place.x, HEIGHT * place.y]
-  // The grid runs right up to the big symbol and on behind it, fainter inside it, and the big
-  // symbol is printed over it as a thick band round its outline.
+  // The grid runs right up to the big symbol and stops there; the big symbol is a thick band
+  // round its outline with nothing inside.
   const bigAt = `transform='translate(${n1(bx)} ${n1(by)}) scale(${big.toFixed(2)})'`
+  // Its solid silhouette, every contour filled on its own so the holes (the drop's bubble, the
+  // ring's middle) are covered too: the grid stays out of all of it.
+  const silhouette = bigShape
+    .split(/(?=M)/)
+    .map((d) => `<path d='${d}'/>`)
+    .join('')
   const grid: string[] = []
   for (let row = 0; row * step * 0.9 < HEIGHT; row++) {
     const y = INSET + step / 2 + row * step * 0.9
@@ -155,16 +162,13 @@ function symbols(type: string, glyph: string | null): string {
   const tiles = grid.join('')
   const parts = [
     `<g mask='url(#bo)' fill-opacity='.95'>${tiles}</g>`,
-    `<g clip-path='url(#bi)' fill-opacity='.3'>${tiles}</g>`,
-    `<use href='#b' fill-opacity='.18'/>`,
     `<use href='#b' fill='none' stroke='#000' stroke-width='1.1' ` +
       `stroke-linejoin='round' stroke-opacity='.8'/>`
   ]
   const defs =
     `<path id='g' fill-rule='evenodd' d='${shape}'/>` +
     `<path id='b' fill-rule='evenodd' clip-rule='evenodd' d='${bigShape}' ${bigAt}/>` +
-    `<clipPath id='bi'><use href='#b'/></clipPath>` +
-    `<mask id='bo'><rect width='${WIDTH}' height='${HEIGHT}' fill='#fff'/><use href='#b' fill='#000'/></mask>`
+    `<mask id='bo'><rect width='${WIDTH}' height='${HEIGHT}' fill='#fff'/><g ${bigAt} fill='#000'>${silhouette}</g></mask>`
   return svgUrl(defs, parts.join(''))
 }
 

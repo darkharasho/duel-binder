@@ -24,6 +24,7 @@ import { cardImageSrc } from '@/lib/images'
 import { cn } from '@/lib/utils'
 import type { GameId } from '@shared/games'
 import { normalizeOpNumber, prefixSuggestions } from '@shared/scan/onePieceNumber'
+import { normalizeMagicCode } from '@shared/scan/magicCode'
 import {
   HOLDER_LABELS,
   TRAINING_HOLDERS,
@@ -43,6 +44,8 @@ import {
   NOT_SYNCED,
   NO_VERSIONS,
   NUMBER_LABEL,
+  MAGIC_NUMBER_PLACEHOLDER,
+  MAGIC_WHAT_TO_SHOOT,
   NUMBER_PLACEHOLDER,
   OFFLINE_WAIT,
   READ_LABEL,
@@ -315,12 +318,14 @@ export function ContributeScreen({
   }
 
   const [text, setText] = useState('')
-  const number = normalizeOpNumber(text)
+  // Magic's codes are "MH3 123" (set, space, collector number); the rest are One Piece's "OP05-119".
+  const magic = game === 'mtg'
+  const number = magic ? normalizeMagicCode(text) : normalizeOpNumber(text)
   const prefixes = useQuery({
-    queryKey: ['training', 'numberPrefixes'],
+    queryKey: ['training', 'numberPrefixes', game],
     queryFn: () => api.scan.numberPrefixes()
   })
-  const chips = prefixSuggestions(text, prefixes.data ?? [])
+  const chips = prefixSuggestions(text, prefixes.data ?? [], 8, magic ? ' ' : '-')
 
   // One Piece numbers read off the camera while nothing is typed: offered for one tap on the
   // desktop, filled in on the phone. On the phone reading goes on while the number is one it read
@@ -891,7 +896,7 @@ export function ContributeScreen({
         id="training-number"
         type="text"
         value={text}
-        placeholder={NUMBER_PLACEHOLDER}
+        placeholder={magic ? MAGIC_NUMBER_PLACEHOLDER : NUMBER_PLACEHOLDER}
         autoCapitalize="characters"
         autoComplete="off"
         autoCorrect="off"
@@ -1030,7 +1035,7 @@ export function ContributeScreen({
     <details className={cn(panel, 'px-4 py-3 text-[13px]')}>
       <summary className="min-h-6 cursor-pointer font-medium">{WHAT_TO_SHOOT_TITLE}</summary>
       <ul className="mt-2 list-disc space-y-1 pl-4 text-muted-foreground">
-        {WHAT_TO_SHOOT.map((line) => (
+        {(magic ? MAGIC_WHAT_TO_SHOOT : WHAT_TO_SHOOT).map((line) => (
           <li key={line}>{line}</li>
         ))}
       </ul>

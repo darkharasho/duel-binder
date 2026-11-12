@@ -18,6 +18,7 @@ import {
   SNAP_MANY,
   SNAP_NONE,
   CAP_REACHED,
+  MAGIC_WHAT_TO_SHOOT,
   WHAT_TO_SHOOT
 } from '../../src/phone/training/copy'
 import {
@@ -636,5 +637,95 @@ describe('shot feedback', () => {
     expect(await screen.findByText('1 shot of this version')).toBeInTheDocument()
     expect(revoked).toHaveBeenCalledWith('blob:shot-2')
     expect(screen.getByRole('img', { name: 'Last photo' })).toHaveAttribute('src', 'blob:shot-1')
+  })
+})
+
+describe('Magic', () => {
+  const MTG_CARD = 2 ** 38 + 1005
+  const mtgPrinting = (o: Partial<Printing>): Printing =>
+    printing({
+      id: 601,
+      cardId: MTG_CARD,
+      setName: 'Modern Horizons 3',
+      setCode: 'MH3 123',
+      setRarity: 'Rare',
+      setRarityCode: 'scryfall-id',
+      ...o
+    })
+  const RARE = mtgPrinting({})
+  const FOIL = mtgPrinting({ id: 602, setRarity: 'Rare (Foil)' })
+  const MTG_DETAIL: CardDetail = {
+    card: { id: MTG_CARD, name: 'Siren Lookout' } as CardDetail['card'],
+    printings: [RARE, FOIL],
+    images: [{ imageId: 8001, cardId: MTG_CARD, sortOrder: 0 }]
+  }
+  const asked: unknown[] = []
+  const mtgStore = (): ReturnType<typeof fakeStore> => {
+    const store = opStore({
+      serverIds: { 601: 9100, 602: 9101 },
+      // Offline, so shots stay in the outbox to be read back.
+      over: {
+        trainingUpload: vi.fn(async () => ({ ok: false, retry: true, reason: 'offline' }) as const)
+      }
+    })
+    const fallback = store.invoke
+    store.invoke = vi.fn(async (channel: string, args: unknown[]) => {
+      if (channel === 'scan:numberPrefixes') return ['MH1', 'MH2', 'MH3', 'NEO']
+      if (channel === 'scan:printingsByCode') {
+        asked.push(args[0])
+        return args[0] === 'MH3 123' ? [scanPrinting(RARE), scanPrinting(FOIL)] : []
+      }
+      if (channel === 'cards:get') return args[0] === MTG_CARD ? MTG_DETAIL : null
+      return fallback(channel as never, args)
+    }) as PhoneStore['invoke']
+    return store
+  }
+
+  it('a typed Magic code lists each finish as its own version, none picked until tapped', async () => {
+    const user = userEvent.setup()
+    asked.length = 0
+    renderScreen(mtgStore(), undefined, { game: 'mtg' })
+    expect(numberBox()).toHaveAttribute('placeholder', 'MH3 123')
+    await user.type(numberBox(), 'mh3-0123')
+    const rare = await screen.findByRole('button', { name: 'Rare' })
+    const foil = screen.getByRole('button', { name: 'Rare (Foil)' })
+    expect(asked).toContain('MH3 123')
+    expect(rare).toHaveAttribute('aria-pressed', 'false')
+    expect(foil).toHaveAttribute('aria-pressed', 'false')
+    expect(shutter()).toBeDisabled()
+
+    await user.click(foil)
+    await waitFor(() => expect(shutter()).toBeEnabled())
+    await user.click(shutter())
+    await waitFor(async () => expect(await uploads()).toHaveLength(1))
+    const [shot] = await uploads()
+    expect(shot.label).toMatchObject({ game: 'mtg', cardId: MTG_CARD, printingId: 9101 })
+  })
+
+  it('Magic set-code chips end in a space', async () => {
+    const user = userEvent.setup()
+    renderScreen(mtgStore(), undefined, { game: 'mtg' })
+    await user.type(numberBox(), 'mh')
+    await user.click(await screen.findByRole('button', { name: 'MH3' }))
+    expect(numberBox()).toHaveValue('MH3 ')
+    expect(screen.queryByRole('button', { name: 'MH1' })).not.toBeInTheDocument()
+  })
+
+  it('runs no number reader and shows no guide box or Read number', async () => {
+    const factory = vi.fn<EngineFactory>(() => fakeEngine())
+    const snap = holding(() => 'OP01-001')
+    renderScreen(mtgStore(), undefined, { engineFactory: factory, game: 'mtg', snap })
+    await screen.findByRole('textbox', { name: 'Card number' })
+    await new Promise((r) => setTimeout(r, 30))
+    expect(factory).not.toHaveBeenCalled()
+    expect(snap).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'Read number' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/in the box/)).not.toBeInTheDocument()
+  })
+
+  it("shows Magic's what to shoot", async () => {
+    renderScreen(mtgStore(), undefined, { game: 'mtg' })
+    for (const line of MAGIC_WHAT_TO_SHOOT) expect(screen.getByText(line)).toBeInTheDocument()
+    expect(screen.queryByText(WHAT_TO_SHOOT[0])).not.toBeInTheDocument()
   })
 })

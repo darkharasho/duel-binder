@@ -22,8 +22,9 @@ import type { CardChoice, MergePreview, SignInProvider } from '@shared/account'
 import { MergeDialog } from '@/features/account/MergeDialog'
 import { api } from '@/lib/api'
 import { useGame } from '@/lib/game'
+import { contributeGame } from '@/features/training/contributeContext'
 import { APP_PLATFORM, isNativeApp } from '@/lib/portal'
-import { GAMES, type GameId } from '@shared/games'
+import type { GameId } from '@shared/games'
 import { MAGIC_FAN_CONTENT, SCRYFALL_CREDIT } from '@shared/legal'
 import { PRIVACY_URL, SIGN_OUT_FAILED, cardDataAge, signOutWarning } from './copy'
 import { CATALOG_KEY, SYNC_STATE_KEY, displayName, usePhone } from './context'
@@ -86,8 +87,8 @@ export function Settings({
   onContribute?: (game: GameId) => void
 } = {}): React.JSX.Element {
   const { store, user, signedOut } = usePhone()
-  const { available } = useGame()
-  const testerGame = available.find((g) => GAMES[g].access === 'testers')
+  const { game, available } = useGame()
+  const testerGame = contributeGame(game, available)
   const { settings, setSettings } = useScanHub()
   const qc = useQueryClient()
   const name = displayName(user)

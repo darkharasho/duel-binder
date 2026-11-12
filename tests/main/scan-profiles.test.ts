@@ -31,7 +31,10 @@ describe('scan profiles', () => {
   })
 
   it('every scanning game has a profile of boxes on the card', () => {
-    const games = new Set([...GAME_IDS.filter((g) => GAMES[g].features.scan), ...Object.keys(SCAN_PROFILES)])
+    const games = new Set([
+      ...GAME_IDS.filter((g) => GAMES[g].features.scan),
+      ...Object.keys(SCAN_PROFILES)
+    ])
     expect(games.has('mtg')).toBe(true)
     for (const game of games as Set<keyof typeof SCAN_PROFILES>) {
       const p = scanProfile(game)

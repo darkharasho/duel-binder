@@ -3,6 +3,8 @@
 export const CONTRIBUTE_TITLE = 'Contribute photos'
 export const NUMBER_LABEL = 'Card number'
 export const NUMBER_PLACEHOLDER = 'OP05-119'
+/** Magic's: its set code and collector number, as the catalog writes them. */
+export const MAGIC_NUMBER_PLACEHOLDER = 'MH3 123'
 /** Before the number the camera read, on the button that fills it in. */
 export const READ_LABEL = 'Camera read'
 export const NO_VERSIONS = 'No card with that number in your card data.'
@@ -17,6 +19,14 @@ export const WHAT_TO_SHOOT_TITLE = 'What to shoot'
 export const WHAT_TO_SHOOT = [
   'A spread of sets and rarities: Leaders, Characters, Events, Stages and DON!!.',
   'Every version you have of the same number, side by side: alternate arts and the base card, plain Parallel foils, SP, manga, Treasure Rare.',
+  "Sleeves and top loaders too, since that's how you'll stream.",
+  'A few angles of each: straight on, tilted, under a light.'
+] as const
+
+export const MAGIC_WHAT_TO_SHOOT = [
+  'A spread of sets and card types: creatures, spells, planeswalkers, sagas, lands and two-faced cards.',
+  'Every frame you have: new cards and old ones, borderless, extended art, showcase and full-art lands.',
+  'Foils too: pick the Foil version when the card in hand is foil.',
   "Sleeves and top loaders too, since that's how you'll stream.",
   'A few angles of each: straight on, tilted, under a light.'
 ] as const

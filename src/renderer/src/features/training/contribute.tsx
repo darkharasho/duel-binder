@@ -2,8 +2,8 @@ import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { useAccountUser } from '@/lib/accountUser'
 import { useGame } from '@/lib/game'
-import { GAMES, type GameId } from '@shared/games'
-import { ContributeContext } from './contributeContext'
+import type { GameId } from '@shared/games'
+import { ContributeContext, contributeGame } from './contributeContext'
 
 // Loaded on demand: it pulls in the camera and the number reader.
 const DesktopContribute = lazy(() => import('./DesktopContribute'))
@@ -16,7 +16,7 @@ const DesktopContribute = lazy(() => import('./DesktopContribute'))
 export function ContributeProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
   const { game, available, setGame } = useGame()
   const { user } = useAccountUser()
-  const testerGame = api.training ? available.find((g) => GAMES[g].access === 'testers') : undefined
+  const testerGame = api.training ? contributeGame(game, available) : undefined
   const [shown, setShown] = useState<GameId | null>(null)
   const back = useRef<GameId | null>(null)
 

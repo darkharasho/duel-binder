@@ -17,7 +17,8 @@ import { PNG } from 'pngjs'
 type Box = readonly [number, number, number, number]
 
 /** scryfallArtUrl(id, 'full') (src/shared/imageSources.ts), inlined: Node's type stripping can't load extensionless imports. */
-const scryfallLarge = (id: string): string => `https://cards.scryfall.io/large/front/${id[0]}/${id[1]}/${id}.jpg`
+const scryfallLarge = (id: string): string =>
+  `https://cards.scryfall.io/large/front/${id[0]}/${id[1]}/${id}.jpg`
 
 interface ScryCard {
   id: string
@@ -38,17 +39,32 @@ interface ScryCard {
 const WANTED: [string, (c: ScryCard) => boolean][] = [
   ['2015 creature', (c) => c.frame === '2015' && isPlain(c) && /Creature/.test(c.type_line ?? '')],
   ['2015 instant', (c) => c.frame === '2015' && isPlain(c) && /^Instant/.test(c.type_line ?? '')],
-  ['2015 planeswalker', (c) => c.frame === '2015' && isPlain(c) && /Planeswalker/.test(c.type_line ?? '')],
+  [
+    '2015 planeswalker',
+    (c) => c.frame === '2015' && isPlain(c) && /Planeswalker/.test(c.type_line ?? '')
+  ],
   ['2015 saga', (c) => c.frame === '2015' && c.layout === 'saga' && !c.frame_effects?.length],
-  ['2015 borderless', (c) => c.frame === '2015' && c.border_color === 'borderless' && /Creature/.test(c.type_line ?? '')],
-  ['2015 extended art', (c) => c.frame === '2015' && (c.frame_effects ?? []).includes('extendedart')],
-  ['2015 full-art land', (c) => c.frame === '2015' && c.full_art && /Basic Land/.test(c.type_line ?? '')],
+  [
+    '2015 borderless',
+    (c) =>
+      c.frame === '2015' && c.border_color === 'borderless' && /Creature/.test(c.type_line ?? '')
+  ],
+  [
+    '2015 extended art',
+    (c) => c.frame === '2015' && (c.frame_effects ?? []).includes('extendedart')
+  ],
+  [
+    '2015 full-art land',
+    (c) => c.frame === '2015' && c.full_art && /Basic Land/.test(c.type_line ?? '')
+  ],
   ['2003', (c) => c.frame === '2003' && isPlain(c) && /Creature/.test(c.type_line ?? '')],
   ['1997', (c) => c.frame === '1997' && isPlain(c) && /Creature/.test(c.type_line ?? '')]
 ]
 
 function isPlain(c: ScryCard): boolean {
-  return c.layout === 'normal' && c.border_color === 'black' && !c.full_art && !c.frame_effects?.length
+  return (
+    c.layout === 'normal' && c.border_color === 'black' && !c.full_art && !c.frame_effects?.length
+  )
 }
 
 /** The boxes to check, with a colour each (RGB). */
@@ -76,11 +92,22 @@ async function pick(bulk: string): Promise<[string, ScryCard][]> {
     if (found.size === WANTED.length) break
   }
   lines.close()
-  return WANTED.flatMap(([name]) => (found.has(name) ? [[name, found.get(name)!] as [string, ScryCard]] : []))
+  return WANTED.flatMap(([name]) =>
+    found.has(name) ? [[name, found.get(name)!] as [string, ScryCard]] : []
+  )
 }
 
-function draw(img: { width: number; height: number; data: Uint8Array }, box: Box, rgb: number[]): void {
-  const [x0, y0, x1, y1] = [box[0] * img.width, box[1] * img.height, box[2] * img.width, box[3] * img.height].map(Math.round)
+function draw(
+  img: { width: number; height: number; data: Uint8Array },
+  box: Box,
+  rgb: number[]
+): void {
+  const [x0, y0, x1, y1] = [
+    box[0] * img.width,
+    box[1] * img.height,
+    box[2] * img.width,
+    box[3] * img.height
+  ].map(Math.round)
   const put = (x: number, y: number): void => {
     if (x < 0 || y < 0 || x >= img.width || y >= img.height) return
     const i = (y * img.width + x) * 4

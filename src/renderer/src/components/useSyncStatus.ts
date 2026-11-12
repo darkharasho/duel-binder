@@ -24,6 +24,7 @@ export function useSyncStatus(): SyncStatus | undefined {
           'search',
           'card',
           'sets',
+          'setNames',
           'pokedex'
         ]) {
           void qc.invalidateQueries({ queryKey: [key] })

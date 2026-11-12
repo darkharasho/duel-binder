@@ -17,6 +17,11 @@ export const queryKeys = {
   stats: ['stats'] as const,
   sync: ['sync'] as const,
   setsList: ['sets', 'list'] as const,
+  /**
+   * Not under 'sets': set names come from the catalog alone, so a collection edit (which drops
+   * ['sets']) leaves them be; a catalog sync and a game switch still do.
+   */
+  setNames: ['setNames'] as const,
   setChecklist: (name: string, language: Language) =>
     ['sets', 'checklist', language, name] as const,
   search: (q: string) => ['search', q] as const,

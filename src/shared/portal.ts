@@ -54,6 +54,7 @@ export const PORTAL_CHANNELS = [
   'pokedex:species',
   'stats:get',
   'sets:list',
+  'sets:names',
   'sets:checklist',
   'sets:adjust',
   'account:signIns',

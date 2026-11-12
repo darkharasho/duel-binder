@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { RowsSkeleton } from '@/components/ui/loading'
 import type { Language } from '@shared/languages'
 import type { CountMode, Friend, SetSummary } from '@shared/types'
 import { PageHeader } from '@/components/PageHeader'
@@ -78,6 +79,7 @@ export function FriendSets({
           </Button>
         </div>
       )}
+      {sets.isPending && <RowsSkeleton label={`Loading ${name}'s sets`} />}
       {sets.data && started.length === 0 && (
         <p className="text-sm text-muted-foreground">
           {name} hasn&apos;t started any sets in this game.

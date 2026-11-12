@@ -21,6 +21,8 @@ export interface SetsFilterPanelProps {
   availableLanguages: Language[]
   /** Left out with nothing to clear. */
   onClearAll?: () => void
+  /** The sets are still loading: the type counts aren't known yet. */
+  loading?: boolean
 }
 
 const PROGRESS: { value: SetFilter; label: string }[] = [
@@ -59,7 +61,7 @@ export function SetsFilterPanel(p: SetsFilterPanelProps): React.JSX.Element {
             <FilterOptionChip
               key={t.value}
               label={t.label}
-              count={p.counts[t.value]}
+              count={p.loading ? undefined : p.counts[t.value]}
               selected={p.types.includes(t.value)}
               onClick={() => toggleType(t.value)}
             />

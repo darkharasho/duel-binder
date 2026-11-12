@@ -18,6 +18,9 @@ export function setLabel(setName: string, setCode: string | null | undefined): s
   return code ? `${code} - ${name}` : name
 }
 
+/** How long set names stay fresh: the catalog changes once a day at most. */
+const SET_NAMES_STALE_MS = 30 * 60_000
+
 /**
  * Set names as the app shows them: labelled with their code, and narrowed to the sets the
  * language filter takes in. Names not in the sets list (still loading, say) pass and show bare.
@@ -26,7 +29,13 @@ export function useSetNames(language: LanguageFilter): {
   labelOf: (setName: string) => string
   inLanguage: (setName: string) => boolean
 } {
-  const sets = useQuery({ queryKey: queryKeys.setsList, queryFn: () => api.sets.list() })
+  // The names alone, not the whole Sets list (counts and art; 2 MB for Yu-Gi-Oh!), and kept a
+  // while: only a catalog sync or a game switch changes them.
+  const sets = useQuery({
+    queryKey: queryKeys.setNames,
+    queryFn: () => api.sets.names(),
+    staleTime: SET_NAMES_STALE_MS
+  })
   return useMemo(() => {
     // Each name's code from the chosen language's set, else English's, else any language's.
     const rank = (l: Language): number => (matchesLanguage(language, l) ? 0 : l === 'en' ? 1 : 2)

@@ -20,7 +20,7 @@ import { sweepClientFor } from './sweep'
 import { pokemonDailyCalls } from './pokemonSweep'
 import { onePieceDailyCalls } from './onePieceSweep'
 import { handleSite } from './site/handler'
-import { routeHost } from './site/host'
+import { routeHost, withAssetCache } from './site/host'
 import { createReleaseSource, type Downloads } from './site/releases'
 
 export interface WorkerEnv extends Env {
@@ -122,9 +122,13 @@ export default {
       return handleSite(req, { appUrl: env.PUBLIC_URL, assets: env.ASSETS, downloads })
     }
     if (route.kind === 'redirect') return Response.redirect(route.location, 301)
-    if (route.kind === 'app-asset') return env.ASSETS.fetch(req)
+    const path = new URL(req.url).pathname
+    if (route.kind === 'app-asset') return withAssetCache(path, await env.ASSETS.fetch(req))
     if (route.kind === 'scan-asset')
-      return env.ASSETS.fetch(new Request(new URL(route.asset, req.url), req))
+      return withAssetCache(
+        path,
+        await env.ASSETS.fetch(new Request(new URL(route.asset, req.url), req))
+      )
     const store = (r: Request): Promise<Response> =>
       env.STORE.get(env.STORE.idFromName('main')).fetch(r)
     const thumbs = await thumbsRoute(req, env.IMAGES, env.ADMIN_TOKEN)

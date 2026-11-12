@@ -286,13 +286,30 @@ const handArt = (url: string, cache: string): Target => ({
 /**
  * The R2 key card art at `size` is stored under, from the id alone (no catalog lookup). Pokémon
  * art only ever in R2 (HAND_ART_PREFIX) lives elsewhere; for those this key is simply never stored.
+ * Magic's grid art (`small`) is Scryfall's small picture under card/thumb; card/small keeps its
+ * normal one, which grid tiles were until 2026-11 and which a set tile's backdrop (`cropped`) still is.
  */
 const cardArtKey = (size: ImageSize, n: number): string =>
   isTokenId(n)
     ? `card/full/${n}`
-    : gameOfId(n) === 'op' || gameOfId(n) === 'mtg'
-      ? `card/${size === 'full' ? 'full' : 'small'}/${n}`
-      : `card/${size}/${n}`
+    : gameOfId(n) === 'mtg' && size === 'small'
+      ? `card/thumb/${n}`
+      : gameOfId(n) === 'op' || gameOfId(n) === 'mtg'
+        ? `card/${size === 'full' ? 'full' : 'small'}/${n}`
+        : `card/${size}/${n}`
+
+/**
+ * Bumped when what an /img URL serves changes: the edge cache is keyed by URL, so its old copies
+ * (kept up to a year) would otherwise still be served. 2: Magic's small art is Scryfall's small
+ * picture, not its normal one. Browsers keep what they already have; that is the same art, larger.
+ */
+const edgeCacheUrl = (url: URL): string => {
+  const m = CARD_PATH_RE.exec(url.pathname)
+  if (!m || m[1] !== 'small' || gameOfId(Number(m[2])) !== 'mtg') return url.toString()
+  const keyed = new URL(url)
+  keyed.searchParams.set('edge-v', '2')
+  return keyed.toString()
+}
 
 /** A Pokédex sprite by national number, kept in R2 as sprite/<n>.png. */
 const SPRITE_PATH_RE = /^\/img\/sprite\/([1-9]\d{0,3})$/
@@ -335,7 +352,7 @@ export async function edgeImage(
   const url = new URL(req.url)
   if (req.method !== 'GET' || !url.pathname.startsWith('/img/')) return null
   // The cache key drops headers (a desktop's Authorization) so every client shares one entry.
-  const cacheKey = new Request(url.toString(), { method: 'GET' })
+  const cacheKey = new Request(edgeCacheUrl(url), { method: 'GET' })
   const hit = await edge?.match(cacheKey).catch(() => undefined)
   if (hit) return hit
   const keep = (res: Response): Response => {
@@ -445,7 +462,8 @@ function resolve(deps: AppDeps, path: string): Target | null {
       }
     }
     if (game === 'mtg') {
-      // Magic art is shown whole (never cropped), so `cropped` is the small copy as in cardArtKey.
+      // Magic art is shown whole (never cropped): `cropped`, a set tile's backdrop, is the normal
+      // picture (stored under card/small, see cardArtKey) and `small`, a grid tile, the small one.
       type ArtRow = { scryfall_id: string; art_from: string | null }
       const front = deps.db
         .prepare('SELECT scryfall_id, art_from FROM mtg_images WHERE image_id = ?')
@@ -460,7 +478,7 @@ function resolve(deps: AppDeps, path: string): Target | null {
         row && row.art_from !== 'none'
           ? scryfallArtUrl(
               row.art_from ?? row.scryfall_id,
-              kind === 'full' ? 'full' : 'small',
+              kind === 'full' ? 'full' : kind === 'cropped' ? 'normal' : 'small',
               front ? 'front' : 'back'
             )
           : null

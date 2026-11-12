@@ -8,6 +8,12 @@ import { countCandidates, priceCandidates } from '../../../src/main/prices/candi
 import { requestPrices } from '../src/priceRequests'
 import { assignSweep, refreshSweepQueue } from '../src/sweep'
 import { assignPokemonSweep, refreshPokemonQueue } from '../src/pokemonSweep'
+import { readRollup, storeRollup } from '../../../src/main/repo/rollup'
+import { listSetNames, listSetsFast } from '../../../src/main/repo/sets'
+import { browseFacetsFast } from '../../../src/main/repo/browse'
+import { userScope } from '../src/scope'
+import { GAME_SET_INDEX } from '../src/catalogLoad'
+import { settleAllRollups } from '../src/rollups'
 
 /** Run `fn` against a fresh, migrated Store's SQLite through the doSql adapter. */
 function inStore<R>(name: string, fn: (db: SqlDb) => R): Promise<R> {
@@ -195,5 +201,47 @@ describe('Store Durable Object SQLite', () => {
       return { listed, res, prices }
     })
     expect(out).toEqual({ listed: 1, res: { priced: 1 }, prices: [{ price: 3 }] })
+  })
+
+  it('a rollup over the 2 MB row cap is stored in pieces and read back on DO SQLite', async () => {
+    // Yu-Gi-Oh!'s Sets list is about 2.2 MB of JSON; production DO SQLite refuses a row that size
+    // (local workerd doesn't enforce the cap, so this checks the pieces, not the refusal).
+    const big = Array.from({ length: 12_000 }, (_, i) => ({ setName: `Set ${i} 日本語`, pad: 'x'.repeat(160) }))
+    const result = await inStore('rollup-pieces', (db) => {
+      storeRollup(db, 'big', 'ygo', big)
+      const back = readRollup<typeof big>(db, 'big')
+      const rows = (db.prepare('SELECT COUNT(*) AS n FROM catalog_rollups').get() as { n: number }).n
+      // A Yu-Gi-Oh! catalog change, settled (its upload finished), drops every piece.
+      db.prepare("INSERT INTO sets (game, language, set_name, set_code) VALUES ('ygo', 'en', 'S', 'S')").run()
+      settleAllRollups(db, new Date())
+      const left = (db.prepare('SELECT COUNT(*) AS n FROM catalog_rollups').get() as { n: number }).n
+      return { same: JSON.stringify(back) === JSON.stringify(big), rows, left }
+    })
+    expect(result.same).toBe(true)
+    expect(result.rows).toBeGreaterThan(2)
+    expect(result.left).toBe(0)
+  })
+
+  it('the Sets list, set names and Browse filters run from rollups on DO SQLite, with the game index', async () => {
+    const out = await inStore('rollup-fast', (db) => {
+      insertCard(db, 89631139, 'Blue-Eyes White Dragon')
+      db.prepare(
+        `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, language, game)
+         VALUES (89631139, 'Legend of Blue Eyes White Dragon', 'LOB-EN001', 'Ultra Rare', 'en', 'ygo')`
+      ).run()
+      db.exec(GAME_SET_INDEX)
+      const scope = userScope(0, 'ygo')
+      const sets = listSetsFast(db, scope)
+      const names = listSetNames(db, scope)
+      const facets = browseFacetsFast(db, scope)
+      const stored = (db.prepare('SELECT key FROM catalog_rollups ORDER BY key').all() as { key: string }[]).map(
+        (r) => r.key
+      )
+      return { sets: sets.map((s) => s.setCode), names, facetSets: facets.setNames, stored }
+    })
+    expect(out.sets).toEqual(['LOB'])
+    expect(out.names).toEqual([{ language: 'en', setName: 'Legend of Blue Eyes White Dragon', setCode: 'LOB' }])
+    expect(out.facetSets).toEqual(['Legend of Blue Eyes White Dragon'])
+    expect(out.stored.length).toBe(3)
   })
 })

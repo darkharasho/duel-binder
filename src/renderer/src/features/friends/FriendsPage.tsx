@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
+import { RowsSkeleton } from '@/components/ui/loading'
 import { api, queryKeys } from '@/lib/api'
 import { formatRelative } from '@/lib/format'
 import { friendsErrorMessage, useFriendsAvailable, useFriendsOverview } from '@/lib/friends'
@@ -142,6 +143,7 @@ export function FriendsPage(): React.JSX.Element {
           </ul>
         </section>
       )}
+      {overview.isLoading && <RowsSkeleton label="Loading friends" count={4} />}
       {data &&
         (data.friends.length === 0 ? (
           <p className="text-sm text-muted-foreground">

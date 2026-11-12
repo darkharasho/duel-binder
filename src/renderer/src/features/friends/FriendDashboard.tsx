@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { LoadingState } from '@/components/ui/loading'
 import type { EntryView, Friend } from '@shared/types'
 import { cardArtUrl, useArtWash } from '@/components/artWashContext'
 import { CardSheet } from '@/components/CardSheet'
@@ -64,6 +65,7 @@ export function FriendDashboard({
             </Button>
           </div>
         )}
+        {stats.isPending && <LoadingState label={`Loading ${name}'s collection…`} />}
         {data && data.totalCards === 0 && (
           <p className="text-lg font-medium">{name} hasn&apos;t added any cards yet</p>
         )}

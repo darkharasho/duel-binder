@@ -1,3 +1,4 @@
+import { GAME_IDS } from '../../src/shared/games/types'
 import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -189,7 +190,7 @@ function snapshot(work: Database.Database): Database.Database {
 
 interface Call {
   path: string
-  body: { table?: string; rows?: unknown[]; keys?: unknown[]; meta?: unknown }
+  body: { table?: string; rows?: unknown[]; keys?: unknown[]; meta?: unknown; game?: string }
   auth: string | null
 }
 
@@ -406,9 +407,14 @@ describe('uploadCatalog', () => {
       '/admin/catalog/rows cards 500',
       '/admin/catalog/rows cards 500',
       '/admin/catalog/rows cards 1',
-      '/admin/catalog/finish  '
+      '/admin/catalog/finish  ',
+      '/admin/catalog/warm  ',
+      '/admin/catalog/warm  ',
+      '/admin/catalog/warm  ',
+      '/admin/catalog/warm  '
     ])
-    expect(calls.at(-1)!.body.meta).toEqual({ db_version: '9.9', last_sync_at: NOW.toISOString() })
+    expect(calls.map((c) => c.body.game).filter(Boolean)).toEqual(['ygo', 'pkm', 'op', 'mtg'])
+    expect(calls.find((c) => c.path === '/admin/catalog/finish')!.body.meta).toEqual({ db_version: '9.9', last_sync_at: NOW.toISOString() })
     expect(calls.every((c) => c.auth === `Bearer ${TOKEN}`)).toBe(true)
     work.close()
   })
@@ -480,7 +486,9 @@ describe('uploadCatalog', () => {
       'rest 400',
       'post /admin/catalog/rows',
       'rest 400',
-      'post /admin/catalog/finish'
+      'post /admin/catalog/finish',
+      // One warm-up per game after the upload, not paced: they come after the batches.
+      ...GAME_IDS.map(() => 'post /admin/catalog/warm')
     ])
     base.close()
     work.close()
@@ -501,8 +509,41 @@ describe('uploadCatalog', () => {
     expect(calls.map((c) => `${c.path} ${c.body.table ?? ''}`)).toEqual([
       '/admin/catalog/delete sets',
       '/admin/catalog/rows card_printings',
-      '/admin/catalog/finish '
+      '/admin/catalog/finish ',
+      '/admin/catalog/warm ',
+      '/admin/catalog/warm ',
+      '/admin/catalog/warm ',
+      '/admin/catalog/warm '
     ])
+    base.close()
+    work.close()
+  })
+
+  it('a failed rollup warm only warns, and is tried once', async () => {
+    const work = await workDb()
+    const base = snapshot(work)
+    work.prepare("UPDATE card_printings SET set_price = 99.5 WHERE set_code = 'LOB-EN005'").run()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { fetch, calls } = recordingFetch((c) =>
+      c.path === '/admin/catalog/warm' ? new Response('gone', { status: 503 }) : ok()
+    )
+    expect(await uploadCatalog({ url: URL_BASE, token: TOKEN, work, base, fetch })).toEqual({
+      upserted: 1,
+      deleted: 0
+    })
+    expect(calls.filter((c) => c.path === '/admin/catalog/warm')).toHaveLength(4)
+    expect(warn).toHaveBeenCalledTimes(4)
+    warn.mockRestore()
+    base.close()
+    work.close()
+  })
+
+  it('warms nothing when nothing changed', async () => {
+    const work = await workDb()
+    const base = snapshot(work)
+    const { fetch, calls } = recordingFetch(ok)
+    await uploadCatalog({ url: URL_BASE, token: TOKEN, work, base, fetch })
+    expect(calls.map((c) => c.path)).toEqual(['/admin/catalog/finish'])
     base.close()
     work.close()
   })
@@ -573,7 +614,8 @@ describe('uploadCatalog', () => {
       refresh: async () => {},
       log: () => {}
     })
-    expect(calls.map((c) => c.path).slice(-3)).toEqual([
+    const paths = calls.map((c) => c.path).filter((p) => p !== '/admin/catalog/warm')
+    expect(paths.slice(-3)).toEqual([
       '/admin/catalog/finish',
       '/admin/scan/fingerprints',
       '/admin/scan/fingerprint-refs'

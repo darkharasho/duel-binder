@@ -10,6 +10,7 @@ import { GameChip } from '@/components/GameSwitch'
 import { TiltCard } from '@/components/TiltCard'
 import { scanFor } from '@/components/scanFor'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/loading'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { UnderlineTabs } from '@/components/UnderlineTabs'
 import { CardPanel } from '@/features/card/CardPanel'
@@ -399,6 +400,27 @@ function Content({
   )
 }
 
+/** The dashboard's shape while its stats load: no "$0.00" or "0 cards" before they arrive. */
+function DashboardSkeleton(): React.JSX.Element {
+  return (
+    <div role="status" aria-label="Loading your collection" className="space-y-10">
+      <div className="grid gap-x-12 gap-y-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+        <div className="space-y-3 self-end">
+          <Skeleton className="h-3.5 w-40" />
+          <Skeleton className="h-12 w-56" />
+          <Skeleton className="h-3.5 w-72" />
+        </div>
+        <Skeleton className="h-40 w-full rounded-md" />
+      </div>
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] gap-x-2 overflow-hidden max-md:grid-cols-3">
+        {Array.from({ length: 6 }, (_, i) => (
+          <Skeleton key={i} className="w-full" style={{ aspectRatio: '59 / 86' }} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function DashboardPage({ onNavigate, onAddCard }: Props): React.JSX.Element {
   const stats = useQuery({ queryKey: queryKeys.stats, queryFn: () => api.stats.get() })
   const data = stats.data
@@ -426,6 +448,8 @@ export function DashboardPage({ onNavigate, onAddCard }: Props): React.JSX.Eleme
           </div>
         ) : data ? (
           <Content stats={data} onNavigate={onNavigate} />
+        ) : stats.isPending ? (
+          <DashboardSkeleton />
         ) : null}
       </div>
     </TooltipProvider>

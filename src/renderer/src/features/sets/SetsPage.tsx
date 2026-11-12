@@ -12,6 +12,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { SearchInput } from '@/components/SearchInput'
 import { SortControl } from '@/components/SortControl'
 import { Button } from '@/components/ui/button'
+import { InlineLoading, RowsSkeleton, Skeleton } from '@/components/ui/loading'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { api, queryKeys } from '@/lib/api'
 import { languageChip, type ActiveChip, type SortOption } from '@/lib/filters'
@@ -270,6 +271,11 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
                     complete
                   </p>
                 )}
+                {sets.isPending && (
+                  <p className="mt-0.5">
+                    <InlineLoading label="Loading sets…" className="text-[13px]" />
+                  </p>
+                )}
               </div>
               <FilterBar
                 search={
@@ -312,7 +318,11 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
                 }
                 chips={chips}
                 onClearAll={clearFilters}
-                resultCount={`${shownCount.toLocaleString('en-US')} ${shownCount === 1 ? 'set' : 'sets'}`}
+                resultCount={
+                  sets.isSuccess
+                    ? `${shownCount.toLocaleString('en-US')} ${shownCount === 1 ? 'set' : 'sets'}`
+                    : undefined
+                }
               />
             </PageHeader>
 
@@ -345,6 +355,23 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
                   )}
                 </div>
               )
+            ) : sets.isPending ? (
+              view === 'grid' ? (
+                <div
+                  role="status"
+                  aria-label="Loading sets"
+                  className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-x-5 gap-y-7"
+                >
+                  {Array.from({ length: 12 }, (_, i) => (
+                    <div key={i}>
+                      <Skeleton className="mb-2 aspect-[4/3] w-full" />
+                      <Skeleton className="h-3 w-3/4" />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <RowsSkeleton label="Loading sets" count={10} />
+              )
             ) : (
               <SetsList
                 sets={visible}
@@ -369,6 +396,7 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
             language={language}
             onLanguageChange={setLanguage}
             availableLanguages={available}
+            loading={sets.isPending}
             onClearAll={chips.length > 0 ? clearFilters : undefined}
           />
         </div>

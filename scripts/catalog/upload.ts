@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3'
 import { getMeta } from '../../src/main/db/meta'
 import { CATALOG_TABLES } from '../../src/shared/catalogTables'
+import { GAME_IDS } from '../../src/shared/games/types'
 import { diffTable } from './diff'
 
 /**
@@ -99,7 +100,9 @@ function chunk<T>(items: T[], size: number): T[][] {
  * `CATALOG_TABLES` order, then `/admin/catalog/finish` with the work database's version and sync time. Each request is
  * retried on network errors, 429 and 5xx; the first failure that can't be retried rejects.
  * Batches are small (`batchFor`) and each is followed by a rest (`pauseAfter`), so the users'
- * requests sharing the portal's Durable Object never wait long behind the upload.
+ * requests sharing the portal's Durable Object never wait long behind the upload. When anything changed,
+ * each game's rollups are then rebuilt (`/admin/catalog/warm`), best effort: a failure only warns, and the portal
+ * builds a missing rollup on its next read anyway.
  */
 export async function uploadCatalog(
   opts: UploadOptions
@@ -110,18 +113,18 @@ export async function uploadCatalog(
   const now = opts.now ?? Date.now
   const root = opts.url.replace(/\/+$/, '')
 
-  const post = (path: string, body: unknown): Promise<void> =>
-    withRetry(path, async () => {
-      const res = await fetchFn(`${root}${path}`, {
-        method: 'POST',
-        headers: { authorization: `Bearer ${opts.token}`, 'content-type': 'application/json' },
-        body: JSON.stringify(body)
-      })
-      if (!res.ok) {
-        const text = await res.text().catch(() => '')
-        throw new HttpError(res.status, `${path} failed: HTTP ${res.status} ${text}`.trim())
-      }
+  const send = async (path: string, body: unknown): Promise<void> => {
+    const res = await fetchFn(`${root}${path}`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${opts.token}`, 'content-type': 'application/json' },
+      body: JSON.stringify(body)
     })
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      throw new HttpError(res.status, `${path} failed: HTTP ${res.status} ${text}`.trim())
+    }
+  }
+  const post = (path: string, body: unknown): Promise<void> => withRetry(path, () => send(path, body))
 
   /** Posts one batch, then rests in proportion to how long the portal took over it. */
   const postBatch = async (path: string, body: unknown): Promise<void> => {
@@ -154,5 +157,15 @@ export async function uploadCatalog(
   if (dbVersion !== null) meta.db_version = dbVersion
   if (lastSyncAt !== null) meta.last_sync_at = lastSyncAt
   await post('/admin/catalog/finish', { meta })
+  if (upserted + deleted > 0) {
+    for (const game of GAME_IDS) {
+      try {
+        // Tried once: a build that ran out of time would only run out again.
+        await send('/admin/catalog/warm', { game })
+      } catch (e) {
+        console.warn(`Warming ${game} rollups failed:`, e instanceof Error ? e.message : e)
+      }
+    }
+  }
   return { upserted, deleted }
 }

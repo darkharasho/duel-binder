@@ -23,6 +23,7 @@ import { listNav } from '@/components/panelNav'
 import { SearchInput } from '@/components/SearchInput'
 import { SortControl } from '@/components/SortControl'
 import { Button } from '@/components/ui/button'
+import { CardGridSkeleton, InlineLoading, Spinner } from '@/components/ui/loading'
 import { UnderlineTabs } from '@/components/UnderlineTabs'
 import { CardPanel } from '@/features/card/CardPanel'
 import { usePrefetchNeighbours } from '@/features/card/usePrefetchNeighbours'
@@ -163,13 +164,20 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
 
   // Stepping quickly can overlap lookups of owned cards; only the latest open lands.
   const opening = useRef(0)
+  // The owned card whose copies are being looked up, so its tile shows it was clicked.
+  const [pendingId, setPendingId] = useState<number | null>(null)
   const open = async (c: BrowseCard): Promise<void> => {
     const n = ++opening.current
     if (c.owned > 0) {
-      const copies = await qc.fetchQuery({
-        queryKey: queryKeys.forCard(c.id),
-        queryFn: () => api.collection.forCard(c.id)
-      })
+      setPendingId(c.id)
+      const copies = await qc
+        .fetchQuery({
+          queryKey: queryKeys.forCard(c.id),
+          queryFn: () => api.collection.forCard(c.id)
+        })
+        .finally(() => {
+          if (n === opening.current) setPendingId(null)
+        })
       if (n !== opening.current) return
       if (copies[0]) {
         setUnowned(null)
@@ -182,6 +190,7 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
   }
   const close = (): void => {
     opening.current++
+    setPendingId(null)
     setSelected(null)
     setUnowned(null)
   }
@@ -207,7 +216,11 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Browse</h1>
             <p className="mt-0.5 text-[13px] text-foreground/75 tabular-nums">
-              {pages.isSuccess ? `${total.toLocaleString('en-US')} cards` : 'Loading cards…'}
+              {pages.isSuccess ? (
+                `${total.toLocaleString('en-US')} cards`
+              ) : pages.isPending ? (
+                <InlineLoading label="Loading cards…" className="text-[13px]" />
+              ) : null}
             </p>
           </div>
           <div className="flex flex-wrap items-end gap-x-3 gap-y-2 border-b border-white/[0.08]">
@@ -265,6 +278,8 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
               )
             )}
           </div>
+        ) : pages.isPending ? (
+          <CardGridSkeleton className="grid grid-cols-[repeat(auto-fill,minmax(calc(140px*var(--card-scale,1)),1fr))] gap-x-4 gap-y-6 max-md:grid-cols-3 max-md:gap-x-2 max-md:gap-y-4" />
         ) : (
           <ul
             aria-label="All cards"
@@ -279,6 +294,7 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
                   type="button"
                   data-nav-key={c.id}
                   onClick={() => void open(c)}
+                  aria-busy={pendingId === c.id || undefined}
                   className={cn(
                     TILE_BUTTON,
                     'group rounded-md p-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring'
@@ -293,6 +309,11 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
                       alt={c.name}
                       className="w-full rounded-[4px] shadow-[0_8px_20px_rgb(0_0_0/0.45)]"
                     />
+                    {pendingId === c.id && (
+                      <span className="absolute inset-0 flex items-center justify-center rounded-[4px] bg-black/40">
+                        <Spinner className="size-6 text-foreground" />
+                      </span>
+                    )}
                     {c.owned > 0 && (
                       <span className="absolute right-1.5 top-1.5 rounded-full bg-primary px-1.5 font-mono text-xs font-semibold text-primary-foreground shadow">
                         ×{c.owned}
@@ -386,6 +407,7 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
           options={(key) => facets.data?.[key] ?? []}
           setLabelOf={setNames.labelOf}
           onChange={change}
+          loading={facets.isPending}
         />
       </FilterPanel>
     </div>

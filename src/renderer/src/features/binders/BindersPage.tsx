@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { CardGridSkeleton, LoadingState } from '@/components/ui/loading'
 import { toast } from 'sonner'
 import { ChevronLeftIcon } from 'lucide-react'
 import type { BinderCard, BinderDetail, BinderSummary } from '@shared/types'
@@ -141,6 +142,7 @@ function Open({
           {q.isSuccess && (
             <p className="text-sm text-muted-foreground">This binder no longer exists.</p>
           )}
+          {q.isPending && <LoadingState label="Loading the binder…" />}
         </>
       )}
     </div>
@@ -180,6 +182,8 @@ export function BindersPage(): React.JSX.Element {
           No binders yet. A binder tracks a set of cards you want to collect, such as every artwork
           of one card.
         </p>
+      ) : list.isPending ? (
+        <CardGridSkeleton label="Loading binders" count={6} className={SHELF} />
       ) : (
         <ul className={SHELF} aria-label="Binders">
           {binders.map((b) => (

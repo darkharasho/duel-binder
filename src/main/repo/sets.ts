@@ -1,7 +1,13 @@
 import type { SqlDb } from '../db/sql'
 import { RARITY_LABEL } from '../db/schema'
 import { pickDefaultCode, setNumber, setPrefix } from '../../shared/sets'
-import type { ChecklistCard, ChecklistRarity, SetChecklist, SetSummary } from '../../shared/types'
+import type {
+  ChecklistCard,
+  ChecklistRarity,
+  SetChecklist,
+  SetNameEntry,
+  SetSummary
+} from '../../shared/types'
 import type { Language } from '../../shared/languages'
 import type { GameId } from '../../shared/games'
 import { setImageKey } from '../../shared/setImages'
@@ -326,6 +332,23 @@ export function listSetsFast(
   }
   const rank = (s: SetSummary): string => `${s.language === 'en' ? 0 : 1}${s.language}`
   return sets.sort((a, b) => cmp(a.setName, b.setName) || cmp(rank(a), rank(b)))
+}
+
+/** Where listSetNames stores a game's set names. Bump with SETS_ROLLUP. */
+export const setNamesRollupKey = (game: GameId): string => `setNames:${SETS_ROLLUP}:${game}`
+
+/**
+ * Every set of the scope's game by name, language and code, from the catalog alone: what labels a
+ * set name in the Collection and Browse filters, a small part of the Sets list (Yu-Gi-Oh!'s is
+ * 2 MB). `known` is the catalog's Sets list when the caller already has it.
+ */
+export function listSetNames(db: SqlDb, scope: Scope = LOCAL, known?: SetSummary[]): SetNameEntry[] {
+  const game = scopeGame(db, scope)
+  return catalogRollup(db, setNamesRollupKey(game), game, () =>
+    (known ?? catalogRollup(db, setsRollupKey(game), game, () => catalogSets(db, scope))).map(
+      (s) => ({ language: s.language, setName: s.setName, setCode: s.setCode })
+    )
+  )
 }
 
 interface PrintingDbRow {

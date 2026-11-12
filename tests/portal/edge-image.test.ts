@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { tokenId } from '../../src/shared/games/ids'
+import { mtgImageId, tokenId } from '../../src/shared/games/ids'
 import { edgeImage } from '../../workers/portal/src/images'
 import { memoryBucket } from './helpers'
 
@@ -48,6 +48,25 @@ describe('artwork from the edge, ahead of the Durable Object', () => {
     await Promise.all(waits)
     expect(edge.store.has(url('small/46986414'))).toBe(true)
     expect(store.calls).toEqual([])
+  })
+
+  it("Magic small art skips the edge's copies of its old normal picture", async () => {
+    const id = mtgImageId('6e5e1c1b-0d4e-4c6e-9d2a-1d1f2b6a7c01')
+    const store = durableObject()
+    const edge = memoryEdge()
+    // What the edge kept from before: Scryfall's normal picture under the plain URL.
+    edge.store.set(url(`small/${id}`), new Response('old normal'))
+    const bucket = memoryBucket()
+    await bucket.put(`card/thumb/${id}`, JPEG.buffer, { httpMetadata: { contentType: 'image/jpeg' } })
+    const waits: Promise<unknown>[] = []
+    const res = await edgeImage(new Request(url(`small/${id}`)), bucket, edge, (p) => waits.push(p), store.fetch)
+    expect(new Uint8Array(await res!.arrayBuffer())).toEqual(JPEG)
+    await Promise.all(waits)
+    expect(edge.store.has(`${url(`small/${id}`)}?edge-v=2`)).toBe(true)
+    // Other sizes keep their plain keys.
+    edge.store.set(url(`full/${id}`), new Response('full'))
+    const full = await edgeImage(new Request(url(`full/${id}`)), bucket, edge, () => {}, store.fetch)
+    expect(await full!.text()).toBe('full')
   })
 
   it('answers from the edge cache before R2', async () => {

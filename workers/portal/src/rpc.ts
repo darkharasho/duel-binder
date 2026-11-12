@@ -2,6 +2,7 @@ import type { Api, InvokeChannel } from '../../../src/shared/ipc'
 import type { AccountLinkChannel, PortalChannel } from '../../../src/shared/portal'
 import type { BrowseFilters, CollectionFilters } from '../../../src/shared/types'
 import type { Scope } from '../../../src/main/repo/scope'
+import { settleRollups } from './rollups'
 import {
   checkAddInput,
   checkDelta,
@@ -19,7 +20,7 @@ import {
   searchCards,
   traditionalArt
 } from '../../../src/main/repo/cards'
-import { browseCards, browseFacets } from '../../../src/main/repo/browse'
+import { browseCards, browseFacetsFast } from '../../../src/main/repo/browse'
 import { pokedexSpecies, pokedexSummary } from '../../../src/main/repo/pokedex'
 import { POKEDEX_SIZE } from '../../../src/shared/pokedex'
 import {
@@ -43,7 +44,12 @@ import {
 import { ruleFieldValues } from '../../../src/main/repo/binderRules'
 import type { BinderDraft, BinderEditLevel, RuleField } from '../../../src/shared/binders'
 import { MAX_PKEY } from './sync'
-import { adjustPrinting, getChecklist, listSets } from '../../../src/main/repo/sets'
+import {
+  adjustPrinting,
+  getChecklist,
+  listSetNames,
+  listSetsFast
+} from '../../../src/main/repo/sets'
 import { getStats, recordSnapshot } from '../../../src/main/repo/stats'
 import {
   listWishlist,
@@ -104,6 +110,12 @@ type ChannelMethod<C extends InvokeChannel> = C extends `${infer N}:${infer M}`
 
 type RpcDeps = AppDeps & { userId: number; game: GameId; ip: string; sessionHash: string }
 
+/** The caller's db once the game's catalog rollups are settled (see rollups.ts): for the fast paths. */
+const rolled = ({ db, game, now }: RpcDeps): AppDeps['db'] => {
+  settleRollups(db, game, now())
+  return db
+}
+
 type Handler<C extends InvokeChannel> = (
   deps: RpcDeps,
   scope: Scope,
@@ -161,12 +173,15 @@ const HANDLERS: { [C in Exclude<PortalChannel, AccountLinkChannel>]: Handler<C> 
   'cards:get': ({ db }, scope, cardId) => getCardDetail(db, checkId(cardId, 'cardId'), scope),
   'cards:browse': ({ db }, scope, f) =>
     browseCards(db, checkObject(f, 'Filters') as unknown as BrowseFilters, scope),
-  'cards:browseFacets': ({ db }, scope, language) =>
-    browseFacets(db, scope, language == null ? undefined : checkLanguage(language)),
+  'cards:browseFacets': (deps, scope, language) =>
+    browseFacetsFast(rolled(deps), scope, language == null ? undefined : checkLanguage(language)),
   'cards:borrowedArt': ({ db }) => borrowedArt(db),
   'cards:traditionalArt': ({ db }) => traditionalArt(db),
   'cards:japaneseArt': ({ db }) => japaneseArt(db),
-  'sets:list': ({ db }, scope) => listSets(db, scope),
+  // The catalog's part of these is a rollup (server-44): kept through a catalog upload, dropped
+  // when it finishes (or the catalog is quiet a while), and built again on the next read.
+  'sets:list': (deps, scope) => listSetsFast(rolled(deps), scope),
+  'sets:names': (deps, scope) => listSetNames(rolled(deps), scope),
   'sets:checklist': ({ db }, scope, setName, language) =>
     getChecklist(db, checkString(setName, 'setName'), checkLanguage(language), scope),
   'sets:adjust': ({ db, now }, scope, setName, language, printingId, delta) => {
@@ -230,8 +245,8 @@ const HANDLERS: { [C in Exclude<PortalChannel, AccountLinkChannel>]: Handler<C> 
     getFacets(db, userScope(friendId(db, userId, id), game)),
   'friends:stats': ({ db, userId, game }, _s, id) =>
     friendStats(db, userId, friendId(db, userId, id), game),
-  'friends:sets': ({ db, userId, game }, _s, id) =>
-    listSets(db, userScope(friendId(db, userId, id), game)),
+  'friends:sets': (deps, _s, id) =>
+    listSetsFast(rolled(deps), userScope(friendId(deps.db, deps.userId, id), deps.game)),
   'friends:checklist': ({ db, userId, game }, _s, id, setName, language) =>
     getChecklist(
       db,

@@ -158,7 +158,7 @@ describe('CollectionPage', () => {
         })
       },
       sets: {
-        list: async () => [
+        names: async () => [
           set('Legend of Blue Eyes', 'LOB', 'en'),
           set('Legend of Blue Eyes', 'LOB-JP', 'ja'),
           set('Premium Pack 1', 'PP01-JP', 'ja')

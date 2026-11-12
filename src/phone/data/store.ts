@@ -229,6 +229,7 @@ const READ_CHANNELS: ReadonlySet<DataChannel> = new Set<DataChannel>([
   'scan:numberPrefixes',
   'stats:get',
   'sets:list',
+  'sets:names',
   'sets:checklist',
   'account:unsynced',
   'games:available',

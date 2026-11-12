@@ -61,26 +61,55 @@ export function pokemonFacets(
   scope: Scope,
   cardIds: string | null
 ): { pkmCategories: string[]; pkmTypes: string[]; pkmStages: string[]; pkmRarities: string[] } {
-  const src = `SELECT pc.* FROM pokemon_cards pc JOIN cards c ON c.id = pc.card_id AND +c.game = ${scope.game}${
-    cardIds ? ` WHERE pc.card_id IN (${cardIds})` : ''
-  }`
-  const values = (sql: string): string[] =>
-    (db.prepare(sql).all() as { v: string }[]).map((r) => r.v)
-  return {
-    pkmCategories: values(
-      `SELECT DISTINCT category AS v FROM (${src}) WHERE category <> '' ORDER BY v`
-    ),
-    pkmTypes: values(
-      `SELECT DISTINCT jt.value AS v FROM (${src}) s, json_each(s.types) jt ORDER BY v`
-    ),
-    pkmStages: values(
-      `SELECT DISTINCT stage AS v FROM (${src}) WHERE stage IS NOT NULL AND stage <> '' ORDER BY v`
-    ),
-    pkmRarities: values(
-      `SELECT DISTINCT rarity AS v FROM (${src}) WHERE rarity IS NOT NULL AND rarity <> '' ORDER BY v`
+  // One pass over the cards (their distinct combinations, about a thousand over the whole catalog),
+  // not one per field: each pass costs the same scan.
+  const rows = db
+    .prepare(
+      `SELECT DISTINCT pc.category, pc.stage, pc.rarity, pc.types FROM pokemon_cards pc
+       JOIN cards c ON c.id = pc.card_id AND +c.game = ${scope.game}${
+         cardIds ? ` WHERE pc.card_id IN (${cardIds})` : ''
+       }`
     )
+    .all() as {
+    category: string | null
+    stage: string | null
+    rarity: string | null
+    types: string | null
+  }[]
+  const categories = new Set<string>()
+  const types = new Set<string>()
+  const stages = new Set<string>()
+  const rarities = new Set<string>()
+  const add = (to: Set<string>, v: string | null): void => {
+    if (v) to.add(v)
+  }
+  for (const r of rows) {
+    add(categories, r.category)
+    add(stages, r.stage)
+    add(rarities, r.rarity)
+    for (const t of typesOf(r.types)) types.add(t)
+  }
+  return {
+    pkmCategories: sorted(categories),
+    pkmTypes: sorted(types),
+    pkmStages: sorted(stages),
+    pkmRarities: sorted(rarities)
   }
 }
+
+/** A card's `types` JSON array; nothing for NULL or anything but an array of strings. */
+function typesOf(json: string | null): string[] {
+  if (!json) return []
+  try {
+    const v: unknown = JSON.parse(json)
+    return Array.isArray(v) ? v.filter((t): t is string => typeof t === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+/** Sorted as SQLite's ORDER BY sorts text (binary; the same order outside astral characters). */
+const sorted = (set: Set<string>): string[] => [...set].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
 
 const escapeLike = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\${c}`)
 

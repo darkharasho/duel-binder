@@ -1,0 +1,51 @@
+name: Catalog schedule
+
+# Starts the nightly catalog run (catalog.yml) once a day in the portal's quiet hours.
+#
+# GitHub starts this repo's scheduled runs 6 to 10 hours late (every catalog run from 2026-10-26 to
+# 2026-11-12 started 6–10 h after its 06:17 UTC cron), so a single cron can't pick the hour. These
+# triggers spread over the night and scripts/catalog/scheduleGate.mts dispatches the catalog from the
+# first one that lands between 08:00 and 13:00 UTC, and only if no catalog run has started today
+# (manual ones count). After 48 hours without a run it dispatches whatever the hour.
+#
+# The catalog's upload shares the portal's one Durable Object with every signed-in request, so it
+# belongs where users aren't: 08:00–13:00 UTC is midnight to 5 am Pacific, 3 to 8 am Eastern.
+# Its own workflow so the skipped triggers don't crowd the catalog runs on the admin page.
+
+on:
+  schedule:
+    # 09:17 lands in the window with no delay; 00:17 and 03:17 with GitHub's usual 6–10 h delay.
+    - cron: '17 0,3,6,9 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: catalog-schedule
+  cancel-in-progress: false
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/catalog/scheduleGate.mts
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Decide
+        id: gate
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node --experimental-strip-types scripts/catalog/scheduleGate.mts
+      # A workflow_dispatch from the job's own token does start a run (unlike most events).
+      - name: Start the catalog
+        if: steps.gate.outputs.run == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run catalog.yml --repo "$GITHUB_REPOSITORY" --ref main

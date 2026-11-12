@@ -2,11 +2,13 @@ name: Catalog
 
 # Refreshes the card catalog the way the desktop app does and uploads what changed to the portal.
 # work.sqlite is cached after every run so a long first sync resumes; base.sqlite (the last
-# snapshot the portal accepted) is cached only after a successful upload.
+# snapshot the portal accepted) is cached as soon as the upload succeeds, even if a later stage
+# fails, so the next run sends only what changed since.
+#
+# No schedule of its own: catalog-schedule.yml dispatches it once a day in the portal's quiet
+# hours (GitHub starts scheduled runs hours late here). Start it by hand from the Actions tab.
 
 on:
-  schedule:
-    - cron: '17 6 * * *'
   workflow_dispatch:
     inputs:
       full:
@@ -155,6 +157,7 @@ jobs:
         if: steps.magic.outcome == 'failure'
         run: echo "CATALOG_PROBLEMS=1" >> "$GITHUB_ENV"
       - name: Upload catalog
+        id: upload
         run: >-
           npm run catalog:job -- --stage upload
           ${{ inputs.full && '--full' || '' }}
@@ -249,8 +252,11 @@ jobs:
             catalog-work/magic-src.sqlite
             catalog-work/magic-src.sqlite-wal
           key: catalog-mtg-${{ github.run_id }}-${{ github.run_attempt }}
+      # Whenever the upload went through, whatever failed after it: the portal holds this state now,
+      # and without it the next run diffs against an older base (or none) and sends every row again.
+      # On 2026-11-12 two runs failed on fingerprints after uploading, so each re-sent 3.3M rows.
       - name: Save base snapshot
-        if: success()
+        if: always() && steps.upload.outcome == 'success'
         uses: actions/cache/save@v4
         with:
           path: catalog-work/base.sqlite

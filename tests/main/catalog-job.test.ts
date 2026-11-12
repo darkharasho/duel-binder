@@ -16,7 +16,14 @@ import {
   type CatalogTable
 } from '../../src/shared/catalogTables'
 import { diffTable } from '../../scripts/catalog/diff'
-import { uploadCatalog } from '../../scripts/catalog/upload'
+import {
+  batchFor,
+  DEFAULT_BATCH,
+  DEFAULT_PACE,
+  NO_PAUSE,
+  pauseAfter,
+  uploadCatalog
+} from '../../scripts/catalog/upload'
 import type { AccuracyReport } from '../../scripts/catalog/accuracy'
 import {
   findShrinks,
@@ -38,6 +45,7 @@ const runJob = (o: JobOptions): ReturnType<typeof runRealJob> =>
     onePiece: async () => ({ report: null, error: null, problems: [] }),
     onePieceJapanese: async () => ({ report: null, error: null, problems: [] }),
     magic: async () => ({ report: null, error: null, problems: [] }),
+    uploadPace: NO_PAUSE,
     ...o
   })
 
@@ -373,7 +381,7 @@ describe('uploadCatalog', () => {
        VALUES (?, ?, 'Spell Card', 'spell', 'Normal', '', 'x')`
     )
     work.transaction(() => {
-      for (let i = 1; i <= 2001; i++) insert.run(i, `Card ${i}`)
+      for (let i = 1; i <= 1001; i++) insert.run(i, `Card ${i}`)
     })()
     setMeta(work, 'db_version', '9.9')
     setMeta(work, 'last_sync_at', NOW.toISOString())
@@ -389,18 +397,92 @@ describe('uploadCatalog', () => {
     vi.useFakeTimers({ toFake: ['setTimeout'] })
     const result = uploadCatalog({ url: URL_BASE, token: TOKEN, work, base: null, fetch })
     await vi.runAllTimersAsync()
-    expect(await result).toEqual({ upserted: 2001, deleted: 0 })
+    expect(await result).toEqual({ upserted: 1001, deleted: 0 })
 
     expect(
       calls.map((c) => `${c.path} ${c.body.table ?? ''} ${c.body.rows?.length ?? ''}`)
     ).toEqual([
-      '/admin/catalog/rows cards 2000',
-      '/admin/catalog/rows cards 2000',
+      '/admin/catalog/rows cards 500',
+      '/admin/catalog/rows cards 500',
+      '/admin/catalog/rows cards 500',
       '/admin/catalog/rows cards 1',
       '/admin/catalog/finish  '
     ])
     expect(calls.at(-1)!.body.meta).toEqual({ db_version: '9.9', last_sync_at: NOW.toISOString() })
     expect(calls.every((c) => c.auth === `Bearer ${TOKEN}`)).toBe(true)
+    work.close()
+  })
+
+  it('sends printings in smaller batches than other tables', async () => {
+    expect(batchFor('card_printings')).toBe(250)
+    expect(batchFor('cards')).toBe(DEFAULT_BATCH)
+    expect(batchFor('mtg_cards')).toBe(DEFAULT_BATCH)
+    expect(DEFAULT_BATCH).toBeLessThanOrEqual(500)
+    expect(batchFor('card_printings', 7)).toBe(7)
+
+    const work = await workDb()
+    const n = work.prepare('SELECT count(*) FROM card_printings').pluck().get() as number
+    const { fetch, calls } = recordingFetch(ok)
+    await uploadCatalog({
+      url: URL_BASE,
+      token: TOKEN,
+      work,
+      base: null,
+      fetch,
+      pace: NO_PAUSE,
+      batch: 2
+    })
+    const printings = calls.filter((c) => c.body.table === 'card_printings')
+    expect(printings.map((c) => c.body.rows!.length)).toEqual(
+      Array.from({ length: Math.ceil(n / 2) }, (_, i) => Math.min(2, n - i * 2))
+    )
+    work.close()
+  })
+
+  it('rests after every batch in proportion to how long the portal took', async () => {
+    expect(pauseAfter(0, DEFAULT_PACE)).toBe(DEFAULT_PACE.minMs)
+    expect(pauseAfter(1000, DEFAULT_PACE)).toBe(500)
+    expect(pauseAfter(60_000, DEFAULT_PACE)).toBe(DEFAULT_PACE.maxMs)
+    expect(pauseAfter(1000, NO_PAUSE)).toBe(0)
+
+    const work = await workDb()
+    const base = snapshot(work)
+    work.prepare("UPDATE card_printings SET set_price = 99.5 WHERE set_code = 'LOB-EN005'").run()
+    work.prepare("UPDATE card_printings SET set_price = 98.5 WHERE set_code = 'LOB-EN119'").run()
+    work.prepare("DELETE FROM sets WHERE language = 'en' AND set_name = 'Starter Deck: Yugi'").run()
+    // Each request takes 800 ms on the fake clock.
+    let clock = 0
+    const events: string[] = []
+    const { fetch } = recordingFetch(() => {
+      clock += 800
+      return ok()
+    })
+    const recorded: typeof fetch = async (input, init) => {
+      events.push(`post ${new URL(String(input)).pathname}`)
+      return fetch(input, init)
+    }
+    await uploadCatalog({
+      url: URL_BASE,
+      token: TOKEN,
+      work,
+      base,
+      fetch: recorded,
+      batch: 1,
+      now: () => clock,
+      sleep: async (ms) => {
+        events.push(`rest ${ms}`)
+      }
+    })
+    expect(events).toEqual([
+      'post /admin/catalog/delete',
+      'rest 400',
+      'post /admin/catalog/rows',
+      'rest 400',
+      'post /admin/catalog/rows',
+      'rest 400',
+      'post /admin/catalog/finish'
+    ])
+    base.close()
     work.close()
   })
 
@@ -410,7 +492,9 @@ describe('uploadCatalog', () => {
     work.prepare("UPDATE card_printings SET set_price = 99.5 WHERE set_code = 'LOB-EN005'").run()
     work.prepare("DELETE FROM sets WHERE language = 'en' AND set_name = 'Starter Deck: Yugi'").run()
     const { fetch, calls } = recordingFetch(ok)
-    expect(await uploadCatalog({ url: URL_BASE, token: TOKEN, work, base, fetch })).toEqual({
+    expect(
+      await uploadCatalog({ url: URL_BASE, token: TOKEN, work, base, fetch, pace: NO_PAUSE })
+    ).toEqual({
       upserted: 1,
       deleted: 1
     })
@@ -429,7 +513,7 @@ describe('uploadCatalog', () => {
       Response.json({ error: 'Unknown column x' }, { status: 400 })
     )
     await expect(
-      uploadCatalog({ url: URL_BASE, token: TOKEN, work, base: null, fetch })
+      uploadCatalog({ url: URL_BASE, token: TOKEN, work, base: null, fetch, pace: NO_PAUSE })
     ).rejects.toThrow(/400/)
     expect(calls).toHaveLength(1)
     work.close()
@@ -440,7 +524,7 @@ describe('uploadCatalog', () => {
     const { fetch, calls } = recordingFetch(() => new Response('down', { status: 500 }))
     vi.useFakeTimers({ toFake: ['setTimeout'] })
     const upload = expect(
-      uploadCatalog({ url: URL_BASE, token: TOKEN, work, base: null, fetch })
+      uploadCatalog({ url: URL_BASE, token: TOKEN, work, base: null, fetch, pace: NO_PAUSE })
     ).rejects.toThrow(/500/)
     await vi.runAllTimersAsync()
     await upload
@@ -781,7 +865,7 @@ describe('game-aware catalog job', () => {
     const work = openDatabase(join(dir, 'work.sqlite'))
     addPokemon(work)
     const { fetch, calls } = recordingFetch(ok)
-    await uploadCatalog({ url: URL_BASE, token: TOKEN, work, base: null, fetch })
+    await uploadCatalog({ url: URL_BASE, token: TOKEN, work, base: null, fetch, pace: NO_PAUSE })
     const rows = (t: string): Record<string, unknown>[] =>
       calls
         .filter((c) => c.body.table === t)
@@ -800,7 +884,7 @@ describe('game-aware catalog job', () => {
   it('Yu-Gi-Oh-only work uploads the legacy bodies plus game ygo (and no set series)', async () => {
     const work = await workDb()
     const { fetch, calls } = recordingFetch(ok)
-    await uploadCatalog({ url: URL_BASE, token: TOKEN, work, base: null, fetch })
+    await uploadCatalog({ url: URL_BASE, token: TOKEN, work, base: null, fetch, pace: NO_PAUSE })
     const seen = new Set<string>()
     for (const c of calls.filter((x) => x.path === '/admin/catalog/rows')) {
       const t = c.body.table!
@@ -1154,7 +1238,8 @@ describe('One Piece step in the nightly job', () => {
       fetch,
       pokemon: async () => ({ reports: [], error: null }),
       onePieceJapanese: async () => ({ report: null, error: null, problems: [] }),
-      magic: async () => ({ report: null, error: null, problems: [] })
+      magic: async () => ({ report: null, error: null, problems: [] }),
+      uploadPace: NO_PAUSE
     })
     expect(out.problems).toHaveLength(1)
     expect(out.problems[0]).toMatch(/^One Piece refresh skipped: .*not a database/i)

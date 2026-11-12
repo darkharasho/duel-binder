@@ -47,7 +47,7 @@ import { logMagic, logMagicSymbols, runMagicStep, type MagicStepResult } from '.
 import { runPokemonStep, type PokemonReport } from './pokemon'
 import { refreshPokemonSetArt, shouldRefreshSetArt, warmSetArt } from './pokemon/setArt'
 import { buildFingerprints, uploadFingerprintRefs, uploadFingerprints } from './fingerprints'
-import { uploadCatalog } from './upload'
+import { uploadCatalog, type UploadPace } from './upload'
 
 export interface JobOptions {
   /** Holds work.sqlite and base.sqlite. */
@@ -122,6 +122,8 @@ export interface JobOptions {
     bytes: Uint8Array,
     game: GameId
   ) => Promise<AccuracyReport>
+  /** The rest between upload batches; defaults to the upload's DEFAULT_PACE. */
+  uploadPace?: UploadPace
   log?: (line: string) => void
 }
 
@@ -516,7 +518,8 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
       token: token!,
       work,
       base,
-      fetch: opts.fetch
+      fetch: opts.fetch,
+      pace: opts.uploadPace
     })
     log(`Uploaded ${uploaded.upserted} rows, deleted ${uploaded.deleted}`)
     // New set art (Pokémon packs and logos, One Piece pack shots) is fetched into the portal's R2

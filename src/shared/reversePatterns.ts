@@ -118,52 +118,54 @@ const RING =
   'M0-11A11 11 0 1 0 0 11A11 11 0 1 0 0-11ZM0-7.5A7.5 7.5 0 1 1 0 7.5A7.5 7.5 0 1 1 0-7.5Z'
 
 /**
- * Sun & Moon: one huge symbol low on the left, partly off the card, and a dense grid of small
- * symbols in staggered rows over the rest, stopping short of the big one.
+ * Where Sun & Moon's big symbol sits (centre as a share of the card) and its width. The Water drop
+ * fills its whole box and leans its tip up-right, so at the default size only the tip's swoosh
+ * showed: it is printed smaller and lower, the whole drop on the card, as Poliwrath UNB 39 has it.
  */
-/** A path's subpaths whose winding runs against its biggest one's: the holes cut in it. */
-function holesOf(d: string): string {
-  const subs = d.split(/(?=M)/).filter(Boolean)
-  const area = (sub: string): number => {
-    const n = (sub.match(/-?\d*\.?\d+/g) ?? []).map(Number)
-    let a = 0
-    for (let i = 0; i + 3 < n.length; i += 2) a += n[i] * n[i + 3] - n[i + 2] * n[i + 1]
-    if (n.length >= 4) a += n[n.length - 2] * n[1] - n[0] * n[n.length - 1]
-    return a / 2
-  }
-  const areas = subs.map(area)
-  const outer = areas.reduce((m, a) => (Math.abs(a) > Math.abs(m) ? a : m), 0)
-  return subs.filter((_, i) => Math.sign(areas[i]) !== Math.sign(outer)).join('')
+const BIG_PLACE: Record<string, { x: number; y: number; size: number }> = {
+  default: { x: 0.26, y: 0.72, size: 0.95 },
+  Water: { x: 0.4, y: 0.68, size: 0.66 }
 }
 
-function symbols(glyph: string | null): string {
+/**
+ * Sun & Moon: one huge symbol low on the left, partly off the card, and a dense grid of small
+ * symbols in staggered rows over the whole card, fainter where they run behind the big one.
+ */
+function symbols(type: string, glyph: string | null): string {
   // Trainers and Energy: filled Poké Balls in the grid, and the big one an outlined ring.
   const shape = glyph ?? POKE_BALL
   const bigShape = glyph ?? RING
   const step = INNER / 8.5
   const scale = ((step * 0.86) / 24).toFixed(3)
-  const big = (WIDTH * 0.95) / 24
-  const [bx, by] = [WIDTH * 0.26, HEIGHT * 0.72]
-  // The big symbol is 24 units wide; the grid keeps clear of a circle a little wider.
-  const clear = 12 * big * 1.08
-  // The big symbol is printed as its outline, with what the small ones cut out filled in.
+  const place = BIG_PLACE[type] ?? BIG_PLACE.default
+  const big = (WIDTH * place.size) / 24
+  const [bx, by] = [WIDTH * place.x, HEIGHT * place.y]
+  // The grid runs right up to the big symbol and on behind it, fainter inside it, and the big
+  // symbol is printed over it as a thick band round its outline.
   const bigAt = `transform='translate(${n1(bx)} ${n1(by)}) scale(${big.toFixed(2)})'`
-  const parts: string[] = [
-    `<path d='${bigShape}' ${bigAt} fill='none' stroke='#000' stroke-width='.6' stroke-linejoin='round' stroke-opacity='.75'/>`,
-    `<path d='${glyph ? holesOf(glyph) : ''}' ${bigAt} fill-opacity='.75'/>`
-  ]
+  const grid: string[] = []
   for (let row = 0; row * step * 0.9 < HEIGHT; row++) {
     const y = INSET + step / 2 + row * step * 0.9
     const shift = row % 2 === 0 ? 0 : step / 2
     for (let col = -1; col < 10; col++) {
       const x = INSET + step / 2 + col * step + shift
-      if (Math.hypot(x - bx, y - by) < clear) continue
-      parts.push(
-        `<use href='#g' transform='translate(${n1(x)} ${n1(y)}) scale(${scale})' fill-opacity='.95'/>`
-      )
+      grid.push(`<use href='#g' transform='translate(${n1(x)} ${n1(y)}) scale(${scale})'/>`)
     }
   }
-  return svgUrl(`<path id='g' fill-rule='evenodd' d='${shape}'/>`, parts.join(''))
+  const tiles = grid.join('')
+  const parts = [
+    `<g mask='url(#bo)' fill-opacity='.95'>${tiles}</g>`,
+    `<g clip-path='url(#bi)' fill-opacity='.3'>${tiles}</g>`,
+    `<use href='#b' fill-opacity='.18'/>`,
+    `<use href='#b' fill='none' stroke='#000' stroke-width='1.1' ` +
+      `stroke-linejoin='round' stroke-opacity='.8'/>`
+  ]
+  const defs =
+    `<path id='g' fill-rule='evenodd' d='${shape}'/>` +
+    `<path id='b' fill-rule='evenodd' clip-rule='evenodd' d='${bigShape}' ${bigAt}/>` +
+    `<clipPath id='bi'><use href='#b'/></clipPath>` +
+    `<mask id='bo'><rect width='${WIDTH}' height='${HEIGHT}' fill='#fff'/><use href='#b' fill='#000'/></mask>`
+  return svgUrl(defs, parts.join(''))
 }
 
 /** The same numbers for the same seed, so a type's glass never changes. */
@@ -355,7 +357,8 @@ export function eraPattern(era: PatternEra, type: string): EraPattern | null {
   let pattern = made.get(key)
   if (!pattern) {
     pattern = {
-      url: era === 'sv' ? glass(type, glyph) : era === 'swsh' ? chevrons(glyph) : symbols(glyph),
+      url:
+        era === 'sv' ? glass(type, glyph) : era === 'swsh' ? chevrons(glyph) : symbols(type, glyph),
       tint: TINTS[type],
       restBlend: DARK.has(type) ? 'screen' : 'multiply'
     }

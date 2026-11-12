@@ -29,7 +29,8 @@ function ygoKind(variant: string | null): ArtKind {
   if (/^manga-style\b/.test(v)) return { key: 'manga', label: 'Manga-Style' }
   if (/^anime( artwork)?$/.test(v)) return { key: 'anime', label: 'Anime' }
   if (/^japanese artwork$/.test(v)) return { key: 'japanese', label: 'Japanese artwork' }
-  if (/^international artwork$/.test(v)) return { key: 'international', label: 'International artwork' }
+  if (/^international artwork$/.test(v))
+    return { key: 'international', label: 'International artwork' }
   const o = /^(\d+)(st|nd|rd|th) artwork$/.exec(v)
   if (o) return { key: `art-${o[1]}`, label: `${o[1]}${o[2]} artwork` }
   return ORIGINAL
@@ -69,8 +70,12 @@ export function artGroups(printings: Printing[], game: GameId): ArtGroup[] {
   if (game === 'op') {
     const alts = groups
       .filter((g) => g.kind.key !== 'original')
-      .sort((a, b) => Math.min(...a.printings.map((p) => p.id)) - Math.min(...b.printings.map((p) => p.id)))
-    if (alts.length >= 2) alts.forEach((g, i) => (g.kind = { key: g.kind.key, label: `Alternate art ${i + 1}` }))
+      .sort(
+        (a, b) =>
+          Math.min(...a.printings.map((p) => p.id)) - Math.min(...b.printings.map((p) => p.id))
+      )
+    if (alts.length >= 2)
+      alts.forEach((g, i) => (g.kind = { key: g.kind.key, label: `Alternate art ${i + 1}` }))
   }
   return groups.sort((a, b) => {
     const ao = a.kind.key === 'original' ? 0 : 1
@@ -112,9 +117,14 @@ function baseLabel(p: Printing, game: GameId): string {
   return p.setRarity
 }
 
+/** A printing's code past its set's prefix ("RA01-EN001" → "EN001"), or the whole code when it has another prefix or none. */
+const codeSuffix = (code: string, prefix: string): string =>
+  code.startsWith(`${prefix}-`) ? code.slice(prefix.length + 1) : code
+
 function pillLabels(printings: Printing[], game: GameId, prefix: string): string[] {
   const base = printings.map((p) => baseLabel(p, game))
-  const count = (ls: string[]) => ls.reduce((m, l) => m.set(l, (m.get(l) ?? 0) + 1), new Map<string, number>())
+  const count = (ls: string[]): Map<string, number> =>
+    ls.reduce((m, l) => m.set(l, (m.get(l) ?? 0) + 1), new Map<string, number>())
   let counts = count(base)
   const withVariant = base.map((l, i) => {
     if (game !== 'ygo' || (counts.get(l) ?? 0) < 2) return l
@@ -123,7 +133,7 @@ function pillLabels(printings: Printing[], game: GameId, prefix: string): string
   })
   counts = count(withVariant)
   return withVariant.map((l, i) =>
-    (counts.get(l) ?? 0) < 2 ? l : `${l} · ${printings[i].setCode.slice(prefix.length + 1)}`
+    (counts.get(l) ?? 0) < 2 ? l : `${l} · ${codeSuffix(printings[i].setCode, prefix)}`
   )
 }
 
@@ -164,6 +174,9 @@ export function setRows(
       if (!b.newest) return -1
       return a.newest > b.newest ? -1 : 1
     }
+    const ae = a.row.language === 'en' ? 0 : 1
+    const be = b.row.language === 'en' ? 0 : 1
+    if (ae !== be) return ae - be
     return a.row.codePrefix.localeCompare(b.row.codePrefix)
   })
   return rows.map((r) => r.row)
@@ -176,7 +189,10 @@ export function defaultLanguageMode(printings: Printing[]): LanguageMode {
 }
 
 /** The languages the 'english' mode lets through: en, every owned language, preferSet's. */
-export function englishModeLanguages(owned: Printing[], preferSet?: { language: Language }): Set<Language> {
+export function englishModeLanguages(
+  owned: Printing[],
+  preferSet?: { language: Language }
+): Set<Language> {
   const set = new Set<Language>(['en'])
   for (const p of owned) set.add(p.language)
   if (preferSet) set.add(preferSet.language)

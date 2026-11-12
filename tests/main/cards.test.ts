@@ -26,7 +26,8 @@ test("other games' results carry no language or printed name", () =>
   ]))
 test('apostrophes and FTS syntax never throw', () => {
   expect(searchCards(db, "Harpie's").map((r) => r.id)).toEqual([18144506])
-  for (const q of ['"', '*', '-', '(', 'NOT', 'a AND', '  ', 'pot"of']) expect(() => searchCards(db, q)).not.toThrow()
+  for (const q of ['"', '*', '-', '(', 'NOT', 'a AND', '  ', 'pot"of'])
+    expect(() => searchCards(db, q)).not.toThrow()
   expect(searchCards(db, '   ')).toEqual([])
 })
 test('set code search', () =>
@@ -47,7 +48,9 @@ test('getCardDetail', () => {
 })
 
 test("getCardDetail dates a printing by its set, else the English set's", () => {
-  db.prepare("INSERT OR REPLACE INTO sets (game, language, set_name, set_code, tcg_date) VALUES ('ygo','en','Legend of Blue Eyes White Dragon','LOB','2002-03-08')").run()
+  db.prepare(
+    "INSERT OR REPLACE INTO sets (game, language, set_name, set_code, tcg_date) VALUES ('ygo','en','Legend of Blue Eyes White Dragon','LOB','2002-03-08')"
+  ).run()
   const d = getCardDetail(db, 46986414)!
   expect(d.printings.find((p) => p.setCode === 'LOB-EN005')?.releaseDate).toBe('2002-03-08')
 })
@@ -56,8 +59,12 @@ test('getCardDetail leaves releaseDate out when the set has no date', () => {
   expect(d.printings.find((p) => p.setCode === 'SDY-006')).not.toHaveProperty('releaseDate')
 })
 test("getCardDetail dates a non-English printing by the English set's date when its own set row is missing", () => {
-  db.prepare("INSERT OR REPLACE INTO sets (game, language, set_name, set_code, tcg_date) VALUES ('ygo','en','Legend of Blue Eyes White Dragon','LOB','2002-03-08')").run()
-  db.prepare("INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, language) VALUES (46986414, 'Legend of Blue Eyes White Dragon', 'LOB-DE005', 'Common', 'de')").run()
+  db.prepare(
+    "INSERT OR REPLACE INTO sets (game, language, set_name, set_code, tcg_date) VALUES ('ygo','en','Legend of Blue Eyes White Dragon','LOB','2002-03-08')"
+  ).run()
+  db.prepare(
+    "INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, language) VALUES (46986414, 'Legend of Blue Eyes White Dragon', 'LOB-DE005', 'Common', 'de')"
+  ).run()
   const d = getCardDetail(db, 46986414)!
   expect(d.printings.find((p) => p.setCode === 'LOB-DE005')?.releaseDate).toBe('2002-03-08')
   db.prepare("DELETE FROM card_printings WHERE set_code = 'LOB-DE005'").run()

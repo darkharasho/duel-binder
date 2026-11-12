@@ -27,12 +27,18 @@ const kindOf = (setRarity: string) => artKind(printing(1, { setRarity }), 'ygo')
 
 describe('splitRarity', () => {
   it('splits variants and strips wiki markup', () => {
-    expect(splitRarity('Ultra Rare (Chibi artwork)')).toEqual({ rarity: 'Ultra Rare', variant: 'Chibi artwork' })
+    expect(splitRarity('Ultra Rare (Chibi artwork)')).toEqual({
+      rarity: 'Ultra Rare',
+      variant: 'Chibi artwork'
+    })
     expect(splitRarity('Ultra Rare ([[Alternate artwork|alternate artwork]])')).toEqual({
       rarity: 'Ultra Rare',
       variant: 'alternate artwork'
     })
-    expect(splitRarity('Common (Yellow "[[Sheep Token]]")')).toEqual({ rarity: 'Common', variant: 'Yellow Sheep Token' })
+    expect(splitRarity('Common (Yellow "[[Sheep Token]]")')).toEqual({
+      rarity: 'Common',
+      variant: 'Yellow Sheep Token'
+    })
     expect(splitRarity('Ultra Rare')).toEqual({ rarity: 'Ultra Rare', variant: null })
   })
 })
@@ -65,7 +71,11 @@ describe('artKind', () => {
 describe('artGroups', () => {
   it('labels One Piece alternate arts', () => {
     const ps = [printing(1), printing(2, { artImageId: 1 }), printing(3, { artImageId: 2 })]
-    expect(artGroups(ps, 'op').map((g) => g.kind.label)).toEqual(['Original', 'Alternate art 1', 'Alternate art 2'])
+    expect(artGroups(ps, 'op').map((g) => g.kind.label)).toEqual([
+      'Original',
+      'Alternate art 1',
+      'Alternate art 2'
+    ])
   })
   it('gives pkm and mtg one group', () => {
     const ps = [printing(1, { artImageId: 1 }), printing(2)]
@@ -74,7 +84,11 @@ describe('artGroups', () => {
     expect(artGroups([], 'ygo')).toEqual([])
   })
   it('picks the newest-dated printing as thumb', () => {
-    const ps = [printing(1, { releaseDate: '2020-01-01' }), printing(2), printing(3, { releaseDate: '2022-05-05' })]
+    const ps = [
+      printing(1, { releaseDate: '2020-01-01' }),
+      printing(2),
+      printing(3, { releaseDate: '2022-05-05' })
+    ]
     expect(artGroups(ps, 'ygo')[0].thumb.id).toBe(3)
   })
   it('orders Original first then by count', () => {
@@ -103,7 +117,10 @@ describe('setRows', () => {
     expect(setRows(ps, 'ygo', { setName: 'Undated', language: 'en' })[0].setName).toBe('Undated')
   })
   it('shortens and disambiguates ygo labels', () => {
-    const a = setRows([printing(1), printing(2, { setRarity: 'Ultra Rare (1st Edition)' })], 'ygo')[0]
+    const a = setRows(
+      [printing(1), printing(2, { setRarity: 'Ultra Rare (1st Edition)' })],
+      'ygo'
+    )[0]
     expect(a.pills.map((p) => p.label)).toEqual(['Ultra', 'Ultra · 1st Edition'])
     const b = setRows(
       [
@@ -118,10 +135,56 @@ describe('setRows', () => {
   })
   it('labels magic finishes', () => {
     const rows = setRows(
-      [printing(1, { setRarity: 'Rare' }), printing(2, { setRarity: 'Rare (Foil)' }), printing(3, { setRarity: 'Rare (Etched Foil)' })],
+      [
+        printing(1, { setRarity: 'Rare' }),
+        printing(2, { setRarity: 'Rare (Foil)' }),
+        printing(3, { setRarity: 'Rare (Etched Foil)' })
+      ],
       'mtg'
     )
     expect(rows[0].pills.map((p) => p.label)).toEqual(['Rare', 'Rare · Foil', 'Rare · Etched'])
+  })
+  it('falls back to the full set code when a code has no dash or another prefix', () => {
+    const dashless = setRows(
+      [
+        printing(1, { setName: 'Promos', setCode: 'SWSH001', setRarity: 'Promo' }),
+        printing(2, { setName: 'Promos', setCode: 'SWSH002', setRarity: 'Promo' })
+      ],
+      'pkm'
+    )[0]
+    expect(dashless.pills.map((p) => p.label)).toEqual(['Promo · SWSH001', 'Promo · SWSH002'])
+    const mixed = setRows(
+      [
+        printing(1, { setCode: 'RA01-EN001', setRarity: 'Secret Rare' }),
+        printing(2, { setCode: 'RA02-EN001', setRarity: 'Secret Rare' })
+      ],
+      'ygo'
+    )[0]
+    expect(mixed.pills.map((p) => p.label)).toEqual(['Secret · EN001', 'Secret · RA02-EN001'])
+  })
+  it('puts English before other languages on a date tie, then sorts by code', () => {
+    const undated = setRows(
+      [
+        printing(1, { setName: 'A', setCode: 'AAA-JP001', language: 'ja' }),
+        printing(2, { setName: 'Z', setCode: 'ZZZ-EN001' }),
+        printing(3, { setName: 'M', setCode: 'MMM-EN001' })
+      ],
+      'ygo'
+    )
+    expect(undated.map((r) => r.codePrefix)).toEqual(['MMM', 'ZZZ', 'AAA'])
+    const dated = setRows(
+      [
+        printing(1, {
+          setName: 'A',
+          setCode: 'AAA-KR001',
+          language: 'ko',
+          releaseDate: '2020-01-01'
+        }),
+        printing(2, { setName: 'Z', setCode: 'ZZZ-EN001', releaseDate: '2020-01-01' })
+      ],
+      'ygo'
+    )
+    expect(dated.map((r) => r.codePrefix)).toEqual(['ZZZ', 'AAA'])
   })
   it('splits languages into rows', () => {
     expect(setRows([printing(1), printing(2, { language: 'ja' })], 'ygo')).toHaveLength(2)
@@ -144,7 +207,11 @@ describe('languages and summary', () => {
       printing(3, { language: 'ja' })
     ]
     expect(printingSummary(ps, 'ygo')).toEqual({ printings: 3, arts: 2, sets: 3, languages: 2 })
-    const qs = [printing(1), printing(2, { setName: 'Other', setRarity: 'Ultra Rare (Chibi artwork)', language: 'ja' }), printing(3, { setName: 'Other', setRarity: 'Ultra Rare (Chibi artwork)', language: 'ja' })]
+    const qs = [
+      printing(1),
+      printing(2, { setName: 'Other', setRarity: 'Ultra Rare (Chibi artwork)', language: 'ja' }),
+      printing(3, { setName: 'Other', setRarity: 'Ultra Rare (Chibi artwork)', language: 'ja' })
+    ]
     expect(printingSummary(qs, 'ygo')).toEqual({ printings: 3, arts: 2, sets: 2, languages: 2 })
   })
 })

@@ -67,7 +67,10 @@ function setup(
   props: Partial<React.ComponentProps<typeof CardPanel>> = {},
   printings = [a, b, c],
   game: GameId = 'ygo',
-  collection: { remove?: (id: number) => Promise<void> } = {},
+  collection: {
+    remove?: (id: number) => Promise<void>
+    forCard?: () => Promise<EntryView[]>
+  } = {},
   wishes: CardWish[] = []
 ): { adjust: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn>; qc: QueryClient } {
   const adjust = vi.fn(async () => ({ rarities: [] }) as unknown as ChecklistCard)
@@ -387,6 +390,32 @@ describe('your copies first', () => {
     ).toBeInTheDocument()
   })
 
+  it('has no Show less on a set page', async () => {
+    setup([entry(5, a)], {
+      entryId: 5,
+      onlySet: true,
+      preferSet: { setName: 'Legend of Blue Eyes', language: 'en' }
+    })
+    const section = await list()
+    expect(within(section).getByRole('list', { name: 'Sets' })).toBeInTheDocument()
+    expect(within(section).queryByRole('button', { name: 'Show less' })).not.toBeInTheDocument()
+  })
+
+  it("opens on every printing when it opens on a printing you don't own", async () => {
+    setup([entry(5, a)], { printingId: 2, seed: { ...seed, defaultPrintingId: 2 } })
+    const section = await list()
+    expect(within(section).queryByRole('button', { name: /^Show all/ })).not.toBeInTheDocument()
+    expect(
+      within(section).getByRole('button', { name: 'Dark Magician LOB-002 Secret Rare' })
+    ).toHaveAttribute('aria-pressed', 'true')
+    const actions = within(setList(section)).getByRole('group', {
+      name: 'Dark Magician LOB-002 Secret Rare'
+    })
+    expect(
+      within(actions).getByRole('button', { name: 'Add one Dark Magician LOB-002 Secret Rare' })
+    ).toBeInTheDocument()
+  })
+
   it('keeps the line, at 0, after its last copy is removed', async () => {
     const { adjust } = setup([entry(5, a, { quantity: 1 })], { entryId: 5 })
     const section = await list()
@@ -507,11 +536,14 @@ describe('the full list, grouped', () => {
     expect(within(plain).queryByRole('button', { name: /^Original/ })).not.toBeInTheDocument()
   })
 
-  it('counts a different-art copy on its pill, and edits it only in your copies', async () => {
+  it('leaves a different-art copy off its pill, and edits it only in your copies', async () => {
     setup([entry(5, a, { imageId: 999 })], { entryId: 5 })
     const section = await showAll(await list())
     const pill = within(section).getByRole('button', { name: 'Dark Magician LOB-001 Ultra Rare' })
-    expect(pill).toHaveTextContent('×2')
+    expect(pill).not.toHaveTextContent('×')
+    expect(pill).toHaveTextContent('$1.00')
+    // Still listed among your copies.
+    expect(within(yourCopies(section)).getByRole('group', { name: /LOB-001/ })).toBeInTheDocument()
     await userEvent.click(pill)
     const sets = setList(section)
     const actions = within(sets).getByRole('group', { name: 'Dark Magician LOB-001 Ultra Rare' })
@@ -520,6 +552,85 @@ describe('the full list, grouped', () => {
     // Your copies still edits it.
     expect(
       within(yourCopies(section)).getByRole('button', { name: /^Add one/ })
+    ).toBeInTheDocument()
+  })
+
+  it('counts every original-art entry of a printing on its pill', async () => {
+    setup([entry(5, a), entry(6, a, { quantity: 3 })], { entryId: 5 })
+    const section = await showAll(await list())
+    expect(
+      within(section).getByRole('button', { name: 'Dark Magician LOB-001 Ultra Rare' })
+    ).toHaveTextContent('×5')
+  })
+
+  it("counts a One Piece copy on its version's own art", async () => {
+    const alt = printing(2, { setRarity: 'SR', setCode: 'OP01-002', artImageId: 555 })
+    setup([entry(5, alt, { imageId: 555 })], { entryId: 5 }, [a, alt], 'op')
+    const section = await showAll(await list())
+    expect(
+      within(section).getByRole('button', { name: 'Dark Magician OP01-002 SR' })
+    ).toHaveTextContent('×2')
+  })
+
+  it('shows one confirm, where the − was pressed', async () => {
+    setup([entry(5, a, { quantity: 1 })], { entryId: 5 })
+    const section = await showAll(await list())
+    await userEvent.click(
+      within(section).getByRole('button', { name: 'Dark Magician LOB-001 Ultra Rare' })
+    )
+    const actions = within(setList(section)).getByRole('group', {
+      name: 'Dark Magician LOB-001 Ultra Rare'
+    })
+    await userEvent.click(within(actions).getByRole('button', { name: /^Remove one/ }))
+    expect(screen.getAllByText('Remove this entry?')).toHaveLength(1)
+    expect(within(actions).getByText('Remove this entry?')).toBeInTheDocument()
+    await userEvent.click(within(actions).getByRole('button', { name: 'Cancel' }))
+    const line = within(yourCopies(section)).getByRole('group', { name: /LOB-001/ })
+    await userEvent.click(within(line).getByRole('button', { name: /^Remove one/ }))
+    expect(screen.getAllByText('Remove this entry?')).toHaveLength(1)
+    expect(within(line).getByText('Remove this entry?')).toBeInTheDocument()
+  })
+
+  it('offers no English toggle when the card has no English printing', async () => {
+    const ja = printing(1, { language: 'ja', setCode: 'DP-JP001' })
+    const ko = printing(2, { language: 'ko', setCode: 'DP-KR002' })
+    setup([], { seed }, [ja, ko])
+    const section = await list()
+    expect(pillNames(section)).toHaveLength(2)
+    expect(within(section).queryByRole('button', { name: 'English' })).not.toBeInTheDocument()
+    expect(within(section).queryByRole('button', { name: 'All languages' })).not.toBeInTheDocument()
+  })
+
+  it('keeps the list still on a first add: the new copy shows on its pill', async () => {
+    let copies: EntryView[] = []
+    const { adjust, qc } = setup([], { seed }, [a, b, c], 'ygo', {
+      forCard: async () => copies
+    })
+    const section = await list()
+    const pill = within(section).getByRole('button', { name: 'Dark Magician LOB-002 Secret Rare' })
+    await userEvent.click(pill)
+    const actions = within(setList(section)).getByRole('group', {
+      name: 'Dark Magician LOB-002 Secret Rare'
+    })
+    await userEvent.click(
+      within(actions).getByRole('button', { name: 'Add one Dark Magician LOB-002 Secret Rare' })
+    )
+    await waitFor(() => expect(adjust).toHaveBeenCalledWith('Legend of Blue Eyes', 'en', 2, 1))
+    const added = entry(7, b, { quantity: 1 })
+    copies = [added]
+    qc.setQueryData(queryKeys.forCard(1), [added])
+    // The entry editor shows once the refetched copies are in.
+    expect(await screen.findByLabelText('Quantity')).toHaveValue(1)
+    expect(within(section).getByText('You have 1')).toBeInTheDocument()
+    expect(within(section).queryByText('Your copies')).not.toBeInTheDocument()
+    expect(
+      within(section).getByRole('button', { name: 'Dark Magician LOB-002 Secret Rare' })
+    ).toHaveTextContent('×1')
+    const after = within(setList(section)).getByRole('group', {
+      name: 'Dark Magician LOB-002 Secret Rare'
+    })
+    expect(
+      within(after).getByRole('button', { name: 'Add one Dark Magician LOB-002 Secret Rare' })
     ).toBeInTheDocument()
   })
 

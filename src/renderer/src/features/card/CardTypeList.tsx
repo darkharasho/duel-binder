@@ -32,6 +32,8 @@ interface CardTypeListProps {
   ownedAtOpen: ReadonlySet<number>
   /** Opens on every printing rather than on the user's copies. Read once, on mount. */
   startExpanded: boolean
+  /** Always on every printing, with no Show all or Show less: a set page's list is short. */
+  alwaysExpanded?: boolean
   /** The set the panel was opened from: its row leads the full list. */
   preferSet?: { setName: string; language: Language }
 }
@@ -97,6 +99,7 @@ export function CardTypeList({
   originalImageId,
   ownedAtOpen,
   startExpanded,
+  alwaysExpanded = false,
   preferSet
 }: CardTypeListProps): React.JSX.Element {
   const { def } = useGame()
@@ -110,7 +113,8 @@ export function CardTypeList({
     base: EntryView[] | undefined
     counts: Map<string, number>
   } | null>(null)
-  // The row whose last copy is waiting on Confirm.
+  // The row whose last copy is waiting on Confirm, and where: a row can have a stepper both on its
+  // owned line and in its pill's action row, and the confirm shows only under the one pressed.
   const [confirming, setConfirming] = useState<string | null>(null)
   const serverOwned = (row: CardTypeRow): number => row.entry?.quantity ?? 0
   // Our counts hold until forCard catches up (it is refetched once the clicks are done).
@@ -193,8 +197,13 @@ export function CardTypeList({
    * A row's −/count/+, and the confirm under it when the − would take an entry's last copy. Each
    * place a row is edited calls this, so the count logic is one.
    */
-  const renderStepper = (row: CardTypeRow, label: string): React.ReactNode => {
+  const renderStepper = (
+    row: CardTypeRow,
+    label: string,
+    place: 'line' | 'action'
+  ): React.ReactNode => {
     const owned = ownedOf(row)
+    const confirmKey = `${place}:${row.key}`
     return (
       <>
         <div className="flex shrink-0 items-center gap-1.5">
@@ -204,7 +213,7 @@ export function CardTypeList({
             aria-label={`Remove one ${label}`}
             disabled={owned === 0}
             onClick={() => {
-              if (owned === 1 && row.entry) setConfirming(row.key)
+              if (owned === 1 && row.entry) setConfirming(confirmKey)
               else adjust(row, -1)
             }}
           >
@@ -234,7 +243,7 @@ export function CardTypeList({
             <Plus />
           </Button>
         </div>
-        {confirming === row.key && row.entry && (
+        {confirming === confirmKey && row.entry && (
           <div className="flex basis-full flex-wrap items-center gap-2 pl-2">
             <span className="text-sm">
               {row.entry.notes ? 'Remove this entry and its notes?' : 'Remove this entry?'}
@@ -268,7 +277,11 @@ export function CardTypeList({
     0
   )
   // Reset per card: the list is keyed by card.
-  const [expanded, setExpanded] = useState(startExpanded)
+  const [expandedState, setExpanded] = useState(startExpanded)
+  const expanded = alwaysExpanded || expandedState
+  // Over the full list, Your copies pins only what was owned at open: a copy added there shows on
+  // its gold pill, so the list doesn't move under the cursor.
+  const pinned = owned.filter((r) => ownedAtOpen.has(r.printing.id))
   // A printing with several entries is still one printing.
   const summary = printingSummary(
     rows.map((r) => r.printing).filter((p, i, all) => all.findIndex((x) => x.id === p.id) === i),
@@ -286,7 +299,7 @@ export function CardTypeList({
   const yourCopiesId = useId()
   const ownedCopies = (compact: boolean): React.JSX.Element => (
     <OwnedCopies
-      rows={owned}
+      rows={compact ? pinned : owned}
       cardName={cardName}
       originalImageId={originalImageId}
       selectedKey={selectedKey}
@@ -294,7 +307,7 @@ export function CardTypeList({
       ownedOf={ownedOf}
       pending={pending > 0}
       wished={wished}
-      stepper={renderStepper}
+      stepper={(row, label) => renderStepper(row, label, 'line')}
       compact={compact}
     />
   )
@@ -325,7 +338,7 @@ export function CardTypeList({
           </div>
         </>
       )}
-      {expanded && owned.length > 0 && (
+      {expanded && pinned.length > 0 && (
         <section aria-labelledby={yourCopiesId} className="space-y-1">
           <p id={yourCopiesId} className="text-xs font-medium text-muted-foreground">
             Your copies
@@ -343,13 +356,13 @@ export function CardTypeList({
           selectedKey={selectedKey}
           onSelect={onSelect}
           ownedOf={ownedOf}
-          stepper={renderStepper}
+          stepper={(row, label) => renderStepper(row, label, 'action')}
           wished={wished}
           preferSet={preferSet}
           searchable={def.id === 'ygo' && rows.length > SEARCH_FROM}
         />
       )}
-      {expanded && owned.length > 0 && (
+      {expanded && !alwaysExpanded && owned.length > 0 && (
         <Button variant="link" size="sm" className="h-auto px-0" onClick={() => setExpanded(false)}>
           Show less
         </Button>

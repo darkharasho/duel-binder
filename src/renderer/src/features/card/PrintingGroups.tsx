@@ -25,7 +25,10 @@ interface PrintingGroupsProps {
   game: GameId
   cardId: number
   cardName: string
-  /** Every row of the card, owned ones included: a printing's pill counts all of its rows. */
+  /**
+   * Every row of the card, owned ones included: a printing's pill counts its rows on the
+   * printing's own art (see PrintingGroups).
+   */
   rows: CardTypeRow[]
   /** The card's original art, for a tile whose printing has no art of its own. */
   originalImageId?: number
@@ -81,10 +84,12 @@ function Toggle({
 
 /**
  * Every printing of a card, grouped: art tiles when it has more than one art, then a row per set
- * (and language) with a pill per printing. A pill shows its rarity and price, or the count owned
- * in gold. Picking a pill selects its printing and opens an action row under its set: the wish
- * heart, and the −/count/+ when the printing has a single original-art row. A copy on other art,
- * or one of several entries, is edited in Your copies only, so the count logic stays one.
+ * (and language) with a pill per printing. A pill shows its rarity and price, or in gold the
+ * copies on the printing's own art (its One Piece art, else the card's original): a copy on other
+ * art isn't that pill's, and shows only in Your copies. Picking a pill selects its printing and
+ * opens an action row under its set: the wish heart, and the −/count/+ when the printing has a
+ * single original-art row. A copy on other art, or one of several entries, is edited in Your
+ * copies only, so the count logic stays one.
  */
 export function PrintingGroups({
   game,
@@ -107,13 +112,20 @@ export function PrintingGroups({
     else rowsOf.set(r.printing.id, [r])
   }
   const printings = [...rowsOf.values()].map((rs) => rs[0].printing)
-  const ownedCount = (p: Printing): number =>
-    (rowsOf.get(p.id) ?? []).reduce((n, r) => n + ownedOf(r), 0)
+  // A row with no entry is the printing's own; an entry counts when it's on the printing's art.
+  const ownedCount = (p: Printing): number => {
+    const art = p.artImageId ?? originalImageId
+    return (rowsOf.get(p.id) ?? [])
+      .filter((r) => !r.entry || r.entry.imageId === art)
+      .reduce((n, r) => n + ownedOf(r), 0)
+  }
 
   const [query, setQuery] = useState('')
   const [art, setArt] = useState<string | null>(null)
   const [mode, setMode] = useState<LanguageMode>(() => defaultLanguageMode(printings))
-  const oneLanguage = new Set(printings.map((p) => p.language)).size <= 1
+  // English or All only means something when the card has both kinds of printing.
+  const mixed =
+    printings.some((p) => p.language === 'en') && printings.some((p) => p.language !== 'en')
   const selectedPrinting = rows.find((r) => r.key === selectedKey)?.printing
 
   // English lets through the languages the user owns or opened, and the one picked, so a row
@@ -126,7 +138,7 @@ export function PrintingGroups({
   const searched =
     searchable && query.trim() ? printings.filter((p) => printingMatches(p, query)) : printings
   const inLanguage =
-    mode === 'all' || oneLanguage ? searched : searched.filter((p) => english.has(p.language))
+    mode === 'all' || !mixed ? searched : searched.filter((p) => english.has(p.language))
   const groups = artGroups(inLanguage, game)
   const artOn = groups.length > 1 && groups.some((g) => g.kind.key === art) ? art : null
   const shown = artOn ? (groups.find((g) => g.kind.key === artOn)?.printings ?? []) : inLanguage
@@ -175,7 +187,7 @@ export function PrintingGroups({
           })}
         </div>
       )}
-      {!oneLanguage && (
+      {mixed && (
         <div className="flex gap-1">
           <Toggle pressed={mode === 'english'} onClick={() => setMode('english')}>
             English

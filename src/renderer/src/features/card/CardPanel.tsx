@@ -96,6 +96,8 @@ export function CardPanel({
   if (copies.data && ownedAtOpen?.cardId !== cardId)
     setOwnedAtOpen({ cardId, ids: new Set(copies.data.map((c) => c.printing.id)) })
   const openOwned = ownedAtOpen?.cardId === cardId ? ownedAtOpen.ids : NONE_OWNED
+  // The printing the page opened the panel on, when it named one.
+  const opened = printingId ?? seed?.defaultPrintingId
   const rows = cardTypeRows({
     printings: detail.data?.printings ?? [],
     copies: copies.data ?? [],
@@ -103,7 +105,7 @@ export function CardPanel({
     ownedAtOpen: openOwned,
     preferSet,
     onlySet,
-    openedPrintingId: printingId ?? seed?.defaultPrintingId
+    openedPrintingId: opened
   })
 
   const [pick, setPick] = useState<Pick | null>(null)
@@ -209,8 +211,16 @@ export function CardPanel({
       onSelect={selectRow}
       originalImageId={detail.data?.images[0]?.imageId}
       ownedAtOpen={openOwned}
+      // On every printing when nothing is owned, or when the page opened a printing the user
+      // doesn't own (a wish, a binder slot): that printing's heart and +/− are what they came for.
+      startExpanded={
+        !(copies.data ?? []).length ||
+        (entryId === undefined &&
+          opened != null &&
+          !(copies.data ?? []).some((c) => c.printing.id === opened))
+      }
       // A set's list is short, so it needs no gate.
-      startExpanded={!!onlySet || !(copies.data ?? []).length}
+      alwaysExpanded={!!onlySet}
       preferSet={preferSet}
     />
   )

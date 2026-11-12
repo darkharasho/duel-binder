@@ -13,7 +13,7 @@ import type { CardTypeRow } from './cardTypes'
 interface OwnedCopiesProps {
   /**
    * The rows with an entry on them, and those of a printing owned at open whose last copy has
-   * gone, in the list's order.
+   * gone, in the list's order. Under the full list, only those of printings owned at open.
    */
   rows: CardTypeRow[]
   cardName: string

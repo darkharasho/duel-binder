@@ -1346,16 +1346,27 @@ describe('mtg art', () => {
     const res = await get(`small/${ids[0]}`)
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toBe('image/jpeg')
-    expect(bucket.store.has(`card/small/${ids[0]}`)).toBe(true)
-    expect(upstream.mock.calls[0][0]).toBe(`https://cards.scryfall.io/normal/front/6/e/${SCRY}.jpg`)
+    expect(bucket.store.has(`card/thumb/${ids[0]}`)).toBe(true)
+    expect(bucket.store.has(`card/small/${ids[0]}`)).toBe(false)
+    expect(upstream.mock.calls[0][0]).toBe(`https://cards.scryfall.io/small/front/6/e/${SCRY}.jpg`)
   })
 
-  it('Magic art: full fetches large, cropped fetches the small copy', async () => {
+  it('Magic art: full fetches large, cropped the normal picture under card/small', async () => {
     expect((await get(`full/${ids[0]}`)).status).toBe(200)
     expect(bucket.store.has(`card/full/${ids[0]}`)).toBe(true)
     expect(upstream.mock.calls[0][0]).toBe(`https://cards.scryfall.io/large/front/6/e/${SCRY}.jpg`)
     expect((await get(`cropped/${ids[0]}`)).status).toBe(200)
     expect(upstream.mock.calls[1][0]).toBe(`https://cards.scryfall.io/normal/front/6/e/${SCRY}.jpg`)
+    expect(bucket.store.has(`card/small/${ids[0]}`)).toBe(true)
+  })
+
+  it('Magic small art never serves the normal picture stored under card/small before', async () => {
+    await bucket.put(`card/small/${ids[0]}`, new Uint8Array([1, 2, 3]).buffer, {
+      httpMetadata: { contentType: 'image/jpeg' }
+    })
+    expect((await get(`small/${ids[0]}`)).status).toBe(200)
+    expect(upstream.mock.calls[0][0]).toBe(`https://cards.scryfall.io/small/front/6/e/${SCRY}.jpg`)
+    expect(bucket.store.has(`card/thumb/${ids[0]}`)).toBe(true)
   })
 
   it('an unknown Magic image is a 404 with no fetch', async () => {
@@ -1374,9 +1385,9 @@ describe('mtg art', () => {
       db.prepare('UPDATE mtg_images SET back_image_id = ? WHERE image_id = ?').run(backId, ids[0])
       expect((await get(`small/${backId}`)).status).toBe(200)
       expect(upstream.mock.calls[0][0]).toBe(
-        `https://cards.scryfall.io/normal/back/6/e/${SCRY}.jpg`
+        `https://cards.scryfall.io/small/back/6/e/${SCRY}.jpg`
       )
-      expect(bucket.store.has(`card/small/${backId}`)).toBe(true)
+      expect(bucket.store.has(`card/thumb/${backId}`)).toBe(true)
       expect((await get(`full/${backId}`)).status).toBe(200)
       expect(upstream.mock.calls[1][0]).toBe(`https://cards.scryfall.io/large/back/6/e/${SCRY}.jpg`)
     })
@@ -1389,11 +1400,11 @@ describe('mtg art', () => {
       )
       expect((await get(`small/${ids[0]}`)).status).toBe(200)
       expect(upstream.mock.calls[0][0]).toBe(
-        `https://cards.scryfall.io/normal/front/9/a/${BORROW}.jpg`
+        `https://cards.scryfall.io/small/front/9/a/${BORROW}.jpg`
       )
       expect((await get(`small/${backId}`)).status).toBe(200)
       expect(upstream.mock.calls[1][0]).toBe(
-        `https://cards.scryfall.io/normal/back/9/a/${BORROW}.jpg`
+        `https://cards.scryfall.io/small/back/9/a/${BORROW}.jpg`
       )
     })
 
@@ -1406,20 +1417,20 @@ describe('mtg art', () => {
       const res = await get(`small/${ids[0]}`)
       expect(res.status).toBe(200)
       expect(res.headers.get('cache-control')).toBe('public, max-age=3600')
-      expect(bucket.store.has(`card/small/${mtgImageId(BORROW)}`)).toBe(true)
-      expect(bucket.store.has(`card/small/${ids[0]}`)).toBe(false)
+      expect(bucket.store.has(`card/thumb/${mtgImageId(BORROW)}`)).toBe(true)
+      expect(bucket.store.has(`card/thumb/${ids[0]}`)).toBe(false)
       const back = await get(`small/${backId}`)
       expect(back.headers.get('cache-control')).toBe('public, max-age=3600')
-      expect(bucket.store.has(`card/small/${mtgBackImageId(BORROW)}`)).toBe(true)
-      expect(bucket.store.has(`card/small/${backId}`)).toBe(false)
+      expect(bucket.store.has(`card/thumb/${mtgBackImageId(BORROW)}`)).toBe(true)
+      expect(bucket.store.has(`card/thumb/${backId}`)).toBe(false)
 
       // Scryfall uploads the real scan; the job clears art_from.
       db.prepare('UPDATE mtg_images SET art_from = NULL WHERE image_id = ?').run(ids[0])
       const own = await get(`small/${ids[0]}`)
       expect(own.status).toBe(200)
       expect(own.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
-      expect(upstream.mock.calls[2][0]).toBe(`https://cards.scryfall.io/normal/front/6/e/${SCRY}.jpg`)
-      expect(bucket.store.has(`card/small/${ids[0]}`)).toBe(true)
+      expect(upstream.mock.calls[2][0]).toBe(`https://cards.scryfall.io/small/front/6/e/${SCRY}.jpg`)
+      expect(bucket.store.has(`card/thumb/${ids[0]}`)).toBe(true)
     })
 
     it("art_from 'none' is a 404 with no fetch", async () => {
@@ -1443,8 +1454,8 @@ describe('mtg art', () => {
     expect(upstream).toHaveBeenCalledTimes(1)
   })
 
-  it('serves stored art, cropped as the small copy', async () => {
-    for (const key of [`card/small/${ids[0]}`, `card/full/${ids[0]}`])
+  it('serves stored art, cropped as the normal copy under card/small', async () => {
+    for (const key of [`card/thumb/${ids[0]}`, `card/small/${ids[0]}`, `card/full/${ids[0]}`])
       bucket.store.set(key, {
         bytes: JPEG.buffer.slice(0) as ArrayBuffer,
         contentType: 'image/jpeg',

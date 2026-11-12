@@ -37,3 +37,21 @@ export function routeHost(url: URL, siteUrl: string): HostRoute {
     return { kind: 'scan-asset', asset: `/app${url.pathname}` }
   return { kind: 'app' }
 }
+
+/** A Vite build's content-hashed file (`name-<8-char hash>.ext`) under /app/assets/, /app/scan/assets/ or /scan/assets/. */
+const HASHED_ASSET_RE = /^\/(?:app\/(?:scan\/)?|scan\/)assets\/[^/]+-[A-Za-z0-9_-]{8}\.[a-z0-9]+$/
+
+/** How long browsers keep a hashed file: its name changes whenever its content does. */
+export const HASHED_ASSET_CACHE = 'public, max-age=31536000, immutable'
+
+/**
+ * `res` (a static asset served for `pathname`) with a year's cache when the file is content-hashed:
+ * Workers Assets sends `max-age=0, must-revalidate` for everything, so each page load re-asked for
+ * every script, style and font. Anything else (the HTML, the service worker, icons) is unchanged.
+ */
+export function withAssetCache(pathname: string, res: Response): Response {
+  if (!HASHED_ASSET_RE.test(pathname) || (res.status !== 200 && res.status !== 304)) return res
+  const out = new Response(res.body, res)
+  out.headers.set('cache-control', HASHED_ASSET_CACHE)
+  return out
+}

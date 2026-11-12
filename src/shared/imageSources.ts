@@ -99,15 +99,21 @@ export function opTcgArtUrl(key: string, size: 'small' | 'full'): string | null 
 export const SCRYFALL_IMAGE_PREFIX = 'https://cards.scryfall.io/'
 const SCRYFALL_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
-/** Scryfall's whole picture of a card object's front (or back) face at `size`; null unless `scryfallId` is a uuid. */
+/** Scryfall's image size for each of ours: 146x204 (~10 KB), 488x680 (~150 KB), 672x936. */
+const SCRYFALL_SIZES = { small: 'small', normal: 'normal', full: 'large' } as const
+
+/**
+ * Scryfall's whole picture of a card object's front (or back) face at `size`: `small` for grid
+ * tiles, `normal` for a set tile's backdrop, `full` for the card view. Null unless `scryfallId` is a uuid.
+ */
 export function scryfallArtUrl(
   scryfallId: string,
-  size: 'small' | 'full',
+  size: keyof typeof SCRYFALL_SIZES,
   face: 'front' | 'back' = 'front'
 ): string | null {
   const id = scryfallId.toLowerCase()
   if (!SCRYFALL_ID_RE.test(id)) return null
-  return `${SCRYFALL_IMAGE_PREFIX}${size === 'small' ? 'normal' : 'large'}/${face}/${id[0]}/${id[1]}/${id}.jpg`
+  return `${SCRYFALL_IMAGE_PREFIX}${SCRYFALL_SIZES[size]}/${face}/${id[0]}/${id[1]}/${id}.jpg`
 }
 
 /** Scryfall's set symbols (single-colour SVGs). Never served as SVG: the job hands the portal a PNG. */

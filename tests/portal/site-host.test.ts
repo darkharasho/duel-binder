@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, type Mock } from 'vitest'
-import { routeHost } from '../../workers/portal/src/site/host'
+import { HASHED_ASSET_CACHE, routeHost, withAssetCache } from '../../workers/portal/src/site/host'
 import { handleSite } from '../../workers/portal/src/site/handler'
 import {
   pickDownloads,
@@ -9,6 +9,35 @@ import {
 import { releaseV021 } from './fixtures/release'
 
 const SITE = 'https://duelbinder.com'
+
+describe('withAssetCache', () => {
+  const served = (status = 200): Response =>
+    new Response(status === 304 ? null : 'x', {
+      status,
+      headers: { 'cache-control': 'public, max-age=0, must-revalidate', 'content-type': 'text/javascript' }
+    })
+  it('keeps hashed build files a year, and changes nothing else', () => {
+    for (const p of [
+      '/app/assets/index-B9x_k2Qa.js',
+      '/app/assets/ibm-plex-mono-cyrillic-400-normal-BSMlKf0J.woff2',
+      '/app/scan/assets/AdminPage-HrVImERf.js',
+      '/scan/assets/sqlite3-Ab12Cd34.wasm'
+    ]) {
+      const res = withAssetCache(p, served())
+      expect(res.headers.get('cache-control'), p).toBe(HASHED_ASSET_CACHE)
+      expect(res.headers.get('content-type')).toBe('text/javascript')
+      expect(withAssetCache(p, served(304)).headers.get('cache-control')).toBe(HASHED_ASSET_CACHE)
+    }
+    for (const p of ['/app/web.html', '/app/assets/x.js', '/scan/sw.js', '/scan/ocr/worker.min.js', '/favicon.svg']) {
+      expect(withAssetCache(p, served()).headers.get('cache-control'), p).toBe(
+        'public, max-age=0, must-revalidate'
+      )
+    }
+    expect(withAssetCache('/app/assets/index-B9x_k2Qa.js', served(404)).headers.get('cache-control')).toBe(
+      'public, max-age=0, must-revalidate'
+    )
+  })
+})
 
 describe('routeHost', () => {
   it('serves the apex as the site', () => {

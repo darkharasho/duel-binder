@@ -250,8 +250,10 @@ with it: a foil nobody taps is priced as non-foil. In step 4:
   are basic lands and art too far from any look (@84–94). The info line named no photo: each code
   band catches only one of its two lines ("C 0007" or "FRA • EN"), never both, so the reader
   requires the language tag and gives nothing on half a line rather than junk codes. Moving the
-  bands to take both lines is a follow-up; until then art carries Magic. The star is still not
-  used for the finish.
+  bands to take both lines is a follow-up; until then art carries Magic, and Code mode stays off
+  for Magic (it would read nothing). The star is still not used for the finish. The Foil toggle
+  and the finish lock are on the main window's list; the finish lock goes back to Auto when the
+  list empties or the game changes.
 
 ## Step 5: the gate, then open
 

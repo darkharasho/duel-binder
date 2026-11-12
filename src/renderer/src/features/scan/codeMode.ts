@@ -15,8 +15,11 @@ import { findTextLine, maskLine, toBand, toGrayBand } from './vision/bands'
  */
 export const CODE_AIM: Box = [0.06, 0.43, 0.94, 0.57]
 
-/** The games whose cards carry a code that names the printing on its own. */
-export const CODE_MODE_GAMES: readonly GameId[] = ['ygo', 'op', 'mtg']
+/**
+ * The games whose cards carry a code that names the printing on its own. Not Magic yet: its info
+ * line is two lines (number over set and language) and a code band holds one.
+ */
+export const CODE_MODE_GAMES: readonly GameId[] = ['ygo', 'op']
 
 export const codeModeGame = (game: GameId): boolean => CODE_MODE_GAMES.includes(game)
 

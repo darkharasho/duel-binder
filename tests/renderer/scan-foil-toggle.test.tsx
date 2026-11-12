@@ -7,6 +7,7 @@ import { GameProvider } from '@/lib/game'
 import type { GameId } from '@shared/games'
 import { createMockApi, renderWithProviders } from './mockApi'
 import { printing } from './scanFakes'
+import { artCandidates } from '@/features/scan/useScanLoop'
 
 const strike = (o: Parameters<typeof printing>[0]) =>
   printing({
@@ -66,7 +67,11 @@ describe('the Magic foil toggle', () => {
   })
 
   it('hides the toggle when the printing has one finish', () => {
-    const actions: ScanRowActions = { setPrinting: () => {}, setQuantity: () => {}, remove: () => {} }
+    const actions: ScanRowActions = {
+      setPrinting: () => {},
+      setQuantity: () => {},
+      remove: () => {}
+    }
     renderWithProviders(
       <ScanRowItem row={row({ options: [PLAIN] })} actions={actions} language={null} scanned={1} />
     )
@@ -99,7 +104,11 @@ describe('the session finish lock', () => {
     await waitFor(() => expect(screen.getByTestId('lock')).toBeInTheDocument())
     await act(async () => {})
     expect(screen.queryByText('Finish')).toBeNull()
-    const actions: ScanRowActions = { setPrinting: () => {}, setQuantity: () => {}, remove: () => {} }
+    const actions: ScanRowActions = {
+      setPrinting: () => {},
+      setQuantity: () => {},
+      remove: () => {}
+    }
     renderWithProviders(
       <ScanRowItem
         row={row({ game: undefined, options: [PLAIN, FOIL] })}
@@ -109,6 +118,54 @@ describe('the session finish lock', () => {
       />
     )
     expect(screen.queryByRole('button', { name: 'Foil' })).toBeNull()
+  })
+
+  function Session(): React.JSX.Element {
+    const { count, session } = useScanHub()
+    return (
+      <>
+        <button onClick={() => count({ ...row(), options: [PLAIN, FOIL] })}>count</button>
+        <button onClick={() => session.clear()}>clear</button>
+      </>
+    )
+  }
+  const renderSession = (api = createMockApi()) => {
+    api.games.available = vi.fn(async () => ['ygo', 'pkm', 'mtg'] as never)
+    api.games.active = vi.fn(async () => 'mtg' as never)
+    renderWithProviders(
+      <GameProvider>
+        <ScanHubProvider>
+          <ScanFinishPicker />
+          <Lock />
+          <Session />
+        </ScanHubProvider>
+      </GameProvider>,
+      { api }
+    )
+    return api
+  }
+  const lockFoil = async (): Promise<void> => {
+    fireEvent.click(await screen.findByRole('combobox', { name: 'Finish' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'Foil' }))
+    expect(screen.getByTestId('lock')).toHaveTextContent('foil')
+  }
+
+  it('goes back to Auto when the list is emptied', async () => {
+    renderSession()
+    await lockFoil()
+    fireEvent.click(screen.getByText('count'))
+    expect(screen.getByTestId('lock')).toHaveTextContent('foil')
+    fireEvent.click(screen.getByText('clear'))
+    await waitFor(() => expect(screen.getByTestId('lock')).toHaveTextContent('auto'))
+  })
+
+  it('goes back to Auto when the game changes', async () => {
+    const api = renderSession()
+    await lockFoil()
+    const changed = vi.mocked(api.app.onDataChanged).mock.calls.map((c) => c[0] as () => void)
+    api.games.active = vi.fn(async () => 'pkm' as never)
+    await act(async () => changed.forEach((f) => f()))
+    await waitFor(() => expect(screen.getByTestId('lock')).toHaveTextContent('auto'))
   })
 
   it('starts every session at Auto', async () => {
@@ -123,5 +180,17 @@ describe('the session finish lock', () => {
     renderPicker('mtg')
     await screen.findByText('Finish')
     expect(screen.getByTestId('lock')).toHaveTextContent('auto')
+  })
+})
+
+describe('artCandidates', () => {
+  it("searches all Magic art with a set picked, since a set's records are other printings' looks", () => {
+    expect(artCandidates([PLAIN, FOIL], 'mtg')).toBeNull()
+  })
+
+  it("narrows other games to the picked set's art", () => {
+    expect(artCandidates([PLAIN, FOIL], 'ygo')).toEqual([9001])
+    expect(artCandidates(null, 'ygo')).toBeNull()
+    expect(artCandidates([{ ...PLAIN, language: 'zh-hans' }], 'pkm')).toBeNull()
   })
 })

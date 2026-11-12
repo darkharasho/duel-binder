@@ -58,13 +58,20 @@ describe('readCode', () => {
     expect(readCode('ygo', 'hello')).toBeNull()
     expect(readCode('op', 'OP05-119')).toBe('OP05-119')
   })
-})
 
-  it('reads a Magic code in code mode', () => {
+  it('reads a Magic code', () => {
     expect(readCode('mtg', 'C 0081 FRA • EN')).toBe('FRA 81')
     expect(readCode('mtg', 'Wizards of the Coast')).toBeNull()
-    expect(codeModeGame('mtg')).toBe(true)
   })
+})
+
+describe('codeModeGame', () => {
+  it('leaves Magic out until a band holds both info lines', () => {
+    expect(codeModeGame('ygo')).toBe(true)
+    expect(codeModeGame('op')).toBe(true)
+    expect(codeModeGame('mtg')).toBe(false)
+  })
+})
 
 describe('aimRect', () => {
   it('is the aim box within the part of the frame the 3:4 preview shows', () => {

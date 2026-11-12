@@ -303,8 +303,20 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
   useEffect(() => {
     if (gameRef.current === game) return
     gameRef.current = game
-    setSettings({ sets: readSets(game) })
+    // The finish lock is the session's and the game's: another game starts at Auto.
+    setSettings({ sets: readSets(game), finishLock: 'auto' })
   }, [game, setSettings])
+
+  // An emptied list (added or cleared) ends the session, and its finish lock with it: a foil lock
+  // left on from the last rip would price the next one as foil.
+  const hadRows = useRef(false)
+  const rowCount = session.rows.length
+  useEffect(() => {
+    const had = hadRows.current
+    hadRows.current = rowCount > 0
+    if (had && rowCount === 0 && (settingsRef.current.finishLock ?? 'auto') !== 'auto')
+      setSettings({ finishLock: 'auto' })
+  }, [rowCount, setSettings])
 
   const { copiesOf } = session
   useEffect(() => {

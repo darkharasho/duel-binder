@@ -356,6 +356,22 @@ const inPreview = (quad: Quad, region: CropRect | undefined): Quad =>
   region ? shiftQuad(quad, -region.x, -region.y) : quad
 
 /**
+ * The art a frame is matched against with sets picked: the picked printings' artworks; null for
+ * all of it. A Chinese set's cards mostly have none to match: their twins' art is found among all
+ * of it. A Magic set's art records are its looks' representatives (mostly English rows, and back
+ * faces no card lists), so a Japanese set or a card shown back up would find nothing; Magic
+ * searches all art and leaves the set to the resolver.
+ */
+export function artCandidates(
+  setPrintings: ScanPrinting[] | null | undefined,
+  game: GameId
+): number[] | null {
+  if (!setPrintings || game === 'mtg' || setPrintings.some((p) => p.language === 'zh-hans'))
+    return null
+  return [...new Set(setPrintings.flatMap((p) => p.imageIds))]
+}
+
+/**
  * Runs the scan engine over the camera, one frame at a time, and turns what it sees into counted
  * cards (onDraft) and the status bar's state. The engine is made on mount and disposed on
  * unmount. When an analysis fails (say the worker crashed), the engine is given the fingerprints
@@ -368,15 +384,10 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
   const [artData, setArtData] = useState<FingerprintStatus | null>(null)
   const [timing, setTiming] = useState<FrameTiming | null>(null)
 
-  // The picked sets' artworks, worked out once per pick rather than per frame. A Chinese set's
-  // cards mostly have none to match: their twins' art is found among all of it, so with one
-  // picked, every set's art is searched.
+  // The picked sets' artworks, worked out once per pick rather than per frame.
   const candidates = useMemo(
-    () =>
-      opts.setPrintings && !opts.setPrintings.some((p) => p.language === 'zh-hans')
-        ? [...new Set(opts.setPrintings.flatMap((p) => p.imageIds))]
-        : null,
-    [opts.setPrintings]
+    () => artCandidates(opts.setPrintings, opts.game),
+    [opts.setPrintings, opts.game]
   )
   const latest = useRef({ ...opts, candidates })
   useEffect(() => {
@@ -1064,7 +1075,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
                 game: o.game,
                 setPrintings,
                 defaultRarity: o.defaultRarity,
-            finishLock: o.finishLock,
+                finishLock: o.finishLock,
                 cardLanguage: (cardId) => languageOf(cardId, raw.textBands),
                 filterLanguage: o.filterLanguage,
                 artDistance: (x, y) => engine.artDistance?.(x, y) ?? Promise.resolve(null),

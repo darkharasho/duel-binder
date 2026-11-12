@@ -536,14 +536,22 @@ describe('printingsOfArt', () => {
     ygoImage: number
   }> {
     const db = await seededDb()
-    const ygoImage = (db.prepare("SELECT image_id AS id FROM card_images WHERE game = 'ygo' LIMIT 1").get() as { id: number }).id
+    const ygoImage = (
+      db.prepare("SELECT image_id AS id FROM card_images WHERE game = 'ygo' LIMIT 1").get() as {
+        id: number
+      }
+    ).id
     const card = (lang: string, oracle: string, name: string): number => {
       const id = mtgCardId(lang, oracle)
       db.prepare(
         `INSERT INTO cards (id, game, name, type, frame_type, race, "desc", updated_at)
          VALUES (?, 'mtg', ?, 'Instant', 'mtg', '', '', '2026-11-12')`
       ).run(id, name)
-      db.prepare("INSERT INTO mtg_cards (card_id, oracle_id, lang) VALUES (?, ?, ?)").run(id, oracle, lang)
+      db.prepare('INSERT INTO mtg_cards (card_id, oracle_id, lang) VALUES (?, ?, ?)').run(
+        id,
+        oracle,
+        lang
+      )
       return id
     }
     const image = (
@@ -558,10 +566,24 @@ describe('printingsOfArt', () => {
       db.prepare(
         `INSERT INTO mtg_images (image_id, scryfall_id, illustration_id, frame, border_color, full_art,
            back_image_id, art_from) VALUES (?, ?, ?, '2015', ?, 0, ?, ?)`
-      ).run(id, sid(n), o.ill ?? 'ill-strike', o.border ?? 'black', o.back ?? null, o.artFrom ?? null)
+      ).run(
+        id,
+        sid(n),
+        o.ill ?? 'ill-strike',
+        o.border ?? 'black',
+        o.back ?? null,
+        o.artFrom ?? null
+      )
       return id
     }
-    const printing = (cardId: number, lang: string, set: string, code: string, rarity: string, n: number): void => {
+    const printing = (
+      cardId: number,
+      lang: string,
+      set: string,
+      code: string,
+      rarity: string,
+      n: number
+    ): void => {
       db.prepare(
         `INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity, set_rarity_code)
          VALUES ('mtg', ?, ?, ?, ?, ?, ?)`
@@ -622,7 +644,21 @@ describe('printingsOfArt', () => {
     const strike = printingsOfArt(db, [img.xyz5], MTG)
     // The look's representative is its lowest-id English image, whichever of its ids was matched.
     expect(strike.every((p) => p.artIds?.length === 1 && p.artIds[0] === img.fra107)).toBe(true)
-    expect(printingsOfArt(db, [img.fra346], MTG).every((p) => p.artIds![0] === img.fra346)).toBe(true)
+    expect(printingsOfArt(db, [img.fra346], MTG).every((p) => p.artIds![0] === img.fra346)).toBe(
+      true
+    )
+  })
+
+  it("gives a Magic printing found by its code the printing's own art", async () => {
+    const { db, img } = await magicDb()
+    expect(printingsByCode(db, 'XYZ 5', MTG).map((p) => p.imageIds)).toEqual([
+      [img.xyz5],
+      [img.xyz5]
+    ])
+    expect(printingsByCode(db, 'FRA 346', MTG).map((p) => p.imageIds)).toEqual([
+      [img.fra346],
+      [img.fra346]
+    ])
   })
 
   it('ignores ids that are not Magic looks', async () => {

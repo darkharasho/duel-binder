@@ -6,7 +6,7 @@ import { LANGUAGES, type Language } from '../../shared/languages'
 import { parsePrice } from '../../shared/pricing'
 import type { ScanPrinting } from '../../shared/scan/types'
 import type { CollectorNumber } from '../../shared/scan/collectorNumber'
-import { gameOfId } from '../../shared/games/ids'
+import { gameOfId, mtgImageId } from '../../shared/games/ids'
 import { opPrintingImageId } from '../../shared/games/onePiece'
 import { twinPrice } from './enTwin'
 import { isMarketOnly, MARKET_ONLY_PRICE } from './priceRule'
@@ -193,9 +193,16 @@ function withImages(db: SqlDb, rows: PrintingRow[], scope: Scope, twins = false)
     .map(({ rawPrice, localName, printedRarity, rarityCode, ...r }) => {
       const twin = twinned.get(`${r.cardId}|${r.language}`)
       const cardImages = images.get(r.cardId) ?? []
-      // A One Piece printing has art of its own (a parallel's, a reprint's): only that, when the
-      // catalog has it, so art matched picks the printing and not just the card.
-      const own = gameOfId(r.cardId) === 'op' ? opPrintingImageId(r.language, rarityCode) : null
+      // A One Piece or Magic printing has art of its own (a parallel's, a reprint's): only that,
+      // when the catalog has it, so art matched picks the printing and not just the card, and a
+      // printing named by its code is added with its own art.
+      const game = gameOfId(r.cardId)
+      const own =
+        game === 'op'
+          ? opPrintingImageId(r.language, rarityCode)
+          : game === 'mtg' && rarityCode
+            ? mtgImageId(rarityCode)
+            : null
       return {
         ...r,
         price: parsePrice(rawPrice),
@@ -477,7 +484,9 @@ export function printingsOfArt(
   const lookRows = (rows: MtgImageRow[]): MtgImageRow[] =>
     rows.map((r) => (r.art_from === null ? r : sources.get(r.art_from)!)).filter(Boolean)
   const illustrations = lookRows(seeds).flatMap((r) => r.illustration_id ?? [])
-  const lone = lookRows(seeds).filter((r) => r.illustration_id === null).map((r) => r.image_id)
+  const lone = lookRows(seeds)
+    .filter((r) => r.illustration_id === null)
+    .map((r) => r.image_id)
   const candidates = [
     ...mtgImagesWhere(db, scope, 'illustration_id', illustrations),
     ...mtgImagesWhere(db, scope, 'image_id', lone)
@@ -492,7 +501,10 @@ export function printingsOfArt(
     [...shown.values()].filter((s) => s.row.art_from === null).map((s) => s.row)
   )
   const artIdsOf = new Map(
-    [...reps].map(([key, r]) => [key, r.back_image_id === null ? [r.image_id] : [r.image_id, r.back_image_id]])
+    [...reps].map(([key, r]) => [
+      key,
+      r.back_image_id === null ? [r.image_id] : [r.image_id, r.back_image_id]
+    ])
   )
   // A printing's own image, by card and (lowercase) Scryfall id.
   const own = new Map<string, { row: MtgImageRow; key: string }>()

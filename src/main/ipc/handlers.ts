@@ -30,6 +30,7 @@ import { adminTabUrl, INVOKE_CHANNELS as CHANNELS } from '@shared/ipc'
 import type { ImageCache } from '../images/cache'
 import { createDataHandlers } from './dataHandlers'
 import type { RollupRunner } from '../rollupRunner'
+import type { RollupWarmer } from '../rollupWarmer'
 import type { ScanWindowManager } from '../scanWindow'
 import type { FingerprintStore } from '../scan/fingerprints'
 import { checkOcrBands, type Ocr } from '../scan/ocr'
@@ -100,6 +101,8 @@ export interface HandlerDeps {
   ripCapture: RipCapture
   /** Builds catalog rollups off the main process; without it they're built in line. */
   rollups?: Pick<RollupRunner, 'build'>
+  /** Told which language Browse asks its filters in, so a catalog change builds those ahead. */
+  rollupWarmer?: Pick<RollupWarmer, 'browsed'>
 }
 
 /** A training photo from the renderer, checked as the portal would check it; null when it isn't one. */
@@ -166,7 +169,8 @@ export function createHandlers({
   ocr,
   adminRuns = createAdminRuns(),
   ripCapture,
-  rollups
+  rollups,
+  rollupWarmer
 }: HandlerDeps): Handlers {
   const local = (serverIds: number[]): LocalPrintings => localPrintings(db, serverIds)
   return {
@@ -175,7 +179,8 @@ export function createHandlers({
       onEdit: () => account.noteLocalEdit(),
       availableGames: () => account.games(),
       onGameChanged: emitDataChanged,
-      buildRollup: rollups && ((job) => rollups.build(job))
+      buildRollup: rollups && ((job) => rollups.build(job)),
+      browsed: rollupWarmer && ((language) => rollupWarmer.browsed(language))
     }),
     'placeholders:save': (request: unknown) => savePlaceholders(checkPlaceholderRequest(request)),
     'dex:preview': async (rows: unknown) => previewDexImport(db, dexRows(rows)),

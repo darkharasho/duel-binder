@@ -141,6 +141,13 @@ const NUDGE_ROUNDS = 2
  * 66 to 80.
  */
 const NUDGE_MAX_DISTANCE = 64
+/**
+ * The largest outline holding the first one is nudged too, every move tried, when it is at least
+ * this many times the first one's area: a borderless card held over a stack has its art's card-shaped panes outlined
+ * first, and its own outline, cut short where its edge meets fingers or the stack, matches nothing
+ * until moved (the Special Guests Consider, SPG 164, a whole-card outline 2-3.5x a pane's area).
+ */
+const NUDGE_OUTER_GROWTH = 1.5
 
 interface Line {
   theta: number
@@ -762,6 +769,29 @@ export function nudgeOutline(
   return at
 }
 
+/**
+ * The outlines nudged when nothing matched, of a frame's candidates as scored (in their order,
+ * the outline finder's likeliest first): the NUDGE_QUADS closest, and the largest that holds the
+ * first and is at least NUDGE_OUTER_GROWTH times its area, when not among them (outer, else null).
+ */
+export function nudgeStarts<T extends { quad: Quad; distance: number }>(
+  scored: readonly T[]
+): { closest: T[]; outer: T | null } {
+  const closest = [...scored].sort((a, b) => a.distance - b.distance).slice(0, NUDGE_QUADS)
+  const [first] = scored
+  if (!first) return { closest, outer: null }
+  const tol = NEST_TOLERANCE * dist(first.quad[0], first.quad[2])
+  let outer: T | null = null
+  for (const s of scored)
+    if (
+      area(s.quad) >= NUDGE_OUTER_GROWTH * area(first.quad) &&
+      (!outer || area(s.quad) > area(outer.quad)) &&
+      contains(s.quad, first.quad, tol)
+    )
+      outer = s
+  return { closest, outer: outer && !closest.includes(outer) ? outer : null }
+}
+
 /** Side of the square an art box is straightened to before it's shrunk for hashing. */
 const ART_PATCH = 128
 /**
@@ -1026,7 +1056,7 @@ export function recognizeArt(
         .map((x) => x.quad)
     const { quads, windows } = searchCandidates(cv, frame, profile)
     let best = closest(quads)
-    const outlines = [...scored].sort((a, b) => a.distance - b.distance).slice(0, NUDGE_QUADS)
+    const outlines = nudgeStarts(scored)
     // The candidate that lost to the card around an inner frame, matched again at full size too
     // when the profile looks for art windows: at PICK_WIDTH a window's card is often misjudged.
     let runnerUp: Quad | null = null
@@ -1078,10 +1108,14 @@ export function recognizeArt(
         via = 'holder'
       }
     }
-    // Still no sure match: the closest few outlines may sit a few percent off the card's edge.
+    // Still no sure match: the closest few outlines may sit a few percent off the card's edge, and
+    // the largest may be the card's own, cut short at one end (nudgeStarts).
     if (final && topDistance(final) > NUDGE_MAX_DISTANCE)
-      for (const outline of outlines) {
-        const moved = nudgeOutline(outline, pickDistance, profile.holderSearch)
+      for (const [outline, thorough] of [
+        ...outlines.closest.map((o) => [o, profile.holderSearch] as const),
+        ...(outlines.outer ? [[outlines.outer, true] as const] : [])
+      ]) {
+        const moved = nudgeOutline(outline, pickDistance, thorough)
         if (moved === outline || moved.distance > ART_MAX_DISTANCE) continue
         const nudged = ranked(moved.quad)
         if (topDistance(nudged) <= NUDGE_MAX_DISTANCE && topDistance(nudged) < topDistance(final)) {

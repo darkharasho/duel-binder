@@ -42,6 +42,7 @@ import { resolveUserData } from './userData'
 import { captureShots, SHOTS } from './dev/capture'
 import { createAccountService } from './cloud/account'
 import { createMainErrorReports, goneMessage } from './errorReports'
+import { withChromiumFallback } from './netFallback'
 import { describeError, type ErrorDetails } from '@shared/errorReports'
 import { createCloudClient } from './cloud/client'
 import { GAMES, GAME_IDS, isGameId, type GameId } from '@shared/games'
@@ -650,6 +651,19 @@ if (!gotLock) {
   })
 
   app.whenReady().then(async () => {
+    // net.fetch only works once the app is ready; everything that reaches the network is built
+    // in bootstrap, after this.
+    globalThis.fetch = withChromiumFallback(
+      globalThis.fetch.bind(globalThis),
+      (input, init) => net.fetch(input instanceof URL ? input.href : input, init),
+      (e) => {
+        const cause = e instanceof Error && e.cause instanceof Error ? e.cause : e
+        const code = (cause as { code?: unknown } | null)?.code
+        const why =
+          typeof code === 'string' ? code : cause instanceof Error ? cause.message : String(cause)
+        errorReports.capture(`Node fetch failed, using Chromium's network: ${why}`)
+      }
+    )
     try {
       await bootstrap()
     } catch (e) {

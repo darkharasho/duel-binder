@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'vitest'
-import { createNumberGate, findOpNumbers, frameNumber } from '../../src/shared/scan/onePieceNumber'
+import {
+  createNumberGate,
+  findOpNumbers,
+  frameNumber,
+  readHints
+} from '../../src/shared/scan/onePieceNumber'
 
 const P = ['EB01', 'EB04', 'OP01', 'OP05', 'OP14', 'P', 'PRB01', 'ST01', 'ST10']
 
@@ -100,5 +105,21 @@ describe('createNumberGate', () => {
     gate.push('P-001')
     gate.reset()
     expect(gate.push('P-001')).toBeNull()
+  })
+})
+
+describe('readHints', () => {
+  test.each([
+    // Real reads off the corpus that give no number.
+    ['P-073', 'OP08-073', true],
+    ['OPR-0443ED', 'OP04-044', true],
+    ['EIYNOP17', 'OP17-001', true],
+    ['P-011L', 'OP05-011', true],
+    ['NAE1100', 'OP05-073', false],
+    // A lone "P" set code is in too much text to count.
+    ['P', 'P-012', false],
+    ['', 'OP01-001', false]
+  ])('%s hints at %s: %s', (text, number, want) => {
+    expect(readHints([text], number)).toBe(want)
   })
 })

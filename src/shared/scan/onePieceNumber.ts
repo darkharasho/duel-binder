@@ -134,6 +134,21 @@ export function frameNumber(texts: readonly string[], prefixes?: readonly string
 }
 
 /**
+ * Whether a band read too broken to give a number ("P-073", "OPR-0443ED", "EIYNOP17") still
+ * points at `number` ("OP08-073"): its three card digits, with lookalike letters taken as digits,
+ * or its set code with digits ("OP17", not a lone "P"), appear in one of the texts.
+ */
+export function readHints(texts: readonly string[], number: string): boolean {
+  const [set, digits] = number.toUpperCase().split('-')
+  if (!set || !digits) return false
+  return texts.some((text) => {
+    const t = text.toUpperCase().replace(/[^A-Z0-9-]/g, '')
+    const asDigits = [...t].map((c) => asDigit(c) ?? c).join('')
+    return asDigits.includes(digits) || (/\d/.test(set) && t.includes(set))
+  })
+}
+
+/**
  * A number read off the camera is trusted once it reads on `need` tries in a row: a try that
  * reads nothing, or another number, starts the count over.
  */

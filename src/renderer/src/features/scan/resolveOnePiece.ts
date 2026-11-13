@@ -1,5 +1,5 @@
 import { LANGUAGES, type Language } from '@shared/languages'
-import { frameNumber } from '@shared/scan/onePieceNumber'
+import { frameNumber, readHints } from '@shared/scan/onePieceNumber'
 import {
   ART_FAR_DISTANCE,
   ART_MATCH_DEPTH,
@@ -21,8 +21,9 @@ import type { ResolveContext, ScanOutcome } from './resolve'
  *
  * So a frame is read as: the number, when one reads on its code bands; else the number of the
  * closest art, when it is OP_ART_MIN_MARGIN ahead of every other number's. A number read one digit
- * off confident art's, in the same set, is taken as misread (the art's number stands); one that
- * names another card than confident art otherwise is a misread one way or the other: unsure. Then the
+ * off confident art's, in the same set, or a promo "P-" number with its digits (setLost), is taken
+ * as misread (the art's number stands); one that names another card than confident art otherwise
+ * is a misread one way or the other: unsure. Then the
  * language: a picked set's, else the user's language filter, else the language the text reads
  * as, else English. Then, among that number's printings in that language (in the picked set when
  * it has some), the one whose art is closest; when another's is within OP_SAME_ART of it, or
@@ -37,7 +38,10 @@ export async function resolveOnePieceSignals(
   const artNumber = await confidentNumber(raw, ctx)
   // A read one digit off confident art in the same set is the read gone wrong: the number's
   // digits are small and soft, and art that far ahead of every other number isn't.
-  const misread = read !== null && artNumber !== null && oneDigitApart(read, artNumber)
+  const misread =
+    read !== null &&
+    artNumber !== null &&
+    (oneDigitApart(read, artNumber) || setLost(read, artNumber))
   const byRead = read && !misread ? await ctx.lookups.printingsByCode(read) : []
   if (byRead.length && artNumber !== null && artNumber !== byRead[0].setCode.toUpperCase())
     return { kind: 'unsure' }
@@ -54,6 +58,16 @@ export async function resolveOnePieceSignals(
   return top && top.distance > ART_FAR_DISTANCE ? { kind: 'none', far: true } : { kind: 'unsure' }
 }
 
+/**
+ * "P-073" read off OP08-073: the set's digits and its O lost, leaving what reads as a promo
+ * number with the card's digits.
+ */
+export function setLost(read: string, art: string): boolean {
+  const [setR, numR] = read.toUpperCase().split('-')
+  const [setA, numA] = art.toUpperCase().split('-')
+  return setR === 'P' && setA.startsWith('OP') && numR === numA
+}
+
 /** "OP13-116" and "OP13-115": one set, card numbers one digit apart. */
 export function oneDigitApart(a: string, b: string): boolean {
   const [setA, numA] = a.toUpperCase().split('-')
@@ -66,7 +80,8 @@ export function oneDigitApart(a: string, b: string): boolean {
 
 /**
  * The number of the closest artwork, when it is close enough and OP_ART_MIN_MARGIN ahead of the
- * closest artwork of any other number. An artwork missing from the catalog counts as another
+ * closest artwork of any other number, or ahead at all with the bands' read hinting at it
+ * (readHints) and not at the runner-up's. An artwork missing from the catalog counts as another
  * number. With no other number in sight, the margin is unlimited if every candidate was ranked,
  * else it runs to the last match.
  */
@@ -87,7 +102,15 @@ async function confidentNumber(raw: RawSignals, ctx: ResolveContext): Promise<st
     : raw.art.length < ART_MATCH_DEPTH
       ? Infinity
       : last.distance - top.distance
-  return margin < OP_ART_MIN_MARGIN ? null : number
+  if (margin >= OP_ART_MIN_MARGIN) return number
+  // Short of the margin, a band read too broken to give a number can still settle it: one that
+  // points at the closest art's number and not at the runner-up's ("P-073" for OP08-073).
+  const rivalNumber = rival && numberOf.get(rival.imageId)
+  const hinted =
+    margin > 0 &&
+    readHints(raw.codeTexts, number) &&
+    !(rivalNumber && readHints(raw.codeTexts, rivalNumber))
+  return hinted ? number : null
 }
 
 /** Each artwork's printed number, for the artworks a printing shows. */

@@ -83,6 +83,23 @@ describe('ScanViewport preview resizing', () => {
     expect(videoRef.current!.srcObject).toBe(stream)
   })
 
+  it('lets go of the stream on the element it replaces', async () => {
+    // The old element, still holding the live stream, was never freed: one leaked a whole
+    // video element per resize, and the phone got slower the more it scanned.
+    const { videoRef } = mount(true)
+    const first = videoRef.current!
+    act(() => report(330, 440))
+    act(() => report(585, 780))
+    await settle()
+    expect(videoRef.current).not.toBe(first)
+    expect(first.srcObject).toBeNull()
+    const second = videoRef.current!
+    act(() => report(330, 440))
+    await settle()
+    expect(second.srcObject).toBeNull()
+    expect(videoRef.current!.srcObject).toBe(stream)
+  })
+
   it('takes a new video element when the page comes back from the background', async () => {
     const { videoRef } = mount(true)
     const first = videoRef.current

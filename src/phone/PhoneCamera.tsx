@@ -74,6 +74,10 @@ function CameraBackdrop({ stream }: { stream: MediaStream | null }): React.JSX.E
     if (!video) return
     video.srcObject = stream
     if (stream) void video.play?.()?.catch(() => undefined)
+    // Replaced or gone, it lets go of the stream, or the live stream keeps it from being freed.
+    return () => {
+      video.srcObject = null
+    }
   }, [stream, shows])
   if (!stream) return null
   return (

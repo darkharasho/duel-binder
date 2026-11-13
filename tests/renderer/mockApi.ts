@@ -152,7 +152,10 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
       refreshFingerprints: vi.fn(async () => ({ state: 'missing' as const, count: 0 })),
       ocr: vi.fn(async () => []),
       language: vi.fn(async () => null),
-      readText: vi.fn(async () => [])
+      readText: vi.fn(async () => []),
+      trace: vi.fn(async () => undefined),
+      traceDir: vi.fn(async () => '/home/me/.config/duel-binder/scan-trace'),
+      openTraceDir: vi.fn(async () => undefined)
     },
     stats: {
       get: vi.fn(async () => ({

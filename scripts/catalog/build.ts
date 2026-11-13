@@ -6,7 +6,8 @@
  *   npm run catalog:job [-- --full | --dry-run | --allow-shrink | --refresh-sets | --refresh-cards | --no-pokemon | --no-onepiece | --no-onepiece-ja | --no-magic | --stage <name>]
  *
  * Env: PORTAL_URL, PORTAL_ADMIN_TOKEN (not needed for --dry-run); ONEPIECE_ART_BUDGET (a positive
- * integer) replaces the One Piece step's nightly art download budget for one run. --full ignores the base and
+ * integer) replaces the One Piece step's nightly art download budget for one run; MTG_FINGERPRINT_BUDGET
+ * (a positive integer) replaces the Magic fingerprints' nightly budget of new hashes for one run. --full ignores the base and
  * uploads every row; --dry-run refreshes and prints per-table counts without uploading or
  * touching the base. A refresh that would delete more than a sliver of any table (see
  * `findShrinks`) is refused unless --allow-shrink is passed, since every client applies the
@@ -216,6 +217,21 @@ export function onePieceArtBudget(value: string | undefined, log?: (line: string
   return ART_BUDGET
 }
 
+/**
+ * MTG_FINGERPRINT_BUDGET when it is a positive integer: the most new Magic fingerprints this run
+ * (the workflow's mtg_fingerprint_budget input), for catching up in one run; else undefined, the
+ * nightly budget (logged when it was set).
+ */
+export function magicFingerprintBudget(
+  value: string | undefined,
+  log?: (line: string) => void
+): number | undefined {
+  if (value && /^[1-9][0-9]*$/.test(value.trim())) return Number(value.trim())
+  if (value?.trim())
+    log?.(`MTG_FINGERPRINT_BUDGET="${value}" is not a positive integer; using the nightly budget`)
+  return undefined
+}
+
 /** In run order. They hand over through the files in `dir`, so one can start where the last stopped. */
 export const STAGES = [
   'ygo',
@@ -289,6 +305,9 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
         fetch: opts.imageFetch ?? opts.fetch,
         log,
         userAgent: `DuelBinder/${version} (https://github.com/darkharasho/duel-binder)`,
+        ...(game === 'mtg'
+          ? { budget: magicFingerprintBudget(process.env['MTG_FINGERPRINT_BUDGET'], log) }
+          : {}),
         // Printing scans are Yu-Gi-Oh's only.
         ...(!ygo
           ? {}

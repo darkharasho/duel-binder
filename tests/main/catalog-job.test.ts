@@ -28,6 +28,7 @@ import {
 import type { AccuracyReport } from '../../scripts/catalog/accuracy'
 import {
   findShrinks,
+  magicFingerprintBudget,
   newSetArtKeys,
   onePieceArtBudget,
   runJob as runRealJob,
@@ -1293,6 +1294,18 @@ describe('One Piece step in the nightly job', () => {
     expect(onePieceArtBudget('0500', (l) => lines.push(l))).toBe(ART_BUDGET)
     expect(lines).toEqual([
       `ONEPIECE_ART_BUDGET="0500" is not a positive integer; using ${ART_BUDGET}`
+    ])
+  })
+
+  it('MTG_FINGERPRINT_BUDGET sets the Magic fingerprint budget for one run', () => {
+    const lines: string[] = []
+    const log = (l: string): number => lines.push(l)
+    expect(magicFingerprintBudget(undefined, log)).toBeUndefined()
+    expect(magicFingerprintBudget('', log)).toBeUndefined()
+    expect(magicFingerprintBudget(' 35000 ', log)).toBe(35000)
+    expect(magicFingerprintBudget('lots', log)).toBeUndefined()
+    expect(lines).toEqual([
+      'MTG_FINGERPRINT_BUDGET="lots" is not a positive integer; using the nightly budget'
     ])
   })
 

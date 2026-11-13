@@ -12,6 +12,7 @@ import {
   ART_MATCH_DEPTH,
   ART_MAX_DISTANCE,
   PKM_ART_MIN_MARGIN,
+  PKM_ART_MAX_DISTANCE_ANY_SET,
   PKM_GUESS_NAME_LIKENESS,
   PKM_NAME_ART_LEAD,
   PKM_NAME_IN_SET_CLEAR,
@@ -94,9 +95,11 @@ async function chineseTwins(
  */
 async function artGroup(raw: RawSignals, ctx: ResolveContext): Promise<number[] | null> {
   const [top] = raw.art
-  if (!top || top.distance > ART_MAX_DISTANCE) return []
+  // No set picked: a far match with nothing else agreeing is as likely the background.
+  const max = ctx.setPrintings ? ART_MAX_DISTANCE : PKM_ART_MAX_DISTANCE_ANY_SET
+  if (!top || top.distance > max) return []
   const near = raw.art.filter(
-    (a) => a.distance <= ART_MAX_DISTANCE && a.distance <= top.distance + PKM_ART_MIN_MARGIN
+    (a) => a.distance <= max && a.distance <= top.distance + PKM_ART_MIN_MARGIN
   )
   if (near.length === raw.art.length && raw.art.length >= ART_MATCH_DEPTH) return null
   const cardOf = new Map(

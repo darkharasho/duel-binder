@@ -6,6 +6,7 @@ import {
   ART_FAR_DISTANCE,
   ART_MAX_DISTANCE,
   CARD_BACK_MAX_DISTANCE,
+  PKM_ART_MAX_DISTANCE_ANY_SET,
   PKM_ART_MIN_MARGIN,
   PKM_GUESS_REPRINT_LEAD,
   PKM_PHOTO_REPRINT_LEAD
@@ -548,6 +549,27 @@ describe('resolvePokemonSignals', () => {
     // Not even a number read names it.
     expect(await resolveSignals(raw({ art, artBack: 22, codeTexts: ['045/193'] }), ctx)).toEqual({
       kind: 'none'
+    })
+  })
+
+  it('with no set picked, a far art match alone is nothing: backgrounds find one by chance', async () => {
+    const far = (d: number): RawSignals =>
+      raw({
+        art: [
+          { imageId: 101, distance: d },
+          { imageId: 201, distance: d + 2 }
+        ]
+      })
+    const past = PKM_ART_MAX_DISTANCE_ANY_SET + 1
+    expect(past).toBeLessThanOrEqual(ART_MAX_DISTANCE)
+    expect((await resolveSignals(far(past), pkm('en'))).kind).not.toBe('recognized')
+    expect((await resolveSignals(far(past), guessing('en'))).kind).not.toBe('recognized')
+    expect(await recognized(far(PKM_ART_MAX_DISTANCE_ANY_SET), pkm('en'))).toMatchObject({
+      cardId: 1
+    })
+    // A picked set keeps the wider limit: few artworks to match by chance.
+    expect(await recognized(far(past), { ...pkm('en'), setPrintings: PKM })).toMatchObject({
+      cardId: 1
     })
   })
 

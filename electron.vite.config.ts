@@ -1,9 +1,11 @@
+import { readFileSync } from 'fs'
 import { resolve } from 'path'
 import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
 const shared = resolve('src/shared')
+const { version } = JSON.parse(readFileSync(resolve('package.json'), 'utf8')) as { version: string }
 
 export default defineConfig({
   main: {
@@ -24,6 +26,8 @@ export default defineConfig({
         '@techstark/opencv-js': resolve('vendor/opencv/opencv.js')
       }
     },
+    // Contribute labels reuse the phone's capture code, which reads the app version from here.
+    define: { __APP_VERSION__: JSON.stringify(version) },
     plugins: [react(), tailwindcss()]
   }
 })

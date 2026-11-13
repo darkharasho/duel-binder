@@ -88,6 +88,7 @@ const EDITS: readonly DataChannel[] = [
   'sessions:record',
   'sessions:setHidden',
   'sessions:delete',
+  'sessions:removeCard',
   'favourites:set',
   'binders:save',
   'binders:remove',

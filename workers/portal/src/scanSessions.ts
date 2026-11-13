@@ -113,8 +113,11 @@ export function applySessionPush(
     let s = pushed
     if (existing) {
       let current = wire(existing)
-      // A price once set never changes, whichever push is newer.
-      s = { ...pushed, cards: mergeSessionCards(current.cards, pushed.cards) }
+      // A price once set never changes, whichever push is newer; the newer edit's card list stands.
+      s = {
+        ...pushed,
+        cards: mergeSessionCards(current.cards, pushed.cards, replaces(pushed, current))
+      }
       if (sameSession(current, s)) return { uid: s.uid, status: 'applied' }
       if (!replaces(s, current)) {
         // An older or same-time push still brings its prices (a fill leaves the edit time as it

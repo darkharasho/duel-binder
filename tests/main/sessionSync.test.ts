@@ -15,6 +15,7 @@ import {
   fillScanSessionPrices,
   listScanSessions,
   recordScanSession,
+  removeScanSessionCard,
   setScanSessionHidden
 } from '../../src/main/repo/scanSessions'
 import type { ScanSessionCard, WireScanSession } from '../../src/shared/scanSessions'
@@ -334,5 +335,26 @@ describe('scan session sync', () => {
     expect(s.friendsVisible).toBe(false)
     expect(s.updatedAt).toBe('2099-01-01T00:00:00.000Z')
     expect(rows(a)).toEqual([expect.objectContaining({ dirty: 0 })])
+  })
+
+  it('a card removed on one device goes on the other, and an older edit never brings it back', async () => {
+    const stray = card({ pkey: 'en|1|ABC-002|Common', addedAt: 2000 })
+    recordScanSession(a, { uid: 's1', game: 'ygo', cards: [card(), stray] })
+    stamp(a, T0)
+    await sync(a)
+    const b = await device()
+    await sync(b)
+    // B hides the session at T1 but has not pushed yet; A removes the stray at T2.
+    setScanSessionHidden(b, 's1', true)
+    stamp(b, T1)
+    removeScanSessionCard(a, 's1', stray)
+    stamp(a, T2)
+    await sync(a)
+    expect(JSON.parse(serverRow().cards as string)).toHaveLength(1)
+    await sync(b)
+    expect(JSON.parse(serverRow().cards as string)).toHaveLength(1)
+    expect(listScanSessions(b, 'ygo').map((s) => s.cards.map((c) => c.pkey))).toEqual([
+      [card().pkey]
+    ])
   })
 })

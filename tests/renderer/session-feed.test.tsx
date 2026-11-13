@@ -177,9 +177,10 @@ describe('the session feed', () => {
   it('opens a card on click', async () => {
     const c = card(3)
     const onOpen = vi.fn()
-    feed([session([c])], true, onOpen)
+    const s = session([c])
+    feed([s], true, onOpen)
     await userEvent.click(screen.getByRole('button', { name: /^Card \d+/ }))
-    expect(onOpen).toHaveBeenCalledWith(c)
+    expect(onOpen).toHaveBeenCalledWith(c, s)
   })
 
   it('lists the newest session first and never says night', () => {

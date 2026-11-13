@@ -12,7 +12,7 @@ import { sessionsKey } from './sessionsKey'
 export function SessionsPage(): React.JSX.Element {
   const { game } = useGame()
   const sessions = useQuery({ queryKey: sessionsKey(game), queryFn: () => api.sessions.list(game) })
-  const [open, setOpen] = useState<ScanSessionCard | null>(null)
+  const [open, setOpen] = useState<{ card: ScanSessionCard; uid: string } | null>(null)
   return (
     <div className="space-y-4 p-8 max-md:p-4">
       <PageHeader>
@@ -20,9 +20,11 @@ export function SessionsPage(): React.JSX.Element {
         <p className="text-sm text-muted-foreground">Cards you added from the scanner</p>
       </PageHeader>
       {sessions.isSuccess && (
-        <SessionFeed sessions={sessions.data} owner variant="desktop" onOpenCard={setOpen} />
+        <SessionFeed sessions={sessions.data} owner variant="desktop" onOpenCard={(card, s) => setOpen({ card, uid: s.uid })} />
       )}
-      {open && <SessionCardSheet card={open} onClose={() => setOpen(null)} />}
+      {open && (
+        <SessionCardSheet card={open.card} sessionUid={open.uid} onClose={() => setOpen(null)} />
+      )}
     </div>
   )
 }

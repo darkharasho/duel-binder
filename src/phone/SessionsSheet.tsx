@@ -18,7 +18,7 @@ export function SessionsSheet({
 }): React.JSX.Element {
   useBackHandler(true, onClose)
   const sessions = useQuery({ queryKey: sessionsKey(game), queryFn: () => api.sessions.list(game) })
-  const [open, setOpen] = useState<ScanSessionCard | null>(null)
+  const [open, setOpen] = useState<{ card: ScanSessionCard; uid: string } | null>(null)
   return (
     <>
       <div
@@ -45,11 +45,13 @@ export function SessionsSheet({
         </header>
         <div className="min-h-0 flex-1 overflow-auto overscroll-contain px-3 pb-6">
           {sessions.isSuccess && (
-            <SessionFeed sessions={sessions.data} owner variant="phone" onOpenCard={setOpen} />
+            <SessionFeed sessions={sessions.data} owner variant="phone" onOpenCard={(card, s) => setOpen({ card, uid: s.uid })} />
           )}
         </div>
       </section>
-      {open && <SessionCardSheet card={open} onClose={() => setOpen(null)} />}
+      {open && (
+        <SessionCardSheet card={open.card} sessionUid={open.uid} onClose={() => setOpen(null)} />
+      )}
     </>
   )
 }

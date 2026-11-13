@@ -7,6 +7,7 @@ import {
   mergeSessionCards,
   listScanSessions,
   recordScanSession,
+  removeScanSessionCard,
   sessionCardsOf,
   setScanSessionHidden
 } from '../../src/main/repo/scanSessions'
@@ -304,7 +305,57 @@ describe('mergeSessionCards', () => {
     expect(mergeSessionCards([c(null)], [c(5, { addedAt: 11 })])).toEqual([c(null)])
     expect(mergeSessionCards([c(null)], [c(5, { pkey: 'en|1|A-002|Common' })])).toEqual([c(null)])
   })
+  it('takes the newer list when the lists differ, carrying prices over by card', () => {
+    const removed = [c(null, { addedAt: 11 })]
+    const stored = [c(5), c(7, { addedAt: 11 })]
+    expect(mergeSessionCards(stored, removed, true)).toEqual([c(7, { addedAt: 11 })])
+    expect(mergeSessionCards(stored, removed, false)).toEqual(stored)
+    expect(mergeSessionCards([c(1, { quantity: 2 })], [c(null)], true)).toEqual([c(1)])
+  })
   it('matches cards by pkey, as each device has its own printing ids', () => {
     expect(mergeSessionCards([c(null)], [c(5, { printingId: 77, photoId: 77 })])).toEqual([c(5)])
+  })
+})
+
+describe('removeScanSessionCard', () => {
+  const two = [card(), card({ pkey: 'en|1|ABC-002|Common', addedAt: 2000, quantity: 2 })]
+  const key = (c: ScanSessionCard): { pkey: string; imageId: number; addedAt: number } => ({
+    pkey: c.pkey,
+    imageId: c.imageId,
+    addedAt: c.addedAt
+  })
+  const cardsOf = (db: Awaited<ReturnType<typeof seededDb>>): ScanSessionCard[] =>
+    JSON.parse(
+      (db.prepare("SELECT cards FROM scan_sessions WHERE uid = 'a'").get() as { cards: string })
+        .cards
+    ) as ScanSessionCard[]
+  const at = (db: Awaited<ReturnType<typeof seededDb>>): string =>
+    (db.prepare("SELECT updated_at FROM scan_sessions WHERE uid = 'a'").get() as { updated_at: string })
+      .updated_at
+
+  it('takes one copy off, then the card, and moves the edit time', async () => {
+    const db = await seededDb()
+    recordScanSession(db, { uid: 'a', game: 'ygo', cards: two })
+    db.prepare("UPDATE scan_sessions SET updated_at = '2020-01-01T00:00:00.000Z'").run()
+    removeScanSessionCard(db, 'a', key(two[1]))
+    expect(cardsOf(db).map((c) => c.quantity)).toEqual([1, 1])
+    expect(at(db) > '2020-01-01T00:00:00.000Z').toBe(true)
+    removeScanSessionCard(db, 'a', key(two[1]))
+    expect(cardsOf(db)).toEqual([two[0]])
+  })
+  it('deletes the session with its last card, and leaves the collection alone', async () => {
+    const db = await seededDb()
+    const owned = db.prepare('SELECT count(*) AS n FROM collection_entries').get()
+    recordScanSession(db, { uid: 'a', game: 'ygo', cards: [card()] })
+    removeScanSessionCard(db, 'a', key(card()))
+    expect(listScanSessions(db, 'ygo')).toEqual([])
+    expect(db.prepare('SELECT count(*) AS n FROM collection_entries').get()).toEqual(owned)
+  })
+  it('does nothing for a card or session it does not hold', async () => {
+    const db = await seededDb()
+    recordScanSession(db, { uid: 'a', game: 'ygo', cards: two })
+    removeScanSessionCard(db, 'a', { ...key(two[0]), addedAt: 1 })
+    removeScanSessionCard(db, 'b', key(two[0]))
+    expect(cardsOf(db)).toEqual(two)
   })
 })

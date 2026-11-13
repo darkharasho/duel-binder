@@ -228,7 +228,8 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       record: unavailable,
       list: unavailable,
       setHidden: unavailable,
-      delete: unavailable
+      delete: unavailable,
+      removeCard: unavailable
     },
     favourites: {
       list: call('favourites:list'),

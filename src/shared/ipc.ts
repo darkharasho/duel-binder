@@ -160,6 +160,8 @@ export interface Api {
     /** Hides a session from friends, or shows it again. */
     setHidden(uid: string, hidden: boolean): Promise<void>
     delete(uid: string): Promise<void>
+    /** Takes one copy of a card out of a session (never the collection); the last card deletes it. */
+    removeCard(uid: string, card: { pkey: string; imageId: number; addedAt: number }): Promise<void>
   }
   /** The cards this account hearted, in the game shown; private, so friends never see them. */
   favourites: {
@@ -481,6 +483,7 @@ export const INVOKE_CHANNELS = [
   'sessions:list',
   'sessions:setHidden',
   'sessions:delete',
+  'sessions:removeCard',
   'favourites:list',
   'favourites:set',
   'binders:list',

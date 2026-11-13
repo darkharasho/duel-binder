@@ -74,29 +74,45 @@ export function sessionCardsOf(db: SqlDb, v: unknown): ScanSessionCard[] {
   return named.length === 0 ? [] : checkSessionCards(named)
 }
 
-/** Whether two lists are the same cards in the same order (printing by pkey, image, added time). */
+/** The key a session card is known by on every device: its printing, image and added time. */
+const cardKey = (c: Pick<ScanSessionCard, 'pkey' | 'imageId' | 'addedAt'>): string => `${c.pkey}\u0000${c.imageId}\u0000${c.addedAt}`
+
+/** Whether two lists are the same cards in the same order (printing by pkey, image, added time, copies). */
 export function sameSessionCardList(a: ScanSessionCard[], b: ScanSessionCard[]): boolean {
   return (
     a.length === b.length &&
-    a.every((c, i) => {
-      const n = b[i]
-      return c.pkey === n.pkey && c.imageId === n.imageId && c.addedAt === n.addedAt
-    })
+    a.every((c, i) => cardKey(c) === cardKey(b[i]) && c.quantity === b[i].quantity)
   )
 }
 
 /**
- * Combines a stored session's cards with an incoming copy of the same session: a price once set is
- * never changed, a stored null takes the incoming price. A session's cards never change otherwise,
- * so lists that differ in length or card identity (pkey, image, added time) keep the stored ones.
+ * Combines a stored session's cards with an incoming copy of the same session. A price once set is
+ * never changed; a null takes the other copy's price. When the lists differ (an owner removed a
+ * card), the newer edit's list stands: `incomingNewer` says whether that is the incoming one.
+ * Prices then carry over between the lists by card key, where the key names one card only.
  * Printing ids aren't compared: each device has its own.
  */
 export function mergeSessionCards(
   stored: ScanSessionCard[],
-  incoming: ScanSessionCard[]
+  incoming: ScanSessionCard[],
+  incomingNewer = false
 ): ScanSessionCard[] {
-  if (!sameSessionCardList(stored, incoming)) return stored
-  return stored.map((c, i) => (c.price === null ? { ...c, price: incoming[i].price } : c))
+  if (sameSessionCardList(stored, incoming))
+    return stored.map((c, i) => (c.price === null ? { ...c, price: incoming[i].price } : c))
+  const [base, other] = incomingNewer ? [incoming, stored] : [stored, incoming]
+  const prices = new Map<string, number | null>()
+  const seen = new Set<string>()
+  for (const c of other) {
+    const k = cardKey(c)
+    if (seen.has(k)) prices.delete(k)
+    else if (c.price !== null) prices.set(k, c.price)
+    seen.add(k)
+  }
+  return base.map((c) => {
+    if (c.price !== null) return c
+    const price = prices.get(cardKey(c))
+    return price === undefined || price === null ? c : { ...c, price }
+  })
 }
 
 /** Records one Add as a session, visible to friends. Does nothing for a uid already held or no cards. */
@@ -187,6 +203,38 @@ export function setScanSessionHidden(
     `UPDATE scan_sessions SET friends_visible = ?, updated_at = ?, ${touch}
      WHERE ${ownerCol} = ${owner} AND uid = ? AND deleted_at IS NULL`
   ).run(hidden ? 0 : 1, new Date().toISOString(), uid)
+}
+
+/**
+ * Takes one copy of a card out of a session (the card goes when its last copy does), for a scan
+ * the owner never meant. The collection is left as it is. A session with no cards left is deleted.
+ * The card is named by its key (pkey, image, added time), as printing ids differ by device.
+ */
+export function removeScanSessionCard(
+  db: SqlDb,
+  uid: string,
+  card: { pkey: string; imageId: number; addedAt: number },
+  scope: Scope = LOCAL
+): void {
+  const { ownerCol, owner, touch } = scope.sessions
+  const row = db
+    .prepare(
+      `SELECT cards FROM scan_sessions WHERE ${ownerCol} = ${owner} AND uid = ? AND deleted_at IS NULL`
+    )
+    .get(uid) as { cards: string } | undefined
+  if (!row) return
+  const cards = JSON.parse(row.cards) as ScanSessionCard[]
+  const key = cardKey(card)
+  const at = cards.findIndex((c) => cardKey(c) === key)
+  if (at < 0) return
+  const next = cards.flatMap((c, i) =>
+    i !== at ? [c] : c.quantity > 1 ? [{ ...c, quantity: c.quantity - 1 }] : []
+  )
+  if (next.length === 0) return deleteScanSession(db, uid, scope)
+  db.prepare(
+    `UPDATE scan_sessions SET cards = ?, updated_at = ?, ${touch}
+     WHERE ${ownerCol} = ${owner} AND uid = ? AND deleted_at IS NULL`
+  ).run(JSON.stringify(next), new Date().toISOString(), uid)
 }
 
 /** Deletes a session by tombstone, so the deletion can sync. */

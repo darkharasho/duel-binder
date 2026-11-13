@@ -177,6 +177,30 @@ describe('resolveOnePieceSignals', () => {
     expect((await recognized(raw({ art: clear }))).printingId).toBe(12)
   })
 
+  it('takes art short of the margin when a broken read hints at its number only', async () => {
+    const close = art([102, 20], [301, 20 + OP_ART_MIN_MARGIN - 1])
+    // "OPI-12O": no number reads, but its digits are OP01-120's.
+    expect((await recognized(raw({ art: close, codeTexts: ['OPI-12O'] }))).printingId).toBe(12)
+    // Hinting at the runner-up's too settles nothing, nor does a tie.
+    const both = raw({ art: close, codeTexts: ['120 | 044'] })
+    expect((await resolveSignals(both, ctx())).kind).toBe('unsure')
+    const tie = raw({ art: art([102, 20], [301, 20]), codeTexts: ['OPI-12O'] })
+    expect((await resolveSignals(tie, ctx())).kind).toBe('unsure')
+  })
+
+  it('takes confident art over a promo "P-" read with its digits (the set lost)', async () => {
+    const promo = [...PRINTINGS, P(41, 4, 'en', 'P-120', 'Promotion card', 'P', 401)]
+    const c = ctx({
+      lookups: {
+        ...lookups,
+        printingsByCode: async (code) =>
+          promo.filter((p) => p.setCode.toUpperCase() === code.toUpperCase())
+      }
+    })
+    const item = await recognized(raw({ art: ALT_ART, codeTexts: ['P-120'] }), c)
+    expect(item).toMatchObject({ printingId: 12, via: 'art' })
+  })
+
   it('counts printings of one number as the same art within OP_SAME_ART', async () => {
     const apart = art([101, 10], [103, 11 + OP_SAME_ART], [301, 90])
     expect((await recognized(raw({ art: apart }))).flag).toBeNull()

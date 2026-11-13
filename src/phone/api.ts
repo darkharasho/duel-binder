@@ -294,6 +294,9 @@ export function createPhoneApi(deps: {
     binders: dataPart('binders'),
     scan: {
       debugFrame: async () => undefined,
+      trace: async () => undefined,
+      traceDir: async () => '',
+      openTraceDir: async () => undefined,
       ...dataPart('scan'),
       fingerprints: (game) => store.fingerprints(game),
       fingerprintRefs: () => store.fingerprintRefs(),

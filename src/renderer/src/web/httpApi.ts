@@ -247,6 +247,9 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
     },
     scan: {
       debugFrame: async () => undefined,
+      trace: async () => undefined,
+      traceDir: async () => '',
+      openTraceDir: async () => undefined,
       printingsByCode: scanUnavailable,
       printingsByNumber: scanUnavailable,
       printingsForSet: scanUnavailable,

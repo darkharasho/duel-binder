@@ -174,7 +174,11 @@ describe('scan trace (renderer)', () => {
 
   it('sampler', () => {
     const s = createTraceSampler()
-    expect([1, 2, 3].map(() => s.take(false, 'none').line)).toEqual([true, false, false])
+    expect([1, 2, 3].map(() => s.take(false, 'none'))).toEqual([
+      { line: true, jpeg: true },
+      { line: false, jpeg: false },
+      { line: false, jpeg: false }
+    ])
     expect([1, 2, 3, 4].map(() => s.take(true, 'unsure').jpeg)).toEqual([true, false, true, false])
     expect(s.take(true, 'recognized')).toEqual({ line: true, jpeg: true })
     expect(s.take(false, 'none').line).toBe(true)

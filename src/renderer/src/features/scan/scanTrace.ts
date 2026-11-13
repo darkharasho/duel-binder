@@ -155,8 +155,8 @@ export function traceLine(f: TraceFrame): string {
 
 /**
  * Which frames are traced: every frame with a card found, and a stretch of frames with none only
- * once. The JPEG is kept on every 3rd found frame and on any found frame whose outcome differs
- * from the last traced frame's.
+ * once, with its JPEG (a card the scanner can't outline shows there). A found frame's JPEG is kept
+ * on every 3rd one and on any whose outcome differs from the last traced frame's.
  */
 export function createTraceSampler(): {
   take(found: boolean, outcome: string): { line: boolean; jpeg: boolean }
@@ -170,7 +170,7 @@ export function createTraceSampler(): {
         const line = lastFound
         lastFound = false
         if (line) last = outcome
-        return { line, jpeg: false }
+        return { line, jpeg: line }
       }
       lastFound = true
       foundCount++

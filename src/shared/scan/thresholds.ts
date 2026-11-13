@@ -6,6 +6,12 @@ export const ART_MAX_DISTANCE = 80
 /** Largest art distance accepted when the lookup is restricted to the picked set. */
 export const ART_MAX_DISTANCE_IN_SET = 80
 /**
+ * Pokémon with no set picked: largest art distance accepted. Over every Pokémon artwork a desk, a
+ * card back or another game's card finds one within 80 by chance (76-80 on background frames);
+ * 74 dropped 4/4 background and 34/36 other-game false hits for 1 net real photo on the gate.
+ */
+export const PKM_ART_MAX_DISTANCE_ANY_SET = 74
+/**
  * Distance of the closest artwork of a different card minus the best distance, needed to trust
  * the best.
  */

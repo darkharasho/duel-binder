@@ -56,6 +56,7 @@ import {
   fillScanSessionPrices,
   listScanSessions,
   recordScanSession,
+  removeScanSessionCard,
   setScanSessionHidden,
   sessionCardsOf
 } from '../repo/scanSessions'
@@ -88,6 +89,7 @@ export const DATA_CHANNELS = [
   'sessions:list',
   'sessions:setHidden',
   'sessions:delete',
+  'sessions:removeCard',
   'favourites:list',
   'favourites:set',
   'binders:list',
@@ -252,6 +254,16 @@ export function createDataHandlers({
     'sessions:setHidden': async (uid: string, hidden: boolean) =>
       edited(setScanSessionHidden(db, uid, hidden === true)),
     'sessions:delete': async (uid: string) => edited(deleteScanSession(db, uid)),
+    'sessions:removeCard': async (
+      uid: string,
+      card: { pkey: unknown; imageId: unknown; addedAt: unknown }
+    ) => {
+      if (typeof uid !== 'string' || !uid) throw new Error('uid must be text')
+      const { pkey, imageId, addedAt } = card ?? {}
+      if (typeof pkey !== 'string' || typeof imageId !== 'number' || typeof addedAt !== 'number')
+        throw new Error('card must name pkey, imageId and addedAt')
+      return edited(removeScanSessionCard(db, uid, { pkey, imageId, addedAt }))
+    },
     'favourites:list': async () => listFavourites(db),
     'favourites:set': async (cardId: number, on: boolean) =>
       edited(setFavourite(db, wholeNumber(cardId, 'cardId'), on)),

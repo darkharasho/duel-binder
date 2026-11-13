@@ -108,7 +108,7 @@ export function SessionBlock({
   session: ScanSession
   owner: boolean
   variant: 'phone' | 'desktop'
-  onOpenCard: (card: ScanSessionCard) => void
+  onOpenCard: (card: ScanSessionCard, session: ScanSession) => void
 }): React.JSX.Element {
   const qc = useQueryClient()
   const [ref, columns] = useColumns()
@@ -201,7 +201,7 @@ export function SessionBlock({
             key={sessionCardKey(c)}
             card={c}
             ring={ringed.has(sessionCardKey(c))}
-            onOpen={() => onOpenCard(c)}
+            onOpen={() => onOpenCard(c, session)}
           />
         ))}
         {collapsed && (

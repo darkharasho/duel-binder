@@ -1204,8 +1204,10 @@ export function applyRemoteSession(db: SqlDb, owner: number, s: WireScanSession)
     return true
   }
   const local = sessionToWire(row)
-  const merged = mergeSessionCards(local.cards, s.cards)
-  if (row.dirty === 1 && !replaces(s, local)) {
+  // A clean row takes the server's list; a dirty one only a newer edit's (a card removed).
+  const serverWins = row.dirty === 0 || replaces(s, local)
+  const merged = mergeSessionCards(local.cards, s.cards, serverWins)
+  if (!serverWins) {
     // Our newer edit stands, but a price the server has and we lack is still taken.
     if (sameCards(merged, local.cards)) return false
     db.prepare('UPDATE scan_sessions SET cards = ? WHERE owner_id = ? AND uid = ?').run(

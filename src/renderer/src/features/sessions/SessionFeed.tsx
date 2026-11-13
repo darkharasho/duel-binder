@@ -12,7 +12,7 @@ export function SessionFeed({
   sessions: ScanSession[]
   owner: boolean
   variant: 'phone' | 'desktop'
-  onOpenCard: (card: ScanSessionCard) => void
+  onOpenCard: (card: ScanSessionCard, session: ScanSession) => void
 }): React.JSX.Element {
   const ordered = useMemo(
     () => [...sessions].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),

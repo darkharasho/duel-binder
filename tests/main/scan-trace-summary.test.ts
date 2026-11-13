@@ -74,6 +74,12 @@ describe('trace summary', () => {
     expect(reasonOf(s, 'art-not-in-file')).toBeUndefined()
   })
 
+  it('lookup-error', () => {
+    const s = summarize([line({ outcome: 'error', error: 'timed out' })], has([]), imagesOf)
+    expect(reasonOf(s, 'lookup-error')).toMatchObject({ frames: ['#1'], errors: ['timed out'] })
+    expect(reasonOf(s, 'art-far')).toBeUndefined()
+  })
+
   it('unsure', () => {
     const s = summarize([line({ outcome: 'unsure' })], has([]), imagesOf)
     expect(reasonOf(s, 'unsure')?.frames).toEqual(['#1'])

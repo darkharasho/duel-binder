@@ -166,6 +166,11 @@ describe('scan trace (renderer)', () => {
     expect(typeof parsed['t']).toBe('number')
   })
 
+  it('traceLine outcome error', () => {
+    const parsed = JSON.parse(traceLine(frame({ error: 'timed out' })))
+    expect(parsed).toMatchObject({ outcome: 'error', error: 'timed out' })
+  })
+
   it('traceLine outcome far', () => {
     const parsed = JSON.parse(traceLine(frame({ outcome: { kind: 'none', far: true } })))
     expect(parsed.outcome).toBe('far')

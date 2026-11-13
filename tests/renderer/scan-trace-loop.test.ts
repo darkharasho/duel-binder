@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { useScanLoop } from '@/features/scan/useScanLoop'
+import { traceSnapshot, useScanLoop } from '@/features/scan/useScanLoop'
 import { setScanTraceOn } from '@/features/scan/scanTrace'
 import { createMockApi } from './mockApi'
 import { codeFrame, fakeEngine, NOTHING, printing, stubVideo, type FakeEngine } from './scanFakes'
@@ -14,6 +14,10 @@ describe('scan trace in the scan loop', () => {
     vi.stubGlobal(
       'OffscreenCanvas',
       class {
+        constructor(
+          public width: number,
+          public height: number
+        ) {}
         getContext(): { drawImage(): void } {
           return { drawImage: () => {} }
         }
@@ -106,5 +110,53 @@ describe('scan trace in the scan loop', () => {
     await run(1000)
     expect(engine.analyze.mock.calls.length).toBeGreaterThan(frames)
     expect(window.api.scan.trace).toHaveBeenCalled()
+  })
+
+  it('stops tracing for the session once main refuses', async () => {
+    setScanTraceOn(true)
+    const trace = vi.fn(async () => {
+      throw new Error('Not found')
+    })
+    window.api = createMockApi({
+      scan: { printingsByCode: vi.fn(async () => [printing()]), trace }
+    })
+    const engine = fakeEngine(() => codeFrame('LOB-EN005'))
+    loop(engine)
+    await run(1000)
+    const sent = trace.mock.calls.length
+    const frames = engine.analyze.mock.calls.length
+    expect(sent).toBeGreaterThan(0)
+    await run(2000)
+    expect(engine.analyze.mock.calls.length).toBeGreaterThan(frames)
+    expect(trace.mock.calls.length).toBe(sent)
+  })
+
+  it('traces a frame whose lookups failed', async () => {
+    setScanTraceOn(true)
+    window.api = createMockApi({
+      scan: {
+        printingsByCode: vi.fn(async () => {
+          throw new Error('db gone')
+        })
+      }
+    })
+    loop(fakeEngine(() => codeFrame('LOB-EN005')))
+    await run(1000)
+    const lines = (window.api.scan.trace as ReturnType<typeof vi.fn>).mock.calls.map(
+      (c) => JSON.parse(c[1] as string) as Record<string, unknown>
+    )
+    const failed = lines.find((l) => l['outcome'] === 'error')
+    expect(failed).toBeDefined()
+    expect(failed!['error']).toBe('db gone')
+    expect(failed!['calls']).toEqual(
+      expect.arrayContaining([expect.objectContaining({ m: 'printingsByCode', error: 'db gone' })])
+    )
+  })
+
+  it('keeps a snapshot at most 1920 wide', () => {
+    const big = traceSnapshot({ width: 3840, height: 2160 } as ImageBitmap)
+    expect([big!.width, big!.height]).toEqual([1920, 1080])
+    const small = traceSnapshot({ width: 1280, height: 720 } as ImageBitmap)
+    expect([small!.width, small!.height]).toEqual([1280, 720])
   })
 })

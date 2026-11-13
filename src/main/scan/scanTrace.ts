@@ -1,6 +1,8 @@
-import { appendFile, mkdir, readdir, rm, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type Database from 'better-sqlite3'
+
+const MB = 1024 * 1024
 
 /** A scan page session: its ISO start time with `:` and `.` made `-`. */
 export const TRACE_SESSION = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z$/
@@ -16,22 +18,30 @@ export interface ScanTraceWriter {
 
 /**
  * The admin scan trace on disk: one folder per scan page session, `trace.jsonl` plus `NNNN.jpg`.
- * Keeps the newest `maxSessions` folders and at most `maxFrames` JPEGs in each; lines go on past it.
- * Nothing here leaves the machine.
+ * Keeps the newest `maxSessions` folders, and older ones only while all of them stay within
+ * `maxTotalBytes`. A session keeps at most `maxFrames` JPEGs (lines go on past it), none over
+ * `maxJpegBytes`, and nothing more once it holds `maxSessionBytes`. Nothing here leaves the machine.
  */
 export function createScanTrace({
   root,
   maxSessions = 20,
   maxFrames = 400,
+  maxJpegBytes = 4 * MB,
+  maxSessionBytes = 1024 * MB,
+  maxTotalBytes = 2048 * MB,
   open: openPath
 }: {
   root: string
   maxSessions?: number
   maxFrames?: number
+  maxJpegBytes?: number
+  maxSessionBytes?: number
+  maxTotalBytes?: number
   /** Opens a folder (Electron's `shell.openPath`). */
   open?: (path: string) => Promise<unknown>
 }): ScanTraceWriter {
   const frames = new Map<string, number>()
+  const bytes = new Map<string, number>()
   // Writes run one at a time so lines and frame numbers keep their order.
   let queue: Promise<unknown> = Promise.resolve()
 
@@ -41,10 +51,20 @@ export function createScanTrace({
     await mkdir(dir, { recursive: true })
     const files = await readdir(dir)
     frames.set(session, files.filter((f) => f.endsWith('.jpg')).length)
-    const sessions = (await readdir(root)).filter((f) => TRACE_SESSION.test(f)).sort()
-    for (const old of sessions.slice(0, Math.max(0, sessions.length - maxSessions))) {
-      await rm(join(root, old), { recursive: true, force: true })
-      frames.delete(old)
+    bytes.set(session, await sizeOf(dir))
+    // Oldest first; the session being opened is never pruned, even if its clock reads earlier.
+    const others = (await readdir(root))
+      .filter((f) => TRACE_SESSION.test(f) && f !== session)
+      .sort()
+    const sizes = await Promise.all(others.map((f) => sizeOf(join(root, f))))
+    let total = sizes.reduce((a, b) => a + b, bytes.get(session) ?? 0)
+    let count = others.length + 1
+    for (let i = 0; i < others.length && (count > maxSessions || total > maxTotalBytes); i++) {
+      await rm(join(root, others[i]!), { recursive: true, force: true })
+      frames.delete(others[i]!)
+      bytes.delete(others[i]!)
+      total -= sizes[i]!
+      count--
     }
     return dir
   }
@@ -56,17 +76,20 @@ export function createScanTrace({
   ): Promise<string | null> {
     if (!TRACE_SESSION.test(session)) throw new Error('Bad trace session')
     const dir = await open(session)
-    let frame: string | null = null
     const n = frames.get(session) ?? 0
-    if (jpeg && n < maxFrames) {
-      frame = `${String(n).padStart(4, '0')}.jpg`
+    const used = bytes.get(session) ?? 0
+    const keep = !!jpeg && n < maxFrames && jpeg.byteLength <= maxJpegBytes
+    const frame = keep ? `${String(n).padStart(4, '0')}.jpg` : null
+    const text = `${JSON.stringify(frame ? { ...line, frame } : line)}\n`
+    const size = Buffer.byteLength(text) + (keep ? jpeg.byteLength : 0)
+    // A full session takes nothing more.
+    if (used + size > maxSessionBytes) return null
+    bytes.set(session, used + size)
+    if (frame) {
       frames.set(session, n + 1)
-      await writeFile(join(dir, frame), Buffer.from(jpeg))
+      await writeFile(join(dir, frame), Buffer.from(jpeg!))
     }
-    await appendFile(
-      join(dir, 'trace.jsonl'),
-      `${JSON.stringify(frame ? { ...line, frame } : line)}\n`
-    )
+    await appendFile(join(dir, 'trace.jsonl'), text)
     return frame
   }
 
@@ -82,6 +105,20 @@ export function createScanTrace({
       return next
     }
   }
+}
+
+/** Bytes of the files in a folder (a session's folder has no subfolders). */
+async function sizeOf(dir: string): Promise<number> {
+  const files = await readdir(dir).catch(() => [] as string[])
+  const sizes = await Promise.all(
+    files.map((f) =>
+      stat(join(dir, f)).then(
+        (s) => s.size,
+        () => 0
+      )
+    )
+  )
+  return sizes.reduce((a, b) => a + b, 0)
 }
 
 /** The card name and up to 3 set codes of each image, in the order given; unknown ids left out. */

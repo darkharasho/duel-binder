@@ -82,6 +82,8 @@ export interface TraceFrame {
   reads: { language?: unknown; localName?: unknown }
   fpCount: number
   ms: Record<string, number>
+  /** The frame's lookups failed or timed out: its outcome is 'error'. */
+  error?: string
 }
 
 type OutcomeName = 'none' | 'far' | 'unsure' | 'recognized'
@@ -111,7 +113,8 @@ export function traceLine(f: TraceFrame): string {
     fpCount: f.fpCount,
     calls: f.calls,
     reads: f.reads,
-    outcome: outcomeName(f.outcome),
+    outcome: f.error === undefined ? outcomeName(f.outcome) : 'error',
+    ...(f.error !== undefined && { error: f.error }),
     ...(item && {
       card: {
         cardId: item.cardId,

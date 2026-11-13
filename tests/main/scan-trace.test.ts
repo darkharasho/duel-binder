@@ -50,6 +50,37 @@ describe('scan trace writer', () => {
     ])
   })
 
+  it('drops a JPEG over maxJpegBytes but keeps its line', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'trace-'))
+    const w = createScanTrace({ root, maxJpegBytes: 3 })
+    await expect(w.write(S1, { seq: 1 }, jpeg())).resolves.toBeNull()
+    expect(lines(root, S1)).toEqual([{ seq: 1 }])
+  })
+
+  it('stops writing a session past maxSessionBytes', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'trace-'))
+    const w = createScanTrace({ root, maxSessionBytes: 40 })
+    await w.write(S1, { seq: 1 }, jpeg())
+    await w.write(S1, { seq: 2, pad: 'x'.repeat(40) })
+    await w.write(S1, { seq: 3 }, jpeg())
+    expect(lines(root, S1).map((l) => l['seq'])).toEqual([1])
+    expect(readdirSync(join(root, S1)).filter((f) => f.endsWith('.jpg'))).toHaveLength(1)
+  })
+
+  it('prunes older sessions past maxTotalBytes, never the current one', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'trace-'))
+    const w = createScanTrace({ root, maxTotalBytes: 50 })
+    for (const h of ['01', '02', '03'])
+      await w.write(`2026-11-13T${h}-00-00-000Z`, { pad: 'x'.repeat(20) })
+    expect(readdirSync(root).sort()).toEqual([
+      '2026-11-13T02-00-00-000Z',
+      '2026-11-13T03-00-00-000Z'
+    ])
+    // A session dated before the others (clock moved back) is still the one being written.
+    await w.write('2026-11-13T00-00-00-000Z', { pad: 'x'.repeat(20) })
+    expect(readdirSync(root)).toContain('2026-11-13T00-00-00-000Z')
+  })
+
   it('rejects a bad session id', async () => {
     const root = mkdtempSync(join(tmpdir(), 'trace-'))
     const w = createScanTrace({ root })

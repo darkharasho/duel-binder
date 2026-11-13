@@ -260,14 +260,21 @@ function debugShot(
   return canvas.convertToBlob({ type: 'image/jpeg', quality: 0.92 })
 }
 
+/** The widest frame the admin scan trace keeps. */
+const TRACE_MAX_WIDTH = 1920
+
 /**
  * The frame drawn for the admin scan trace before the engine takes it (cheap: no encode); null
  * where there's no OffscreenCanvas. Encoded only if the trace keeps its picture.
  */
-function traceSnapshot(frame: ImageBitmap): OffscreenCanvas | null {
+export function traceSnapshot(frame: ImageBitmap): OffscreenCanvas | null {
   if (typeof OffscreenCanvas === 'undefined') return null
-  const canvas = new OffscreenCanvas(frame.width, frame.height)
-  canvas.getContext('2d')?.drawImage(frame, 0, 0)
+  // At most 1080p, as the photo tests read: a 4K frame drawn whole costs 4x the memory and time.
+  const scale = Math.min(1, TRACE_MAX_WIDTH / frame.width)
+  const width = Math.round(frame.width * scale)
+  const height = Math.round(frame.height * scale)
+  const canvas = new OffscreenCanvas(width, height)
+  canvas.getContext('2d')?.drawImage(frame, 0, 0, width, height)
   return canvas
 }
 
@@ -663,7 +670,9 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
       ? {
           session: newTraceSession(),
           sampler: createTraceSampler(),
-          fpCount: {} as Partial<Record<GameId, number>>
+          fpCount: {} as Partial<Record<GameId, number>>,
+          // Main refused a line (not an admin now, say): nothing more is traced this session.
+          stopped: false
         }
       : null
 
@@ -1044,7 +1053,8 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
         const setPrintings = o.setPrintings
         const candidates = o.candidates
         const shot = KEEP_FRAMES ? debugShot(frame, frame.width, frame.height, l) : null
-        const traceShot = trace ? traceSnapshot(frame) : null
+        const tracing = !!trace && !trace.stopped
+        const traceShot = tracing ? traceSnapshot(frame) : null
         const frameSize: [number, number] = [frame.width, frame.height]
         const started = performance.now()
         // A counted card being read: its frames are kept for the reading, as grabbed.
@@ -1107,7 +1117,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
             l.pokemonNames = { ...NO_POKEMON_NAMES, reads: [] }
           }
           // With the trace on, the lookups and reads are recorded for the frame's line.
-          const recorded = trace ? recordLookups(api.scan) : null
+          const recorded = tracing ? recordLookups(api.scan) : null
           const reads: Record<string, unknown> = {}
           const noted =
             <A extends unknown[], R>(key: string, fn: (...a: A) => Promise<R>) =>
@@ -1116,13 +1126,61 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
               reads[key] = out
               return out
             }
-          if (trace && trace.fpCount[o.game] === undefined) {
+          if (tracing && trace && trace.fpCount[o.game] === undefined) {
             const game = o.game
             trace.fpCount[game] = 0
             api.scan.fingerprintStatus(game).then(
               (s) => (trace.fpCount[game] = s.count),
               () => undefined
             )
+          }
+          // The frame's trace line, sent with its picture when the sampler keeps one. The trace
+          // never costs the frame: whatever goes wrong in it is dropped.
+          const traceFrame = (outcome: ScanOutcome, counted: boolean, error?: string): void => {
+            if (!trace || !tracing || trace.stopped) return
+            try {
+              const take = trace.sampler.take(raw.found, error ? 'error' : outcomeName(outcome))
+              if (!take.line) return
+              const { pixels = 0, vision = 0, ocr = 0 } = raw.ms ?? {}
+              const line = traceLine({
+                seq,
+                game: o.game,
+                setKey: o.setKey,
+                sets: [...new Set((setPrintings ?? []).map((p) => p.setName))].slice(0, 10),
+                filterLanguage: o.filterLanguage ?? null,
+                finishLock: o.finishLock ?? 'auto',
+                camera: cameraLabel(video),
+                size: frameSize,
+                raw,
+                outcome,
+                counted,
+                calls: recorded?.calls ?? [],
+                reads,
+                fpCount: trace.fpCount[o.game] ?? 0,
+                ms: {
+                  pixels: Math.round(pixels),
+                  vision: Math.round(vision),
+                  ocr: Math.round(ocr),
+                  analyze: Math.round(analyzed - started),
+                  lookup: Math.round(performance.now() - analyzed)
+                },
+                ...(error !== undefined && { error })
+              })
+              const session = trace.session
+              void (async () => {
+                const jpeg =
+                  take.jpeg && traceShot
+                    ? await (
+                        await traceShot.convertToBlob({ type: 'image/jpeg', quality: 0.92 })
+                      ).arrayBuffer()
+                    : undefined
+                await api.scan.trace(session, line, jpeg).catch(() => {
+                  trace.stopped = true
+                })
+              })().catch(() => undefined)
+            } catch {
+              // Nothing traced for this frame.
+            }
           }
           let outcome: ScanOutcome
           try {
@@ -1137,21 +1195,24 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
                 setPrintings,
                 defaultRarity: o.defaultRarity,
                 finishLock: o.finishLock,
-                cardLanguage: trace
+                cardLanguage: tracing
                   ? noted('cardLanguage', (cardId: number) => languageOf(cardId, raw.textBands))
                   : (cardId) => languageOf(cardId, raw.textBands),
                 filterLanguage: o.filterLanguage,
                 artDistance: (x, y) => engine.artDistance?.(x, y) ?? Promise.resolve(null),
-                readLanguage: trace ? noted('language', readLanguage) : readLanguage,
-                readLocalName: trace ? noted('localName', readLocalName) : readLocalName,
+                readLanguage: tracing ? noted('language', readLanguage) : readLanguage,
+                readLocalName: tracing ? noted('localName', readLocalName) : readLocalName,
                 lookups: recorded?.lookups ?? api.scan,
                 reverseRefs: o.game === 'pkm' && !isPhone() ? reverseRefStats : undefined
               }),
               LOOKUP_TIMEOUT_MS
             )
-          } catch {
+          } catch (e) {
             // An engine thrown away for another game owes nothing.
-            if (live && engineRef.current === engine) fail({ reinit: false })
+            if (live && engineRef.current === engine) {
+              traceFrame({ kind: 'none' }, false, e instanceof Error ? e.message : String(e))
+              fail({ reinit: false })
+            }
             return
           }
           l.failures = 0
@@ -1208,50 +1269,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
             void keepDebugShot(shot, o.game, raw, outcome, draft !== null, l.debugTimes)
             l.debugTimes = []
           }
-          // The trace never costs the frame: whatever goes wrong in it is dropped.
-          if (trace) {
-            try {
-              const take = trace.sampler.take(raw.found, outcomeName(outcome))
-              if (take.line) {
-                const { pixels = 0, vision = 0, ocr = 0 } = raw.ms ?? {}
-                const line = traceLine({
-                  seq,
-                  game: o.game,
-                  setKey: o.setKey,
-                  sets: [...new Set((setPrintings ?? []).map((p) => p.setName))].slice(0, 10),
-                  filterLanguage: o.filterLanguage ?? null,
-                  finishLock: o.finishLock ?? 'auto',
-                  camera: cameraLabel(video),
-                  size: frameSize,
-                  raw,
-                  outcome,
-                  counted: draft !== null,
-                  calls: recorded?.calls ?? [],
-                  reads,
-                  fpCount: trace.fpCount[o.game] ?? 0,
-                  ms: {
-                    pixels: Math.round(pixels),
-                    vision: Math.round(vision),
-                    ocr: Math.round(ocr),
-                    analyze: Math.round(analyzed - started),
-                    lookup: Math.round(performance.now() - analyzed)
-                  }
-                })
-                const session = trace.session
-                void (async () => {
-                  const jpeg =
-                    take.jpeg && traceShot
-                      ? await (
-                          await traceShot.convertToBlob({ type: 'image/jpeg', quality: 0.92 })
-                        ).arrayBuffer()
-                      : undefined
-                  await api.scan.trace(session, line, jpeg)
-                })().catch(() => undefined)
-              }
-            } catch {
-              // Nothing traced for this frame.
-            }
-          }
+          traceFrame(outcome, draft !== null)
           if (draft) {
             // A photo asked for on its own while this frame was read is no longer needed.
             if (l.photoQuiet) l.photoWanted = false

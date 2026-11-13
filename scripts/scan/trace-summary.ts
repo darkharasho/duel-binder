@@ -6,6 +6,7 @@
  *
  * Reasons, in the order they're judged:
  * - no-outline: no card found in the frame.
+ * - lookup-error: the frame's catalog lookups failed or timed out.
  * - art-not-in-file: a card the frame's lookups named (by name or code) has none of its artworks
  *   in this computer's fingerprint file, so its art could never match.
  * - unsure: close art but not sure enough to count.
@@ -19,12 +20,14 @@ import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { decodeFingerprints } from '../../src/shared/scan/fingerprintFile'
 
-export type Reason = 'no-outline' | 'art-not-in-file' | 'art-far' | 'unsure'
+export type Reason = 'no-outline' | 'lookup-error' | 'art-not-in-file' | 'art-far' | 'unsure'
 
 export interface TraceLineJson {
   seq: number
   found: boolean
-  outcome: 'none' | 'far' | 'unsure' | 'recognized'
+  outcome: 'none' | 'far' | 'unsure' | 'recognized' | 'error'
+  /** Why the frame's lookups failed, when outcome is 'error'. */
+  error?: string
   game?: string
   /** Main's named art, or the renderer's [imageId, distance] pairs. */
   art: (
@@ -39,7 +42,7 @@ export interface TraceLineJson {
 export interface Summary {
   frames: number
   outcomes: Record<string, number>
-  reasons: { reason: Reason; frames: string[]; cards?: string[] }[]
+  reasons: { reason: Reason; frames: string[]; cards?: string[]; errors?: string[] }[]
 }
 
 const NAMING = new Set(['matchName', 'printingsByCode', 'printingsByNumber'])
@@ -71,16 +74,21 @@ export function summarize(
   imagesOfCard: (cardId: number) => number[]
 ): Summary {
   const outcomes: Record<string, number> = {}
-  const groups = new Map<Reason, { frames: string[]; cards: Set<string> }>()
+  const groups = new Map<Reason, { frames: string[]; cards: Set<string>; errors: Set<string> }>()
   const note = (r: Reason, l: TraceLineJson, cards: number[] = []): void => {
-    const g = groups.get(r) ?? { frames: [], cards: new Set<string>() }
+    const g = groups.get(r) ?? { frames: [], cards: new Set<string>(), errors: new Set<string>() }
     g.frames.push(l.frame ?? `#${l.seq}`)
     cards.forEach((c) => g.cards.add(String(c)))
+    if (l.error) g.errors.add(l.error)
     groups.set(r, g)
   }
   for (const l of lines) {
     outcomes[l.outcome] = (outcomes[l.outcome] ?? 0) + 1
     if (l.outcome === 'recognized') continue
+    if (l.outcome === 'error') {
+      note('lookup-error', l)
+      continue
+    }
     if (!l.found) {
       note('no-outline', l)
       continue
@@ -93,7 +101,7 @@ export function summarize(
     else if (l.outcome === 'unsure') note('unsure', l)
     else note('art-far', l)
   }
-  const order: Reason[] = ['no-outline', 'art-not-in-file', 'unsure', 'art-far']
+  const order: Reason[] = ['no-outline', 'lookup-error', 'art-not-in-file', 'unsure', 'art-far']
   return {
     frames: lines.length,
     outcomes,
@@ -101,7 +109,12 @@ export function summarize(
       .filter((r) => groups.has(r))
       .map((r) => {
         const g = groups.get(r)!
-        return { reason: r, frames: g.frames, ...(g.cards.size ? { cards: [...g.cards] } : {}) }
+        return {
+          reason: r,
+          frames: g.frames,
+          ...(g.cards.size ? { cards: [...g.cards] } : {}),
+          ...(g.errors.size ? { errors: [...g.errors] } : {})
+        }
       })
   }
 }
@@ -151,6 +164,7 @@ async function main(): Promise<void> {
     })
     console.log(`\n${r.reason}: ${r.frames.length}`)
     if (cards.length) console.log(`  cards: ${cards.join(', ')}`)
+    if (r.errors?.length) console.log(`  errors: ${r.errors.slice(0, 5).join(' | ')}`)
     console.log(`  frames: ${r.frames.slice(0, 10).join(' ')}${r.frames.length > 10 ? ' …' : ''}`)
   }
 }

@@ -125,7 +125,58 @@ describe('createShowingTracker', () => {
 
   it('different card counts without absence', () => {
     const t = createShowingTracker({ stableFrames: 2, absentMs: 600 })
-    expect(run(t, [seen(1), seen(1), seen(2), seen(2), seen(1), seen(1)])).toEqual([1, 2, 1])
+    expect(run(t, [seen(1), seen(1), seen(2), seen(2), seen(3), seen(3)])).toEqual([1, 2, 3])
+  })
+
+  describe('a pile of counted cards in view', () => {
+    const tracker = (): ReturnType<typeof createShowingTracker> =>
+      createShowingTracker({ stableFrames: 2, absentMs: 600, recentCards: 3 })
+
+    it('a card counted lately, seen again on the pile, does not count again', () => {
+      // 1 held and counted, dropped on the pile; 2 held over it and counted; 2 lowered: 1 shows.
+      const t = tracker()
+      expect(run(t, [seen(1), seen(1), seen(2), seen(2), seen(1), seen(1), seen(1)])).toEqual([
+        1, 2
+      ])
+      expect(t.heldBack()?.cardId).toBe(1)
+    })
+
+    it('remembers the last few cards, not older ones', () => {
+      const t = tracker()
+      const ids = [1, 2, 3, 4, 1, 2]
+      expect(
+        run(
+          t,
+          ids.flatMap((id) => [seen(id), seen(id)])
+        )
+      ).toEqual([1, 2, 3, 4, 1, 2])
+    })
+
+    it('forgets them once the view clears', () => {
+      const t = tracker()
+      expect(run(t, [seen(1), seen(1), seen(2), seen(2)])).toEqual([1, 2])
+      expect(run(t, [...Array<ScanOutcome>(8).fill(NONE), seen(1), seen(1)], 400)).toEqual([1])
+      expect(t.heldBack()).toBeNull()
+    })
+
+    it('a new card held over the pile still counts, and stops holding back', () => {
+      const t = tracker()
+      run(t, [seen(1), seen(1), seen(2), seen(2), seen(1), seen(1)])
+      expect(t.heldBack()?.cardId).toBe(1)
+      expect(run(t, [seen(5), seen(5)], 1000)).toEqual([5])
+      expect(t.heldBack()).toBeNull()
+    })
+
+    it('a card counted by photo (settle) is remembered too', () => {
+      const t = createShowingTracker({
+        stableFrames: 2,
+        absentMs: 600,
+        recentCards: 3,
+        settleMs: 0
+      })
+      t.settle(0, 7)
+      expect(run(t, [seen(2), seen(2), seen(7), seen(7), seen(7)], 100)).toEqual([2])
+    })
   })
 
   it('reset forgets the card shown', () => {

@@ -177,7 +177,8 @@ export interface ScanLoop {
 const sameStatus = (a: ScanStatus, b: ScanStatus): boolean =>
   a.kind === b.kind &&
   (a.kind !== 'added' ||
-    (b.kind === 'added' && a.name === b.name && a.setCode === b.setCode && a.guess === b.guess))
+    (b.kind === 'added' && a.name === b.name && a.setCode === b.setCode && a.guess === b.guess)) &&
+  (a.kind !== 'counted-already' || (b.kind === 'counted-already' && a.name === b.name))
 
 /**
  * A counted card whose rarity was unsure, read from the live frames while it stays in view. The
@@ -1151,7 +1152,12 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
             // A photo asked for on its own while this frame was read is no longer needed.
             if (l.photoQuiet) l.photoWanted = false
             counted(draft, engine, o, raw.quad)
-          } else show(outcome, null)
+          } else {
+            // A card counted lately, back in view: say why it wasn't counted again.
+            const held = tracker.current.heldBack()
+            if (held) setStatus({ kind: 'counted-already', name: held.name })
+            show(outcome, null)
+          }
         }
 
         // A worker is free once it has answered (or the frame failed): the next frame's art is

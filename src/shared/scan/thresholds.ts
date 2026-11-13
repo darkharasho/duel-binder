@@ -121,6 +121,11 @@ export const NAME_MIN_MARGIN = 0.05
 export const STABLE_FRAMES = 2
 /** How long a card must be gone before the same card can count again. */
 export const ABSENT_MS = 600
+/**
+ * How many of the cards counted lately don't count again until the view clears (tracker.ts): the
+ * cards a pile of scanned ones in view shows on top as each new card is lowered onto it.
+ */
+export const RECENT_CARDS = 3
 
 // Rarity from the card's look, tuned on real webcam photos. A reading of the name's ink counts
 // only when it is a line of text where a name starts.

@@ -19,6 +19,8 @@ export function statusText(s: ScanStatus): string {
       return `${s.setCode ? `${s.name} ${s.setCode}` : s.name} · ${s.guess ? 'added as a best guess' : 'added'}, lower it to scan the next card`
     case 'stopped':
       return 'Scanning stopped after repeated errors.'
+    case 'counted-already':
+      return `${s.name} is already counted. Keep scanned cards out of view.`
   }
 }
 

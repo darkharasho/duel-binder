@@ -10,6 +10,8 @@ export type ScanStatus =
   | { kind: 'photo-failed' }
   | { kind: 'added'; name: string; setCode: string | null; guess?: true }
   | { kind: 'stopped' }
+  // A card counted lately came back into view (the top of a pile of scanned cards) and wasn't counted.
+  | { kind: 'counted-already'; name: string }
 
 /**
  * The languages a Pokémon card can be scanned in. Simplified Chinese cards are mostly matched by

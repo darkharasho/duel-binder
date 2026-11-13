@@ -8,7 +8,7 @@ import {
   printingSummary,
   setRows,
   splitRarity
-} from '@/features/card/printingGroups'
+} from '@/features/card/printingGroupData'
 
 const printing = (id: number, extra: Partial<Printing> = {}): Printing => ({
   id,

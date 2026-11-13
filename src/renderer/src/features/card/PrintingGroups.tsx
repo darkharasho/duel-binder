@@ -19,7 +19,7 @@ import {
   englishModeLanguages,
   setRows,
   type LanguageMode
-} from './printingGroups'
+} from './printingGroupData'
 
 interface PrintingGroupsProps {
   game: GameId

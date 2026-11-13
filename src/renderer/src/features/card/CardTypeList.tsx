@@ -16,7 +16,7 @@ import { cn } from '@/lib/utils'
 import type { CardTypeRow } from './cardTypes'
 import { OwnedCopies } from './OwnedCopies'
 import { PrintingGroups } from './PrintingGroups'
-import { printingSummary } from './printingGroups'
+import { printingSummary } from './printingGroupData'
 
 interface CardTypeListProps {
   cardId: number

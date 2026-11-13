@@ -142,6 +142,15 @@ export function ScanViewport({
     video.srcObject = stream
     void video.play?.()?.catch(() => undefined)
   }, [resizes, videoRef])
+  // The element a new one replaced lets go of the stream: one still holding a live camera stream
+  // is never freed, so each resize leaked a whole video element and scanning slowed over time.
+  const lastVideo = useRef<HTMLVideoElement | null>(null)
+  useLayoutEffect(() => {
+    const video = videoRef.current
+    const old = lastVideo.current
+    if (old && old !== video && !old.isConnected) old.srcObject = null
+    lastVideo.current = video
+  }, [resizes, videoKey, videoRef])
   const zoomable = !!onZoom
   // Not React's onWheel: that listener is passive, so it couldn't stop the page zooming too.
   useEffect(() => {

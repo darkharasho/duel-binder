@@ -59,6 +59,14 @@ export class FingerprintIndex {
     this.hashes = hashes
   }
 
+  private idSet: Set<number> | null = null
+
+  /** Whether the file has a fingerprint of this artwork. */
+  hasImage(imageId: number): boolean {
+    this.idSet ??= new Set(this.ids)
+    return this.idSet.has(imageId)
+  }
+
   /** The closest two artworks' records come to each other; null when either has none. */
   distanceBetween(a: number, b: number): number | null {
     const records = (id: number): number[] => {

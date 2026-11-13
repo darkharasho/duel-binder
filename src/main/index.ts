@@ -20,6 +20,7 @@ import icon from '../../resources/icon.png?asset'
 import { openDatabase } from './db/database'
 import { createCatalogService } from './catalog/service'
 import { createRipCapture } from './ripCapture'
+import { createScanTrace } from './scan/scanTrace'
 import { recordSnapshot } from './repo/stats'
 import {
   directCatalog,
@@ -588,6 +589,10 @@ async function bootstrap(): Promise<void> {
       fingerprints,
       ocr,
       ripCapture: createRipCapture(join(userData, 'rip-capture'), (p) => shell.openPath(p)),
+      scanTrace: createScanTrace({
+        root: join(userData, 'scan-trace'),
+        open: (p) => shell.openPath(p)
+      }),
       rollups,
       rollupWarmer
     })

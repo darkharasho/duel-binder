@@ -217,6 +217,15 @@ export interface Api {
     /** Dev builds: keeps a camera frame and what became of it, for replaying a live failure. */
     debugFrame(jpeg: ArrayBuffer, note: string): Promise<void>
     /**
+     * Admin scan trace: appends one frame's line (JSON, at most 8 KB) to the session's trace on
+     * this computer, with the frame's JPEG when given. Refused for a non-admin account.
+     */
+    trace(session: string, line: string, jpeg?: ArrayBuffer): Promise<void>
+    /** Admin: the folder scan traces are written to. */
+    traceDir(): Promise<string>
+    /** Admin: opens the scan trace folder. */
+    openTraceDir(): Promise<void>
+    /**
      * The card text on each band as model reads it, unjudged: a Pokémon card's language is told
      * from one read per model (pokemonLanguageOfReads), never from the reads run together.
      */
@@ -511,6 +520,9 @@ export const INVOKE_CHANNELS = [
   'scan:ocr',
   'scan:language',
   'scan:debugFrame',
+  'scan:trace',
+  'scan:traceDir',
+  'scan:openTraceDir',
   'scan:readText',
   'scanWindow:open',
   'scanWindow:isOpen',

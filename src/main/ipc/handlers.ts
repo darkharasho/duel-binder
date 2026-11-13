@@ -59,6 +59,7 @@ import type { AccountService } from '../cloud/account'
 import type { MainErrorReports } from '../errorReports'
 import type { CatalogService } from '../catalog/service'
 import { saveDebugFrame } from '../scan/debugFrames'
+import { describeArt, type ScanTraceWriter } from '../scan/scanTrace'
 
 export interface WindowDeps {
   minimize(): void
@@ -99,6 +100,8 @@ export interface HandlerDeps {
   adminRuns?: AdminRuns
   /** The admin Rip capture tab's key frames on disk. */
   ripCapture: RipCapture
+  /** The admin scan trace's folder on disk. */
+  scanTrace: ScanTraceWriter
   /** Builds catalog rollups off the main process; without it they're built in line. */
   rollups?: Pick<RollupRunner, 'build'>
   /** Told which language Browse asks its filters in, so a catalog change builds those ahead. */
@@ -169,9 +172,13 @@ export function createHandlers({
   ocr,
   adminRuns = createAdminRuns(),
   ripCapture,
+  scanTrace,
   rollups,
   rollupWarmer
 }: HandlerDeps): Handlers {
+  const mustBeAdmin = (): void => {
+    if (!account.status().user?.admin) throw new Error('Not found')
+  }
   const local = (serverIds: number[]): LocalPrintings => localPrintings(db, serverIds)
   return {
     ...createDataHandlers({
@@ -268,6 +275,44 @@ export function createHandlers({
       if (!(jpeg instanceof ArrayBuffer) || typeof note !== 'string')
         throw new Error('Bad debug frame')
       await saveDebugFrame(jpeg, note)
+    },
+    'scan:trace': async (session: unknown, line: unknown, jpeg: unknown) => {
+      mustBeAdmin()
+      if (typeof session !== 'string' || typeof line !== 'string' || line.length > 8192)
+        throw new Error('Bad trace line')
+      if (jpeg !== undefined && !(jpeg instanceof ArrayBuffer)) throw new Error('Bad trace frame')
+      const parsed: unknown = JSON.parse(line)
+      if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed))
+        throw new Error('Bad trace line')
+      const out = parsed as Record<string, unknown>
+      if (Array.isArray(out['art'])) {
+        const pairs = (out['art'] as unknown[]).filter(
+          (a): a is [number, number] =>
+            Array.isArray(a) && Number.isSafeInteger(a[0]) && typeof a[1] === 'number'
+        )
+        const named = new Map(
+          describeArt(
+            db,
+            pairs.map(([id]) => id)
+          ).map((a) => [a.imageId, a])
+        )
+        out['art'] = pairs.map(([imageId, distance]) => ({
+          name: null,
+          sets: [],
+          ...named.get(imageId),
+          imageId,
+          distance
+        }))
+      }
+      await scanTrace.write(session, out, jpeg)
+    },
+    'scan:traceDir': async () => {
+      mustBeAdmin()
+      return scanTrace.root
+    },
+    'scan:openTraceDir': async () => {
+      mustBeAdmin()
+      await scanTrace.openFolder()
     },
     'scan:readText': async (bands: unknown, model: unknown) => {
       if (!isTextModel(model)) throw new Error(`Unknown OCR model: ${String(model)}`)

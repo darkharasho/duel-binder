@@ -9,6 +9,10 @@ import type { PortalChannel } from '../../src/shared/portal'
 import type Database from 'better-sqlite3'
 import type { AccountStatus, SetChecklist, SyncStatus } from '../../src/shared/types'
 import { seededDb } from './helpers'
+import { mkdtempSync, readFileSync, existsSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { createScanTrace } from '../../src/main/scan/scanTrace'
 
 type FakeAccount = { [K in Exclude<keyof AccountService, 'portal'>]: Mock<AccountService[K]> } & {
   portal: Mock<(channel: PortalChannel, args: unknown[]) => Promise<unknown>>
@@ -68,6 +72,11 @@ async function makeHandlers(opts: { signedIn?: boolean } = {}) {
     sizeBytes: async () => 0,
     clear: async () => {}
   }
+  const openTrace = vi.fn(async () => '')
+  const scanTrace = createScanTrace({
+    root: mkdtempSync(join(tmpdir(), 'trace-')),
+    open: openTrace
+  })
   const handlers = createHandlers({
     db,
     images,
@@ -92,15 +101,21 @@ async function makeHandlers(opts: { signedIn?: boolean } = {}) {
     account: account as unknown as AccountService,
     errorReports: { setEnabled: vi.fn() },
     emitDataChanged: vi.fn(),
-    fingerprints: { ygo: noFingerprints, pkm: noFingerprints, op: noFingerprints, mtg: noFingerprints },
+    fingerprints: {
+      ygo: noFingerprints,
+      pkm: noFingerprints,
+      op: noFingerprints,
+      mtg: noFingerprints
+    },
     ocr: {
       read: async () => [],
       readText: async () => ({ text: '', confidence: 0 }),
       dispose: async () => {}
     },
-    ripCapture: { save: vi.fn(), remove: vi.fn(), note: vi.fn(), openFolder: vi.fn() }
+    ripCapture: { save: vi.fn(), remove: vi.fn(), note: vi.fn(), openFolder: vi.fn() },
+    scanTrace
   })
-  return { db, handlers, account, catalog, scanWindow, images }
+  return { db, handlers, account, catalog, scanWindow, images, scanTrace, openTrace }
 }
 
 const noFingerprints = {
@@ -532,5 +547,55 @@ describe('friends handlers', () => {
       ['friends:remove', [5]],
       ['friends:facets', [6]]
     ])
+  })
+})
+
+describe('scan trace handlers', () => {
+  const SESSION = '2026-11-13T08-16-58-123Z'
+  const asUser = (account: FakeAccount, admin: boolean): void => {
+    account.status.mockReturnValue({ user: { admin } } as unknown as AccountStatus)
+  }
+
+  it('scan:trace refuses a non-admin account', async () => {
+    const { handlers, account, scanTrace } = await makeHandlers({ signedIn: true })
+    asUser(account, false)
+    await expect(handlers['scan:trace'](SESSION, '{"seq":1}')).rejects.toThrow('Not found')
+    expect(existsSync(join(scanTrace.root, SESSION))).toBe(false)
+    account.status.mockReturnValue({ user: null } as unknown as AccountStatus)
+    await expect(handlers['scan:trace'](SESSION, '{"seq":1}')).rejects.toThrow('Not found')
+  })
+
+  it('scan:trace writes for an admin with named art', async () => {
+    const { db, handlers, account, scanTrace } = await makeHandlers({ signedIn: true })
+    asUser(account, true)
+    const img = db
+      .prepare(
+        'SELECT i.image_id AS id, c.name FROM card_images i JOIN cards c ON c.id = i.card_id LIMIT 1'
+      )
+      .get() as { id: number; name: string }
+    await handlers['scan:trace'](SESSION, JSON.stringify({ art: [[img.id, 12]] }))
+    const line = JSON.parse(
+      readFileSync(join(scanTrace.root, SESSION, 'trace.jsonl'), 'utf8').trim()
+    ) as { art: { imageId: number; distance: number; name: string; sets: string[] }[] }
+    expect(line.art[0]).toMatchObject({ imageId: img.id, distance: 12, name: img.name })
+    expect(Array.isArray(line.art[0]!.sets)).toBe(true)
+  })
+
+  it('scan:trace rejects an oversized or broken line', async () => {
+    const { handlers, account } = await makeHandlers({ signedIn: true })
+    asUser(account, true)
+    await expect(handlers['scan:trace'](SESSION, 'x'.repeat(8193))).rejects.toThrow()
+    await expect(handlers['scan:trace'](SESSION, '{not json')).rejects.toThrow()
+    await expect(handlers['scan:trace'](SESSION, '{}', 'nope')).rejects.toThrow()
+  })
+
+  it('scan:traceDir and scan:openTraceDir are admin only', async () => {
+    const { handlers, account, scanTrace, openTrace } = await makeHandlers({ signedIn: true })
+    asUser(account, false)
+    await expect(handlers['scan:traceDir']()).rejects.toThrow('Not found')
+    asUser(account, true)
+    await expect(handlers['scan:traceDir']()).resolves.toBe(scanTrace.root)
+    await handlers['scan:openTraceDir']()
+    expect(openTrace).toHaveBeenCalledWith(scanTrace.root)
   })
 })

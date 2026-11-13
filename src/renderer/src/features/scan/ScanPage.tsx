@@ -31,6 +31,7 @@ import { ArtDataNotice } from './ArtDataNotice'
 import { HitPriceInput } from './HitPriceInput'
 import { SET_UNREADABLE, setsSkippedText, statusText } from './scanText'
 import { ScanSoundToggle } from './ScanSoundToggle'
+import { ScanTraceToggle } from './ScanTraceToggle'
 import { SessionList } from './SessionList'
 import { MultiSearchPicker, SearchPicker } from './SearchPicker'
 import { ScanFinishPicker } from './FinishPicker'
@@ -130,6 +131,7 @@ export function ScanPage({
         />
         <ScanSoundToggle />
       </div>
+      <ScanTraceToggle />
       {!inPage && (
         <>
           <div className="flex flex-col gap-2 border-t border-white/[0.06] pt-3">

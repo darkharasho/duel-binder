@@ -81,9 +81,9 @@ export function ValueChart({ history }: { history: ValuePoint[] }): React.JSX.El
     <figure aria-label="Value over time" className="flex h-full min-h-40 flex-col">
       <figcaption className="mb-3 flex flex-wrap items-baseline gap-x-2 text-sm">
         <span className="font-semibold">Value over time</span>
-        <span className={`font-mono text-xs ${tone}`}>{signed(change)}</span>
+        <span className={`rounded-full bg-popover px-2 font-mono text-xs ${tone}`}>{signed(change)}</span>
         {pct !== null && (
-          <span className={`font-mono text-xs ${tone}`}>
+          <span className={`rounded-full bg-popover px-2 font-mono text-xs ${tone}`}>
             ({change < 0 ? '-' : '+'}
             {Math.abs(pct).toFixed(1)}%)
           </span>

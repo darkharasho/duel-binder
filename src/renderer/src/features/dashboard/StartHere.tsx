@@ -132,7 +132,7 @@ export function StartHere({ onNavigate, onSearch, blurb }: Props): React.JSX.Ele
             search(text.trim())
           }}
         >
-          <label className="flex h-14 cursor-text items-center gap-3 rounded-xl border border-white/10 bg-card px-4 shadow-[0_12px_40px_rgb(0_0_0/0.35)] transition-colors focus-within:border-white/25 hover:border-white/20">
+          <label className="flex h-14 cursor-text items-center gap-3 rounded-full border border-border px-4 transition-colors focus-within:border-white/60 hover:border-white/40">
             <Search aria-hidden className="size-5 shrink-0 text-muted-foreground" />
             <input
               value={text}

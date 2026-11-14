@@ -127,7 +127,11 @@ function DesktopAccount(): React.JSX.Element {
             in again.
           </p>
         )}
-        {s.error && <p className="text-destructive">{s.error}</p>}
+        {s.error && (
+          <p className="inline-block rounded-2xl bg-popover px-3 py-1.5 text-destructive">
+            {s.error}
+          </p>
+        )}
         {pending}
         {unsynced}
         <Button size="sm" onClick={() => apply(api.account.signIn())}>

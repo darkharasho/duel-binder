@@ -5,7 +5,6 @@ import type { CountMode, SetSummary } from '@shared/types'
 import { LanguageTag } from '@/components/LanguageTag'
 import { formatMonthYear } from '@/lib/format'
 import { useChunkedList } from '@/lib/useChunkedList'
-import { isPhone } from '@/lib/platform'
 import { cn } from '@/lib/utils'
 import { SetArt } from './SetArt'
 import { SetProgress } from './SetProgress'
@@ -51,7 +50,7 @@ function GridItem({ s, mode, onOpen }: ItemProps): React.JSX.Element {
           setCode={s.setCode}
           className={cn(
             'aspect-[4/3] w-full rounded-[4px] shadow-[0_8px_20px_rgb(0_0_0/0.45)] transition-transform duration-200 group-hover:-translate-y-1',
-            !started && 'opacity-60 grayscale-[0.6]'
+            !started && 'opacity-60 grayscale-[0.6]' /* on art: fixed */
           )}
         />
         <div className="min-w-0 space-y-1.5">
@@ -171,9 +170,7 @@ export const SetsList = memo(function SetsList({
     )
   }
   // Each series is a section of the one list the chunking fills in, so its header shows with its
-  // first set. On the desktop the header sticks under the page's own while its sets scroll by; the
-  // phone's page header scrolls away, and so do these.
-  const phone = isPhone()
+  // first set. The header is plain text on the wash, so it scrolls with its sets.
   const sections = groups.map((g, i) => {
     const start = groups.slice(0, i).reduce((n, x) => n + x.sets.length, 0)
     return { g, run: shown.slice(start, start + g.sets.length) }
@@ -194,8 +191,7 @@ export const SetsList = memo(function SetsList({
           <section key={name} aria-label={name}>
             <h2
               className={cn(
-                'z-10 -mx-8 flex items-baseline gap-2 border-b border-white/[0.06] px-8 py-2 max-md:-mx-4 max-md:px-4',
-                !phone && 'sticky top-0 bg-background/60 backdrop-blur-xl',
+                '-mx-8 flex items-baseline gap-2 border-b border-white/[0.06] px-8 py-2 max-md:-mx-4 max-md:px-4',
                 view === 'grid' && 'mb-4'
               )}
             >

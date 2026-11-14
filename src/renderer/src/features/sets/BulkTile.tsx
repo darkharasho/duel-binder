@@ -65,7 +65,7 @@ export const BulkTile = memo(function BulkTile({
         data-highlighted={highlighted}
         data-owned={owned}
         className={cn(
-          'flex flex-col gap-1.5 rounded-lg bg-card p-1.5',
+          'flex flex-col gap-1.5 rounded-lg p-1.5',
           owned && 'ring-2 ring-emerald-500',
           // Declared after the owned ring so the highlight wins when both apply.
           highlighted && 'ring-2 ring-primary ring-offset-2 ring-offset-background'

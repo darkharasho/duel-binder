@@ -32,7 +32,7 @@ export function JustAdded({
   return (
     <ul aria-label="Just added" className="space-y-1">
       {shown.map((item) => (
-        <li key={item.id} className="flex items-center gap-2 rounded-md bg-card p-1 pr-1.5 text-xs">
+        <li key={item.id} className="flex items-center gap-2 rounded-md p-1 pr-1.5 text-xs">
           <CardArt
             imageId={item.imageId}
             size="small"

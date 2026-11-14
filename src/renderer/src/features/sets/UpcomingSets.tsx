@@ -31,7 +31,7 @@ export function UpcomingSets({
   if (sets.length === 0) return null
   const noun = sets.length === 1 ? 'upcoming set' : 'upcoming sets'
   return (
-    <section className="rounded-md border border-white/[0.06]">
+    <section>
       <button
         type="button"
         aria-expanded={open}

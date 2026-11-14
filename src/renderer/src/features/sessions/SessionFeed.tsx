@@ -25,7 +25,7 @@ export function SessionFeed({
       </p>
     )
   return (
-    <div className="space-y-4">
+    <div className="space-y-8">
       {ordered.map((s) => (
         <SessionBlock
           key={s.uid}

@@ -31,16 +31,33 @@ export function PageHeader({
 }): React.JSX.Element {
   const { available } = useGame()
   const chip = isPhone() && available.length > 1
+  const phone = isPhone()
   const heading =
     title || stats?.length ? (
-      <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-3">
+      <div
+        className={cn(
+          phone
+            ? 'flex flex-col items-start gap-y-3'
+            : 'flex flex-wrap items-end justify-between gap-x-8 gap-y-3'
+        )}
+      >
         {title && <h1 className={cn(PAGE_TITLE, 'min-w-0')}>{title}</h1>}
         {stats && stats.length > 0 && (
-          <dl className="ml-auto flex gap-8 text-right">
+          <dl
+            className={cn(
+              'flex gap-8',
+              phone ? 'justify-start gap-6 text-left' : 'ml-auto text-right'
+            )}
+          >
             {stats.map((s) => (
               <div key={s.label} className="flex flex-col-reverse">
                 <dt className="font-mono text-[10.5px] uppercase tracking-[1.5px]">{s.label}</dt>
-                <dd className="font-mono text-[30px] font-medium leading-none">{s.value}</dd>
+                <dd
+                  className={cn(
+                    'font-mono font-medium leading-none',
+                    phone ? 'text-[22px]' : 'text-[30px]'
+                  )}
+                >{s.value}</dd>
               </div>
             ))}
           </dl>

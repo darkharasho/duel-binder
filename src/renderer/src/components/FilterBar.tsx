@@ -3,6 +3,8 @@ import { SlidersHorizontal } from 'lucide-react'
 import { FilterChip } from '@/components/FilterChip'
 import { Button } from '@/components/ui/button'
 import type { ActiveChip } from '@/lib/filters'
+import { isPhone } from '@/lib/platform'
+import { cn } from '@/lib/utils'
 
 /**
  * The bar every list page shares. Row 1: search, Filters, sort, then the page's own toggle. Row 2,
@@ -36,10 +38,12 @@ export function FilterBar({
   resultCount?: string
 }): React.JSX.Element {
   const active = chips.length
+  // On a phone the search takes its own full-width line; the buttons share the line below.
+  const phone = isPhone()
   return (
     <div className="@container space-y-2">
-      <div className="flex items-center gap-2">
-        <div className="min-w-28 flex-1">{search}</div>
+      <div className={cn('flex items-center gap-2', phone && 'flex-wrap')}>
+        <div className={cn('min-w-28 flex-1', phone && 'min-w-40 basis-full')}>{search}</div>
         {onToggleFilters && (
           <Button
             variant={active > 0 ? 'default' : 'outline'}

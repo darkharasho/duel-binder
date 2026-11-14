@@ -144,12 +144,12 @@ function ReviewRow({ row, disabled }: { row: ScanRow; disabled: boolean }): Reac
           {where && <span className={cn(row.setCode && 'font-mono text-xs')}>{where}</span>}
           {where && (price != null || range) && ' · '}
           {price != null && (
-            <span aria-label={`Price of ${row.name}`} className="text-emerald-400 tabular-nums">
+            <span aria-label={`Price of ${row.name}`} className="font-mono text-emerald-400 tabular-nums">
               {formatUsd(price)}
             </span>
           )}
           {range && (
-            <span aria-label={`Price range of ${row.name}`} className="tabular-nums">
+            <span aria-label={`Price range of ${row.name}`} className="font-mono tabular-nums">
               {formatUsd(range.low)} – {formatUsd(range.high)}
             </span>
           )}
@@ -204,7 +204,7 @@ function ReviewRow({ row, disabled }: { row: ScanRow; disabled: boolean }): Reac
           </button>
           <span
             aria-label={`Quantity of ${row.name}`}
-            className="w-5 text-center text-sm font-semibold tabular-nums"
+            className="w-5 text-center font-mono text-sm font-semibold tabular-nums"
           >
             {row.quantity}
           </span>
@@ -338,7 +338,7 @@ export function ReviewSheet({
             {priced > 0 && (
               <p
                 aria-label="Value of the list"
-                className="text-xl font-bold leading-7 tabular-nums"
+                className="font-mono text-xl font-bold leading-7 tabular-nums"
               >
                 {formatUsd(value)}
               </p>
@@ -362,7 +362,7 @@ export function ReviewSheet({
                 aria-pressed={checkOnly === only}
                 onClick={() => setCheckOnly(only as boolean)}
                 className={cn(
-                  'h-8 rounded-full px-3.5 text-[13px] font-medium active:bg-white/[0.14]',
+                  'h-8 rounded-full px-3.5 text-[13px] font-medium active:bg-chip-on active:text-chip-on-ink',
                   checkOnly === only ? 'bg-chip-on text-chip-on-ink' : 'bg-chip'
                 )}
               >
@@ -390,8 +390,7 @@ export function ReviewSheet({
             disabled={session.rows.length === 0 || session.committing}
             onClick={() => setClearing(true)}
             className={cn(
-              'h-[52px] rounded-full px-5 text-sm font-medium active:bg-white/[0.12] disabled:opacity-40',
-              GLASS
+              'h-[52px] rounded-full bg-chip px-5 text-sm font-medium active:bg-chip-on active:text-chip-on-ink disabled:opacity-40'
             )}
           >
             Clear

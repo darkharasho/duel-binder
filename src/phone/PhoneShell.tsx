@@ -242,7 +242,7 @@ function Shell({ engineFactory }: { engineFactory?: EngineFactory }): React.JSX.
       {!scan && (
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-0 z-30 h-[env(safe-area-inset-top)] bg-background/60 backdrop-blur-xl"
+          className="pointer-events-none absolute inset-x-0 top-0 z-30 h-[env(safe-area-inset-top)] bg-background"
         />
       )}
 

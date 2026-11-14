@@ -202,7 +202,7 @@ function Sheet({
                       aria-controls={expanded ? `${id}-${i}` : undefined}
                       onClick={() => setOpened(expanded ? null : g.key)}
                       className={cn(
-                        'flex min-h-16 w-full items-center gap-3.5 rounded-2xl border px-4 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-white/30 active:bg-white/[0.12]',
+                        'flex min-h-16 w-full items-center gap-3.5 rounded-2xl px-4 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-white/30 active:bg-chip-on active:text-chip-on-ink',
                         holdsPicked
                           ? 'bg-chip-on text-chip-on-ink'
                           : 'bg-chip'

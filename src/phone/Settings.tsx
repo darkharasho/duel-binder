@@ -208,7 +208,7 @@ export function Settings({
 
   return (
     <div className="mx-auto max-w-lg space-y-6 px-4 pb-8 pt-2">
-      <h1 className="px-1 text-3xl font-bold tracking-tight">Settings</h1>
+      <h1 className="px-1 font-display text-[44px] leading-none">Settings</h1>
 
       <section aria-label="Account" className="space-y-2">
         <Group>
@@ -260,7 +260,7 @@ export function Settings({
           </button>
           {problems > 0 && (
             <button type="button" className={rowButton} onClick={() => setProblemsOpen(true)}>
-              Sync problems ({problems})
+              Sync problems (<span className="font-mono">{problems}</span>)
             </button>
           )}
         </Group>
@@ -325,7 +325,13 @@ export function Settings({
           <UsageToggle className="flex min-h-12 items-start gap-3 px-4 py-3 text-[15px]" />
           <Row>
             <span className="text-muted-foreground">
-              {[age, version.data ? `Version ${version.data}` : null].filter(Boolean).join(' · ')}
+              {age}
+              {age && version.data && ' · '}
+              {version.data && (
+                <>
+                  Version <span className="font-mono">{version.data}</span>
+                </>
+              )}
             </span>
           </Row>
         </Group>

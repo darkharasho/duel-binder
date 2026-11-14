@@ -237,8 +237,8 @@ function Shell({ engineFactory }: { engineFactory?: EngineFactory }): React.JSX.
         </div>
       )}
 
-      {/* Behind the status bar, which the iOS app draws over the page: frosted like the page
-          header below it, so the cards scrolling up under the clock don't show through. */}
+      {/* Behind the status bar, which the iOS app draws over the page: solid, so the cards
+          scrolling up under the clock don't show through. */}
       {!scan && (
         <div
           aria-hidden
@@ -251,17 +251,12 @@ function Shell({ engineFactory }: { engineFactory?: EngineFactory }): React.JSX.
       {!scan && <AccountNotices />}
 
       {/* Only there while something waits or fails; pb-7 keeps it clear of the raised Scan button. */}
-      {!scan && (
-        <StatusLine className="relative z-30 shrink-0 pb-7" />
-      )}
+      {!scan && <StatusLine className="relative z-30 shrink-0 pb-7" />}
 
       {/* The scanner is full screen; its × goes back to Home. */}
       <nav
         aria-label="Tabs"
-        className={cn(
-          'relative z-40 shrink-0 pb-[env(safe-area-inset-bottom)]',
-          scan && 'hidden'
-        )}
+        className={cn('relative z-40 shrink-0 pb-[env(safe-area-inset-bottom)]', scan && 'hidden')}
       >
         <div className={cn('mx-auto grid h-16 max-w-lg items-end', GRID_COLS[tabs.length + 1])}>
           {tabs.map(({ page: p, label, icon: Icon }) =>
@@ -283,9 +278,7 @@ function Shell({ engineFactory }: { engineFactory?: EngineFactory }): React.JSX.
                 >
                   <Icon className="size-6" />
                 </span>
-                <span className={page === p ? 'font-semibold' : undefined}>
-                  {label}
-                </span>
+                <span className={page === p ? 'font-semibold' : undefined}>{label}</span>
               </button>
             ) : (
               <TabButton

@@ -8,7 +8,7 @@ import { SET_TYPES, type SetType } from '@shared/setTypes'
 import { useArtWash } from '@/components/artWashContext'
 import { FilterBar } from '@/components/FilterBar'
 import { useMainScroll } from '@/components/mainScroll'
-import { PAGE_TITLE, PageHeader } from '@/components/PageHeader'
+import { PageHeader } from '@/components/PageHeader'
 import { SearchInput } from '@/components/SearchInput'
 import { SortControl } from '@/components/SortControl'
 import { Button } from '@/components/ui/button'
@@ -259,6 +259,7 @@ export function SetsPage({
         <div className="flex items-start">
           <div className="min-w-0 flex-1 space-y-4 p-8 max-md:p-4">
             <PageHeader
+              title="Sets"
               stats={
                 sets.isSuccess
                   ? [
@@ -268,14 +269,11 @@ export function SetsPage({
                   : undefined
               }
             >
-              <div>
-                <h1 className={PAGE_TITLE}>Sets</h1>
-                {sets.isPending && (
-                  <p className="mt-0.5">
-                    <InlineLoading label="Loading sets…" className="text-[13px]" />
-                  </p>
-                )}
-              </div>
+              {sets.isPending && (
+                <p>
+                  <InlineLoading label="Loading sets…" className="text-[13px]" />
+                </p>
+              )}
               <FilterBar
                 search={
                   <SearchInput

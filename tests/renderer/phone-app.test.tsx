@@ -473,7 +473,11 @@ describe('phone app', () => {
       'href',
       'https://duelbinder.com/privacy'
     )
-    expect(await screen.findByText((_, el) => el?.tagName === "SPAN" && /Version dev/.test(el.textContent ?? ""))).toBeInTheDocument()
+    expect(
+      await screen.findByText(
+        (_, el) => el?.tagName === 'SPAN' && /Version dev/.test(el.textContent ?? '')
+      )
+    ).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Refresh card data' }))
     await waitFor(() => expect(store.updateCatalog).toHaveBeenCalledWith({ force: true }))
     await waitFor(() =>

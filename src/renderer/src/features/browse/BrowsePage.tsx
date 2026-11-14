@@ -18,7 +18,7 @@ import {
   FilterPanel,
   LanguageSection
 } from '@/components/FilterPanel'
-import { PAGE_TITLE, PageHeader } from '@/components/PageHeader'
+import { PageHeader } from '@/components/PageHeader'
 import { listNav } from '@/components/panelNav'
 import { SearchInput } from '@/components/SearchInput'
 import { SortControl } from '@/components/SortControl'
@@ -217,18 +217,16 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
     <div className="flex items-start">
       <div className="min-w-0 flex-1 space-y-5 p-8 max-md:p-4">
         <PageHeader
+          title="Browse"
           stats={
             pages.isSuccess ? [{ label: 'Cards', value: total.toLocaleString('en-US') }] : undefined
           }
         >
-          <div>
-            <h1 className={PAGE_TITLE}>Browse</h1>
-            {pages.isPending && (
-              <p className="mt-0.5 text-[13px] tabular-nums">
-                <InlineLoading label="Loading cards…" className="text-[13px]" />
-              </p>
-            )}
-          </div>
+          {pages.isPending && (
+            <p className="text-[13px] tabular-nums">
+              <InlineLoading label="Loading cards…" className="text-[13px]" />
+            </p>
+          )}
           <div className="flex flex-wrap items-end gap-x-3 gap-y-2 border-b border-white/[0.08]">
             <UnderlineTabs
               label="Show"

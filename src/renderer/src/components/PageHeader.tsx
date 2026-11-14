@@ -57,7 +57,9 @@ export function PageHeader({
                     'font-mono font-medium leading-none',
                     phone ? 'text-[22px]' : 'text-[30px]'
                   )}
-                >{s.value}</dd>
+                >
+                  {s.value}
+                </dd>
               </div>
             ))}
           </dl>

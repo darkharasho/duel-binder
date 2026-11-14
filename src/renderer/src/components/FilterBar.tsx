@@ -8,8 +8,9 @@ import { cn } from '@/lib/utils'
 
 /**
  * The bar every list page shares. Row 1: search, Filters, sort, then the page's own toggle. Row 2,
- * only with something active: the removable chips, Clear all and the result count. It never
- * wraps, so a sticky header stays two rows: a long run of chips scrolls sideways. Its controls
+ * only with something active: the removable chips, Clear all and the result count. On desktop
+ * it never wraps, so a sticky header stays two rows: a long run of chips scrolls sideways. On a
+ * phone the search takes its own line above the buttons. Its controls
  * size to the bar rather than the window, since an open side panel narrows the bar too.
  */
 export function FilterBar({

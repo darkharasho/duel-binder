@@ -7,7 +7,7 @@ import type { NavigateFn } from '@/components/AppShell'
 import { useArtWash } from '@/components/artWashContext'
 import { CardSheet } from '@/components/CardSheet'
 import { EmptyHero, EmptySteps } from '@/components/EmptyHero'
-import { PAGE_TITLE, PageHeader, type PageStat } from '@/components/PageHeader'
+import { PageHeader, type PageStat } from '@/components/PageHeader'
 import { SearchInput } from '@/components/SearchInput'
 import { Button } from '@/components/ui/button'
 import { RowsSkeleton } from '@/components/ui/loading'
@@ -157,8 +157,7 @@ export function WishlistPage({ onNavigate }: { onNavigate?: NavigateFn } = {}): 
 
   return (
     <div className="space-y-4 p-8 max-md:p-4">
-      <PageHeader stats={items.length > 0 ? wishStats(items) : undefined}>
-        <h1 className={PAGE_TITLE}>Wishlist</h1>
+      <PageHeader title="Wishlist" stats={items.length > 0 ? wishStats(items) : undefined}>
         {items.length > 0 && unpricedCount(items) > 0 && (
           <p className="text-sm tabular-nums">{unpricedCount(items)} without a price</p>
         )}

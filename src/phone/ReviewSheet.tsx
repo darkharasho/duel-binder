@@ -144,7 +144,10 @@ function ReviewRow({ row, disabled }: { row: ScanRow; disabled: boolean }): Reac
           {where && <span className={cn(row.setCode && 'font-mono text-xs')}>{where}</span>}
           {where && (price != null || range) && ' · '}
           {price != null && (
-            <span aria-label={`Price of ${row.name}`} className="font-mono text-emerald-400 tabular-nums">
+            <span
+              aria-label={`Price of ${row.name}`}
+              className="font-mono text-emerald-400 tabular-nums"
+            >
               {formatUsd(price)}
             </span>
           )}
@@ -332,8 +335,10 @@ export function ReviewSheet({
           </div>
           <div className="text-right">
             <p className="text-xs text-muted-foreground tabular-nums">
-              {plural(session.total, 'card', 'cards')} ·{' '}
-              {plural(session.rows.length, 'entry', 'entries')}
+              <span className="font-mono">{session.total}</span>{' '}
+              {session.total === 1 ? 'card' : 'cards'} ·{' '}
+              <span className="font-mono">{session.rows.length}</span>{' '}
+              {session.rows.length === 1 ? 'entry' : 'entries'}
             </p>
             {priced > 0 && (
               <p
@@ -345,7 +350,8 @@ export function ReviewSheet({
             )}
             {priced > 0 && unpriced > 0 && (
               <p className="text-xs text-muted-foreground tabular-nums">
-                {plural(unpriced, 'card', 'cards')} with no price
+                <span className="font-mono">{unpriced}</span> {unpriced === 1 ? 'card' : 'cards'}{' '}
+                with no price
               </p>
             )}
           </div>

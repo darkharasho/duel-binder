@@ -62,11 +62,7 @@ type Refresh =
   | { state: 'error'; message: string }
 
 function Group({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return (
-    <div className="space-y-1">
-      {children}
-    </div>
-  )
+  return <div className="space-y-1">{children}</div>
 }
 
 function Row({ children }: { children: React.ReactNode }): React.JSX.Element {
@@ -242,7 +238,10 @@ export function Settings({
           )}
         </div>
         {signOutFailed && (
-          <p role="alert" className="mx-4 inline-block rounded-2xl bg-popover px-3 py-1.5 text-[13px] text-destructive">
+          <p
+            role="alert"
+            className="mx-4 inline-block rounded-2xl bg-popover px-3 py-1.5 text-[13px] text-destructive"
+          >
             {SIGN_OUT_FAILED}
           </p>
         )}

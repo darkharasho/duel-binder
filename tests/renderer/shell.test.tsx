@@ -76,17 +76,24 @@ describe('AppShell', () => {
 })
 
 describe('AppShell sidebar mark', () => {
-  it('shows the D mark as an image and no wordmark text', async () => {
+  it('shows the D mark with the Duel Binder name', async () => {
     await renderApp()
     const nav = screen.getByRole('navigation', { name: 'Main' })
     const aside = nav.closest('aside') as HTMLElement
-    expect(within(aside).getByRole('img', { name: 'Duel Binder' })).toBeInTheDocument()
-    expect(within(aside).queryByText('Duel Binder')).not.toBeInTheDocument()
+    expect(within(aside).getByText('Duel Binder')).toHaveClass('font-display')
+  })
+
+  it('sets tabs under a heading in from it', async () => {
+    await renderApp()
+    expect(screen.getByRole('button', { name: 'Collection' })).toHaveClass('ml-3')
   })
 
   it('marks only the open page as current', async () => {
     await renderApp()
-    expect(screen.getByRole('button', { name: 'Dashboard' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('button', { name: 'Dashboard' })).toHaveAttribute(
+      'aria-current',
+      'page'
+    )
     expect(screen.getByRole('button', { name: 'Collection' })).not.toHaveAttribute('aria-current')
   })
 
@@ -99,11 +106,10 @@ describe('AppShell sidebar mark', () => {
         }
       })
     )
-    expect(screen.getByRole('img', { name: 'Duel Binder' })).toBeInTheDocument()
+    expect(screen.getByText('Duel Binder')).toBeInTheDocument()
     expect(
       await screen.findByRole('button', { name: 'Switch game, showing Yu-Gi-Oh!' })
     ).toBeInTheDocument()
-    expect(screen.queryByText('Duel Binder')).not.toBeInTheDocument()
   })
 })
 

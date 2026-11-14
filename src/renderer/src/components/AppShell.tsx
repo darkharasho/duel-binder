@@ -129,7 +129,12 @@ export function AppShell({
       <div className="flex min-h-0 flex-1">
         <aside className="flex w-[200px] shrink-0 flex-col gap-5 pb-5 pl-6 pr-3 pt-3">
           <div className="flex flex-col items-start gap-3">
-            <img src={logoMark} alt="Duel Binder" className="-ml-1 h-auto w-[46px]" />
+            <div className="-ml-1 flex items-center gap-2">
+              <img src={logoMark} alt="" className="h-auto w-[34px] shrink-0" />
+              <span className="whitespace-nowrap font-display text-[24px] leading-none">
+                Duel Binder
+              </span>
+            </div>
             {available.length > 1 && <SidebarGameSwitch />}
           </div>
           <nav
@@ -155,6 +160,7 @@ export function AppShell({
                   {shown.map(({ page: p, label }) => (
                     <NavItem
                       key={p}
+                      indent={heading !== undefined}
                       label={label}
                       active={page === p}
                       onClick={() => onNavigate(p)}
@@ -234,12 +240,15 @@ function NavItem({
   label,
   active,
   onClick,
-  badge = 0
+  badge = 0,
+  indent = false
 }: {
   label: string
   active: boolean
   onClick: () => void
   badge?: number
+  /** Set in from its group heading. */
+  indent?: boolean
 }): React.JSX.Element {
   return (
     <button
@@ -249,7 +258,7 @@ function NavItem({
       }
       aria-current={active ? 'page' : undefined}
       onClick={onClick}
-      className={cn(ITEM, active && 'text-base font-extrabold')}
+      className={cn(ITEM, indent && 'ml-3', active && 'text-base font-extrabold')}
     >
       {active && (
         <span

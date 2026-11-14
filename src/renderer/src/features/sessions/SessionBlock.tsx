@@ -81,6 +81,7 @@ function Tile({
           className="w-full"
           reverse={reverse}
         />
+        {/* on art: fixed */}
         {card.quantity > 1 && (
           <span className="absolute right-1 top-1 rounded-full bg-black/75 px-1.5 text-[11px] font-semibold leading-5 text-white">
             ×{card.quantity}
@@ -89,8 +90,8 @@ function Tile({
       </span>
       <span
         className={cn(
-          'text-xs font-medium tabular-nums',
-          card.price === null ? 'text-muted-foreground' : 'text-emerald-400'
+          'font-mono text-xs font-medium tabular-nums',
+          card.price === null && 'text-muted-foreground'
         )}
       >
         {formatUsd(card.price)}
@@ -147,17 +148,15 @@ export function SessionBlock({
   }
 
   return (
-    <section className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4 backdrop-blur-md">
+    <section>
       <header className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
         <h3 className="font-bold">{sessionDate(session.createdAt)}</h3>
         <span className="text-sm text-muted-foreground">{plural(cards, 'card', 'cards')}</span>
-        <span className="text-sm font-semibold text-emerald-400">
+        <span className="rounded-full bg-popover px-2 font-mono text-sm font-semibold text-emerald-400">
           {formatUsd(sessionTotal(session.cards).value)}
         </span>
         {owner && !session.friendsVisible && (
-          <span className="rounded-full border border-white/10 bg-white/[0.06] px-2 py-0.5 text-[11px] text-muted-foreground">
-            hidden
-          </span>
+          <span className="rounded-full bg-popover px-2 py-0.5 text-[11px]">hidden</span>
         )}
         <span className="ml-auto flex items-center gap-2">
           {/* Replays are the owner's to make; a friend only looks. */}
@@ -208,7 +207,7 @@ export function SessionBlock({
           <button
             type="button"
             onClick={() => setExpanded(true)}
-            className="flex aspect-[5/7] w-full items-center justify-center self-start rounded-[7px] border border-white/[0.06] bg-white/[0.03] text-center text-sm text-muted-foreground hover:bg-white/[0.07]"
+            className="flex aspect-[5/7] w-full items-center justify-center self-start rounded-[7px] border border-border text-center text-sm text-muted-foreground hover:bg-white/[0.07]"
           >
             +{sorted.length - shown.length} more
           </button>

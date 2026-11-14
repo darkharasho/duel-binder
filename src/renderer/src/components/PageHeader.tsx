@@ -179,6 +179,8 @@ export function PageHeader({
           )}
           style={{
             top: -top,
+            // Feathered over the page's left margin, so there is no hard edge at the sidebar.
+            maskImage: 'linear-gradient(90deg, transparent, #000 32px)',
             background:
               'linear-gradient(180deg, var(--wash-base, var(--background)) calc(100% - 40px), transparent)'
           }}

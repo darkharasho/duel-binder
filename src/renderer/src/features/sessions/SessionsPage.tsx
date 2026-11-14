@@ -64,9 +64,7 @@ export function SessionsPage({ onNavigate }: { onNavigate?: NavigateFn } = {}): 
     <div className="space-y-4 p-8 max-md:p-4">
       <PageHeader>
         <h1 className={PAGE_TITLE}>Sessions</h1>
-        {!empty && (
-          <p className="text-sm text-muted-foreground">Cards you added from the scanner</p>
-        )}
+        {!empty && <p className="text-sm">Cards you added from the scanner</p>}
       </PageHeader>
       {sessions.isPending && <RowsSkeleton label="Loading sessions" />}
       {empty ? (

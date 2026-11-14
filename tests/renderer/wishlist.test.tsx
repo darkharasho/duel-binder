@@ -252,7 +252,7 @@ describe('WishlistPage', () => {
       friends: { owning }
     })
     expect(
-      await screen.findByText('2 cards · $20.00 to get · 1 without a price')
+      await screen.findByText('1 without a price')
     ).toBeInTheDocument()
     expect(await screen.findByText('Bob has this')).toBeInTheDocument()
     expect(owning).toHaveBeenCalledTimes(1)
@@ -265,7 +265,8 @@ describe('WishlistPage', () => {
     })
     expect(await screen.findByText('Owned')).toBeInTheDocument()
     expect(screen.getByText('1 of 3 owned')).toBeInTheDocument()
-    expect(screen.getByText('2 cards · $20.00 to get')).toBeInTheDocument()
+    expect(screen.getByText('$20.00')).toBeInTheDocument()
+    expect(screen.getByText('To get')).toBeInTheDocument()
   })
 
   it('removes a want, and steps its target down to no target', async () => {

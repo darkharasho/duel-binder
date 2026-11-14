@@ -273,7 +273,8 @@ describe('BrowsePage', () => {
     expect(dm).toHaveTextContent('$7.50')
     expect(within(dm).getByText('×2')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^Pot of Greed/ })).toHaveTextContent('Normal')
-    expect(screen.getByText('2 cards')).toBeInTheDocument()
+    expect(screen.getByText('Cards')).toBeInTheDocument()
+    expect(screen.getByText('2')).toBeInTheDocument()
   })
 
   it('lists sets by their English code', async () => {

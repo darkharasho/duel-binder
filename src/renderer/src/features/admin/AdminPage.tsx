@@ -104,9 +104,7 @@ export function AdminPage({
           <Pulse view={runs.data} />
           <span className="flex-1" />
           {needsStats && stats.data && (
-            <span className="text-xs text-muted-foreground">
-              Updated {new Date(stats.data.at).toLocaleString()}
-            </span>
+            <span className="text-xs">Updated {new Date(stats.data.at).toLocaleString()}</span>
           )}
           <Button variant="outline" size="sm" disabled={fetching} onClick={refresh}>
             Refresh

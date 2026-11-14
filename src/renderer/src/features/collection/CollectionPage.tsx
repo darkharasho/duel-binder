@@ -237,15 +237,14 @@ export function CollectionPage({
     (friend ? friend.cardCount > 0 : (stats.data?.uniqueCards ?? 0) > 0)
   const languageLabel = LANGUAGES.find((l) => l.code === languageFilter)?.label ?? ''
   const entryCount = (
-    <p className="text-sm text-muted-foreground tabular-nums">
+    <p className="text-sm tabular-nums">
       {/* No count until the list arrives: "0 entries" would flash on every first open. */}
-      {entries.data !== undefined && (
+      {entries.data !== undefined && friend && (
         <>
           {list.length} {list.length === 1 ? 'entry' : 'entries'}
         </>
       )}
       {entries.data === undefined && entries.isPending && <InlineLoading label="Loading cards…" />}
-      {entries.data !== undefined && !friend && stats.data !== undefined && ' · '}
       {!friend && stats.data !== undefined && (
         <>Prices updated {formatRelative(stats.data.pricesUpdatedAt)}</>
       )}
@@ -267,7 +266,19 @@ export function CollectionPage({
     <TooltipProvider>
       <div className="flex items-start">
         <div className="min-w-0 flex-1 space-y-4 p-8 max-md:p-4">
-          <PageHeader title={!inFriendHeader && !friend ? 'Collection' : undefined}>
+          <PageHeader
+            title={!inFriendHeader && !friend ? 'Collection' : undefined}
+            stats={
+              entries.data !== undefined && !friend
+                ? [
+                    {
+                      label: list.length === 1 ? 'Entry' : 'Entries',
+                      value: list.length.toLocaleString('en-US')
+                    }
+                  ]
+                : undefined
+            }
+          >
             {friendHeader?.(
               inFriendHeader && (
                 <>
@@ -278,9 +289,7 @@ export function CollectionPage({
             )}
             {!inFriendHeader && (
               <header className="flex flex-wrap items-end justify-between gap-2 max-md:flex-col max-md:items-start">
-                <div>
-                  {entryCount}
-                </div>
+                <div>{entryCount}</div>
               </header>
             )}
 

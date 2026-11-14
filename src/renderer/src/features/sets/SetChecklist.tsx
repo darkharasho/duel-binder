@@ -568,7 +568,7 @@ export function SetChecklist({
               className="size-24 rounded-[3px] shadow-[0_8px_20px_rgb(0_0_0/0.5)]"
             />
             <div className="min-w-0 flex-1">
-              <p className="font-mono text-[13px] text-foreground/75">
+              <p className="font-mono text-[13px]">
                 {data.set.setCode}
                 {data.set.tcgDate && ` · ${data.set.tcgDate}`} · {progress.owned} of{' '}
                 {progress.total}
@@ -646,23 +646,24 @@ export function SetChecklist({
                           ×{t.owned}
                         </span>
                       )}
-                      <span className="mb-1 font-mono text-[11.5px] font-medium">
-                        {tileNumberLabel(t)}
-                      </span>
-                      <span className={cn('truncate text-[15px] font-semibold', favourites && TILE_NAME)}>
+                      <span
+                        className={cn(
+                          'truncate text-[15px] font-semibold',
+                          favourites && TILE_NAME
+                        )}
+                      >
                         {t.card.name}
                       </span>
-                      <span className="mt-1 flex min-w-0 flex-col gap-1">
+                      <span className="mt-1 flex min-w-0 flex-col gap-1 font-mono text-[11.5px] font-medium">
+                        <span className="flex justify-between gap-2">
+                          <span className="truncate">{tileNumberLabel(t)}</span>
+                          {/* A card's own price isn't otherwise on its tile, so the order would be a mystery. */}
+                          {priced?.price != null && (
+                            <span className="shrink-0">{formatUsd(priced.price)}</span>
+                          )}
+                        </span>
                         {(priced?.rarity ?? t.rarity) && (
-                          <span className="truncate font-mono text-[11.5px] font-medium">
-                            {priced?.rarity ?? t.rarity}
-                          </span>
-                        )}
-                        {/* A card's own price isn't otherwise on its tile, so the order would be a mystery. */}
-                        {priced?.price != null && (
-                          <span className="font-mono text-[11.5px] font-medium">
-                            {formatUsd(priced.price)}
-                          </span>
+                          <span className="truncate">{priced?.rarity ?? t.rarity}</span>
                         )}
                       </span>
                     </button>

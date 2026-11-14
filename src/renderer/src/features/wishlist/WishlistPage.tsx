@@ -7,7 +7,7 @@ import type { NavigateFn } from '@/components/AppShell'
 import { useArtWash } from '@/components/artWashContext'
 import { CardSheet } from '@/components/CardSheet'
 import { EmptyHero, EmptySteps } from '@/components/EmptyHero'
-import { PAGE_TITLE, PageHeader } from '@/components/PageHeader'
+import { PAGE_TITLE, PageHeader, type PageStat } from '@/components/PageHeader'
 import { SearchInput } from '@/components/SearchInput'
 import { Button } from '@/components/ui/button'
 import { RowsSkeleton } from '@/components/ui/loading'
@@ -68,14 +68,12 @@ export function WishCardSheet({
   )
 }
 
-const summary = (items: WishlistItem[]): string => {
-  const { cost, unpriced } = wishlistCost(items)
-  return [
-    `${items.length} ${items.length === 1 ? 'card' : 'cards'}`,
-    `${formatUsd(cost)} to get`,
-    ...(unpriced > 0 ? [`${unpriced} without a price`] : [])
-  ].join(' · ')
-}
+const unpricedCount = (items: WishlistItem[]): number => wishlistCost(items).unpriced
+
+const wishStats = (items: WishlistItem[]): PageStat[] => [
+  { label: items.length === 1 ? 'Card' : 'Cards', value: items.length.toLocaleString('en-US') },
+  { label: 'To get', value: formatUsd(wishlistCost(items).cost) }
+]
 
 const WISH_STEPS = [
   {
@@ -159,10 +157,10 @@ export function WishlistPage({ onNavigate }: { onNavigate?: NavigateFn } = {}): 
 
   return (
     <div className="space-y-4 p-8 max-md:p-4">
-      <PageHeader>
+      <PageHeader stats={items.length > 0 ? wishStats(items) : undefined}>
         <h1 className={PAGE_TITLE}>Wishlist</h1>
-        {items.length > 0 && (
-          <p className="text-sm text-muted-foreground tabular-nums">{summary(items)}</p>
+        {items.length > 0 && unpricedCount(items) > 0 && (
+          <p className="text-sm tabular-nums">{unpricedCount(items)} without a price</p>
         )}
         {items.length > 0 && (
           <SearchInput

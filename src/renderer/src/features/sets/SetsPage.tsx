@@ -258,15 +258,18 @@ export function SetsPage({
       <div hidden={openSet !== null}>
         <div className="flex items-start">
           <div className="min-w-0 flex-1 space-y-4 p-8 max-md:p-4">
-            <PageHeader>
+            <PageHeader
+              stats={
+                sets.isSuccess
+                  ? [
+                      { label: 'Started', value: `${header.started} / ${header.total}` },
+                      { label: 'Complete', value: header.complete }
+                    ]
+                  : undefined
+              }
+            >
               <div>
                 <h1 className={PAGE_TITLE}>Sets</h1>
-                {sets.isSuccess && (
-                  <p className="mt-0.5 text-[13px] text-foreground/75 tabular-nums">
-                    You&apos;ve started {header.started} of {header.total} sets · {header.complete}{' '}
-                    complete
-                  </p>
-                )}
                 {sets.isPending && (
                   <p className="mt-0.5">
                     <InlineLoading label="Loading sets…" className="text-[13px]" />

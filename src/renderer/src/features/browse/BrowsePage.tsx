@@ -216,16 +216,18 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
   return (
     <div className="flex items-start">
       <div className="min-w-0 flex-1 space-y-5 p-8 max-md:p-4">
-        <PageHeader>
+        <PageHeader
+          stats={
+            pages.isSuccess ? [{ label: 'Cards', value: total.toLocaleString('en-US') }] : undefined
+          }
+        >
           <div>
             <h1 className={PAGE_TITLE}>Browse</h1>
-            <p className="mt-0.5 text-[13px] text-foreground/75 tabular-nums">
-              {pages.isSuccess ? (
-                `${total.toLocaleString('en-US')} cards`
-              ) : pages.isPending ? (
+            {pages.isPending && (
+              <p className="mt-0.5 text-[13px] tabular-nums">
                 <InlineLoading label="Loading cards…" className="text-[13px]" />
-              ) : null}
-            </p>
+              </p>
+            )}
           </div>
           <div className="flex flex-wrap items-end gap-x-3 gap-y-2 border-b border-white/[0.08]">
             <UnderlineTabs
@@ -334,14 +336,14 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
                       <LanguageTag language={c.language} className="shrink-0" />
                     )}
                   </div>
-                  <div className="mt-0.5 min-w-0 space-y-0.5">
-                    <div className="truncate font-mono text-[11.5px] font-medium">
-                      {statsLine(c)}
+                  <div className="mt-0.5 min-w-0 space-y-0.5 font-mono text-[11.5px] font-medium">
+                    <div className="flex justify-between gap-2">
+                      <span className="truncate">{statsLine(c)}</span>
+                      <span className="shrink-0">
+                        {c.price !== null ? formatUsd(c.price) : '—'}
+                      </span>
                     </div>
-                    <div className="flex justify-between font-mono text-[11.5px] font-medium">
-                      <span>{c.releasedAt?.slice(0, 4) ?? ''}</span>
-                      <span>{c.price !== null ? formatUsd(c.price) : '—'}</span>
-                    </div>
+                    {c.releasedAt && <div>{c.releasedAt.slice(0, 4)}</div>}
                   </div>
                 </button>
                 <FavouriteHeart

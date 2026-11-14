@@ -116,7 +116,7 @@ describe('SetsPage languages', () => {
   it('header counts only the selected language', async () => {
     localStorage.setItem('language.filter', 'ja')
     renderPage([LOB_EN, LOB_JA, MR])
-    expect(await screen.findByText("You've started 1 of 1 sets · 0 complete")).toBeInTheDocument()
+    expect(await screen.findByText('1 / 1')).toBeInTheDocument()
   })
 })
 
@@ -194,7 +194,7 @@ describe('SetsPage', () => {
 
   it('shows the header summary and lists unstarted sets by default', async () => {
     renderPage()
-    expect(await screen.findByText("You've started 2 of 3 sets · 1 complete")).toBeInTheDocument()
+    expect(await screen.findByText('2 / 3')).toBeInTheDocument()
     const lob = screen.getByRole('button', { name: /Legend of Blue Eyes/ })
     expect(lob).toHaveAttribute('data-started', 'false')
     expect(within(lob).getByText('Not started')).toBeInTheDocument()
@@ -275,7 +275,7 @@ describe('SetsPage', () => {
     await userEvent.click(await screen.findByRole('button', { name: /Metal Raiders/ }))
     expect(await screen.findByRole('button', { name: 'Alpha Dragon' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: /All sets/ }))
-    expect(await screen.findByText(/You've started/)).toBeInTheDocument()
+    expect(await screen.findByText('Started')).toBeInTheDocument()
   })
 
   it('opens straight on a set another page linked to', async () => {
@@ -292,7 +292,7 @@ describe('SetsPage', () => {
     )
     expect(await screen.findByRole('button', { name: 'Alpha Dragon' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: /All sets/ }))
-    expect(await screen.findByText(/You've started/)).toBeInTheDocument()
+    expect(await screen.findByText('Started')).toBeInTheDocument()
   })
 
   it("Android's back leaves the set for the list before it leaves the page", async () => {
@@ -306,7 +306,7 @@ describe('SetsPage', () => {
     await screen.findByRole('button', { name: 'Alpha Dragon' })
 
     act(() => void handleBack())
-    expect(await screen.findByText(/You've started/)).toBeInTheDocument()
+    expect(await screen.findByText('Started')).toBeInTheDocument()
     expect(home).not.toHaveBeenCalled()
     act(() => void handleBack())
     expect(home).toHaveBeenCalledTimes(1)
@@ -451,6 +451,6 @@ describe('SetArt', () => {
     await userEvent.click(await screen.findByRole('button', { name: /Metal Raiders/ }))
     await screen.findByRole('button', { name: 'Alpha Dragon' })
     await userEvent.keyboard('{Escape}')
-    expect(await screen.findByText(/You've started/)).toBeInTheDocument()
+    expect(await screen.findByText('Started')).toBeInTheDocument()
   })
 })

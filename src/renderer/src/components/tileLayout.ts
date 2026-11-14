@@ -20,13 +20,12 @@ export const TILE_NAME = 'pr-7'
 /** On the heart: the name's row, at its right, inside the button's `p-1`. */
 export const TILE_HEART = 'col-start-1 row-start-2 mr-1 self-center justify-self-end'
 
-/** A checklist tile, with the card's number in a row of its own between the art and the name. */
-export const NUMBERED_TILE =
-  'group/tile grid grid-cols-[minmax(0,1fr)] grid-rows-[auto_auto_auto_1fr]'
+/** A checklist tile: the same three rows as a card tile, with the card's number on the first line under the name. */
+export const NUMBERED_TILE = 'group/tile grid grid-cols-[minmax(0,1fr)] grid-rows-[auto_auto_1fr]'
 export const NUMBERED_TILE_BUTTON =
-  '[grid-area:1/1/span_4] grid min-w-0 grid-cols-[minmax(0,1fr)] grid-rows-subgrid'
+  '[grid-area:1/1/span_3] grid min-w-0 grid-cols-[minmax(0,1fr)] grid-rows-subgrid'
 /** On a checklist tile's heart: the name's row, inside the button's `p-1.5`. */
-export const NUMBERED_TILE_HEART = 'col-start-1 row-start-3 mr-1.5 self-center justify-self-end'
+export const NUMBERED_TILE_HEART = 'col-start-1 row-start-2 mr-1.5 self-center justify-self-end'
 
 /** A tile heart button's look and reach (see FavouriteHeart); `data-on` keeps it shown. */
 export const HEART_BUTTON = [

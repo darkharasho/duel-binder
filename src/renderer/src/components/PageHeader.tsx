@@ -34,11 +34,7 @@ export function PageHeader({
   const heading =
     title || stats?.length ? (
       <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-3">
-        {title && (
-          <h1 className={cn(PAGE_TITLE, 'min-w-0')}>
-            {title}
-          </h1>
-        )}
+        {title && <h1 className={cn(PAGE_TITLE, 'min-w-0')}>{title}</h1>}
         {stats && stats.length > 0 && (
           <dl className="ml-auto flex gap-8 text-right">
             {stats.map((s) => (

@@ -49,7 +49,7 @@ export function PokedexPage(): React.JSX.Element {
         <div className="space-y-2">
           <div>
             <h1 className={PAGE_TITLE}>Pokédex</h1>
-            <p className="mt-0.5 text-[13px] text-foreground/75 tabular-nums">
+            <p className="mt-0.5 text-[13px] tabular-nums">
               {summary.isSuccess
                 ? `${total.caught} / ${POKEDEX_SIZE} caught · ${percentText(total)}%`
                 : summary.isError

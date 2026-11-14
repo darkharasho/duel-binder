@@ -26,7 +26,7 @@ function Section({
   children: React.ReactNode
 }): React.JSX.Element {
   return (
-    <section className="border-t border-white/[0.08] pt-5">
+    <section className="border-t border-border pt-5">
       <h2 className="mb-3 text-sm font-semibold">{title}</h2>
       <div className="space-y-3">{children}</div>
     </section>
@@ -37,7 +37,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }):
   return (
     <div className="flex items-center justify-between gap-4 text-sm">
       <span className="text-muted-foreground">{label}</span>
-      <span className="text-right tabular-nums">{children}</span>
+      <span className="text-right font-mono tabular-nums">{children}</span>
     </div>
   )
 }

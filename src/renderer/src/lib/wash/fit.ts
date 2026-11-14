@@ -16,11 +16,11 @@ export interface Fitted {
 const THEMES = {
   dark: {
     startL: 0.62,
-    chromaBoost: 1.9,
-    maxC: 0.24,
+    chromaBoost: 1.5,
+    maxC: 0.19,
     step: -0.01,
     minContrast: 5.5,
-    base: { L: [0.17, 0.24], C: 0.08 }
+    base: { L: [0.17, 0.24], C: 0.06 }
   },
   light: {
     startL: 0.72,

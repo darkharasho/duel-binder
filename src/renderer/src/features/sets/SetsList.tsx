@@ -50,7 +50,7 @@ function GridItem({ s, mode, onOpen }: ItemProps): React.JSX.Element {
           setCode={s.setCode}
           className={cn(
             'aspect-[4/3] w-full rounded-[4px] shadow-[0_8px_20px_rgb(0_0_0/0.45)] transition-transform duration-200 group-hover:-translate-y-1',
-            !started && 'opacity-60 grayscale-[0.6]' /* on art: fixed */
+            !started && 'brightness-[.6] grayscale-[0.6]' /* on art: fixed */
           )}
         />
         <div className="min-w-0 space-y-1.5">

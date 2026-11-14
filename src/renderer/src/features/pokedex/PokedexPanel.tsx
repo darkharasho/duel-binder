@@ -33,7 +33,7 @@ function CardTile({
         className="group w-full rounded-md p-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <span
-          className={cn('relative block', missing && 'opacity-45 grayscale' /* on art: fixed */)}
+          className={cn('relative block', missing && 'grayscale brightness-[.45]' /* on art: fixed */)}
         >
           {/* 0: the catalog has no image for this card; never ask for image 0. */}
           {card.imageId === 0 ? (

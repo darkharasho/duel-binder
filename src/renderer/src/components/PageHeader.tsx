@@ -50,8 +50,17 @@ function usePin(
       const row = pin()
       // A page kept mounted but hidden (the Sets list under an open set) has no boxes: never held.
       if (!row || !scroller || row.getClientRects().length === 0) return setPinned(false)
-      const fromTop = row.getBoundingClientRect().top - scroller.getBoundingClientRect().top
-      setPinned(scroller.scrollTop > 0 && fromTop <= PIN_GAP + 0.5)
+      const scrollerTop = scroller.getBoundingClientRect().top
+      const fromTop = row.getBoundingClientRect().top - scrollerTop
+      const held = scroller.scrollTop > 0 && fromTop <= PIN_GAP + 0.5
+      // The scrollbar track sits outside the fade, so it draws the same fade to this depth.
+      const fade = el.querySelector(':scope > [data-pin-fade]')
+      if (held && fade)
+        document.documentElement.style.setProperty(
+          '--pin-fade',
+          `${fade.getBoundingClientRect().bottom - scrollerTop}px`
+        )
+      setPinned(held)
     }
     onScroll()
     scroller?.addEventListener('scroll', onScroll, { passive: true })
@@ -163,6 +172,7 @@ export function PageHeader({
         // same colour, see TitleBar), fading out below the row.
         <div
           aria-hidden
+          data-pin-fade
           className={cn(
             'pointer-events-none absolute -inset-x-8 bottom-[-24px] -z-10 transition-opacity duration-150',
             !pinned && 'opacity-0'

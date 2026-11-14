@@ -125,7 +125,7 @@ function Pocket({
         <div className="binder-card">
           {c.imageId ? (
             // Faded on a wrapper: the art's own fade-in would otherwise light a missing card up.
-            <div className={cn(missing && 'opacity-[0.13] grayscale')}>
+            <div className={cn(missing && 'grayscale brightness-[.2]')}>
               <CardArt
                 imageId={c.imageId}
                 printingId={binderScanFor(c)}

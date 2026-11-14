@@ -83,6 +83,14 @@
   ::-webkit-scrollbar-corner {
     background: transparent;
   }
+  /* While a page header holds its row, the page's track carries the same fade (see PageHeader). */
+  html[data-header-pinned] [data-main-scroll]::-webkit-scrollbar-track {
+    background: linear-gradient(
+      180deg,
+      var(--wash-base, var(--background)) calc(var(--pin-fade, 0px) - 40px),
+      transparent var(--pin-fade, 0px)
+    );
+  }
   ::-webkit-scrollbar-thumb {
     background: rgb(255 255 255 / 12%);
     border: 3px solid transparent;

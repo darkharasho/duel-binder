@@ -625,7 +625,7 @@ export function SetChecklist({
                         NUMBERED_TILE_BUTTON,
                         // On the tile, so the hover stays while the pointer is on the heart.
                         'relative rounded-lg p-1.5 text-left outline-none group-hover/tile:bg-accent focus-visible:ring-2 focus-visible:ring-ring',
-                        !owned && 'grayscale opacity-40' /* on art: fixed */
+                        !owned && 'grayscale brightness-[.4]' /* on art: fixed */
                       )}
                     >
                       <TiltCard className="mb-1">

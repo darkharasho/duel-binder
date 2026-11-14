@@ -75,6 +75,38 @@ describe('AppShell', () => {
   })
 })
 
+describe('AppShell sidebar mark', () => {
+  it('shows the D mark as an image and no wordmark text', async () => {
+    await renderApp()
+    const nav = screen.getByRole('navigation', { name: 'Main' })
+    const aside = nav.closest('aside') as HTMLElement
+    expect(within(aside).getByRole('img', { name: 'Duel Binder' })).toBeInTheDocument()
+    expect(within(aside).queryByText('Duel Binder')).not.toBeInTheDocument()
+  })
+
+  it('marks only the open page as current', async () => {
+    await renderApp()
+    expect(screen.getByRole('button', { name: 'Dashboard' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('button', { name: 'Collection' })).not.toHaveAttribute('aria-current')
+  })
+
+  it('with two games shows the mark and the game switch', async () => {
+    await renderApp(
+      mockApi({
+        games: {
+          available: vi.fn(async () => ['ygo', 'pkm'] as never),
+          active: vi.fn(async () => 'ygo' as never)
+        }
+      })
+    )
+    expect(screen.getByRole('img', { name: 'Duel Binder' })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('button', { name: 'Switch game, showing Yu-Gi-Oh!' })
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Duel Binder')).not.toBeInTheDocument()
+  })
+})
+
 describe('AppShell sets nav', () => {
   it('lists Sets in the Catalog group, after My cards, and opens it', async () => {
     await renderApp()

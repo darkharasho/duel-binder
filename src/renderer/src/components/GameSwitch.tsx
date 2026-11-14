@@ -2,7 +2,6 @@ import { CheckIcon, ChevronDownIcon, LoaderCircleIcon } from 'lucide-react'
 import { DropdownMenu as DropdownMenuPrimitive } from 'radix-ui'
 import { toast } from 'sonner'
 import { GAMES, type GameId } from '@shared/games'
-import logo from '@/assets/logo.svg'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -92,8 +91,8 @@ function GameMenu({
 }
 
 /**
- * The desktop sidebar's name row as the game switch: the logo and "Duel Binder", the game shown
- * under the name, and a menu of games. Only for accounts with more than one game.
+ * The desktop sidebar's game switch, a mono pill under the D mark showing the game, opening a menu
+ * of games. Only for accounts with more than one game.
  */
 export function SidebarGameSwitch(): React.JSX.Element {
   const { game, loading } = useShownGame()
@@ -104,19 +103,11 @@ export function SidebarGameSwitch(): React.JSX.Element {
         <button
           type="button"
           aria-label={`Switch game, showing ${def.name}`}
-          className="-mx-2 flex items-center gap-2.5 rounded-md px-2 py-1 text-left transition-colors duration-150 hover:bg-white/5 focus-visible:outline-2 focus-visible:outline-ring data-[state=open]:bg-white/5"
+          className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-full bg-chip px-3 font-mono text-xs font-medium text-foreground transition-colors duration-150 hover:bg-chip/70 focus-visible:outline-2 focus-visible:outline-ring data-[state=open]:bg-chip/70"
         >
-          <img src={logo} alt="" className="h-9 w-9" />
-          <span className="min-w-0 flex-1">
-            <span className="block whitespace-nowrap text-[15px] font-semibold tracking-[-0.01em]">
-              Duel Binder
-            </span>
-            <span className="flex items-center gap-1.5 whitespace-nowrap text-[11px] text-muted-foreground">
-              <GameMark game={def.id} loading={loading} />
-              {def.name}
-            </span>
-          </span>
-          <ChevronDownIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+          <GameMark game={def.id} loading={loading} />
+          {def.name}
+          <ChevronDownIcon aria-hidden className="size-3 shrink-0" />
         </button>
       </DropdownMenuTrigger>
       <GameMenu align="start" />

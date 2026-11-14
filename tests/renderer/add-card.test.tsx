@@ -196,6 +196,19 @@ describe('AddCardDialog', () => {
     expect(await screen.findByText('Pot of Greed')).toBeInTheDocument()
   })
 
+  it('is a solid popover surface with a display-type search field and mono result meta', async () => {
+    const api = createMockApi({
+      cards: { search: async () => [{ ...pot, matchedSetCode: 'LOB-EN119' }] }
+    })
+    renderWithProviders(<AddCardDialog open onOpenChange={() => {}} />, { api })
+    const input = await screen.findByPlaceholderText(/Search cards/)
+    expect(screen.getByRole('dialog')).toHaveClass('bg-popover')
+    expect(input).toHaveClass('font-display')
+    await userEvent.type(input, 'pot')
+    expect(await screen.findByText('LOB-EN119')).toHaveClass('font-mono')
+    expect(screen.getByText('Spell Card')).toHaveClass('font-mono')
+  })
+
   it('single-art card skips art step', async () => {
     const { add } = setup()
     await userEvent.type(await screen.findByPlaceholderText(/Search cards/), 'pot')

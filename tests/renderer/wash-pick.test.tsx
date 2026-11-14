@@ -9,9 +9,9 @@ vi.mock('@/lib/wash/sample', () => ({
   gameFallback: vi.fn()
 }))
 
-const colourful = { greyArt: false, tag: 'colour' } as unknown as Families
-const grey = { greyArt: true, tag: 'grey' } as unknown as Families
-const fallback = { greyArt: false, tag: 'fallback' } as unknown as Families
+const colourful = { greyArt: false, fams: [{}], tag: 'colour' } as unknown as Families
+const grey = { greyArt: true, fams: [{}], tag: 'grey' } as unknown as Families
+const fallback = { greyArt: false, fams: [{}], tag: 'fallback' } as unknown as Families
 
 const card = (imageId: number): WashCard => ({ imageId })
 const [a, b, c, d] = [card(1), card(2), card(3), card(4)]
@@ -139,5 +139,45 @@ describe('useArtWash', () => {
     await flush()
     expect(set).toHaveBeenCalledTimes(1)
     expect((set.mock.calls[0][0] as WashState).seed).toBe(2)
+  })
+
+  it('skips a card with no colour list in favour of a colourful one', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.99)
+    const empty = { greyArt: false, fams: [], tag: 'empty' } as unknown as Families
+    sample.mockImplementation(async (card) => (card.imageId === 1 ? empty : colourful))
+    render(tree([a, b]))
+    await flush()
+    expect((set.mock.calls[0][0] as WashState).families).toBe(colourful)
+  })
+
+  it('stops after a few unreadable cards and uses the game colours', async () => {
+    sample.mockResolvedValue(null)
+    const many = Array.from({ length: 20 }, (_, i) => card(i + 1))
+    render(tree(many))
+    await flush()
+    expect(sample).toHaveBeenCalledTimes(6)
+    expect((set.mock.calls[0][0] as WashState).families).toBe(fallback)
+  })
+
+  it('keeps the current wash when the pick is too late', async () => {
+    let resolve!: (f: Families) => void
+    sample.mockReturnValue(new Promise((r) => (resolve = r)))
+    const now = vi.spyOn(Date, 'now')
+    now.mockReturnValue(1000)
+    render(tree([a]))
+    now.mockReturnValue(1000 + 7000)
+    resolve(colourful)
+    await flush()
+    expect(set).not.toHaveBeenCalled()
+  })
+
+  it('drops the list walk when a child view takes over', async () => {
+    let resolve!: (f: Families) => void
+    sample.mockReturnValue(new Promise((r) => (resolve = r)))
+    const { rerender } = render(tree([a]))
+    rerender(tree(undefined))
+    resolve(colourful)
+    await flush()
+    expect(set).not.toHaveBeenCalled()
   })
 })

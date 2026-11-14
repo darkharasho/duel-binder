@@ -10,7 +10,7 @@ const buttonVariants = cva(
       variant: {
         default: "bg-chip-on text-chip-on-ink hover:bg-chip-on/90",
         destructive:
-          "bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40",
+          "bg-destructive text-chip-on-ink hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40",
         outline:
           "border border-foreground/60 bg-transparent hover:bg-chip",
         secondary:

@@ -12,7 +12,7 @@ const badgeVariants = cva(
         secondary:
           "bg-chip text-foreground [a&]:hover:bg-chip/70",
         destructive:
-          "bg-destructive text-white focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 [a&]:hover:bg-destructive/90",
+          "bg-destructive text-chip-on-ink focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 [a&]:hover:bg-destructive/90",
         outline:
           "border-foreground/60 bg-popover text-foreground [a&]:hover:bg-chip",
         ghost: "text-foreground [a&]:hover:bg-chip",

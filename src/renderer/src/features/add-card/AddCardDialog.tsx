@@ -238,7 +238,7 @@ export function AddCardDialog({
   const downloading = sync?.cardCount === 0
   // On the phone the dialog fills the screen, so its lists can grow to the space left.
   const phone = isPhone()
-  const listClass = phone ? 'max-h-none flex-1' : 'max-h-[26rem]'
+  const listClass = phone ? 'max-h-none flex-1' : 'max-h-[min(26rem,calc(100dvh-18dvh-9rem))] min-h-0'
   const commandClass = phone ? 'min-h-0 flex-1 rounded-none' : 'rounded-none'
   // The search underline: Bricolage at 22 px, italic placeholder (the Input primitive's field).
   const inputWrapClass =
@@ -266,7 +266,7 @@ export function AddCardDialog({
         className={
           phone
             ? 'inset-0 top-0 left-0 flex h-dvh max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 p-0 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] data-[state=closed]:zoom-out-100 data-[state=open]:zoom-in-100 sm:max-w-none'
-            : 'top-[18%] translate-y-0 gap-0 overflow-hidden rounded-2xl border-0 bg-popover p-0 shadow-2xl sm:max-w-[720px]'
+            : 'top-[18%] flex max-h-[calc(100dvh-18dvh-1.5rem)] translate-y-0 flex-col gap-0 overflow-hidden rounded-2xl border-0 bg-popover p-0 shadow-2xl sm:max-w-[720px]'
         }
         overlayClassName={phone ? undefined : 'bg-black/60 backdrop-blur-sm'}
         data-layout={phone ? 'full-screen' : undefined}

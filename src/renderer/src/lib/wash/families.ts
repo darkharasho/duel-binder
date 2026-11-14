@@ -16,6 +16,12 @@ export const FRAME: Record<string, [hue: number, chroma: number]> = {
   synchro: [265, 0.09],
   xyz: [295, 0.1],
   link: [245, 0.15],
+  normal_pendulum: [80, 0.12],
+  effect_pendulum: [55, 0.15],
+  ritual_pendulum: [240, 0.13],
+  fusion_pendulum: [315, 0.14],
+  synchro_pendulum: [265, 0.09],
+  xyz_pendulum: [295, 0.1],
   spell: [170, 0.13],
   trap: [345, 0.14]
 }
@@ -67,7 +73,7 @@ export function familiesFromPixels(pixels: RGB[], frameType?: string): Families 
   }
   // Grey art: the frame colour becomes the main pool; the art's strongest colour (if far enough away) stays as a smaller one.
   const frame = frameType ? FRAME[frameType] : undefined
-  const greyArt = vivid < GREY && !!frame
+  const greyArt = vivid < GREY
   if (greyArt && frame) {
     const [fH, fC] = frame
     const art = picked[0]

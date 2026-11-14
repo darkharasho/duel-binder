@@ -54,7 +54,7 @@ export function SessionsPage({ onNavigate }: { onNavigate?: NavigateFn } = {}): 
   const sessions = useQuery({ queryKey: sessionsKey(game), queryFn: () => api.sessions.list(game) })
   const [open, setOpen] = useState<{ card: ScanSessionCard; uid: string } | null>(null)
   const washCards = useMemo(
-    () => sessions.data?.flatMap((s) => s.cards.map((c) => ({ imageId: c.imageId }))),
+    () => sessions.data?.flatMap((s) => s.cards.filter((c) => c.imageId > 0).map((c) => ({ imageId: c.imageId }))),
     [sessions.data]
   )
   // A table-like feed, so a softer wash.

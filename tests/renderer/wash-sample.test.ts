@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RGB } from '@/lib/wash/color'
 import { fit } from '@/lib/wash/fit'
-import { gameFallback, sampleCard, sampleMemory } from '@/lib/wash/sample'
+import { clearMisses, gameFallback, readPixels, sampleCard, sampleMemory } from '@/lib/wash/sample'
 
 const px: RGB[] = Array.from({ length: 1024 }, () => [200, 40, 40] as RGB)
 const reader = () => vi.fn(async (..._a: unknown[]): Promise<RGB[] | null> => px)
@@ -10,6 +10,7 @@ const reader = () => vi.fn(async (..._a: unknown[]): Promise<RGB[] | null> => px
 beforeEach(() => {
   localStorage.clear()
   sampleMemory.clear()
+  clearMisses()
   vi.restoreAllMocks()
 })
 
@@ -65,6 +66,46 @@ describe('sampleCard', () => {
     ).toBeNull()
   })
 
+  it('does not ask again for a card that failed, until the day is up', async () => {
+    const read = vi.fn(async (..._a: unknown[]): Promise<RGB[] | null> => null)
+    expect(await sampleCard({ imageId: 9 }, 'pkm', read)).toBeNull()
+    expect(await sampleCard({ imageId: 9 }, 'pkm', read)).toBeNull()
+    expect(read).toHaveBeenCalledTimes(1)
+    clearMisses() // a new session still has it in localStorage
+    expect(await sampleCard({ imageId: 9 }, 'pkm', read)).toBeNull()
+    expect(read).toHaveBeenCalledTimes(1)
+    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 25 * 60 * 60 * 1000)
+    clearMisses()
+    await sampleCard({ imageId: 9 }, 'pkm', read)
+    expect(read).toHaveBeenCalledTimes(2)
+  })
+
+  it('asks with its own query so a CORS read cannot reuse the grid tile copy', async () => {
+    const read = reader()
+    await sampleCard({ imageId: 6 }, 'pkm', read)
+    expect(String(read.mock.calls[0][0])).toMatch(/small\/6\?(wash|now)/)
+  })
+
+  it('gives grey art with no frame the game colours', async () => {
+    const grey: RGB[] = Array.from({ length: 1024 }, () => [90, 90, 95] as RGB)
+    const f = await sampleCard({ imageId: 7 }, 'pkm', async () => grey)
+    expect(f?.greyArt).toBe(true)
+    expect(f?.fams).toEqual(gameFallback('pkm').fams)
+    expect(fit(f!, 'dark').worst).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('keeps the frame colour for grey Yu-Gi-Oh! art with a known frame', async () => {
+    const grey: RGB[] = Array.from({ length: 1024 }, () => [90, 90, 95] as RGB)
+    const f = await sampleCard({ imageId: 8, frameType: 'effect' }, 'ygo', async () => grey)
+    expect(f?.fams).not.toEqual(gameFallback('ygo').fams)
+  })
+
+  it('recovers from a corrupt index', async () => {
+    localStorage.setItem('wash:v1:index', '{"a":1}')
+    await sampleCard({ imageId: 5 }, 'ygo', reader())
+    expect(JSON.parse(localStorage.getItem('wash:v1:index')!)).toEqual(['wash:v1:ygo:5'])
+  })
+
   it('keeps at most 600 keys, evicting the oldest', async () => {
     const read = reader()
     for (let i = 1; i <= 601; i++) await sampleCard({ imageId: i }, 'ygo', read)
@@ -81,5 +122,15 @@ describe('gameFallback', () => {
   })
   it.each(['ygo', 'pkm', 'op', 'mtg'] as const)('%s passes contrast in the dark theme', (g) => {
     expect(fit(gameFallback(g), 'dark').worst).toBeGreaterThanOrEqual(4.5)
+  })
+})
+
+describe('readPixels', () => {
+  it('gives up after the timeout', async () => {
+    vi.useFakeTimers()
+    const p = readPixels('ygo-img://small/1', { x: 0, y: 0, w: 1, h: 1 }, 1000)
+    vi.advanceTimersByTime(1001)
+    expect(await p).toBeNull()
+    vi.useRealTimers()
   })
 })

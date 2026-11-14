@@ -53,7 +53,10 @@ export function ArtWash({
   )
   return (
     <div aria-hidden data-game={game} className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-      <div className="absolute inset-0" style={{ background: base }} />
+      <div
+        className="absolute inset-0"
+        style={{ background: base, transition: reducedMotion() ? 'none' : 'background-color 700ms ease' }}
+      />
       {layer(0, 'wash-a')}
       {layer(1, 'wash-b')}
       <div

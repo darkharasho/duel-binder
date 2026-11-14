@@ -33,8 +33,14 @@ describe('wash engine', () => {
     expect(f.greyArt).toBe(true)
     expect(Math.abs(lch(f.fams[0].lab)[2] - FRAME.effect[0])).toBeLessThan(2)
   })
-  it('does not use a frame for grey art with an unknown frame', () => {
-    expect(familiesFromPixels(fill([90, 90, 95]), 'pokemon').greyArt).toBe(false)
+  it('flags grey art whatever the frame, so the pick can skip it', () => {
+    expect(familiesFromPixels(fill([90, 90, 95]), 'pokemon').greyArt).toBe(true)
+    expect(familiesFromPixels(fill([90, 90, 95])).greyArt).toBe(true)
+    expect(familiesFromPixels(fill([200, 40, 40])).greyArt).toBe(false)
+  })
+  it('knows the pendulum frames', () => {
+    const f = familiesFromPixels(fill([90, 90, 95]), 'effect_pendulum')
+    expect(Math.abs(lch(f.fams[0].lab)[2] - FRAME.effect[0])).toBeLessThan(2)
   })
   it.each(['dark', 'light'] as const)('fits every pool and the base to 4.5:1 in %s', (t) => {
     for (const px of [fill([250, 240, 120]), fill([20, 20, 30]), mix([[255, 255, 255], 500], [[0, 200, 255], 524])]) {

@@ -158,10 +158,11 @@ function Pocket({
           ×{c.owned}
         </Badge>
       )}
+      {/* on art: fixed */}
       {c.added && (
         <Badge
           variant="secondary"
-          className="pointer-events-none absolute left-3.5 top-5 z-[3] text-[10px] max-md:left-2 max-md:top-3"
+          className="pointer-events-none absolute left-3.5 top-5 z-[3] bg-black/70 text-[10px] text-white max-md:left-2 max-md:top-3"
         >
           added by hand
         </Badge>

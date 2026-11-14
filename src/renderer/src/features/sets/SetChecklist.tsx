@@ -232,7 +232,7 @@ export function SetChecklist({
   const data = checklist.data
   // An OCG set's unpriced printings: the portal prices them and they show after the next sync.
   useRequestPrices(useMemo(() => (friend ? [] : checklistUnpriced(data)), [friend, data]))
-  const washCards = useMemo(() => data?.cards.map((c) => ({ imageId: c.imageId })), [data])
+  const washCards = useMemo(() => data?.cards.filter((c) => c.imageId > 0).map((c) => ({ imageId: c.imageId })), [data])
   useArtWash(washCards ?? null)
   const tiles = useMemo(
     () =>

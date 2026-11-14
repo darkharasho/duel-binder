@@ -370,6 +370,7 @@ function TabButton({
     >
       <Icon aria-hidden className="size-6" />
       {label}
+      {current && <span aria-hidden className="absolute bottom-0.5 h-1 w-5 rounded-full bg-foreground" />}
       {badge > 0 && (
         <span
           aria-hidden

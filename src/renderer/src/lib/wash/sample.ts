@@ -1,7 +1,7 @@
 import type { GameId } from '@shared/games'
 import { cardImageSrc } from '@/lib/images'
 import { type RGB, lch, toOklab, unlch } from './color'
-import { type Families, familiesFromPixels } from './families'
+import { FRAME, type Families, familiesFromPixels } from './families'
 
 export interface WashCard {
   imageId: number
@@ -26,10 +26,27 @@ export const ART_BOX: Record<GameId, ArtBox> = {
 
 const SIZE = 32
 
-/** The box of an image as SIZE x SIZE pixels; null if it won't load or the canvas is tainted. */
-export function readPixels(src: string, box: ArtBox): Promise<RGB[] | null> {
+/** How long one image read may take before it counts as a miss. */
+export const READ_TIMEOUT_MS = 4000
+
+/** The box of an image as SIZE x SIZE pixels; null if it won't load, times out or the canvas is tainted. */
+export function readPixels(
+  src: string,
+  box: ArtBox,
+  timeoutMs = READ_TIMEOUT_MS
+): Promise<RGB[] | null> {
   return new Promise((resolve) => {
     const img = new Image()
+    const timer = setTimeout(() => {
+      img.onload = img.onerror = null
+      img.src = ''
+      resolve(null)
+    }, timeoutMs)
+    const done = resolve
+    resolve = (v) => {
+      clearTimeout(timer)
+      done(v)
+    }
     img.crossOrigin = 'anonymous'
     img.onerror = () => resolve(null)
     img.onload = () => {
@@ -57,6 +74,9 @@ export function readPixels(src: string, box: ArtBox): Promise<RGB[] | null> {
 const MAX_KEYS = 600
 const INDEX_KEY = 'wash:v1:index'
 const keyOf = (game: GameId, id: number): string => `wash:v1:${game}:${id}`
+const missKeyOf = (game: GameId, id: number): string => `wash:v1:miss:${game}:${id}`
+/** A card whose image could not be read is left alone for this long. */
+export const MISS_TTL_MS = 24 * 60 * 60 * 1000
 
 /** Sampled cards this session; localStorage keeps them between runs. */
 export const sampleMemory = new Map<string, Families>()
@@ -72,15 +92,34 @@ function stored(key: string): Families | null {
   }
 }
 
-/** Saves a card, oldest first out past MAX_KEYS. Storage errors (private mode, quota) are ignored. */
-function store(key: string, f: Families): void {
+/** Failed reads this session (key to when), so a visit does not ask again. */
+const missMemory = new Map<string, number>()
+
+function recentlyMissed(key: string): boolean {
+  let at = missMemory.get(key)
+  if (at === undefined) {
+    try {
+      at = Number(localStorage.getItem(key))
+    } catch {
+      at = 0
+    }
+    if (at) missMemory.set(key, at)
+  }
+  return !!at && Date.now() - at < MISS_TTL_MS
+}
+
+/** Forgets failed reads (tests). */
+export const clearMisses = (): void => missMemory.clear()
+
+/** Saves an entry, oldest first out past MAX_KEYS. Storage errors (private mode, quota) are ignored. */
+function store(key: string, value: unknown): void {
   try {
-    const index = (JSON.parse(localStorage.getItem(INDEX_KEY) ?? '[]') as string[]).filter(
-      (k) => k !== key
-    )
+    const parsed: unknown = JSON.parse(localStorage.getItem(INDEX_KEY) ?? '[]')
+    // A corrupt index (not a list) starts over rather than switching saving off for good.
+    const index = (Array.isArray(parsed) ? (parsed as string[]) : []).filter((k) => k !== key)
     index.push(key)
     while (index.length > MAX_KEYS) localStorage.removeItem(index.shift()!)
-    localStorage.setItem(key, JSON.stringify(f))
+    localStorage.setItem(key, JSON.stringify(value))
     localStorage.setItem(INDEX_KEY, JSON.stringify(index))
   } catch {
     /* the memory cache still has it */
@@ -99,17 +138,37 @@ export async function sampleCard(
     sampleMemory.set(key, hit)
     return hit
   }
+  const missKey = missKeyOf(game, card.imageId)
+  if (recentlyMissed(missKey)) return null
+  const miss = (): null => {
+    const at = Date.now()
+    missMemory.set(missKey, at)
+    store(missKey, at)
+    return null
+  }
   try {
-    const src = cardImageSrc(game === 'ygo' ? 'cropped' : 'small', card.imageId)
-    const pixels = await read(src, ART_BOX[game])
-    if (!pixels || pixels.length === 0) return null
-    const f = familiesFromPixels(pixels, card.frameType)
+    const pixels = await read(sampleSrc(game, card.imageId), ART_BOX[game])
+    if (!pixels || pixels.length === 0) return miss()
+    let f = familiesFromPixels(pixels, card.frameType)
+    // Grey art with no frame colour to lead (other games, unknown frames): the game's glow colours.
+    if (f.greyArt && !(card.frameType && Object.hasOwn(FRAME, card.frameType)))
+      f = { ...f, fams: gameFallback(game).fams }
     sampleMemory.set(key, f)
     store(key, f)
     return f
   } catch {
-    return null
+    return miss()
   }
+}
+
+/**
+ * The art to read. Desktop asks ahead of the download queue (`?now`; the protocol sends CORS headers).
+ * Elsewhere the read adds `?wash`: the grid shows the same image as a plain `<img>`, and a CORS
+ * request must not be answered from that no-CORS copy in the HTTP cache (it would fail the check).
+ */
+function sampleSrc(game: GameId, imageId: number): string {
+  const src = cardImageSrc(game === 'ygo' ? 'cropped' : 'small', imageId, { now: true })
+  return src.includes('?') ? src : `${src}?wash`
 }
 
 /** The first two colours of each game's glow (from ArtWash), for where there is no art to read. */

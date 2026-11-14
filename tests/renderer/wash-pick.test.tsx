@@ -1,5 +1,5 @@
 import { act, render } from '@testing-library/react'
-import type { ReactNode } from 'react'
+import { StrictMode, type ReactNode } from 'react'
 import { ArtWashContext, pickOrder, useArtWash, type WashState } from '@/components/artWashContext'
 import type { Families } from '@/lib/wash/families'
 import { type WashCard, gameFallback, sampleCard } from '@/lib/wash/sample'
@@ -118,5 +118,26 @@ describe('useArtWash', () => {
     const w = set.mock.calls[0][0] as WashState
     expect(w.families).toBe(colourful)
     expect(w.seed).toBe(2)
+  })
+
+  it('sets once under StrictMode', async () => {
+    sample.mockResolvedValue(colourful)
+    render(<StrictMode>{tree([a, b, c])}</StrictMode>)
+    await flush()
+    expect(set).toHaveBeenCalledTimes(1)
+  })
+
+  it('drops a walk in flight when unmounted, and sets only the remounted walk', async () => {
+    const pending: Array<(f: Families) => void> = []
+    sample.mockImplementation(() => new Promise((r) => pending.push(r)))
+    const first = render(tree([a]))
+    first.unmount()
+    render(tree([b]))
+    expect(pending).toHaveLength(2)
+    pending[0](grey)
+    pending[1](colourful)
+    await flush()
+    expect(set).toHaveBeenCalledTimes(1)
+    expect((set.mock.calls[0][0] as WashState).seed).toBe(2)
   })
 })

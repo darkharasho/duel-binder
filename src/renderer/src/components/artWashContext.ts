@@ -46,13 +46,13 @@ export function useArtWash(
   const set = useContext(ArtWashContext)
   const { game } = useGame()
   const picked = useRef(false)
-  const mounted = useRef(false)
+  const generation = useRef(0)
   const strength = opts?.strength ?? 1
 
   useEffect(() => {
-    mounted.current = true
     return () => {
-      mounted.current = false
+      // Tear-down (unmount or StrictMode's simulated one): drop any walk in flight and allow a new pick.
+      generation.current++
       picked.current = false
     }
   }, [])
@@ -60,13 +60,14 @@ export function useArtWash(
   useEffect(() => {
     if (!cards || cards.length === 0 || !set || picked.current) return
     picked.current = true
+    const mine = generation.current
     const order = pickOrder(cards, Math.random)
     void (async () => {
       let first: { card: WashCard; families: Families } | null = null
       let chosen: { card: WashCard; families: Families } | null = null
       for (const card of order) {
         const families = await sampleCard(card, game)
-        if (!mounted.current) return
+        if (generation.current !== mine) return
         if (!families) continue
         first ??= { card, families }
         if (!families.greyArt) {

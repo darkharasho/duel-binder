@@ -184,7 +184,8 @@ Port `wash.js` to TypeScript, for example `src/renderer/src/lib/wash/`, with uni
   - button, input, select, tabs, toggle, badge and table;
   - pill buttons and chips, underline inputs, and tables with hairline rules and no boxes.
 - **Every page that shows cards picks from its own cards.** That includes Binders, Wishlist, Pokédex,
-  Sessions and the card detail panel. Sets and the set checklist pick from the set's cards, not the
+  Sessions. The card detail panel is left out: it opens over a page that already has a wash, and
+  re-picking under it would break "one pick per visit". Sets and the set checklist pick from the set's cards, not the
   pack or logo image.
 
 ## Left to the builder

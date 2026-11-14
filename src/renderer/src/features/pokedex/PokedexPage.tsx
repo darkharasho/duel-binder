@@ -24,8 +24,14 @@ const EMPTY = { caught: [] }
  * species' panel; a card there opens its card panel in the same sheet, and closing that goes back.
  */
 export function PokedexPage(): React.JSX.Element {
-  // The page only has sprites, no card art, so it keeps whatever wash is showing.
-  useArtWash(null)
+  // The page only shows sprites, so the wash comes from your most valuable owned cards (the
+  // Dashboard's list, same query, so it's usually cached already).
+  const stats = useQuery({ queryKey: queryKeys.stats, queryFn: () => api.stats.get() })
+  const washCards = useMemo(
+    () => stats.data?.topEntries.map((e) => ({ imageId: e.imageId, frameType: e.card.frameType })),
+    [stats.data]
+  )
+  useArtWash(washCards ?? null)
   const summary = useQuery({ queryKey: queryKeys.pokedex, queryFn: () => api.pokedex.summary() })
   const tiles = useMemo(() => dexTiles(summary.data ?? EMPTY), [summary.data])
   const [filter, setFilter] = useState<DexFilter>('all')

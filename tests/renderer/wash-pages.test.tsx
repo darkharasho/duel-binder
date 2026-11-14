@@ -162,7 +162,19 @@ describe('pages hand their cards to the wash', () => {
     expect(set.mock.calls[0][0]).toMatchObject({ seed: 700, strength: 0.5 })
   })
 
-  it('Pokédex: only sprites, so it leaves the wash alone', async () => {
+  it('Pokédex: your most valuable owned cards, since the page itself only has sprites', async () => {
+    const entry = (imageId: number) => ({ imageId, card: { frameType: 'normal' } })
+    renderWithProviders(wrap(<PokedexPage />), {
+      api: createMockApi({
+        pokedex: { summary: vi.fn(async () => ({ caught: [] })) },
+        stats: { get: vi.fn(async () => ({ topEntries: [entry(31), entry(32)] })) as never }
+      })
+    })
+    await waitFor(() => expect(set).toHaveBeenCalledTimes(1))
+    expect(sampledIds().every((id) => id === 31 || id === 32)).toBe(true)
+  })
+
+  it('Pokédex: owning nothing leaves the wash alone', async () => {
     renderWithProviders(wrap(<PokedexPage />), {
       api: createMockApi({ pokedex: { summary: vi.fn(async () => ({ caught: [] })) } })
     })

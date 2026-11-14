@@ -240,6 +240,7 @@ export function createPhoneApi(deps: {
       request: portal('friends:request'),
       accept: portal('friends:accept'),
       ignore: portal('friends:ignore'),
+      cancel: portal('friends:cancel'),
       remove: portal('friends:remove'),
       block: portal('friends:block'),
       unblock: portal('friends:unblock'),

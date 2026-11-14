@@ -1,14 +1,19 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { DollarSign, Heart, Users } from 'lucide-react'
 import type { WishlistItem } from '@shared/types'
+import type { NavigateFn } from '@/components/AppShell'
 import { CardSheet } from '@/components/CardSheet'
+import { EmptyHero, EmptySteps } from '@/components/EmptyHero'
 import { PageHeader } from '@/components/PageHeader'
 import { SearchInput } from '@/components/SearchInput'
+import { Button } from '@/components/ui/button'
 import { RowsSkeleton } from '@/components/ui/loading'
 import { CardPanel } from '@/features/card/CardPanel'
 import { api, queryKeys } from '@/lib/api'
 import { formatUsd } from '@/lib/format'
+import { pageInGame, useGame } from '@/lib/game'
 import { unpricedIntl, useRequestPrices } from '@/lib/priceRequests'
 import {
   matchesWishSearch,
@@ -71,8 +76,51 @@ const summary = (items: WishlistItem[]): string => {
   ].join(' · ')
 }
 
+const WISH_STEPS = [
+  {
+    icon: Heart,
+    title: 'Heart a version',
+    text: 'Open any card and press the heart next to the version you want.'
+  },
+  {
+    icon: DollarSign,
+    title: 'See what it costs',
+    text: 'The list adds up what getting it all costs.'
+  },
+  { icon: Users, title: 'Spot it with a friend', text: 'Each card shows which friends own it.' }
+] as const
+
+function NoWishes({ onNavigate }: { onNavigate?: NavigateFn }): React.JSX.Element {
+  const { def } = useGame()
+  const browse = onNavigate && pageInGame('browse', def)
+  const sets = onNavigate && pageInGame('sets', def)
+  return (
+    <EmptyHero
+      id="no-wishes"
+      title="Nothing on your wishlist yet"
+      blurb="Keep track of the cards you're hunting, what they cost, and which friends could trade you one."
+    >
+      {(browse || sets) && (
+        <div className="mt-7 flex flex-wrap justify-center gap-3">
+          {browse && (
+            <Button size="lg" onClick={() => onNavigate('browse')}>
+              Browse cards
+            </Button>
+          )}
+          {sets && (
+            <Button size="lg" variant="outline" onClick={() => onNavigate('sets')}>
+              Find a set&apos;s missing cards
+            </Button>
+          )}
+        </div>
+      )}
+      <EmptySteps steps={WISH_STEPS} />
+    </EmptyHero>
+  )
+}
+
 /** The cards this account wants, what getting them would cost, and which of them friends own. */
-export function WishlistPage(): React.JSX.Element {
+export function WishlistPage({ onNavigate }: { onNavigate?: NavigateFn } = {}): React.JSX.Element {
   const wishlist = useWishlist()
   const items = wishlist.data ?? []
   const owners = useWishOwners(items.map((w) => w.pkey))
@@ -106,9 +154,9 @@ export function WishlistPage(): React.JSX.Element {
     <div className="space-y-4 p-8 max-md:p-4">
       <PageHeader>
         <h1 className="text-xl font-semibold">Wishlist</h1>
-        <p className="text-sm text-muted-foreground tabular-nums">
-          {items.length > 0 ? summary(items) : 'Cards you want'}
-        </p>
+        {items.length > 0 && (
+          <p className="text-sm text-muted-foreground tabular-nums">{summary(items)}</p>
+        )}
         {items.length > 0 && (
           <SearchInput
             label="Search wishlist"
@@ -119,9 +167,7 @@ export function WishlistPage(): React.JSX.Element {
         )}
       </PageHeader>
       {wishlist.isSuccess && items.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          Nothing here yet. Open a card and press the heart next to the type you want.
-        </p>
+        <NoWishes onNavigate={onNavigate} />
       ) : wishlist.isPending ? (
         <RowsSkeleton label="Loading your wishlist" />
       ) : items.length > 0 && shown.length === 0 ? (

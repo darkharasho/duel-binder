@@ -113,6 +113,8 @@ export interface Api {
     request(username: string): Promise<FriendRequestResult>
     accept(userId: number): Promise<void>
     ignore(userId: number): Promise<void>
+    /** Takes back a request you sent that hasn't been accepted. */
+    cancel(userId: number): Promise<void>
     remove(userId: number): Promise<void>
     /** Also ends any friendship or request with them. */
     block(userId: number): Promise<void>
@@ -467,6 +469,7 @@ export const INVOKE_CHANNELS = [
   'friends:request',
   'friends:accept',
   'friends:ignore',
+  'friends:cancel',
   'friends:remove',
   'friends:block',
   'friends:unblock',

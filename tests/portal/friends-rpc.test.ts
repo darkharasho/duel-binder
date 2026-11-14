@@ -252,6 +252,14 @@ describe('friends RPC', () => {
     expect((await call('friends:overview', [], cb)).body.result.incoming).toEqual([])
   })
 
+  it('cancel takes back a sent request', async () => {
+    await call('friends:request', ['bob'], ca)
+    expect((await call('friends:overview', [], ca)).body.result.outgoing).toHaveLength(1)
+    expect((await call('friends:cancel', [bob], ca)).status).toBe(200)
+    expect((await call('friends:overview', [], ca)).body.result.outgoing).toEqual([])
+    expect((await call('friends:overview', [], cb)).body.result.incoming).toEqual([])
+  })
+
   it('block cuts off the collection and unblock lifts it', async () => {
     await befriend()
     expect((await call('friends:block', [bob], ca)).status).toBe(200)

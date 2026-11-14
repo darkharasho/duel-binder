@@ -5,8 +5,9 @@ import { Input } from '@/components/ui/input'
 import { api, queryKeys } from '@/lib/api'
 import { track } from '@/lib/usage'
 import { friendsErrorMessage } from '@/lib/friends'
+import { cn } from '@/lib/utils'
 
-export function AddFriendForm(): React.JSX.Element {
+export function AddFriendForm({ className }: { className?: string } = {}): React.JSX.Element {
   const qc = useQueryClient()
   const [username, setUsername] = useState('')
   const request = useMutation({
@@ -19,7 +20,7 @@ export function AddFriendForm(): React.JSX.Element {
   })
   const name = username.trim()
   return (
-    <div className="space-y-2">
+    <div className={cn('space-y-2', className)}>
       <form
         className="flex max-w-md gap-2"
         onSubmit={(e) => {

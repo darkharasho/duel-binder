@@ -36,6 +36,27 @@ const session: ScanSession = {
 const api = (): Api => createMockApi({ sessions: { list: vi.fn(async () => [session]) } })
 
 describe('SessionsPage', () => {
+  it('with no sessions, points to the scanner', async () => {
+    const onNavigate = vi.fn()
+    renderWithProviders(<SessionsPage onNavigate={onNavigate} />, {
+      api: createMockApi({ sessions: { list: vi.fn(async () => []) } })
+    })
+    expect(await screen.findByRole('heading', { name: 'No scan sessions yet' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Open the scanner' }))
+    expect(onNavigate).toHaveBeenCalledWith('scan')
+  })
+
+  it('on the web, says scanning is in the apps instead of offering the scanner', async () => {
+    renderWithProviders(<SessionsPage onNavigate={vi.fn()} />, {
+      api: createMockApi({
+        window: { platform: 'web' },
+        sessions: { list: vi.fn(async () => []) }
+      })
+    })
+    expect(await screen.findByText(/Scanning is in the desktop and phone apps/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Open the scanner' })).not.toBeInTheDocument()
+  })
+
   it('lists the current game sessions', async () => {
     const a = api()
     renderWithProviders(<SessionsPage />, { api: a })

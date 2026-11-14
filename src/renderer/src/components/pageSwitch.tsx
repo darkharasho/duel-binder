@@ -120,7 +120,7 @@ export function PageSwitch({
           onNavigate={onNavigate}
         />
       )}
-      {page === 'wishlist' && <WishlistPage />}
+      {page === 'wishlist' && <WishlistPage onNavigate={onNavigate} />}
       {page === 'binders' && <BindersPage />}
       {page === 'pokedex' && <PokedexPage />}
       {page === 'browse' && (
@@ -135,7 +135,7 @@ export function PageSwitch({
         />
       )}
       {page === 'scan' && scan}
-      {page === 'sessions' && <SessionsPage />}
+      {page === 'sessions' && <SessionsPage onNavigate={onNavigate} />}
       {page === 'friends' && <FriendsPage key={friendsKey} />}
       {page === 'settings' && settings}
       {page === 'admin' && (

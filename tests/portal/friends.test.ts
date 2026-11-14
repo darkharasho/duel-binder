@@ -6,6 +6,7 @@ import {
   acceptFriend,
   areFriends,
   blockUser,
+  cancelFriendRequest,
   friendsOverview,
   ignoreFriend,
   removeFriend,
@@ -41,7 +42,27 @@ describe('friends', () => {
     expect(friendsOverview(db, bob, 'ygo').incoming).toEqual([
       expect.objectContaining({ id: alice, username: 'alice', sentAt: NOW.toISOString() })
     ])
-    expect(friendsOverview(db, alice, 'ygo')).toEqual({ friends: [], incoming: [], blocked: [] })
+    expect(friendsOverview(db, alice, 'ygo')).toEqual({
+      friends: [],
+      incoming: [],
+      outgoing: [expect.objectContaining({ id: bob, username: 'bob', sentAt: NOW.toISOString() })],
+      blocked: []
+    })
+  })
+
+  it('the sender can cancel a pending request; an accepted one stays', () => {
+    requestFriend(db, alice, 'bob', NOW)
+    cancelFriendRequest(db, alice, bob)
+    expect(friendsOverview(db, alice, 'ygo').outgoing).toEqual([])
+    expect(friendsOverview(db, bob, 'ygo').incoming).toEqual([])
+    // Only the sender's own request: bob can't cancel alice's.
+    requestFriend(db, alice, 'bob', NOW)
+    cancelFriendRequest(db, bob, alice)
+    expect(friendsOverview(db, bob, 'ygo').incoming).toHaveLength(1)
+    acceptFriend(db, bob, alice, NOW)
+    cancelFriendRequest(db, alice, bob)
+    expect(areFriends(db, alice, bob)).toBe(true)
+    expect(friendsOverview(db, alice, 'ygo').outgoing).toEqual([])
   })
 
   it('a repeated request stays a single request', () => {
@@ -80,7 +101,12 @@ describe('friends', () => {
     requestFriend(db, alice, 'bob', NOW)
     ignoreFriend(db, bob, alice)
     expect(friendsOverview(db, bob, 'ygo').incoming).toEqual([])
-    expect(friendsOverview(db, alice, 'ygo')).toEqual({ friends: [], incoming: [], blocked: [] })
+    expect(friendsOverview(db, alice, 'ygo')).toEqual({
+      friends: [],
+      incoming: [],
+      outgoing: [],
+      blocked: []
+    })
     requestFriend(db, alice, 'bob', NOW)
     expect(friendsOverview(db, bob, 'ygo').incoming).toHaveLength(1)
   })
@@ -102,9 +128,7 @@ describe('friends', () => {
       new FriendError('No Duel Binder user called "zed"')
     )
     expect(() => requestFriend(db, alice, 'Alice', NOW)).toThrow(new FriendError("That's you"))
-    expect(() => requestFriend(db, alice, '   ', NOW)).toThrow(
-      new FriendError('Enter a username')
-    )
+    expect(() => requestFriend(db, alice, '   ', NOW)).toThrow(new FriendError('Enter a username'))
     befriend()
     expect(() => requestFriend(db, alice, 'bob', NOW)).toThrow(
       new FriendError("You're already friends with bob")
@@ -241,16 +265,21 @@ describe('friends', () => {
       expect(friendsOverview(db, alice, 'ygo')).toEqual({
         friends: [],
         incoming: [],
+        outgoing: [],
         blocked: [expect.objectContaining({ id: bob, username: 'bob' })]
       })
       expect(friendsOverview(db, bob, 'ygo').blocked).toEqual([])
     })
 
-    it('drops a pending request either way', () => {
+    it('hides a pending request either way, and unblocking clears theirs', () => {
       requestFriend(db, bob, 'alice', NOW)
       blockUser(db, alice, bob, NOW)
       expect(friendsOverview(db, alice, 'ygo').incoming).toEqual([])
+      // Bob still sees it as sent, so the block doesn't show.
+      expect(friendsOverview(db, bob, 'ygo').outgoing).toHaveLength(1)
       unblockUser(db, alice, bob)
+      expect(friendsOverview(db, alice, 'ygo').incoming).toEqual([])
+      expect(friendsOverview(db, bob, 'ygo').outgoing).toEqual([])
       requestFriend(db, alice, 'bob', NOW)
       blockUser(db, alice, bob, NOW)
       expect(friendsOverview(db, bob, 'ygo').incoming).toEqual([])
@@ -262,6 +291,17 @@ describe('friends', () => {
         expect(requestFriend(db, bob, 'alice', NOW)).toEqual({ status: 'sent' })
       expect(friendsOverview(db, alice, 'ygo').incoming).toEqual([])
       expect(requestFriend(db, bob, 'carol', NOW)).toEqual({ status: 'sent' })
+    })
+
+    it('lists a request to someone who blocked you as sent, and lets you cancel it', () => {
+      blockUser(db, alice, bob, NOW)
+      requestFriend(db, bob, 'alice', NOW)
+      expect(friendsOverview(db, bob, 'ygo').outgoing).toEqual([
+        expect.objectContaining({ id: alice })
+      ])
+      expect(friendsOverview(db, alice, 'ygo').incoming).toEqual([])
+      cancelFriendRequest(db, bob, alice)
+      expect(friendsOverview(db, bob, 'ygo').outgoing).toEqual([])
     })
 
     it("won't let the blocker send a request until they unblock", () => {

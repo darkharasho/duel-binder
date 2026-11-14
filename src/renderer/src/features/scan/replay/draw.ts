@@ -24,12 +24,12 @@ const FONT = "'IBM Plex Sans', system-ui, sans-serif"
 
 /** The app's own palette (index.css): warm off-white on near-black; colour comes from the art. */
 const BG = '#111113'
-const FG = '#ecebe8'
-const MUTED = '#8f8d88'
-const GOLD = '#e8c477'
+export const FG = '#ecebe8'
+export const MUTED = '#8f8d88'
+export const GOLD = '#e8c477'
 const GOLD_RGB = '232, 196, 119'
 
-const CARD_ASPECT = 88 / 63
+export const CARD_ASPECT = 88 / 63
 const CARD_W = REPLAY_W * 0.46
 const CARD_Y = REPLAY_H * 0.43
 const END_W = REPLAY_W * 0.34
@@ -75,13 +75,18 @@ function roundedRect(
   ctx.closePath()
 }
 
-function setFont(ctx: CanvasRenderingContext2D, weight: number, px: number, spacing = 0): void {
+export function setFont(
+  ctx: CanvasRenderingContext2D,
+  weight: number,
+  px: number,
+  spacing = 0
+): void {
   ctx.font = `${weight} ${px}px ${FONT}`
   ctx.letterSpacing = `${spacing}px`
 }
 
 /** Text centred at x, shrunk until it fits `maxWidth`. */
-function centredText(
+export function centredText(
   ctx: CanvasRenderingContext2D,
   text: string,
   x: number,
@@ -166,7 +171,7 @@ function ambientOf(art: ImageBitmap): Ambient {
   return ambient
 }
 
-const glowOf = (art: ImageBitmap): string => ambientOf(art).glow
+export const glowOf = (art: ImageBitmap): string => ambientOf(art).glow
 
 // --- Backdrop ---------------------------------------------------------------------------------
 
@@ -208,9 +213,9 @@ function washLayer(
 }
 
 /** Near-black, the card's colour glowing through, darker at the edges and under the text. */
-function backdrop(
+export function backdrop(
   ctx: CanvasRenderingContext2D,
-  scene: ReplayScene,
+  scene: Pick<ReplayScene, 'backdrop'>,
   layers: { art: ImageBitmap; alpha: number }[],
   t: number
 ): void {
@@ -244,7 +249,7 @@ function backdrop(
 
 // --- The card ---------------------------------------------------------------------------------
 
-interface Pose {
+export interface Pose {
   cx: number
   cy: number
   w: number
@@ -288,7 +293,12 @@ function cardBack(ctx: CanvasRenderingContext2D, x: number, y: number, w: number
   }
 }
 
-function drawCard(ctx: CanvasRenderingContext2D, art: ImageBitmap, p: Pose, k: number): void {
+export function drawCard(
+  ctx: CanvasRenderingContext2D,
+  art: ImageBitmap,
+  p: Pose,
+  k: number
+): void {
   if (p.alpha <= 0) return
   const w = p.w
   const h = w * CARD_ASPECT
@@ -424,7 +434,7 @@ const lineIn = (local: number, at: number): { a: number; dy: number } => {
   return { a: p, dy: (1 - p) * 18 }
 }
 
-function rarityPill(ctx: CanvasRenderingContext2D, text: string, y: number): void {
+export function rarityPill(ctx: CanvasRenderingContext2D, text: string, y: number): void {
   setFont(ctx, 600, 17, 2)
   const w = Math.min(REPLAY_W - 80, ctx.measureText(text).width + 30)
   ctx.save()
@@ -480,7 +490,7 @@ function pullText(
   ctx.restore()
 }
 
-function chip(ctx: CanvasRenderingContext2D, text: string): void {
+export function chip(ctx: CanvasRenderingContext2D, text: string): void {
   setFont(ctx, 500, 21)
   const w = ctx.measureText(text).width + 36
   roundedRect(ctx, 24, 24, w, 44, 22)
@@ -521,7 +531,10 @@ const LOGO_PX = 26
 const LOGO_GAP = 9
 
 /** The words along the bottom, the logo just before them where there is one; the two centred. */
-function watermark(ctx: CanvasRenderingContext2D, logo: CanvasImageSource | undefined): void {
+export function watermark(
+  ctx: CanvasRenderingContext2D,
+  logo: CanvasImageSource | undefined
+): void {
   const y = REPLAY_H - 24
   ctx.save()
   ctx.fillStyle = MUTED

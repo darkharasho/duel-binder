@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { resolveSignals, type ResolveContext, type ScanDraft } from '@/features/scan/resolve'
+import { plainDonFirst } from '@/features/scan/resolveOnePiece'
 import type { ArtMatch, RawSignals } from '@/features/scan/engine'
 import type { ScanPrinting } from '@shared/scan/types'
 import { OP_ART_MIN_MARGIN, OP_SAME_ART } from '@shared/scan/thresholds'
@@ -214,5 +215,36 @@ describe('resolveOnePieceSignals', () => {
       far: true
     })
     expect(await resolveSignals(raw({ found: false }), ctx())).toEqual({ kind: 'none' })
+  })
+})
+
+describe('plainDonFirst', () => {
+  const don = (printingId: number, name: string, imageId: number): ScanPrinting => ({
+    ...base,
+    printingId,
+    cardId: printingId,
+    name,
+    language: 'en',
+    setCode: 'DON!!',
+    setName: 'DON!!',
+    rarity: name.includes('Gold') ? 'DON!! (Foil)' : 'DON!!',
+    imageIds: [imageId]
+  })
+  const gold = don(1, 'DON!! (Oden) (Gold)', 10)
+  const plain = don(2, 'DON!! (Oden)', 20)
+  const other = don(3, 'DON!! (Kaido)', 30)
+  const by = (d: Record<number, number>) => (p: ScanPrinting) => d[p.imageIds[0]] ?? Infinity
+
+  it('puts a Gold DON!! that leads by a few points behind its plain twin', () => {
+    expect(plainDonFirst([gold, plain, other], by({ 10: 46, 20: 54 }))[0]).toBe(plain)
+  })
+
+  it('keeps a Gold DON!! that leads by more than OP_SAME_ART', () => {
+    const d = by({ 10: 30, 20: 30 + OP_SAME_ART + 2 })
+    expect(plainDonFirst([gold, plain, other], d)[0]).toBe(gold)
+  })
+
+  it('leaves other cards alone', () => {
+    expect(plainDonFirst([other, gold, plain], by({ 30: 40, 10: 42, 20: 44 }))[0]).toBe(other)
   })
 })

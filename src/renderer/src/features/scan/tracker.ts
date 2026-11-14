@@ -13,10 +13,10 @@ export interface ShowingTracker {
   push(now: number, outcome: ScanOutcome): ScanDraft | null
   /**
    * Nothing counts until the view clears, or settleMs pass (a hand swapping cards may never clear
-   * it): a card just counted some other way, which live frames may take for its twin. `cardId`,
+   * it): a card just counted some other way, which live frames may take for its twin. `item`,
    * the card that counted, if any, is shown from then on, so it never counts again while held.
    */
-  settle(now: number, cardId?: number | null): void
+  settle(now: number, item?: ScanDraft | null): void
   /**
    * The card last held back as counted lately (on a pile of scanned cards in view, say), until
    * a card counts or the view clears; else null.
@@ -26,8 +26,23 @@ export interface ShowingTracker {
 }
 
 /**
+ * What makes two frames' cards one card to count. Mostly the card, but a One Piece card is its
+ * printed number: its English and Japanese printings are separate cards, and a frame whose
+ * language read fails (English) between ones that read Japanese would count it twice. Every
+ * DON!! card shares one number, so a DON!! is its number and its leader, its Gold printing (a
+ * separate card too, whose art hashes within a few points of the plain one's) included.
+ */
+export function showingKey(item: ScanDraft): string {
+  if (item.game !== 'op' || !item.setCode) return String(item.cardId)
+  const number = item.setCode.toUpperCase()
+  return number === 'DON!!'
+    ? `op:${number}:${item.name.replace(/\s*\(Gold\)\s*$/i, '')}`
+    : `op:${number}`
+}
+
+/**
  * Turns per-frame outcomes into counted cards, one per showing. A card counts once it has been
- * recognized in stableFrames frames in a row. Frames are matched by card alone: the same card
+ * recognized in stableFrames frames in a row. Frames are matched by card alone (showingKey): the same card
  * read by its code in one frame and its art in the next, or matched to another of its artworks,
  * is still one showing, and never counts again while shown. It counts again only after nothing
  * has been in view, in consecutive `none` frames, for absentMs, or once a different card has
@@ -59,13 +74,13 @@ export function createShowingTracker(
   const absentMs = opts.absentMs ?? ABSENT_MS
   const settleMs = opts.settleMs ?? PHOTO_SETTLE_MS
   const recentCards = opts.recentCards ?? RECENT_CARDS
-  let streakOf: number | null = null
+  let streakOf: string | null = null
   let streak = 0
-  let shown: number | null = null
+  let shown: string | null = null
   let absentSince: number | null = null
   let settledUntil = 0
   // The cards counted lately, newest first, since the view last cleared.
-  let recent: number[] = []
+  let recent: string[] = []
   let held: ScanDraft | null = null
   // A card was recognized, and no `none` frame has come since.
   let justSeen = false
@@ -74,8 +89,8 @@ export function createShowingTracker(
     streakOf = null
     streak = 0
   }
-  const remember = (cardId: number): void => {
-    recent = [cardId, ...recent.filter((id) => id !== cardId)].slice(0, recentCards)
+  const remember = (key: string): void => {
+    recent = [key, ...recent.filter((k) => k !== key)].slice(0, recentCards)
   }
 
   return {
@@ -104,31 +119,32 @@ export function createShowingTracker(
       absentSince = null
       justSeen = true
       if (now < settledUntil) return null
-      const { cardId, guess } = outcome.item
-      if (cardId === shown) {
+      const { guess } = outcome.item
+      const key = showingKey(outcome.item)
+      if (key === shown) {
         clearStreak()
         return null
       }
-      streak = cardId === streakOf ? streak + 1 : 1
-      streakOf = cardId
+      streak = key === streakOf ? streak + 1 : 1
+      streakOf = key
       const needed = !guess ? stableFrames : shown === null ? guessFrames : swapFrames
       if (streak < needed) return null
       clearStreak()
-      if (recent.includes(cardId)) {
+      if (recent.includes(key)) {
         held = outcome.item
         return null
       }
-      shown = cardId
+      shown = key
       held = null
-      remember(cardId)
+      remember(key)
       return outcome.item
     },
 
-    settle(now, cardId = null) {
+    settle(now, item = null) {
       clearStreak()
-      shown = cardId
+      shown = item ? showingKey(item) : null
       held = null
-      if (cardId !== null) remember(cardId)
+      if (shown !== null) remember(shown)
       settledUntil = now + settleMs
     },
 

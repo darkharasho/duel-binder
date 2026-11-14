@@ -148,6 +148,25 @@ async function languageOf(
   return languages.find((l) => l === read) ?? languages[0]
 }
 
+const GOLD = /\s*\(Gold\)\s*$/i
+
+/**
+ * `ranked` with a Gold DON!! that leads by less than OP_SAME_ART put behind its plain twin. The
+ * gold foil hashes within a few points of the plain card (and either may lead frame to frame), and
+ * plain DON!! are far more common, so a near tie is the plain card, left to be checked.
+ */
+export function plainDonFirst(
+  ranked: ScanPrinting[],
+  artDistance: (p: ScanPrinting) => number
+): ScanPrinting[] {
+  const [best] = ranked
+  if (!best || best.setCode.toUpperCase() !== 'DON!!' || !GOLD.test(best.name)) return ranked
+  const plainName = best.name.replace(GOLD, '')
+  const plain = ranked.find((p) => p.name === plainName && p.language === best.language)
+  if (!plain || artDistance(plain) - artDistance(best) > OP_SAME_ART) return ranked
+  return [plain, ...ranked.filter((p) => p !== plain)]
+}
+
 /** The number's printing the frame shows, among `options` (all of the number's). */
 async function choose(
   options: ScanPrinting[],
@@ -163,7 +182,7 @@ async function choose(
   const ofLanguage = ranked.filter((p) => p.language === language)
   const set = new Set((ctx.setPrintings ?? []).map((p) => p.printingId))
   const inSet = ofLanguage.filter((p) => set.has(p.printingId))
-  const among = inSet.length ? inSet : ofLanguage
+  const among = plainDonFirst(inSet.length ? inSet : ofLanguage, artDistance)
   const [best, next] = among
   if (!best) return null
   const d = artDistance(best)

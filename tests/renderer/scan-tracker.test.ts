@@ -174,7 +174,7 @@ describe('createShowingTracker', () => {
         recentCards: 3,
         settleMs: 0
       })
-      t.settle(0, 7)
+      t.settle(0, draft(7))
       expect(run(t, [seen(2), seen(2), seen(7), seen(7), seen(7)], 100)).toEqual([2])
     })
   })
@@ -236,7 +236,7 @@ describe('createShowingTracker', () => {
 
   it('after settle for a counted card never counts that card again while it is held', () => {
     const t = createShowingTracker({ stableFrames: 1, absentMs: 100, settleMs: 500 })
-    t.settle(0, 1)
+    t.settle(0, draft(1))
     expect(t.push(600, seen(1))).toBeNull()
     expect(t.push(700, seen(1))).toBeNull()
     expect(t.push(800, seen(2))?.cardId).toBe(2)
@@ -247,5 +247,37 @@ describe('createShowingTracker', () => {
     t.settle(0)
     expect(t.push(499, seen(2))).toBeNull()
     expect(t.push(500, seen(2))?.cardId).toBe(2)
+  })
+})
+
+describe('One Piece twins', () => {
+  const op = (cardId: number, setCode: string, name = 'Sanji'): ScanOutcome => ({
+    kind: 'recognized',
+    item: { ...draft(cardId), game: 'op', setCode, name }
+  })
+
+  it('counts an English and Japanese printing of one number as one card', () => {
+    const t = createShowingTracker({ stableFrames: 2 })
+    const counted = run(t, [
+      op(1, 'OP11-051'),
+      op(1, 'OP11-051'),
+      op(2, 'OP11-051'),
+      op(2, 'OP11-051'),
+      op(1, 'OP11-051')
+    ])
+    expect(counted).toEqual([1])
+  })
+
+  it('counts a DON!! flickering to its Gold printing once, and another DON!! after it', () => {
+    const t = createShowingTracker({ stableFrames: 2 })
+    const counted = run(t, [
+      op(1, 'DON!!', 'DON!! (Oden) (Gold)'),
+      op(1, 'DON!!', 'DON!! (Oden) (Gold)'),
+      op(2, 'DON!!', 'DON!! (Oden)'),
+      op(2, 'DON!!', 'DON!! (Oden)'),
+      op(3, 'DON!!', 'DON!! (Kaido)'),
+      op(3, 'DON!!', 'DON!! (Kaido)')
+    ])
+    expect(counted).toEqual([1, 3])
   })
 })

@@ -192,7 +192,11 @@ function DesktopSettings(): React.JSX.Element {
         </Row>
         <Row label="Cards">{(sync?.cardCount ?? 0).toLocaleString('en-US')}</Row>
         <Row label="Database version">{sync?.dbVersion ?? '—'}</Row>
-        {sync?.error && <p className="text-sm text-destructive">Last error: {sync.error}</p>}
+        {sync?.error && (
+          <p className="inline-block rounded-2xl bg-popover px-3 py-1.5 text-sm text-destructive">
+            Last error: {sync.error}
+          </p>
+        )}
         <Button size="sm" disabled={syncing} onClick={() => refresh.mutate()}>
           Refresh card data
         </Button>

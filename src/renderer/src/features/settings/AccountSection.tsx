@@ -160,7 +160,11 @@ function DesktopAccount(): React.JSX.Element {
           Offline. Changes will sync when you&apos;re back online.
         </p>
       )}
-      {s.state === 'error' && <p className="text-destructive">Sync failed: {s.error}</p>}
+      {s.state === 'error' && (
+        <p className="inline-block rounded-2xl bg-popover px-3 py-1.5 text-destructive">
+          Sync failed: {s.error}
+        </p>
+      )}
       {pending}
       {unsynced}
       <SignInMethods />
@@ -236,7 +240,12 @@ function WebAccount(): React.JSX.Element {
   const me = useQuery({ queryKey: ['me'], queryFn: () => fetchMe() })
 
   if (me.isPending) return <p className="text-sm text-muted-foreground">Loading account…</p>
-  if (me.isError) return <p className="text-sm text-destructive">Couldn&apos;t load your account</p>
+  if (me.isError)
+    return (
+      <p className="inline-block rounded-2xl bg-popover px-3 py-1.5 text-sm text-destructive">
+        Couldn&apos;t load your account
+      </p>
+    )
   if (!me.data) {
     return (
       <p className="flex gap-3 text-sm text-muted-foreground">

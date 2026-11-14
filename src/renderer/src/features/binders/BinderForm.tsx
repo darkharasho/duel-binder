@@ -388,7 +388,7 @@ export function BinderForm({
             <Button
               type="button"
               variant="ghost"
-              className="ml-auto text-destructive"
+              className="ml-auto rounded-full bg-popover text-destructive"
               onClick={() => setConfirming(true)}
             >
               Delete

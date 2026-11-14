@@ -49,7 +49,10 @@ export function AddFriendForm({ className }: { className?: string } = {}): React
         </p>
       )}
       {request.isError && (
-        <p role="alert" className="text-sm text-destructive">
+        <p
+          role="alert"
+          className="inline-block rounded-2xl bg-popover px-3 py-1.5 text-sm text-destructive"
+        >
           {friendsErrorMessage(request.error)}
         </p>
       )}

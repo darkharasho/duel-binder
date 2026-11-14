@@ -15,8 +15,20 @@ const H = 292
 const ART = { x0: 0.06, x1: 0.94, y0: 0.09, y1: 0.47 }
 const BODY = { x0: 0.05, x1: 0.95, y0: 0.54, y1: 0.86 }
 
-/** Cards whose Reverse Holofoil printings the scanner can tell from Normal. */
-export const REVERSE_CHECKED_SETS: readonly string[] = ['DLR']
+/**
+ * Sets whose Reverse Holofoil printings the scanner can tell from Normal or Holofoil: the main
+ * Mega Evolution sets (not their energy or promo sets). Scarlet & Violet reverses darken the body
+ * far less (0.72-0.87 of the reference against 0.43-0.76 here), into the range Normals read.
+ */
+export const REVERSE_CHECKED_SETS: readonly string[] = [
+  'MEG',
+  'PFL',
+  'ASC',
+  'POR',
+  'CRI',
+  'PBL',
+  'DLR'
+]
 
 /** True when the set code (like 'DLR 002/103') is in a set the check covers. */
 export function reverseChecked(setCode: string | null): boolean {
@@ -120,14 +132,19 @@ export function bodyStats(img: RgbaImage): BodyStats {
   const luma = shrinkLuma(img)
   const art = region(luma, ART)
   const body = region(luma, BODY)
-  return { ratio: body.mean / Math.max(art.mean, 1e-6), spread: body.mean > 0 ? body.std / body.mean : 0 }
+  return {
+    ratio: body.mean / Math.max(art.mean, 1e-6),
+    spread: body.mean > 0 ? body.std / body.mean : 0
+  }
 }
 
 /** Reverse Holofoil if the body is much darker than the reference's, or much more uneven. */
 export function reverseVersion(photo: BodyStats, ref: BodyStats): 'Normal' | 'Reverse Holofoil' {
   const bodyLum = photo.ratio / ref.ratio
   const spread = photo.spread - ref.spread
-  return bodyLum < REVERSE_BODY_LUM_MAX || spread > REVERSE_SPREAD_MIN ? 'Reverse Holofoil' : 'Normal'
+  return bodyLum < REVERSE_BODY_LUM_MAX || spread > REVERSE_SPREAD_MIN
+    ? 'Reverse Holofoil'
+    : 'Normal'
 }
 
 const REFS: Record<string, number[]> = refs.refs

@@ -5,11 +5,12 @@ import { Button } from '@/components/ui/button'
 import type { ActiveChip } from '@/lib/filters'
 import { isPhone } from '@/lib/platform'
 import { cn } from '@/lib/utils'
+import { usePinned } from './PageHeader'
 
 /**
  * The bar every list page shares. Row 1: search, Filters, sort, then the page's own toggle. Row 2,
  * only with something active: the removable chips, Clear all and the result count. On desktop
- * it never wraps, so a sticky header stays two rows: a long run of chips scrolls sideways. On a
+ * it never wraps, so the pinned header row stays two rows: a long run of chips scrolls sideways. On a
  * phone the search takes its own line above the buttons. Its controls
  * size to the bar rather than the window, since an open side panel narrows the bar too.
  */
@@ -22,7 +23,8 @@ export function FilterBar({
   sizable,
   chips = [],
   onClearAll,
-  resultCount
+  resultCount,
+  lead
 }: {
   search?: React.ReactNode
   filtersOpen?: boolean
@@ -37,13 +39,17 @@ export function FilterBar({
   onClearAll?: () => void
   /** "1,204 cards". */
   resultCount?: string
+  /** Shown before the search only while the bar is pinned at the top, e.g. a Back button. */
+  lead?: React.ReactNode
 }): React.JSX.Element {
+  const pinned = usePinned()
   const active = chips.length
   // On a phone the search takes its own full-width line; the buttons share the line below.
   const phone = isPhone()
   return (
-    <div className="@container space-y-2">
+    <div data-pin className="@container space-y-2">
       <div className={cn('flex items-center gap-2', phone && 'flex-wrap')}>
+        {pinned && lead}
         <div className={cn('min-w-28 flex-1', phone && 'min-w-40 basis-full')}>{search}</div>
         {onToggleFilters && (
           <Button

@@ -509,6 +509,7 @@ export function SetChecklist({
             </div>
             <FilterBar
               sizable
+              lead={<BackButton onBack={onBack} />}
               // Bulk mode has its own search box, and shows every rarity.
               search={
                 !bulk && (

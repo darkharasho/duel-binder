@@ -164,7 +164,7 @@ export function BinderView({
 
   // The first of two lines above the binder: name and rules; progress and the Show tabs follow.
   const nameLine = (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+    <div data-pin className="flex flex-wrap items-center gap-x-4 gap-y-2">
       {back}
       <h2 className="min-w-0 max-w-[40%] shrink-0 truncate text-xl font-semibold max-md:max-w-[75%]">
         {detail.name}

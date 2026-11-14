@@ -7,7 +7,8 @@ import { gameFallback } from '@/lib/wash/sample'
 import type { WashState } from './artWashContext'
 
 const reducedMotion = (): boolean =>
-  typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
+  typeof window !== 'undefined' &&
+  !!window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
 
 type Layers = { active: 0 | 1; bg: [string, string] }
 
@@ -38,9 +39,21 @@ export function ArtWash({
   useEffect(() => {
     setLayers((l): Layers => {
       if (l.bg[l.active] === pools) return l
-      return l.active === 0 ? { active: 1, bg: [l.bg[0], pools] } : { active: 0, bg: [pools, l.bg[1]] }
+      return l.active === 0
+        ? { active: 1, bg: [l.bg[0], pools] }
+        : { active: 0, bg: [pools, l.bg[1]] }
     })
   }, [pools])
+
+  // The pinned header row fades from this colour, so it reads as the wash rather than a bar.
+  useEffect(() => {
+    if (!enabled) return
+    const root = document.documentElement
+    root.style.setProperty('--wash-base', base)
+    return () => {
+      root.style.removeProperty('--wash-base')
+    }
+  }, [base, enabled])
 
   if (!enabled) return null
   const transition = reducedMotion() ? 'none' : 'opacity 700ms ease'
@@ -52,10 +65,17 @@ export function ArtWash({
     />
   )
   return (
-    <div aria-hidden data-game={game} className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
+    <div
+      aria-hidden
+      data-game={game}
+      className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
+    >
       <div
         className="absolute inset-0"
-        style={{ background: base, transition: reducedMotion() ? 'none' : 'background-color 700ms ease' }}
+        style={{
+          background: base,
+          transition: reducedMotion() ? 'none' : 'background-color 700ms ease'
+        }}
       />
       {layer(0, 'wash-a')}
       {layer(1, 'wash-b')}

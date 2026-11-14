@@ -63,7 +63,7 @@ export function SearchInput({
     <div className={cn('relative', className)}>
       <Search
         aria-hidden
-        className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+        className="pointer-events-none absolute left-0 top-1/2 size-4 -translate-y-1/2 text-foreground"
       />
       <Input
         type="search"

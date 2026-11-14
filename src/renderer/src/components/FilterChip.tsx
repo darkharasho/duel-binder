@@ -1,7 +1,7 @@
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-const CHIP = 'inline-flex h-7 shrink-0 items-center gap-1 rounded-md whitespace-nowrap text-xs'
+const CHIP = 'inline-flex h-7 shrink-0 items-center gap-1 rounded-full whitespace-nowrap font-mono text-xs font-medium'
 
 /** An active filter under the search row, with an x to remove it. */
 export function FilterChip({
@@ -12,13 +12,13 @@ export function FilterChip({
   onRemove: () => void
 }): React.JSX.Element {
   return (
-    <span title={label} className={cn(CHIP, 'max-w-64 bg-white/[0.08] pl-2.5 pr-1')}>
+    <span title={label} className={cn(CHIP, 'max-w-64 bg-chip pl-2.5 pr-1')}>
       <span className="min-w-0 truncate">{label}</span>
       <button
         type="button"
         aria-label={`Remove ${label} filter`}
         onClick={onRemove}
-        className="rounded-sm p-0.5 outline-none hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-ring"
+        className="rounded-full p-0.5 outline-none hover:bg-chip focus-visible:ring-2 focus-visible:ring-ring"
       >
         <X className="size-3" />
       </button>
@@ -47,7 +47,7 @@ export function FilterOptionChip({
       className={cn(
         CHIP,
         'max-w-full px-2.5 outline-none focus-visible:ring-2 focus-visible:ring-ring',
-        selected ? 'bg-primary text-primary-foreground' : 'bg-white/[0.08] hover:bg-white/[0.14]'
+        selected ? 'bg-chip-on text-chip-on-ink' : 'bg-chip hover:bg-chip/70'
       )}
     >
       <span className="min-w-0 truncate">{label}</span>

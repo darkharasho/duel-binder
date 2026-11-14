@@ -8,24 +8,27 @@
   /* One dark "catalogue" palette: warm off-white on near-black; colour comes from card art. */
   --radius: 0.5rem;
   --background: #111113;
-  --foreground: #ecebe8;
-  --card: #18181b;
+  --foreground: #ffffff;
+  --card: transparent;
   --card-foreground: #ecebe8;
-  --popover: #1a1a1d;
+  --popover: #17141d;
   --popover-foreground: #ecebe8;
   --primary: #ecebe8;
   --primary-foreground: #111113;
-  --secondary: #232326;
+  --secondary: transparent;
   --secondary-foreground: #ecebe8;
   --muted: #1e1e21;
-  --muted-foreground: #8f8d88;
+  --muted-foreground: #ffffff;
   --accent: rgb(255 255 255 / 6%);
   --accent-foreground: #ecebe8;
   --destructive: #f07a6a;
-  --border: rgb(255 255 255 / 8%);
+  --border: rgb(255 255 255 / 22%);
   --input: rgb(255 255 255 / 14%);
   --ring: rgb(236 235 232 / 60%);
   --complete: #86d9a6;
+  --chip: rgb(255 255 255 / 14%);
+  --chip-on: #ffffff;
+  --chip-on-ink: #14101a;
 }
 
 @theme inline {
@@ -52,8 +55,11 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-complete: var(--complete);
-  --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
-  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --color-chip: var(--chip);
+  --color-chip-on: var(--chip-on);
+  --color-chip-on-ink: var(--chip-on-ink);
+  --font-sans: 'Bricolage Grotesque Variable', system-ui, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, monospace;
 }
 
 @layer base {
@@ -102,6 +108,14 @@
   @media (prefers-reduced-motion: reduce) {
     * { transition-duration: 0ms !important; animation-duration: 0ms !important; }
   }
+}
+
+/* Display type: condensed heavy Bricolage (needs the wdth axis). */
+.font-display {
+  font-family: var(--font-sans);
+  font-stretch: 75%;
+  font-weight: 800;
+  letter-spacing: -0.03em;
 }
 
 /*

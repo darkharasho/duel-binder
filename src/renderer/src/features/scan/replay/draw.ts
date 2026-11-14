@@ -20,7 +20,7 @@ export interface ReplayScene {
 }
 
 const WATERMARK = 'DUEL BINDER · RIP REPLAY'
-const FONT = "'IBM Plex Sans', system-ui, sans-serif"
+const FONT = "'Bricolage Grotesque Variable', system-ui, sans-serif"
 
 /** The app's own palette (index.css): warm off-white on near-black; colour comes from the art. */
 const BG = '#111113'
@@ -810,7 +810,7 @@ function endFrame(
 export async function loadReplayFonts(): Promise<void> {
   if (typeof document === 'undefined' || !document.fonts) return
   await Promise.all(
-    [500, 600, 700].map((w) => document.fonts.load(`${w} 36px 'IBM Plex Sans'`).catch(() => []))
+    [500, 600, 700].map((w) => document.fonts.load(`${w} 36px 'Bricolage Grotesque Variable'`).catch(() => []))
   )
 }
 

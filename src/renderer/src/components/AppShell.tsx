@@ -12,7 +12,7 @@ import { isMac, isWeb } from '@/lib/platform'
 import { cn } from '@/lib/utils'
 import { track, trackOpen } from '@/lib/usage'
 import { ArtWash } from './ArtWash'
-import { ArtWashSrcContext } from './artWashContext'
+import { ArtWashContext, type WashState } from './artWashContext'
 import { SidebarGameSwitch } from './GameSwitch'
 import { MainScrollContext, type MainScroll } from './mainScroll'
 import { ArtDownloads } from './ArtDownloads'
@@ -105,7 +105,7 @@ export function AppShell({
     }),
     []
   )
-  const [wash, setWash] = useState<string | null>(null)
+  const [wash, setWash] = useState<WashState | null>(null)
   // The portal flags only the owner's account as admin.
   const { user } = useAccountUser()
   // Each page opens at its top, not wherever the previous page was scrolled to.
@@ -122,7 +122,7 @@ export function AppShell({
   }, [page, def, onNavigate])
   return (
     <div className="group/shell relative isolate flex h-screen flex-col overflow-hidden bg-background text-foreground tabular-nums">
-      <ArtWash src={wash} />
+      <ArtWash wash={wash} enabled={page !== 'scan'} />
       {!isWeb() && (
         <>
           {/* Carries a page header's glass up to the top of the window, so it doesn't float as a box. */}
@@ -234,9 +234,9 @@ export function AppShell({
         <div className="relative flex min-w-0 flex-1 flex-col">
           <SyncBanner />
           <main ref={mainRef} data-main-scroll className="min-h-0 flex-1 overflow-auto">
-            <ArtWashSrcContext.Provider value={setWash}>
+            <ArtWashContext.Provider value={setWash}>
               <MainScrollContext.Provider value={scroll}>{children}</MainScrollContext.Provider>
-            </ArtWashSrcContext.Provider>
+            </ArtWashContext.Provider>
           </main>
           <ArtDownloads />
         </div>

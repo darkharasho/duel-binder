@@ -15,7 +15,7 @@ import {
   type LucideIcon
 } from 'lucide-react'
 import { ArtWash } from '@/components/ArtWash'
-import { ArtWashSrcContext } from '@/components/artWashContext'
+import { ArtWashContext, type WashState } from '@/components/artWashContext'
 import type { Page } from '@/components/AppShell'
 import { MainScrollContext, type MainScroll } from '@/components/mainScroll'
 import { PageSwitch, PagesAddCard, usePages } from '@/components/pageSwitch'
@@ -160,7 +160,7 @@ function Shell({ engineFactory }: { engineFactory?: EngineFactory }): React.JSX.
     }),
     []
   )
-  const [wash, setWash] = useState<string | null>(null)
+  const [wash, setWash] = useState<WashState | null>(null)
   // Each page opens at its top.
   useLayoutEffect(() => {
     scroll.set(0)
@@ -198,7 +198,7 @@ function Shell({ engineFactory }: { engineFactory?: EngineFactory }): React.JSX.
       data-phone-shell
       className="fixed inset-0 isolate flex flex-col overflow-hidden bg-background text-foreground tabular-nums"
     >
-      <ArtWash src={scan ? null : wash} glow={!scan} />
+      <ArtWash wash={wash} enabled={!scan} />
       <main
         ref={mainRef}
         data-main-scroll
@@ -210,7 +210,7 @@ function Shell({ engineFactory }: { engineFactory?: EngineFactory }): React.JSX.
             : 'overflow-auto overscroll-contain pt-[env(safe-area-inset-top)]'
         )}
       >
-        <ArtWashSrcContext.Provider value={setWash}>
+        <ArtWashContext.Provider value={setWash}>
           <MainScrollContext.Provider value={scroll}>
             <PageSwitch
               pages={pages}
@@ -224,7 +224,7 @@ function Shell({ engineFactory }: { engineFactory?: EngineFactory }): React.JSX.
               settings={<Settings onContribute={(g) => void openContribute(g)} />}
             />
           </MainScrollContext.Provider>
-        </ArtWashSrcContext.Provider>
+        </ArtWashContext.Provider>
       </main>
 
       {contribute !== null && (

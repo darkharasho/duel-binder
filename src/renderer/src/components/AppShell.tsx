@@ -125,16 +125,7 @@ export function AppShell({
   return (
     <div className="group/shell relative isolate flex h-screen flex-col overflow-hidden bg-background text-foreground tabular-nums">
       <ArtWash wash={wash} enabled={page !== 'scan'} />
-      {!isWeb() && (
-        <>
-          {/* Carries a page header's glass up to the top of the window, so it doesn't float as a box. */}
-          <div
-            aria-hidden
-            className="absolute left-[199px] right-0 top-0 hidden h-9 border-l border-white/[0.06] bg-background/60 backdrop-blur-xl group-has-[[data-page-header]]/shell:block"
-          />
-          <TitleBar />
-        </>
-      )}
+      {!isWeb() && <TitleBar />}
       <div className="flex min-h-0 flex-1">
         <aside className="flex w-[200px] shrink-0 flex-col gap-5 pb-5 pl-6 pr-3 pt-3">
           <div className="flex flex-col items-start gap-3">

@@ -4,7 +4,7 @@ import { GENERATIONS, POKEDEX_SIZE } from '@shared/pokedex'
 import { useArtWash } from '@/components/artWashContext'
 import { CardSheet } from '@/components/CardSheet'
 import { FilterOptionChip } from '@/components/FilterChip'
-import { PageHeader } from '@/components/PageHeader'
+import { PAGE_TITLE, PageHeader } from '@/components/PageHeader'
 import { CardPanel } from '@/features/card/CardPanel'
 import { api, queryKeys } from '@/lib/api'
 import { DexBar, PokedexGrid } from './PokedexGrid'
@@ -48,7 +48,7 @@ export function PokedexPage(): React.JSX.Element {
       <PageHeader>
         <div className="space-y-2">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Pokédex</h1>
+            <h1 className={PAGE_TITLE}>Pokédex</h1>
             <p className="mt-0.5 text-[13px] text-foreground/75 tabular-nums">
               {summary.isSuccess
                 ? `${total.caught} / ${POKEDEX_SIZE} caught · ${percentText(total)}%`

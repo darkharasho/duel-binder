@@ -7,7 +7,7 @@ import type { BinderCard, BinderDetail, BinderSummary } from '@shared/types'
 import { reverseLook } from '@shared/reverseHolo'
 import { CardArt } from '@/components/CardArt'
 import { useArtWash } from '@/components/artWashContext'
-import { PageHeader } from '@/components/PageHeader'
+import { PAGE_TITLE, PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { SetProgress } from '@/features/sets/SetProgress'
 import { api, queryKeys } from '@/lib/api'
@@ -233,7 +233,7 @@ export function BindersPage(): React.JSX.Element {
     <div className="space-y-4 p-8 max-md:p-4">
       <PageHeader>
         <div className="flex items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold">Binders</h1>
+          <h1 className={PAGE_TITLE}>Binders</h1>
           {!empty && <Button onClick={() => setForm(true)}>New binder</Button>}
         </div>
       </PageHeader>

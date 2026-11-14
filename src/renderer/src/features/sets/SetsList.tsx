@@ -195,7 +195,7 @@ export const SetsList = memo(function SetsList({
             <h2
               className={cn(
                 'z-10 -mx-8 flex items-baseline gap-2 border-b border-white/[0.06] px-8 py-2 max-md:-mx-4 max-md:px-4',
-                !phone && 'sticky top-[var(--page-header-h,0px)] bg-background/60 backdrop-blur-xl',
+                !phone && 'sticky top-0 bg-background/60 backdrop-blur-xl',
                 view === 'grid' && 'mb-4'
               )}
             >

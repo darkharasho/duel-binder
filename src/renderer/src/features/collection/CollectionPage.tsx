@@ -267,7 +267,7 @@ export function CollectionPage({
     <TooltipProvider>
       <div className="flex items-start">
         <div className="min-w-0 flex-1 space-y-4 p-8 max-md:p-4">
-          <PageHeader>
+          <PageHeader title={!inFriendHeader && !friend ? 'Collection' : undefined}>
             {friendHeader?.(
               inFriendHeader && (
                 <>
@@ -279,7 +279,6 @@ export function CollectionPage({
             {!inFriendHeader && (
               <header className="flex flex-wrap items-end justify-between gap-2 max-md:flex-col max-md:items-start">
                 <div>
-                  {!friend && <h1 className="text-xl font-semibold">Collection</h1>}
                   {entryCount}
                 </div>
               </header>

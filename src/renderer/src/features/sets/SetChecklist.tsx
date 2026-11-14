@@ -646,21 +646,21 @@ export function SetChecklist({
                           ×{t.owned}
                         </span>
                       )}
-                      <span className="mb-1 text-xs tabular-nums text-muted-foreground">
+                      <span className="mb-1 font-mono text-[11.5px] font-medium">
                         {tileNumberLabel(t)}
                       </span>
-                      <span className={cn('truncate text-xs font-medium', favourites && TILE_NAME)}>
+                      <span className={cn('truncate text-[15px] font-semibold', favourites && TILE_NAME)}>
                         {t.card.name}
                       </span>
                       <span className="mt-1 flex min-w-0 flex-col gap-1">
                         {(priced?.rarity ?? t.rarity) && (
-                          <span className="truncate text-xs text-muted-foreground">
+                          <span className="truncate font-mono text-[11.5px] font-medium">
                             {priced?.rarity ?? t.rarity}
                           </span>
                         )}
                         {/* A card's own price isn't otherwise on its tile, so the order would be a mystery. */}
                         {priced?.price != null && (
-                          <span className="text-xs tabular-nums text-emerald-400">
+                          <span className="font-mono text-[11.5px] font-medium">
                             {formatUsd(priced.price)}
                           </span>
                         )}

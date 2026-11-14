@@ -5,7 +5,7 @@ import { Camera, History, ListChecks } from 'lucide-react'
 import type { NavigateFn } from '@/components/AppShell'
 import { useArtWash } from '@/components/artWashContext'
 import { EmptyHero, EmptySteps } from '@/components/EmptyHero'
-import { PageHeader } from '@/components/PageHeader'
+import { PAGE_TITLE, PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { RowsSkeleton } from '@/components/ui/loading'
 import { api } from '@/lib/api'
@@ -63,7 +63,7 @@ export function SessionsPage({ onNavigate }: { onNavigate?: NavigateFn } = {}): 
   return (
     <div className="space-y-4 p-8 max-md:p-4">
       <PageHeader>
-        <h1 className="text-xl font-semibold">Sessions</h1>
+        <h1 className={PAGE_TITLE}>Sessions</h1>
         {!empty && (
           <p className="text-sm text-muted-foreground">Cards you added from the scanner</p>
         )}

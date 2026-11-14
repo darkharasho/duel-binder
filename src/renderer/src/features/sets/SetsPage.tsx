@@ -8,7 +8,7 @@ import { SET_TYPES, type SetType } from '@shared/setTypes'
 import { useArtWash } from '@/components/artWashContext'
 import { FilterBar } from '@/components/FilterBar'
 import { useMainScroll } from '@/components/mainScroll'
-import { PageHeader } from '@/components/PageHeader'
+import { PAGE_TITLE, PageHeader } from '@/components/PageHeader'
 import { SearchInput } from '@/components/SearchInput'
 import { SortControl } from '@/components/SortControl'
 import { Button } from '@/components/ui/button'
@@ -260,7 +260,7 @@ export function SetsPage({
           <div className="min-w-0 flex-1 space-y-4 p-8 max-md:p-4">
             <PageHeader>
               <div>
-                <h1 className="text-2xl font-semibold tracking-tight">Sets</h1>
+                <h1 className={PAGE_TITLE}>Sets</h1>
                 {sets.isSuccess && (
                   <p className="mt-0.5 text-[13px] text-foreground/75 tabular-nums">
                     You&apos;ve started {header.started} of {header.total} sets · {header.complete}{' '}

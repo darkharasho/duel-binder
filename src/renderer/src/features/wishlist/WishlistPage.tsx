@@ -7,7 +7,7 @@ import type { NavigateFn } from '@/components/AppShell'
 import { useArtWash } from '@/components/artWashContext'
 import { CardSheet } from '@/components/CardSheet'
 import { EmptyHero, EmptySteps } from '@/components/EmptyHero'
-import { PageHeader } from '@/components/PageHeader'
+import { PAGE_TITLE, PageHeader } from '@/components/PageHeader'
 import { SearchInput } from '@/components/SearchInput'
 import { Button } from '@/components/ui/button'
 import { RowsSkeleton } from '@/components/ui/loading'
@@ -160,7 +160,7 @@ export function WishlistPage({ onNavigate }: { onNavigate?: NavigateFn } = {}): 
   return (
     <div className="space-y-4 p-8 max-md:p-4">
       <PageHeader>
-        <h1 className="text-xl font-semibold">Wishlist</h1>
+        <h1 className={PAGE_TITLE}>Wishlist</h1>
         {items.length > 0 && (
           <p className="text-sm text-muted-foreground tabular-nums">{summary(items)}</p>
         )}

@@ -1,58 +1,71 @@
-import { useLayoutEffect, useRef } from 'react'
 import { useGame } from '@/lib/game'
 import { isPhone } from '@/lib/platform'
 import { cn } from '@/lib/utils'
 import { GameChip } from './GameSwitch'
 
+/** The big condensed page title: 96 px, 56 px under 1100 px. For a page that draws its own h1. */
+export const PAGE_TITLE = 'font-display text-[56px] leading-[.8] min-[1100px]:text-[96px]'
+
+export interface PageStat {
+  label: string
+  value: React.ReactNode
+}
+
 /**
- * A page's title bar, pinned to the top of the scrolling main area. Sits first in a `p-8` page
- * (`max-md:p-4` under 768 px). On the phone it scrolls away under the shell's sticky status line,
- * and carries the game chip at its right when the account has more than one game.
+ * A page's header, first in a `p-8` page (`max-md:p-4` under 768 px). It has no box: the page's art
+ * wash shows through, and it scrolls away with the page. `title` is the big condensed heading
+ * (96 px, 56 px under 1100 px); `stats` sit right-aligned beside it, a mono value over a mono label.
+ * Pages that draw their own heading pass it as children. On the phone it carries the game chip at its
+ * right when the account has more than one game.
  */
 export function PageHeader({
   className,
+  title,
+  stats,
   children
 }: {
   className?: string
-  children: React.ReactNode
+  title?: string
+  stats?: PageStat[]
+  children?: React.ReactNode
 }): React.JSX.Element {
-  const ref = useRef<HTMLDivElement>(null)
   const { available } = useGame()
   const chip = isPhone() && available.length > 1
-  // Tells the main scroll area how tall the header is, so its scrollbar gutter can match the glass.
-  useLayoutEffect(() => {
-    const el = ref.current
-    const main = el?.closest<HTMLElement>('main[data-main-scroll]')
-    if (!el || !main) return
-    const update = (): void => {
-      // Sets keeps its list's header mounted, hidden, under an open set: that one measures nothing.
-      if (el.offsetHeight > 0) main.style.setProperty('--page-header-h', `${el.offsetHeight}px`)
-    }
-    update()
-    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update)
-    observer?.observe(el)
-    return () => {
-      observer?.disconnect()
-      main.style.removeProperty('--page-header-h')
-    }
-  }, [])
+  const heading =
+    title || stats?.length ? (
+      <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-3">
+        {title && (
+          <h1 className={cn(PAGE_TITLE, 'min-w-0')}>
+            {title}
+          </h1>
+        )}
+        {stats && stats.length > 0 && (
+          <dl className="ml-auto flex gap-8 text-right">
+            {stats.map((s) => (
+              <div key={s.label} className="flex flex-col-reverse">
+                <dt className="font-mono text-[10.5px] uppercase tracking-[1.5px]">{s.label}</dt>
+                <dd className="font-mono text-[30px] font-medium leading-none">{s.value}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+      </div>
+    ) : null
+  const body = (
+    <>
+      {heading}
+      {children}
+    </>
+  )
   return (
-    <div
-      ref={ref}
-      data-page-header
-      className={cn(
-        'sticky top-0 z-20 -mx-8 -mt-8 space-y-3 border-b border-white/[0.06] bg-background/60 px-8 pb-3 pt-3 backdrop-blur-xl max-md:-mx-4 max-md:-mt-4 max-md:px-4',
-        isPhone() && 'relative',
-        className
-      )}
-    >
+    <div data-page-header className={cn('space-y-3 pb-3', isPhone() && 'relative', className)}>
       {chip ? (
         <div className="flex items-start gap-3">
-          <div className="min-w-0 flex-1 space-y-3">{children}</div>
+          <div className="min-w-0 flex-1 space-y-3">{body}</div>
           <GameChip />
         </div>
       ) : (
-        children
+        body
       )}
     </div>
   )

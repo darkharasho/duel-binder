@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { BookOpen, Heart, Users } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { EmptyHero, EmptySteps } from '@/components/EmptyHero'
-import { PageHeader } from '@/components/PageHeader'
+import { PAGE_TITLE, PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { RowsSkeleton } from '@/components/ui/loading'
 import { useAccountUser } from '@/lib/accountUser'
@@ -97,7 +97,7 @@ export function FriendsPage(): React.JSX.Element {
 
   const header = (
     <PageHeader>
-      <h1 className="text-2xl font-semibold tracking-tight">Friends</h1>
+      <h1 className={PAGE_TITLE}>Friends</h1>
     </PageHeader>
   )
 

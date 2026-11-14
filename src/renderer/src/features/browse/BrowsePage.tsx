@@ -18,7 +18,7 @@ import {
   FilterPanel,
   LanguageSection
 } from '@/components/FilterPanel'
-import { PageHeader } from '@/components/PageHeader'
+import { PAGE_TITLE, PageHeader } from '@/components/PageHeader'
 import { listNav } from '@/components/panelNav'
 import { SearchInput } from '@/components/SearchInput'
 import { SortControl } from '@/components/SortControl'
@@ -218,7 +218,7 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
       <div className="min-w-0 flex-1 space-y-5 p-8 max-md:p-4">
         <PageHeader>
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Browse</h1>
+            <h1 className={PAGE_TITLE}>Browse</h1>
             <p className="mt-0.5 text-[13px] text-foreground/75 tabular-nums">
               {pages.isSuccess ? (
                 `${total.toLocaleString('en-US')} cards`
@@ -326,7 +326,7 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
                   </TiltCard>
                   {/* With every language shown, a Magic card's languages are same-named tiles. */}
                   <div
-                    className={cn('flex items-center gap-1 text-[13px] font-semibold', TILE_NAME)}
+                    className={cn('flex items-center gap-1 text-[15px] font-semibold', TILE_NAME)}
                     title={c.localName}
                   >
                     <span className="truncate">{c.name}</span>
@@ -335,14 +335,12 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
                     )}
                   </div>
                   <div className="mt-0.5 min-w-0 space-y-0.5">
-                    <div className="truncate font-mono text-[11px] text-muted-foreground">
+                    <div className="truncate font-mono text-[11.5px] font-medium">
                       {statsLine(c)}
                     </div>
-                    <div className="flex justify-between font-mono text-[11px]">
+                    <div className="flex justify-between font-mono text-[11.5px] font-medium">
+                      <span>{c.releasedAt?.slice(0, 4) ?? ''}</span>
                       <span>{c.price !== null ? formatUsd(c.price) : '—'}</span>
-                      <span className="text-muted-foreground">
-                        {c.releasedAt?.slice(0, 4) ?? ''}
-                      </span>
                     </div>
                   </div>
                 </button>

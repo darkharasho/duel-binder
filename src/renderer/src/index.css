@@ -83,14 +83,6 @@
   ::-webkit-scrollbar-corner {
     background: transparent;
   }
-  /* While a page header holds its row, the page's track carries the same fade (see PageHeader). */
-  html[data-header-pinned] [data-main-scroll]::-webkit-scrollbar-track {
-    background: linear-gradient(
-      180deg,
-      var(--wash-base, var(--background)) calc(var(--pin-fade, 0px) - 40px),
-      transparent var(--pin-fade, 0px)
-    );
-  }
   ::-webkit-scrollbar-thumb {
     background: rgb(255 255 255 / 12%);
     border: 3px solid transparent;
@@ -235,4 +227,29 @@
 }
 @keyframes phone-blob-c {
   to { transform: translate(14vw, -18vh) scale(1.1); }
+}
+
+/* Behind a held header row (PageHeader): the wash itself, fixed to the window so it lines up with
+   the title bar and the page around it. Cards slip under the background rather than a box. Feathered
+   over the page's left margin (no edge at the sidebar) and faded out below the row. */
+.pin-fade {
+  background:
+    linear-gradient(180deg, transparent 45%, rgb(8 7 12 / 0.5)),
+    var(--wash-pools, none),
+    var(--wash-base, var(--background));
+  background-attachment: fixed;
+  mask-image:
+    linear-gradient(90deg, transparent, #000 32px),
+    linear-gradient(180deg, #000 calc(100% - 32px), transparent);
+  mask-composite: intersect;
+}
+/* The wash's grain, so the copy matches it to the pixel. */
+.pin-fade::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--wash-grain, none);
+  background-attachment: fixed;
+  opacity: 0.22;
+  mix-blend-mode: overlay;
 }

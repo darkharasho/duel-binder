@@ -11,9 +11,6 @@ export const PAGE_TITLE = 'font-display text-[56px] leading-[.8] min-[1100px]:te
 const PinnedContext = createContext(false)
 export const usePinned = (): boolean => useContext(PinnedContext)
 
-/** How many headers are holding their row now; the title bar takes the wash colour while any are. */
-let holding = 0
-
 /** Gap between the top of the page and the pinned row, in px. */
 const PIN_GAP = 12
 
@@ -53,13 +50,6 @@ function usePin(
       const scrollerTop = scroller.getBoundingClientRect().top
       const fromTop = row.getBoundingClientRect().top - scrollerTop
       const held = scroller.scrollTop > 0 && fromTop <= PIN_GAP + 0.5
-      // The scrollbar track sits outside the fade, so it draws the same fade to this depth.
-      const fade = el.querySelector(':scope > [data-pin-fade]')
-      if (held && fade)
-        document.documentElement.style.setProperty(
-          '--pin-fade',
-          `${fade.getBoundingClientRect().bottom - scrollerTop}px`
-        )
       setPinned(held)
     }
     onScroll()
@@ -70,16 +60,6 @@ function usePin(
     }
   }, [ref, on])
   const held = on && top !== null && pinned
-  // The title bar sits above the scrolling page, so it reads this to take the same colour.
-  useLayoutEffect(() => {
-    if (!held) return
-    holding += 1
-    document.documentElement.setAttribute('data-header-pinned', '')
-    return () => {
-      holding -= 1
-      if (holding === 0) document.documentElement.removeAttribute('data-header-pinned')
-    }
-  }, [held])
   return { top: on ? top : null, pinned: held }
 }
 
@@ -91,11 +71,12 @@ export interface PageStat {
 /**
  * A page's header, first in a `p-8` page (`max-md:p-4` under 768 px). It has no box: the page's art
  * wash shows through. On desktop the title scrolls away but a child marked `data-pin` (the
- * FilterBar marks itself) stays pinned at the top; while held, a fade of the wash's base colour sits
- * behind it so cards scrolling under stay out of the way. On the phone it all scrolls away. `title` is the big condensed heading
- * (96 px, 56 px under 1100 px); `stats` sit right-aligned beside it, a mono value over a mono label.
- * Pages that draw their own heading pass it as children. On the phone it carries the game chip at its
- * right when the account has more than one game.
+ * FilterBar marks itself) stays pinned at the top; while held, a copy of the wash (fixed to the
+ * window, see `.pin-fade` in index.css) sits behind it so cards scrolling under stay out of the way.
+ * On the phone it all scrolls away. `title` is the big condensed heading (96 px, 56 px under
+ * 1100 px); `stats` sit right-aligned beside it, a mono value over a mono label. Pages that draw
+ * their own heading pass it as children. On the phone it carries the game chip at its right when the
+ * account has more than one game.
  */
 export function PageHeader({
   className,
@@ -168,22 +149,16 @@ export function PageHeader({
       style={top !== null ? { top } : undefined}
     >
       {top !== null && (
-        // Not a box: the wash's own base colour from the window's top edge (the title bar takes the
-        // same colour, see TitleBar), fading out below the row.
+        // Not a box: the wash itself, lined up with the window, from the window's top edge to a
+        // little below the row, where it fades out.
         <div
           aria-hidden
           data-pin-fade
           className={cn(
-            'pointer-events-none absolute -inset-x-8 bottom-[-24px] -z-10 transition-opacity duration-150',
+            'pin-fade pointer-events-none absolute -inset-x-8 bottom-[-44px] -z-10 transition-opacity duration-150',
             !pinned && 'opacity-0'
           )}
-          style={{
-            top: -top,
-            // Feathered over the page's left margin, so there is no hard edge at the sidebar.
-            maskImage: 'linear-gradient(90deg, transparent, #000 32px)',
-            background:
-              'linear-gradient(180deg, var(--wash-base, var(--background)) calc(100% - 40px), transparent)'
-          }}
+          style={{ top: -top }}
         />
       )}
       <PinnedContext.Provider value={pinned}>

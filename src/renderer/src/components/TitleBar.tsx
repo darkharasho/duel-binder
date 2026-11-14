@@ -64,11 +64,6 @@ export function TitleBar(): React.JSX.Element {
         platform === 'win32' && 'pr-[140px]'
       )}
     >
-      {/* Over the page column, the pinned header row's wash-base colour while it is held. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-y-0 left-[200px] right-0 bg-(--wash-base) [mask-image:linear-gradient(90deg,transparent,#000_32px)] opacity-0 transition-opacity duration-150 [html[data-header-pinned]_&]:opacity-100"
-      />
       <div className="flex-1" />
       {platform === 'linux' && (
         <div className="relative">

@@ -50,10 +50,14 @@ export function ArtWash({
     if (!enabled) return
     const root = document.documentElement
     root.style.setProperty('--wash-base', base)
+    root.style.setProperty('--wash-pools', pools)
+    root.style.setProperty('--wash-grain', GRAIN)
     return () => {
+      root.style.removeProperty('--wash-grain')
       root.style.removeProperty('--wash-base')
+      root.style.removeProperty('--wash-pools')
     }
-  }, [base, enabled])
+  }, [base, pools, enabled])
 
   if (!enabled) return null
   const transition = reducedMotion() ? 'none' : 'opacity 700ms ease'

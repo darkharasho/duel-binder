@@ -139,7 +139,7 @@ describe('friends page', () => {
     const user = userEvent.setup()
     const api = make({ friends: [], incoming: [], blocked: [] })
     renderWithProviders(<FriendsPage />, { api })
-    const send = screen.getByRole('button', { name: 'Send request' })
+    const send = await screen.findByRole('button', { name: 'Send request' })
     expect(send).toBeDisabled()
     await user.type(screen.getByRole('textbox', { name: 'Username' }), 'bob')
     await user.click(send)
@@ -156,7 +156,7 @@ describe('friends page', () => {
       }
     )
     renderWithProviders(<FriendsPage />, { api })
-    await user.type(screen.getByRole('textbox', { name: 'Username' }), 'bob')
+    await user.type(await screen.findByRole('textbox', { name: 'Username' }), 'bob')
     await user.click(screen.getByRole('button', { name: 'Send request' }))
     expect(await screen.findByText("You're now friends with Bob")).toBeInTheDocument()
   })
@@ -174,7 +174,7 @@ describe('friends page', () => {
       }
     )
     renderWithProviders(<FriendsPage />, { api })
-    await user.type(screen.getByRole('textbox', { name: 'Username' }), 'bob')
+    await user.type(await screen.findByRole('textbox', { name: 'Username' }), 'bob')
     await user.click(screen.getByRole('button', { name: 'Send request' }))
     expect(await screen.findByText('No Duel Binder user called "bob"')).toBeInTheDocument()
   })
@@ -282,15 +282,50 @@ describe('friends page', () => {
     expect(await screen.findByText('1 card · Updated 2 days ago')).toBeInTheDocument()
   })
 
-  it('shows the empty state', async () => {
+  it('shows the empty state, with the add form and your username', async () => {
     renderWithProviders(<FriendsPage />, {
-      api: make({ friends: [], incoming: [], blocked: [] })
-    })
-    expect(
-      await screen.findByText(
-        'No friends yet. Add one by their Duel Binder username, shown under their name in Settings.'
+      api: make(
+        { friends: [], incoming: [], blocked: [] },
+        { window: { platform: 'linux' }, account: { status: vi.fn(async () => signedIn) } }
       )
-    ).toBeInTheDocument()
+    })
+    // Signed-out shows the same heading until the account status loads, so wait for the form.
+    const input = await screen.findByRole('textbox', { name: 'Username' })
+    const hero = screen.getByRole('region', { name: 'Collect with friends' })
+    expect(hero).toContainElement(input)
+    expect(await within(hero).findByText('@seto')).toBeInTheDocument()
+    // Only the one form.
+    expect(screen.getAllByRole('button', { name: 'Send request' })).toHaveLength(1)
+  })
+
+  it('lists sent requests under the empty state, and cancels one', async () => {
+    const user = userEvent.setup()
+    const api = make({ friends: [], incoming: [], outgoing: [alice(3)], blocked: [] })
+    renderWithProviders(<FriendsPage />, { api })
+    const sent = await screen.findByRole('region', { name: 'Sent requests' })
+    expect(within(sent).getByText('Alice')).toBeInTheDocument()
+    expect(within(sent).getByText('@alice · Sent 1 day ago')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Collect with friends' })).toBeInTheDocument()
+    await user.click(within(sent).getByRole('button', { name: 'Cancel request' }))
+    expect(api.friends.cancel).toHaveBeenCalledWith(3)
+    await waitFor(() => expect(api.friends.overview).toHaveBeenCalledTimes(2))
+  })
+
+  it('lists sent requests alongside friends, with the form at the top', async () => {
+    renderWithProviders(<FriendsPage />, {
+      api: make({ friends: [bob], incoming: [], outgoing: [alice(3)], blocked: [] })
+    })
+    expect(await screen.findByRole('region', { name: 'Sent requests' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Collect with friends' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Send request' })).toBeInTheDocument()
+  })
+
+  it('copes with a portal that leaves out sent requests', async () => {
+    renderWithProviders(<FriendsPage />, {
+      api: make({ friends: [bob], incoming: [], blocked: [] })
+    })
+    expect(await screen.findByText('Bob')).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Sent requests' })).not.toBeInTheDocument()
   })
 
   it('shows offline with Retry', async () => {
@@ -305,11 +340,7 @@ describe('friends page', () => {
     renderWithProviders(<FriendsPage />, { api })
     expect(await screen.findByText(OFFLINE_MESSAGE)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Retry' }))
-    expect(
-      await screen.findByText(
-        'No friends yet. Add one by their Duel Binder username, shown under their name in Settings.'
-      )
-    ).toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: 'Collect with friends' })).toBeInTheDocument()
   })
 
   it('shows the signed-out message on desktop', async () => {

@@ -77,8 +77,17 @@ describe('the binders page', () => {
 
   it('says so when there are no binders, and New binder opens the form', async () => {
     renderWithProviders(<BindersPage />)
-    expect(await screen.findByText(/No binders yet/)).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: 'Start your first binder' })
+    ).toBeInTheDocument()
+    // One New binder button: the header's waits until there are binders.
     await userEvent.click(screen.getByRole('button', { name: 'New binder' }))
+    expect(screen.getByRole('heading', { name: 'New binder' })).toBeInTheDocument()
+  })
+
+  it('an example binder on the empty page opens the form too', async () => {
+    renderWithProviders(<BindersPage />)
+    await userEvent.click(await screen.findByRole('button', { name: /A whole set/ }))
     expect(screen.getByRole('heading', { name: 'New binder' })).toBeInTheDocument()
   })
 

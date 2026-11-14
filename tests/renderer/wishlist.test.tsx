@@ -107,6 +107,22 @@ describe('wishlist helpers', () => {
   })
 })
 
+describe('the empty wishlist', () => {
+  it('offers Browse and the sets', async () => {
+    const onNavigate = vi.fn()
+    renderWithProviders(<WishlistPage onNavigate={onNavigate} />, {
+      api: createMockApi({ wishlist: { list: vi.fn(async () => []) } })
+    })
+    expect(
+      await screen.findByRole('heading', { name: 'Nothing on your wishlist yet' })
+    ).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Browse cards' }))
+    expect(onNavigate).toHaveBeenCalledWith('browse')
+    await userEvent.click(screen.getByRole('button', { name: "Find a set's missing cards" }))
+    expect(onNavigate).toHaveBeenCalledWith('sets')
+  })
+})
+
 describe('the heart on a card type', () => {
   it('wants the printing, and takes it back', async () => {
     let wished: { printingId: number; quantity: null }[] = []

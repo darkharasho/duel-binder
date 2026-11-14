@@ -207,6 +207,7 @@ export function createHandlers({
     'friends:request': async (username: string) => account.portal('friends:request', [username]),
     'friends:accept': async (userId: number) => account.portal('friends:accept', [userId]),
     'friends:ignore': async (userId: number) => account.portal('friends:ignore', [userId]),
+    'friends:cancel': async (userId: number) => account.portal('friends:cancel', [userId]),
     'friends:remove': async (userId: number) => account.portal('friends:remove', [userId]),
     'friends:block': async (userId: number) => account.portal('friends:block', [userId]),
     'friends:unblock': async (userId: number) => account.portal('friends:unblock', [userId]),

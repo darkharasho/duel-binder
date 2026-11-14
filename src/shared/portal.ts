@@ -19,6 +19,7 @@ export const PORTAL_CHANNELS = [
   'friends:request',
   'friends:accept',
   'friends:ignore',
+  'friends:cancel',
   'friends:remove',
   'friends:block',
   'friends:unblock',

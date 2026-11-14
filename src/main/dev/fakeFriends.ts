@@ -245,6 +245,7 @@ export function createFakeFriends(
   const people = new Map(FAKE_PEOPLE.map((p) => [p.user.id, p]))
   const friends = new Set(FRIEND_IDS)
   const incoming = new Map([[REQUESTER, new Date(now().getTime() - 26 * 3_600_000).toISOString()]])
+  const outgoing = new Map<number, string>()
   const blocked = new Map([[BLOCKED.id, BLOCKED]])
   const wishVisible = new Map(FAKE_PEOPLE.map((p) => [p.user.id, p.wishlistVisible]))
   let myWishlistVisible = true
@@ -274,6 +275,7 @@ export function createFakeFriends(
           return { ...u, cardCount: t.cards ?? 0, updatedAt: t.updated }
         }),
         incoming: [...incoming].map(([id, sentAt]) => ({ ...people.get(id)!.user, sentAt })),
+        outgoing: [...outgoing].map(([id, sentAt]) => ({ ...people.get(id)!.user, sentAt })),
         blocked: [...blocked.values()].sort(byName)
       }
     },
@@ -286,17 +288,20 @@ export function createFakeFriends(
         friends.add(p.user.id)
         return { status: 'accepted', friend: p.user }
       }
+      if (!outgoing.has(p.user.id)) outgoing.set(p.user.id, now().toISOString())
       return { status: 'sent' }
     },
     'friends:accept': (id) => {
       if (typeof id === 'number' && incoming.delete(id)) friends.add(id)
     },
     'friends:ignore': (id) => void incoming.delete(id as number),
+    'friends:cancel': (id) => void outgoing.delete(id as number),
     'friends:remove': (id) => void friends.delete(id as number),
     'friends:block': (id) => {
       const u = userOf(id as number)
       friends.delete(id as number)
       incoming.delete(id as number)
+      outgoing.delete(id as number)
       if (u) blocked.set(u.id, u)
     },
     'friends:unblock': (id) => void blocked.delete(id as number),

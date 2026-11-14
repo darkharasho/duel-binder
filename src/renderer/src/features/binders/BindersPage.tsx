@@ -12,7 +12,8 @@ import { SetProgress } from '@/features/sets/SetProgress'
 import { api, queryKeys } from '@/lib/api'
 import { useBackHandler } from '@/lib/backStack'
 import { cn } from '@/lib/utils'
-import { binderStyle } from './binderColour'
+import { EmptyHero } from '@/components/EmptyHero'
+import { BINDER_COLOURS, binderStyle } from './binderColour'
 import { BinderForm } from './BinderForm'
 import './binderLook.css'
 import { BinderView } from './BinderView'
@@ -149,6 +150,54 @@ function Open({
   )
 }
 
+/** Example binders on the empty page: a cover each, and what its rule collects. */
+const EXAMPLES = [
+  { name: 'Every artwork', colour: BINDER_COLOURS[0], text: 'Each version of one card' },
+  { name: 'A whole set', colour: BINDER_COLOURS[1], text: 'One of every card in a set' },
+  { name: 'Chase rares', colour: BINDER_COLOURS[2], text: 'One rarity across every set' }
+] as const
+
+function NoBinders({ onNew }: { onNew: () => void }): React.JSX.Element {
+  return (
+    <EmptyHero
+      id="no-binders"
+      title="Start your first binder"
+      blurb="A binder tracks a group of cards you want to collect and shows what's still missing, page by page."
+    >
+      <div className="mt-7 flex justify-center">
+        <Button size="lg" onClick={onNew}>
+          New binder
+        </Button>
+      </div>
+      <ul
+        aria-label="Binder ideas"
+        className="mx-auto mt-14 grid max-w-2xl grid-cols-3 gap-8 max-md:gap-4"
+      >
+        {EXAMPLES.map((e) => (
+          <li key={e.name} className="min-w-0">
+            <button
+              type="button"
+              onClick={onNew}
+              className="group/cover block w-full rounded-lg text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4 focus-visible:ring-offset-background"
+            >
+              <div
+                className="binder-cover binder-leather"
+                style={{ '--binder': e.colour } as React.CSSProperties}
+              >
+                <div className="binder-window">
+                  <div className="aspect-[59/86] rounded-[2px] bg-white/5" />
+                </div>
+                <div className="binder-title">{e.name}</div>
+              </div>
+              <p className="mt-4 px-1 text-xs text-muted-foreground">{e.text}</p>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </EmptyHero>
+  )
+}
+
 /** The current game's binders, with progress; opening one shows its slots. */
 export function BindersPage(): React.JSX.Element {
   const list = useQuery({ queryKey: queryKeys.binders, queryFn: () => api.binders.list() })
@@ -169,19 +218,17 @@ export function BindersPage(): React.JSX.Element {
     )
   if (uid) return <Open uid={uid} onBack={() => setUid(null)} onEdit={setForm} />
   const binders = list.data ?? []
+  const empty = list.isSuccess && binders.length === 0
   return (
     <div className="space-y-4 p-8 max-md:p-4">
       <PageHeader>
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-xl font-semibold">Binders</h1>
-          <Button onClick={() => setForm(true)}>New binder</Button>
+          {!empty && <Button onClick={() => setForm(true)}>New binder</Button>}
         </div>
       </PageHeader>
-      {list.isSuccess && binders.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          No binders yet. A binder tracks a set of cards you want to collect, such as every artwork
-          of one card.
-        </p>
+      {empty ? (
+        <NoBinders onNew={() => setForm(true)} />
       ) : list.isPending ? (
         <CardGridSkeleton label="Loading binders" count={6} className={SHELF} />
       ) : (

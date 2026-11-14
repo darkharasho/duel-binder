@@ -85,6 +85,7 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
       request: vi.fn(async () => ({ status: 'sent' as const })),
       accept: vi.fn(async () => undefined),
       ignore: vi.fn(async () => undefined),
+      cancel: vi.fn(async () => undefined),
       remove: vi.fn(async () => undefined),
       block: vi.fn(async () => undefined),
       unblock: vi.fn(async () => undefined),

@@ -593,6 +593,8 @@ export interface FriendRequest extends FriendUser {
 export interface FriendsOverview {
   friends: Friend[]
   incoming: FriendRequest[]
+  /** Requests you sent that haven't been accepted; missing from a portal older than 0.90. */
+  outgoing?: FriendRequest[]
   /** People you've blocked, by name. */
   blocked: FriendUser[]
 }

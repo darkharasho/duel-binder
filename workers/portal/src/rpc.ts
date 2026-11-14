@@ -77,6 +77,7 @@ import {
   blockUser,
   friendsOverview,
   ignoreFriend,
+  cancelFriendRequest,
   removeFriend,
   requestFriend,
   unblockUser
@@ -227,6 +228,8 @@ const HANDLERS: { [C in Exclude<PortalChannel, AccountLinkChannel>]: Handler<C> 
   'friends:accept': ({ db, userId, now }, _s, id) =>
     acceptFriend(db, userId, checkId(id, 'userId'), now()),
   'friends:ignore': ({ db, userId }, _s, id) => ignoreFriend(db, userId, checkId(id, 'userId')),
+  'friends:cancel': ({ db, userId }, _s, id) =>
+    cancelFriendRequest(db, userId, checkId(id, 'userId')),
   'friends:remove': ({ db, userId }, _s, id) => removeFriend(db, userId, checkId(id, 'userId')),
   'friends:block': ({ db, userId, now }, _s, id) =>
     blockUser(db, userId, checkId(id, 'userId'), now()),

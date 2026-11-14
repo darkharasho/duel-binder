@@ -62,6 +62,19 @@ export function friendsOverview(db: SqlDb, me: number, game: GameId): FriendsOve
         `SELECT u.id, u.discord_id, u.username, u.display_name, u.avatar, f.created_at AS sent
            FROM friendships f JOIN users u ON u.id = f.requester_id
           WHERE f.addressee_id = ? AND f.status = 'pending'
+            AND NOT EXISTS (SELECT 1 FROM friend_blocks b
+                             WHERE b.blocker_id = f.addressee_id AND b.blocked_id = f.requester_id)
+          ORDER BY f.created_at DESC, u.id`
+      )
+      .all(me) as (UserRow & { sent: string })[]
+  ).map((r): FriendRequest => ({ ...toUser(r), sentAt: r.sent }))
+  // A request to someone who blocked you is kept and listed like any other, so the block stays hidden.
+  const outgoing = (
+    db
+      .prepare(
+        `SELECT u.id, u.discord_id, u.username, u.display_name, u.avatar, f.created_at AS sent
+           FROM friendships f JOIN users u ON u.id = f.addressee_id
+          WHERE f.requester_id = ? AND f.status = 'pending' AND u.closed_at IS NULL
           ORDER BY f.created_at DESC, u.id`
       )
       .all(me) as (UserRow & { sent: string })[]
@@ -76,7 +89,7 @@ export function friendsOverview(db: SqlDb, me: number, game: GameId): FriendsOve
       )
       .all(me) as UserRow[]
   ).map(toUser)
-  return { friends, incoming, blocked }
+  return { friends, incoming, outgoing, blocked }
 }
 
 function blocks(db: SqlDb, blocker: number, blocked: number): boolean {
@@ -105,8 +118,9 @@ export function requestFriend(
   if (target.id === me) throw new FriendError("That's you")
   if (blocks(db, me, target.id))
     throw new FriendError(`You've blocked ${target.username}. Unblock them first.`)
-  // Someone who blocked you gets nothing, but you're told it was sent, as with any request.
-  if (blocks(db, target.id, me)) return { status: 'sent' }
+  // Someone who blocked you never sees the request (incoming leaves it out), but it is stored and
+  // listed as sent like any other, so nothing tells you about the block.
+  const blocked = blocks(db, target.id, me)
   const row = db
     .prepare(
       `SELECT requester_id, status FROM friendships
@@ -115,7 +129,7 @@ export function requestFriend(
     .get(me, target.id, target.id, me) as { requester_id: number; status: string } | undefined
   if (row?.status === 'accepted')
     throw new FriendError(`You're already friends with ${target.username}`)
-  if (row && row.requester_id === target.id) {
+  if (row && row.requester_id === target.id && !blocked) {
     acceptFriend(db, me, target.id, now)
     return { status: 'accepted', friend: toUser(target) }
   }
@@ -154,6 +168,13 @@ export function ignoreFriend(db: SqlDb, me: number, requesterId: number): void {
   ).run(requesterId, me)
 }
 
+/** Takes back a request you sent that hasn't been accepted. */
+export function cancelFriendRequest(db: SqlDb, me: number, addresseeId: number): void {
+  db.prepare(
+    "DELETE FROM friendships WHERE requester_id = ? AND addressee_id = ? AND status = 'pending'"
+  ).run(me, addresseeId)
+}
+
 export function removeFriend(db: SqlDb, me: number, friendId: number): void {
   db.prepare(
     `DELETE FROM friendships WHERE status = 'accepted'
@@ -177,16 +198,22 @@ export function blockUser(db: SqlDb, me: number, userId: number, now: Date): voi
   if (userId === me) throw new FriendError("You can't block yourself")
   if (!db.prepare('SELECT 1 FROM users WHERE id = ?').get(userId))
     throw new FriendError('No such user')
+  // Their pending request to you stays (hidden from you, still "sent" for them) so the block
+  // doesn't show on their side; unblocking clears it.
   db.prepare(
     `DELETE FROM friendships
-      WHERE (requester_id = ? AND addressee_id = ?) OR (requester_id = ? AND addressee_id = ?)`
+      WHERE (requester_id = ? AND addressee_id = ?)
+         OR (requester_id = ? AND addressee_id = ? AND status = 'accepted')`
   ).run(me, userId, userId, me)
   db.prepare(
     'INSERT OR IGNORE INTO friend_blocks (blocker_id, blocked_id, created_at) VALUES (?, ?, ?)'
   ).run(me, userId, now.toISOString())
 }
 
-/** Lifts the block; the friendship isn't restored. */
+/** Lifts the block; the friendship isn't restored, and requests they sent during the block go. */
 export function unblockUser(db: SqlDb, me: number, userId: number): void {
   db.prepare('DELETE FROM friend_blocks WHERE blocker_id = ? AND blocked_id = ?').run(me, userId)
+  db.prepare(
+    "DELETE FROM friendships WHERE requester_id = ? AND addressee_id = ? AND status = 'pending'"
+  ).run(userId, me)
 }

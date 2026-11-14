@@ -1,4 +1,5 @@
 import { formatUsd } from '@/lib/format'
+import { loadReplayArt, loadReplayLogo } from './art'
 import { plural } from '../scanText'
 import {
   backdrop,
@@ -7,6 +8,7 @@ import {
   drawCard,
   FG,
   glowOf,
+  loadReplayFonts,
   GOLD,
   rarityPill,
   REPLAY_W,
@@ -14,7 +16,8 @@ import {
   watermark,
   type ReplayScene
 } from './draw'
-import { REPLAY_MIN_PRICE, replayValue, type ReplayPull } from './pulls'
+import { REPLAY_MIN_PRICE, replayValue, type ReplayPull, type ReplaySource } from './pulls'
+import { replayFileName, saveReplay, type SaveResult } from './save'
 
 /** What the still is drawn from: the replay's scene without its timeline. */
 export type StillScene = Pick<ReplayScene, 'pulls' | 'art' | 'header' | 'backdrop' | 'logo'>
@@ -205,4 +208,27 @@ export function drawHighlights(ctx: CanvasRenderingContext2D, scene: StillScene)
   )
   chip(ctx, scene.header)
   watermark(ctx, scene.logo)
+}
+
+/** Makes the still and puts it on the device, the way a replay is saved. */
+export type Still = (source: ReplaySource) => Promise<SaveResult>
+
+/** The highlights still: load the art, draw it once at 1080×1350, save it as a PNG. */
+export const makeHighlights: Still = async (source) => {
+  const [loaded, logo] = await Promise.all([
+    loadReplayArt(source.pulls),
+    loadReplayLogo(),
+    loadReplayFonts()
+  ])
+  if (loaded.pulls.length === 0) throw new Error("Couldn't load the card art")
+  const canvas = document.createElement('canvas')
+  canvas.width = STILL_W
+  canvas.height = STILL_H
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error("Couldn't save the image")
+  ctx.scale(STILL_W / REPLAY_W, STILL_W / REPLAY_W)
+  drawHighlights(ctx, { ...loaded, logo, header: source.header, backdrop: 'deep' })
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
+  if (!blob) throw new Error("Couldn't save the image")
+  return saveReplay(blob, replayFileName('png'))
 }

@@ -376,7 +376,7 @@ export function createHandlers({
       // Only a plain replay file name: the dialog picks the folder, the renderer never does.
       if (
         typeof name !== 'string' ||
-        !/^[\w.-]+\.(mp4|webm|gif)$/.test(name) ||
+        !/^[\w.-]+\.(mp4|webm|gif|png)$/.test(name) ||
         name.startsWith('.')
       )
         throw new Error('Not a replay file name')

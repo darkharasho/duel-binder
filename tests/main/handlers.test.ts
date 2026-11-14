@@ -139,7 +139,9 @@ describe('createHandlers', () => {
       '/home/me/rip.mp4'
     )
     expect(saveReplay).toHaveBeenCalledWith('rip-replay-2026-11-04.mp4', data)
-    for (const bad of ['../evil.mp4', 'rip.exe', 'a/b.gif', 42])
+    await handlers['app:saveReplay']('rip-replay-2026-11-13.png', data)
+    expect(saveReplay).toHaveBeenCalledWith('rip-replay-2026-11-13.png', data)
+    for (const bad of ['../evil.mp4', 'rip.exe', 'a/b.gif', 'rip.svg', 42])
       await expect(handlers['app:saveReplay'](bad, data)).rejects.toThrow()
     await expect(handlers['app:saveReplay']('rip.gif', 'not bytes')).rejects.toThrow()
   })

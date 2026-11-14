@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { PencilIcon } from 'lucide-react'
 import type { BinderCard, BinderDetail } from '@shared/types'
 import { normalizeRules, type BinderRule } from '@shared/binders'
+import { useArtWash } from '@/components/artWashContext'
 import { CardSheet } from '@/components/CardSheet'
 import { PageHeader } from '@/components/PageHeader'
 import { binderScanFor } from '@/components/scanFor'
@@ -118,6 +119,15 @@ export function BinderView({
       ),
     [sorted, view]
   )
+  // Slots with no art (imageId 0) can't wash the page.
+  const washCards = useMemo(
+    () =>
+      detail.cards.flatMap((c) =>
+        c.imageId > 0 ? [{ imageId: c.imageId, frameType: c.card.frameType }] : []
+      ),
+    [detail.cards]
+  )
+  useArtWash(washCards)
   const summary = [
     hasGoal && progress.total === 0
       ? 'Nothing to track yet'

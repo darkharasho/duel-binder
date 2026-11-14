@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { Friend, WishlistItem } from '@shared/types'
+import { useArtWash } from '@/components/artWashContext'
 import { PageHeader } from '@/components/PageHeader'
 import { api, queryKeys } from '@/lib/api'
 import { WishCardSheet } from './WishlistPage'
@@ -24,7 +25,12 @@ export function FriendWishlist({
     retry: false
   })
   const [open, setOpen] = useState<WishlistItem | null>(null)
-  const items = wishlist.data ?? []
+  const items = useMemo(() => wishlist.data ?? [], [wishlist.data])
+  const washCards = useMemo(
+    () => items.map((w) => ({ imageId: w.imageId, frameType: w.card.frameType })),
+    [items]
+  )
+  useArtWash(washCards, { strength: 0.5 })
   return (
     <div className="space-y-4 p-8 max-md:p-4">
       <PageHeader>{header}</PageHeader>

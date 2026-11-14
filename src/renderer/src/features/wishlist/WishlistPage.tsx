@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { DollarSign, Heart, Users } from 'lucide-react'
 import type { WishlistItem } from '@shared/types'
 import type { NavigateFn } from '@/components/AppShell'
+import { useArtWash } from '@/components/artWashContext'
 import { CardSheet } from '@/components/CardSheet'
 import { EmptyHero, EmptySteps } from '@/components/EmptyHero'
 import { PageHeader } from '@/components/PageHeader'
@@ -130,6 +131,12 @@ export function WishlistPage({ onNavigate }: { onNavigate?: NavigateFn } = {}): 
     () => (wishlist.data ?? []).filter((w) => matchesWishSearch(w, q)),
     [wishlist.data, q]
   )
+  const washCards = useMemo(
+    () => items.map((w) => ({ imageId: w.imageId, frameType: w.card.frameType })),
+    [items]
+  )
+  // A list of rows, so a softer wash.
+  useArtWash(washCards, { strength: 0.5 })
   useRequestPrices(
     unpricedIntl(
       items.map((w) => ({

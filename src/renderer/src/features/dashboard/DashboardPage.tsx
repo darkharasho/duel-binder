@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { printingReverseLook } from '@shared/reverseHolo'
 import { useQuery } from '@tanstack/react-query'
 import type { CollectionStats, EntryView } from '@shared/types'
 import type { NavigateFn } from '@/components/AppShell'
-import { cardArtUrl, useArtWashSrc } from '@/components/artWashContext'
+import { useArtWash } from '@/components/artWashContext'
 import { CardArt } from '@/components/CardArt'
 import { CardSheet } from '@/components/CardSheet'
 import { GameChip } from '@/components/GameSwitch'
@@ -426,10 +426,13 @@ function DashboardSkeleton(): React.JSX.Element {
 export function DashboardPage({ onNavigate, onAddCard, onSearch }: Props): React.JSX.Element {
   const stats = useQuery({ queryKey: queryKeys.stats, queryFn: () => api.stats.get() })
   const data = stats.data
-  const top = data?.topEntries[0]
   const { available } = useGame()
   const phoneChip = isPhone() && available.length > 1
-  useArtWashSrc(top ? cardArtUrl(top.imageId) : null)
+  const washCards = useMemo(
+    () => data?.topEntries.map((e) => ({ imageId: e.imageId, frameType: e.card.frameType })),
+    [data]
+  )
+  useArtWash(washCards ?? null)
 
   return (
     <TooltipProvider>

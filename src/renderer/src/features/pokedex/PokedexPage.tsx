@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { GENERATIONS, POKEDEX_SIZE } from '@shared/pokedex'
+import { useArtWash } from '@/components/artWashContext'
 import { CardSheet } from '@/components/CardSheet'
 import { FilterOptionChip } from '@/components/FilterChip'
 import { PageHeader } from '@/components/PageHeader'
@@ -23,6 +24,8 @@ const EMPTY = { caught: [] }
  * species' panel; a card there opens its card panel in the same sheet, and closing that goes back.
  */
 export function PokedexPage(): React.JSX.Element {
+  // The page only has sprites, no card art, so it keeps whatever wash is showing.
+  useArtWash(null)
   const summary = useQuery({ queryKey: queryKeys.pokedex, queryFn: () => api.pokedex.summary() })
   const tiles = useMemo(() => dexTiles(summary.data ?? EMPTY), [summary.data])
   const [filter, setFilter] = useState<DexFilter>('all')

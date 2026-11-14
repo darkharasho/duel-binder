@@ -32,7 +32,7 @@ import {
   NUMBERED_TILE_HEART,
   TILE_NAME
 } from '@/components/tileLayout'
-import { coverArtUrl, setArtUrl, useArtWashSrc } from '@/components/artWashContext'
+import { useArtWash } from '@/components/artWashContext'
 import { LanguageTag } from '@/components/LanguageTag'
 import { PageHeader } from '@/components/PageHeader'
 import { listNav } from '@/components/panelNav'
@@ -232,13 +232,8 @@ export function SetChecklist({
   const data = checklist.data
   // An OCG set's unpriced printings: the portal prices them and they show after the next sync.
   useRequestPrices(useMemo(() => (friend ? [] : checklistUnpriced(data)), [friend, data]))
-  useArtWashSrc(
-    data?.set.coverImageId
-      ? coverArtUrl(data.set.coverImageId)
-      : data?.set.imageKey
-        ? setArtUrl(data.set.imageKey)
-        : null
-  )
+  const washCards = useMemo(() => data?.cards.map((c) => ({ imageId: c.imageId })), [data])
+  useArtWash(washCards ?? null)
   const tiles = useMemo(
     () =>
       data

@@ -1,21 +1,7 @@
 import { createContext, useContext, useEffect, useRef } from 'react'
 import { useGame } from '@/lib/game'
-import { cardImageSrc, setImageSrc } from '@/lib/images'
 import type { Families } from '@/lib/wash/families'
 import { type WashCard, gameFallback, sampleCard } from '@/lib/wash/sample'
-
-/** Sets the image (an image URL from `lib/images`) whose blurred colours tint the top of the app; null for none. */
-export const ArtWashSrcContext = createContext<((src: string | null) => void) | null>(null)
-
-/** Tints the app with `src` while the calling page is shown; `undefined` leaves it to a child view. */
-export function useArtWashSrc(src: string | null | undefined): void {
-  const set = useContext(ArtWashSrcContext)
-  useEffect(() => {
-    if (src === undefined) return
-    set?.(src)
-    return () => set?.(null)
-  }, [set, src])
-}
 
 export interface WashState {
   families: Families
@@ -81,7 +67,3 @@ export function useArtWash(
     })()
   }, [cards, set, game, strength])
 }
-
-export const cardArtUrl = (imageId: number): string => cardImageSrc('small', imageId)
-export const coverArtUrl = (imageId: number): string => cardImageSrc('cropped', imageId)
-export const setArtUrl = (imageKey: string): string => setImageSrc(imageKey)

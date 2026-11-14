@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { LoadingState } from '@/components/ui/loading'
 import type { BinderSummary, Friend } from '@shared/types'
+import { useArtWash } from '@/components/artWashContext'
 import { PageHeader } from '@/components/PageHeader'
 import { api, queryKeys } from '@/lib/api'
 import { useBackHandler } from '@/lib/backStack'
@@ -55,6 +56,14 @@ export function FriendBinders({
   header: React.ReactNode
 }): React.JSX.Element {
   const [uid, setUid] = useState<string | null>(null)
+  const washCards = useMemo(
+    () =>
+      uid
+        ? undefined
+        : binders.flatMap((b) => (b.coverImageId ? [{ imageId: b.coverImageId }] : [])),
+    [uid, binders]
+  )
+  useArtWash(washCards)
   if (uid) return <Open friend={friend} uid={uid} header={header} onBack={() => setUid(null)} />
   return (
     <div className="space-y-4 p-8 max-md:p-4">

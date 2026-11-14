@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { ScanSessionCard } from '@shared/scanSessions'
 import { Camera, History, ListChecks } from 'lucide-react'
 import type { NavigateFn } from '@/components/AppShell'
+import { useArtWash } from '@/components/artWashContext'
 import { EmptyHero, EmptySteps } from '@/components/EmptyHero'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
@@ -52,6 +53,12 @@ export function SessionsPage({ onNavigate }: { onNavigate?: NavigateFn } = {}): 
   const { game } = useGame()
   const sessions = useQuery({ queryKey: sessionsKey(game), queryFn: () => api.sessions.list(game) })
   const [open, setOpen] = useState<{ card: ScanSessionCard; uid: string } | null>(null)
+  const washCards = useMemo(
+    () => sessions.data?.flatMap((s) => s.cards.map((c) => ({ imageId: c.imageId }))),
+    [sessions.data]
+  )
+  // A table-like feed, so a softer wash.
+  useArtWash(washCards ?? null, { strength: 0.5 })
   const empty = sessions.isSuccess && sessions.data.length === 0
   return (
     <div className="space-y-4 p-8 max-md:p-4">

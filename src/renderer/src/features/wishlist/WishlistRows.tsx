@@ -41,7 +41,7 @@ function OwnedMark({ item }: { item: WishlistItem }): React.JSX.Element | null {
   if (item.owned === 0) return null
   const done = stillWanted(item) === 0
   return (
-    <span className="inline-flex items-center gap-1 text-xs text-emerald-400">
+    <span className="inline-flex items-center gap-1 rounded-full bg-popover px-2 text-xs text-emerald-400">
       {done && <Check className="size-3" />}
       {done ? 'Owned' : `${item.owned} of ${item.quantity} owned`}
     </span>
@@ -76,7 +76,7 @@ function WantStepper({
       >
         <Minus />
       </Button>
-      <span className="w-9 text-center text-sm tabular-nums">{q ?? 'Any'}</span>
+      <span className="w-9 text-center font-mono text-sm tabular-nums">{q ?? 'Any'}</span>
       <Button
         variant="outline"
         size="icon-sm"
@@ -140,7 +140,7 @@ export function WishlistRows({
                 <OwnedMark item={item} />
                 {friends && friends.length > 0 && <Owners friends={friends} />}
               </span>
-              <span className="shrink-0 text-sm tabular-nums">
+              <span className="shrink-0 font-mono text-sm tabular-nums">
                 {item.priceApproximate && item.unitPrice !== null && '~'}
                 {formatUsd(item.unitPrice)}
               </span>

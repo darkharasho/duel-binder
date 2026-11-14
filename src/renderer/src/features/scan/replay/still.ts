@@ -37,12 +37,14 @@ export interface StillSlot {
 
 const BEST_W = 250
 const SIDE_W = 165
-const ROW_W = 92
+const ROW_W = 108
 const ROW_GAP = 14
 const SIDE_OFFSET = 223
 const BEST_TOP = 92
 const ROW_DROP = 136
-const TOTAL_Y = 806
+/** The sides stand this far above the best card's bottom, so their captions clear its rarity. */
+const SIDE_LIFT = 60
+const TOTAL_Y = 826
 /** With no row under the podium, everything comes down this far so the frame isn't top-heavy. */
 const NO_ROW_SHIFT = 100
 const NO_ROW_TOTAL_Y = 760
@@ -50,8 +52,9 @@ const NO_ROW_TOTAL_Y = 760
 const heightOf = (w: number): number => w * CARD_ASPECT
 
 /**
- * The podium: the dearest pull in the middle, #2 to its left and #3 to its right, their bottoms
- * level, then the rest in one row below, dearest on the left. Pulls run cheapest first.
+ * The podium: the dearest pull in the middle, #2 to its left and #3 to its right, standing a
+ * little higher so their captions clear its rarity, then the rest in one row below, dearest on
+ * the left. Pulls run cheapest first.
  */
 export function podiumLayout(n: number): { slots: StillSlot[]; totalY: number } {
   const shift = n <= 3 ? NO_ROW_SHIFT : 0
@@ -59,7 +62,7 @@ export function podiumLayout(n: number): { slots: StillSlot[]; totalY: number } 
   const bottom = bestTop + heightOf(BEST_W)
   const slots: StillSlot[] = []
   if (n >= 1) slots.push({ index: n - 1, tier: 'best', cx: REPLAY_W / 2, top: bestTop, w: BEST_W })
-  const sideTop = bottom - heightOf(SIDE_W)
+  const sideTop = bottom - SIDE_LIFT - heightOf(SIDE_W)
   if (n >= 2)
     slots.push({
       index: n - 2,
@@ -131,7 +134,7 @@ function line(
 /** Caption sizes per tier: name and price weights and sizes, and how far below the card. */
 const CAPTIONS = {
   side: { name: [600, 18], price: [600, 18], nameDy: 26, priceDy: 50, extra: 20 },
-  row: { name: [500, 13], price: [600, 14], nameDy: 20, priceDy: 40, extra: 12 }
+  row: { name: [500, 15], price: [600, 16], nameDy: 20, priceDy: 40, extra: 12 }
 } as const
 
 /**

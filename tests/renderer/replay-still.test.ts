@@ -69,6 +69,26 @@ describe('podiumLayout', () => {
     expect(by(1).cx).toBeLessThan(by(0).cx)
   })
 
+  it("side captions end above the best card's rarity pill", () => {
+    const { slots } = podiumLayout(5)
+    const best = slots.find((s) => s.tier === 'best')!
+    const pillTop = best.top + best.w * CARD_ASPECT + 40 - 24
+    for (const s of slots.filter((x) => x.tier === 'side'))
+      expect(s.top + s.w * CARD_ASPECT + 50).toBeLessThanOrEqual(pillTop)
+  })
+
+  it('the total sits clear of the row captions', () => {
+    const { slots, totalY } = podiumLayout(8)
+    const row = slots.find((s) => s.tier === 'row')!
+    // The price baseline is 40 below the card; the total's capitals rise about 27 above its own.
+    expect(row.top + row.w * CARD_ASPECT + 40 + 20).toBeLessThanOrEqual(totalY - 27)
+  })
+
+  it('row cards use the spare width', () => {
+    const row = podiumLayout(8).slots.filter((s) => s.tier === 'row')
+    expect(row[0].w).toBeGreaterThanOrEqual(105)
+  })
+
   it('with no row the podium sits lower', () => {
     const best = (n: number): number => podiumLayout(n).slots.find((s) => s.tier === 'best')!.top
     expect(best(3)).toBeGreaterThan(best(5))

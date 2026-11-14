@@ -92,7 +92,7 @@ const columns = helper.columns([
     id: 'setCode',
     header: () => <GameWord word="printingCode" />,
     cell: ({ row }) => (
-      <span className="inline-flex items-center gap-1.5">
+      <span className="inline-flex items-center gap-1.5 font-mono">
         {row.original.printing.setCode}
         <LanguageTag language={row.original.printing.language} />
       </span>
@@ -109,7 +109,7 @@ const columns = helper.columns([
   helper.accessor('quantity', {
     id: 'quantity',
     header: 'Qty',
-    cell: ({ row }) => <span className="tabular-nums">{row.original.quantity}</span>
+    cell: ({ row }) => <span className="font-mono tabular-nums">{row.original.quantity}</span>
   }),
   helper.accessor('unitPrice', {
     id: 'unitPrice',

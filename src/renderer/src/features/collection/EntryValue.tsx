@@ -14,11 +14,11 @@ export function ValueText({
   approximate: boolean
 }): React.JSX.Element {
   const text = formatUsd(amount)
-  if (amount === null || !approximate) return <span className="tabular-nums">{text}</span>
+  if (amount === null || !approximate) return <span className="font-mono tabular-nums">{text}</span>
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className="tabular-nums">
+        <span className="font-mono tabular-nums">
           <span aria-label="approximately">≈</span>
           {text}
         </span>
@@ -71,7 +71,7 @@ export function EntryValue({
     // Say where the number comes from.
     return (
       <span
-        className="tabular-nums"
+        className="font-mono tabular-nums"
         title={entry.priceSource === 'tcgplayer' ? TCG_TIP : 'Set price via YGOPRODeck'}
       >
         {formatUsd(amount)}
@@ -93,7 +93,7 @@ export function EntryValue({
           <span className="text-muted-foreground">No price</span>
         ) : (
           <span className="inline-flex items-baseline gap-1">
-            <span className="tabular-nums">
+            <span className="font-mono tabular-nums">
               {entry.priceApproximate && <span aria-label="approximately">≈</span>}
               {formatUsd(amount)}
             </span>
@@ -121,7 +121,7 @@ export function StaleBadge({ entry }: { entry: EntryView }): React.JSX.Element |
   return (
     <Badge
       variant="outline"
-      className="w-auto rounded-md whitespace-normal border-amber-500/60 text-left text-amber-700 dark:text-amber-400"
+      className="w-auto whitespace-normal rounded-full border-transparent bg-popover text-left text-amber-400"
     >
       No longer in database — price may be stale
     </Badge>

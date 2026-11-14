@@ -21,6 +21,12 @@ const synced = {
 } as const
 
 describe('SettingsPage', () => {
+  it('titles the page with the shared display-font header', async () => {
+    renderWithProviders(<SettingsPage />, { api: createMockApi() })
+    const h1 = await screen.findByRole('heading', { level: 1, name: 'Settings' })
+    expect(h1).toHaveClass('font-display')
+  })
+
   it('refresh button calls sync.run and is disabled while syncing', async () => {
     const user = userEvent.setup()
     const api = createMockApi({ sync: { status: vi.fn(async () => ({ ...synced })) } })
@@ -33,16 +39,20 @@ describe('SettingsPage', () => {
     expect(api.sync.run).toHaveBeenCalledTimes(1)
     unmount()
 
-    const busy = createMockApi({ sync: { status: vi.fn(async () => ({ ...synced, state: 'downloading' as const })) } })
+    const busy = createMockApi({
+      sync: { status: vi.fn(async () => ({ ...synced, state: 'downloading' as const })) }
+    })
     renderWithProviders(<SettingsPage />, { api: busy })
-    await waitFor(() => expect(screen.getByRole('button', { name: /Refresh card data|Syncing/ })).toBeDisabled())
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Refresh card data|Syncing/ })).toBeDisabled()
+    )
   })
 
   it('credits Yugipedia for non-English set lists', async () => {
     renderWithProviders(<SettingsPage />, { api: createMockApi() })
-    expect(
-      await screen.findByText(/Non-English set lists from/)
-    ).toHaveTextContent('Non-English set lists from Yugipedia (CC BY-SA 4.0).')
+    expect(await screen.findByText(/Non-English set lists from/)).toHaveTextContent(
+      'Non-English set lists from Yugipedia (CC BY-SA 4.0).'
+    )
     expect(screen.getByRole('link', { name: 'Yugipedia' })).toHaveAttribute(
       'href',
       'https://yugipedia.com/'
@@ -74,7 +84,9 @@ describe('SettingsPage', () => {
 
   it('says prices come from the account', async () => {
     renderWithProviders(<SettingsPage />, { api: createMockApi() })
-    expect(await screen.findByText('Prices come from your Duel Binder account.')).toBeInTheDocument()
+    expect(
+      await screen.findByText('Prices come from your Duel Binder account.')
+    ).toBeInTheDocument()
     expect(await screen.findByLabelText(/Show eBay prices/)).toBeChecked()
   })
 
@@ -139,7 +151,10 @@ describe('SettingsPage', () => {
   })
 
   describe('unsynced dialog states', () => {
-    const accountWith = (count: number, unsynced: () => Promise<never[]>): ReturnType<typeof createMockApi> =>
+    const accountWith = (
+      count: number,
+      unsynced: () => Promise<never[]>
+    ): ReturnType<typeof createMockApi> =>
       createMockApi({
         account: {
           status: vi.fn(async () => ({
@@ -177,7 +192,9 @@ describe('SettingsPage', () => {
 
   it('shows the last sync error', async () => {
     const api = createMockApi({
-      sync: { status: vi.fn(async () => ({ ...synced, state: 'error' as const, error: 'HTTP 500' })) }
+      sync: {
+        status: vi.fn(async () => ({ ...synced, state: 'error' as const, error: 'HTTP 500' }))
+      }
     })
     renderWithProviders(<SettingsPage />, { api })
     expect(await screen.findByText(/HTTP 500/)).toBeInTheDocument()
@@ -185,11 +202,15 @@ describe('SettingsPage', () => {
 
   it('backup shows saved path', async () => {
     const user = userEvent.setup()
-    const api = createMockApi({ app: { backupDatabase: vi.fn(async () => '/tmp/duel-binder-2026-10-23.db') } })
+    const api = createMockApi({
+      app: { backupDatabase: vi.fn(async () => '/tmp/duel-binder-2026-10-23.db') }
+    })
     renderWithProviders(<SettingsPage />, { api })
     await user.click(await screen.findByRole('button', { name: /Back up collection/ }))
     await waitFor(() =>
-      expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('/tmp/duel-binder-2026-10-23.db'))
+      expect(toast.success).toHaveBeenCalledWith(
+        expect.stringContaining('/tmp/duel-binder-2026-10-23.db')
+      )
     )
   })
 
@@ -208,7 +229,12 @@ describe('SettingsPage', () => {
     const api = createMockApi({
       app: {
         version: vi.fn(async () => '1.0.0'),
-        checkForUpdates: vi.fn(async () => ({ state: 'none' as const, mode: 'auto' as const, version: null, error: null }))
+        checkForUpdates: vi.fn(async () => ({
+          state: 'none' as const,
+          mode: 'auto' as const,
+          version: null,
+          error: null
+        }))
       }
     })
     renderWithProviders(<SettingsPage />, { api })
@@ -235,7 +261,10 @@ describe('web account deletion', () => {
   })
 
   it('delete asks first, then calls deleteAccount', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(seto), { status: 200 })))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify(seto), { status: 200 }))
+    )
     const user = userEvent.setup()
     const api = createMockApi({ window: { platform: 'web' } })
     renderWithProviders(<SettingsPage />, { api })
@@ -260,11 +289,16 @@ describe('web account deletion', () => {
   })
 
   it('shows why a delete failed and keeps the dialog open', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(seto), { status: 200 })))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify(seto), { status: 200 }))
+    )
     const user = userEvent.setup()
     const api = createMockApi({
       window: { platform: 'web' },
-      account: { deleteAccount: vi.fn(async () => Promise.reject(new Error("Couldn't delete your account"))) }
+      account: {
+        deleteAccount: vi.fn(async () => Promise.reject(new Error("Couldn't delete your account")))
+      }
     })
     renderWithProviders(<SettingsPage />, { api })
     await screen.findByText('Signed in as Seto')

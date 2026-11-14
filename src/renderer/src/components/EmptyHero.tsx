@@ -52,12 +52,9 @@ export function EmptySteps({
   return (
     <ol className="mt-14 grid grid-cols-3 gap-5 max-md:grid-cols-1 max-md:gap-3">
       {steps.map(({ icon: Icon, title, text }, i) => (
-        <li
-          key={title}
-          className="rounded-xl border border-white/[0.06] bg-card/60 p-5 max-md:flex max-md:items-start max-md:gap-4 max-md:p-4"
-        >
+        <li key={title} className="max-md:flex max-md:items-start max-md:gap-4">
           <div className="flex items-center gap-3 max-md:shrink-0">
-            <span className="grid size-9 place-items-center rounded-lg bg-white/[0.06]">
+            <span className="grid size-9 place-items-center rounded-full bg-chip">
               <Icon aria-hidden className="size-[18px] text-foreground/80" />
             </span>
             <span className="font-mono text-xs text-muted-foreground max-md:hidden">

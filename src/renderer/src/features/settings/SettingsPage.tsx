@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/PageHeader'
 import { isSyncing, useSyncStatus } from '@/components/useSyncStatus'
 import { useUpdateStatus } from './useUpdateToasts'
 import { api, queryKeys } from '@/lib/api'
@@ -149,7 +150,7 @@ function DesktopSettings(): React.JSX.Element {
 
   return (
     <div className="max-w-2xl space-y-8 px-8 pb-10 pt-3">
-      <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+      <PageHeader title="Settings" />
 
       <Section title="Account">
         <AccountSection />
@@ -284,7 +285,7 @@ function DesktopSettings(): React.JSX.Element {
 function WebSettings(): React.JSX.Element {
   return (
     <div className="max-w-2xl space-y-8 px-8 pb-10 pt-3">
-      <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+      <PageHeader title="Settings" />
       <Section title="Account">
         <AccountSection />
       </Section>

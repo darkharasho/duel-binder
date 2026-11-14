@@ -984,10 +984,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
         best ??= looked
       }
       if (stale() || (quiet && best === null)) return
-      tracker.current.settle(
-        performance.now(),
-        best?.kind === 'recognized' ? best.item.cardId : null
-      )
+      tracker.current.settle(performance.now(), best?.kind === 'recognized' ? best.item : null)
       if (best?.kind === 'recognized') {
         counted(best.item, engine, o, null)
       } else {

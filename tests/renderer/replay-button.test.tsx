@@ -188,4 +188,15 @@ describe('MakeReplay', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save image' }))
     expect(toast.error).toHaveBeenCalledWith("Couldn't load the card art")
   })
+
+  it('Make replay waits while an image saves', async () => {
+    let done!: (r: { saved: false }) => void
+    const still = vi.fn(() => new Promise<{ saved: false }>((r) => (done = r)))
+    render(<MakeReplay source={src(row(5))} variant="phone" make={vi.fn()} still={still} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Save image' }))
+    expect(screen.getByRole('button', { name: 'Make replay' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Replay format/ })).toBeDisabled()
+    await act(async () => done({ saved: false }))
+    expect(screen.getByRole('button', { name: 'Make replay' })).toBeEnabled()
+  })
 })

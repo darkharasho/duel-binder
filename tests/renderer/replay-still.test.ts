@@ -110,6 +110,8 @@ describe('priceLine', () => {
     expect(priceLine(pull(12, { quantity: 2 }))).toBe(`${formatUsd(12)} · ×2`))
   it('a rarity pull shows its rarity', () =>
     expect(priceLine(pull(null, { rarity: 'Secret Rare' }))).toBe('Secret Rare'))
+  it('a rarity pull with copies keeps its rarity', () =>
+    expect(priceLine(pull(null, { rarity: 'Secret Rare', quantity: 2 }))).toBe('Secret Rare · ×2'))
   it('under $1 counts as no price', () =>
     expect(priceLine(pull(0.5, { rarity: 'Ultra Rare' }))).toBe('Ultra Rare'))
 })

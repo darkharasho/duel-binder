@@ -102,11 +102,13 @@ export function ellipsize(text: string, maxWidth: number, measure: (s: string) =
 
 /** The line under a card's name: its price and copies, or for a pull its rarity earned, the rarity. */
 export function priceLine(pull: ReplayPull): string {
-  const parts = [
-    ...(pull.price !== null && pull.price >= REPLAY_MIN_PRICE ? [formatUsd(pull.price)] : []),
-    ...(pull.quantity > 1 ? [`×${pull.quantity}`] : [])
+  const priced = pull.price !== null && pull.price >= REPLAY_MIN_PRICE
+  return [
+    priced ? formatUsd(pull.price ?? 0) : pull.rarity,
+    pull.quantity > 1 ? `×${pull.quantity}` : null
   ]
-  return parts.length ? parts.join(' · ') : (pull.rarity ?? '')
+    .filter(Boolean)
+    .join(' · ')
 }
 
 /** One line centred at x, cut to fit. */

@@ -139,6 +139,7 @@ export function MakeReplay({
           ? PHONE_CONTROL
           : 'h-8 rounded-md border px-2 text-xs font-medium hover:bg-accent'
       }
+      disabled={saving}
       onClick={() => setFormat((f) => (f === 'video' ? 'gif' : 'video'))}
     >
       {format === 'video' ? videoLabel : 'GIF'}
@@ -148,14 +149,14 @@ export function MakeReplay({
   return (
     <span className="flex items-center gap-2">
       {variant === 'phone' ? (
-        <button type="button" className={PHONE_CONTROL} disabled={empty} onClick={start}>
+        <button type="button" className={PHONE_CONTROL} disabled={empty || saving} onClick={start}>
           Make replay
         </button>
       ) : (
         <Button
           variant="outline"
           size="sm"
-          disabled={empty}
+          disabled={empty || saving}
           title={empty ? 'No pulls to replay yet' : undefined}
           onClick={start}
         >

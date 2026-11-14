@@ -62,6 +62,20 @@ describe('applyReverseCheck', () => {
     })
   })
 
+  it('tells a holo rare from its Reverse Holofoil', () => {
+    const rare = draftOf([opt(1, 'Holofoil'), opt(2, 'Reverse Holofoil')])
+    expect(applyReverseCheck(rare, READS_REVERSE, refs)).toMatchObject({
+      printingId: 2,
+      rarity: 'Reverse Holofoil',
+      flag: null
+    })
+    expect(applyReverseCheck(rare, READS_NORMAL, refs)).toMatchObject({
+      printingId: 1,
+      rarity: 'Holofoil',
+      flag: null
+    })
+  })
+
   it('leaves the draft alone when the check does not apply', () => {
     const item = draftOf()
     expect(applyReverseCheck(item, READS_REVERSE, undefined)).toBe(item)
@@ -82,6 +96,8 @@ describe('applyReverseCheck', () => {
     expect(applyReverseCheck(split, READS_REVERSE, refs)).toBe(split)
     const three = draftOf([opt(1, 'Normal'), opt(2, 'Reverse Holofoil'), opt(3, 'Holofoil')])
     expect(applyReverseCheck(three, READS_REVERSE, refs)).toBe(three)
+    const holoNormal = draftOf([opt(1, 'Normal'), opt(2, 'Holofoil')])
+    expect(applyReverseCheck(holoNormal, READS_REVERSE, refs)).toBe(holoNormal)
   })
 
   it('leaves a graded slab and holder-search art alone', () => {

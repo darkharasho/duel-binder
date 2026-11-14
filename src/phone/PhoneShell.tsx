@@ -252,14 +252,14 @@ function Shell({ engineFactory }: { engineFactory?: EngineFactory }): React.JSX.
 
       {/* Only there while something waits or fails; pb-7 keeps it clear of the raised Scan button. */}
       {!scan && (
-        <StatusLine className="relative z-30 shrink-0 border-t border-white/[0.06] bg-background/90 pb-7 backdrop-blur-xl" />
+        <StatusLine className="relative z-30 shrink-0 pb-7" />
       )}
 
       {/* The scanner is full screen; its × goes back to Home. */}
       <nav
         aria-label="Tabs"
         className={cn(
-          'relative z-40 shrink-0 border-t border-white/[0.08] bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl',
+          'relative z-40 shrink-0 pb-[env(safe-area-inset-bottom)]',
           scan && 'hidden'
         )}
       >
@@ -277,13 +277,13 @@ function Shell({ engineFactory }: { engineFactory?: EngineFactory }): React.JSX.
                 <span
                   aria-hidden
                   className={cn(
-                    '-mt-6 flex size-14 items-center justify-center rounded-full shadow-lg ring-4 ring-background transition-colors',
-                    page === p ? 'bg-primary text-primary-foreground' : 'bg-card text-foreground'
+                    '-mt-6 flex size-14 items-center justify-center rounded-full shadow-lg transition-colors',
+                    page === p ? 'bg-chip-on text-chip-on-ink' : 'bg-chip text-foreground'
                   )}
                 >
                   <Icon className="size-6" />
                 </span>
-                <span className={page === p ? 'text-foreground' : 'text-muted-foreground'}>
+                <span className={page === p ? 'font-semibold' : undefined}>
                   {label}
                 </span>
               </button>
@@ -310,7 +310,7 @@ function Shell({ engineFactory }: { engineFactory?: EngineFactory }): React.JSX.
       <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
         <SheetContent
           side="bottom"
-          className="rounded-t-3xl border-white/[0.08] pb-[max(1rem,env(safe-area-inset-bottom))]"
+          className="rounded-t-3xl border-0 bg-popover pb-[max(1rem,env(safe-area-inset-bottom))]"
         >
           <SheetHeader>
             <SheetTitle>More</SheetTitle>
@@ -321,7 +321,7 @@ function Shell({ engineFactory }: { engineFactory?: EngineFactory }): React.JSX.
               <GameSegments />
             </div>
           )}
-          <div className="divide-y divide-white/[0.06] px-4">
+          <div className="px-4">
             {more.map(({ page: p, label, icon: Icon }) => (
               <button
                 key={p}
@@ -329,12 +329,12 @@ function Shell({ engineFactory }: { engineFactory?: EngineFactory }): React.JSX.
                 aria-label={p === 'friends' && requests > 0 ? undefined : label}
                 aria-current={page === p ? 'page' : undefined}
                 onClick={() => go(p)}
-                className="flex h-14 w-full items-center gap-4 text-left text-base active:bg-white/[0.06]"
+                className="flex h-14 w-full items-center gap-4 text-left text-base active:bg-chip"
               >
-                <Icon aria-hidden className="size-5 text-muted-foreground" />
+                <Icon aria-hidden className="size-5" />
                 {label}
                 {p === 'friends' && requests > 0 && (
-                  <span className="ml-auto rounded-full bg-primary px-2 text-xs font-semibold leading-5 text-primary-foreground">
+                  <span className="ml-auto rounded-full bg-chip-on px-2 font-mono text-xs font-semibold leading-5 text-chip-on-ink">
                     <span className="sr-only">, </span>
                     {requests}
                     <span className="sr-only"> {requests === 1 ? 'request' : 'requests'}</span>
@@ -372,7 +372,7 @@ function TabButton({
       onClick={onClick}
       className={cn(
         'relative flex h-full flex-col items-center justify-end gap-1 pb-2 text-[11px] font-medium transition-colors',
-        current ? 'text-foreground' : 'text-muted-foreground'
+        current && 'font-semibold'
       )}
     >
       <Icon aria-hidden className="size-6" />
@@ -380,7 +380,7 @@ function TabButton({
       {badge > 0 && (
         <span
           aria-hidden
-          className="absolute left-1/2 top-2 ml-2 rounded-full bg-primary px-1.5 text-[10px] font-semibold leading-4 text-primary-foreground"
+          className="absolute left-1/2 top-2 ml-2 rounded-full bg-chip-on px-1.5 font-mono text-[10px] font-semibold leading-4 text-chip-on-ink"
         >
           {badge}
         </span>

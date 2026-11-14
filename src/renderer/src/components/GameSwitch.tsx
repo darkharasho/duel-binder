@@ -67,7 +67,7 @@ function GameMenu({
   const { game } = useShownGame()
   const choose = useSwitch()
   return (
-    <DropdownMenuContent align={align} className="min-w-44 border-white/10 bg-card shadow-lg">
+    <DropdownMenuContent align={align} className="min-w-44 border-0 bg-popover shadow-lg">
       <DropdownMenuRadioGroup value={game} onValueChange={choose}>
         {available.map((g) => (
           <DropdownMenuPrimitive.RadioItem
@@ -131,13 +131,13 @@ export function GameChip({ className }: { className?: string }): React.JSX.Eleme
           // The chip is small to look at; its invisible ::after pad makes the tap target about
           // 44 pt, reaching into the header's padding, so a thumb near it still lands.
           className={cn(
-            "relative inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-white/[0.08] bg-muted px-3 text-[13px] font-semibold transition-colors after:absolute after:-inset-x-3 after:-inset-y-2 after:content-[''] active:bg-white/10 data-[state=open]:bg-white/10",
+            "relative inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-chip px-3 text-[13px] font-semibold transition-colors after:absolute after:-inset-x-3 after:-inset-y-2 after:content-[''] active:bg-chip-on active:text-chip-on-ink data-[state=open]:bg-chip-on data-[state=open]:text-chip-on-ink",
             className
           )}
         >
           <GameMark game={def.id} loading={loading} />
           {def.name}
-          <ChevronDownIcon aria-hidden className="-mr-0.5 size-3.5 text-muted-foreground" />
+          <ChevronDownIcon aria-hidden className="-mr-0.5 size-3.5" />
         </button>
       </DropdownMenuTrigger>
       <GameMenu align="end" roomy />
@@ -156,7 +156,7 @@ export function GameSegments(): React.JSX.Element {
     <div
       role="radiogroup"
       aria-label="Game"
-      className="grid auto-cols-fr grid-flow-col gap-1 rounded-xl border border-white/[0.08] bg-muted p-1"
+      className="grid auto-cols-fr grid-flow-col gap-1"
     >
       {available.map((g) => (
         <button
@@ -169,9 +169,9 @@ export function GameSegments(): React.JSX.Element {
           className={cn(
             stacked
               ? // Dot over name; a longer name is cut, not wrapped.
-                'flex h-12 min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1 text-[12px] font-semibold transition-colors'
-              : 'flex h-10 items-center justify-center gap-2 rounded-lg text-sm font-semibold transition-colors',
-            g === game ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'
+                'flex h-12 min-w-0 flex-col items-center justify-center gap-1 rounded-full px-1 text-[12px] font-semibold transition-colors'
+              : 'flex h-10 items-center justify-center gap-2 rounded-full text-sm font-semibold transition-colors',
+            g === game ? 'bg-chip-on text-chip-on-ink' : 'bg-chip'
           )}
         >
           <GameMark game={g} loading={loading && g === game} />

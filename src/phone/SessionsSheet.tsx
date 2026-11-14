@@ -28,7 +28,7 @@ export function SessionsSheet({
       />
       <section
         aria-labelledby="phone-sessions-title"
-        className="absolute inset-x-0 bottom-0 top-[calc(env(safe-area-inset-top)+0.75rem)] z-30 flex flex-col rounded-t-[28px] border-t border-white/[0.1] bg-background/80 shadow-2xl backdrop-blur-2xl animate-in slide-in-from-bottom duration-200"
+        className="absolute inset-x-0 bottom-0 top-[calc(env(safe-area-inset-top)+0.75rem)] z-30 flex flex-col rounded-t-[28px] bg-popover shadow-2xl animate-in slide-in-from-bottom duration-200"
       >
         <button
           type="button"
@@ -36,10 +36,10 @@ export function SessionsSheet({
           onClick={onClose}
           className="flex h-7 shrink-0 items-center justify-center"
         >
-          <span aria-hidden className="h-1.5 w-10 rounded-full bg-white/25" />
+          <span aria-hidden className="h-1.5 w-10 rounded-full bg-chip" />
         </button>
         <header className="shrink-0 px-[18px] pb-3">
-          <h2 id="phone-sessions-title" className="text-[22px] font-bold leading-7">
+          <h2 id="phone-sessions-title" className="font-display text-[44px] leading-none">
             Sessions
           </h2>
         </header>

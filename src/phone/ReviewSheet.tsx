@@ -106,7 +106,7 @@ function usePullToClose(
 }
 
 const STEP =
-  'flex size-10 items-center justify-center rounded-full text-white/85 active:bg-white/[0.12] disabled:opacity-40'
+  'flex size-10 items-center justify-center rounded-full active:bg-chip disabled:opacity-40'
 
 /** One scanned card: art, code and price, its printing, how many, and remove. */
 function ReviewRow({ row, disabled }: { row: ScanRow; disabled: boolean }): React.JSX.Element {
@@ -162,9 +162,9 @@ function ReviewRow({ row, disabled }: { row: ScanRow; disabled: boolean }): Reac
           onPick={(v) => session.setPrinting(row.key, Number(v))}
           searchPlaceholder="Search code, rarity or set"
           disabled={disabled}
-          className="mt-1.5 h-8 max-w-full gap-1.5 rounded-full border border-white/[0.12] bg-white/[0.08] px-2.5 text-xs active:bg-white/[0.14]"
+          className="mt-1.5 h-8 max-w-full gap-1.5 rounded-full bg-chip px-2.5 text-xs active:bg-chip-on active:text-chip-on-ink"
         >
-          <StarIcon aria-hidden className="size-3.5 shrink-0 text-white/60" />
+          <StarIcon aria-hidden className="size-3.5 shrink-0" />
           {picked ? (
             <OptionLabel option={picked} compact />
           ) : (
@@ -172,7 +172,7 @@ function ReviewRow({ row, disabled }: { row: ScanRow; disabled: boolean }): Reac
               {`Choose a ${printingNoun(row.game ?? 'ygo')}`}
             </span>
           )}
-          <ChevronDownIcon aria-hidden className="size-3.5 shrink-0 opacity-60" />
+          <ChevronDownIcon aria-hidden className="size-3.5 shrink-0" />
         </PrintingSheet>
         {flag && (
           <p className="mt-1 flex items-center gap-1 text-xs text-amber-300">
@@ -188,7 +188,7 @@ function ReviewRow({ row, disabled }: { row: ScanRow; disabled: boolean }): Reac
           aria-label={`Remove ${row.name}`}
           disabled={disabled}
           onClick={() => session.remove(row.key)}
-          className="-mr-1 -mt-1 flex size-10 items-center justify-center rounded-full text-white/55 active:bg-white/[0.08] disabled:opacity-40"
+          className="-mr-1 -mt-1 flex size-10 items-center justify-center rounded-full active:bg-chip disabled:opacity-40"
         >
           <XIcon aria-hidden className="size-4" />
         </button>
@@ -305,7 +305,7 @@ export function ReviewSheet({
         style={dy > 0 ? { transform: `translateY(${dy}px)` } : undefined}
         className={cn(
           dy === 0 && 'transition-transform duration-200',
-          'absolute z-30 flex flex-col rounded-t-[28px] border-t border-white/[0.1] bg-background/80 shadow-2xl backdrop-blur-2xl animate-in slide-in-from-bottom duration-200',
+          'absolute z-30 flex flex-col rounded-t-[28px] bg-popover shadow-2xl animate-in slide-in-from-bottom duration-200',
           stream
             ? 'inset-x-0 bottom-0 h-[60%] landscape:inset-y-0 landscape:right-0 landscape:left-auto landscape:h-full landscape:w-[45%] landscape:rounded-l-[28px] landscape:rounded-tr-none landscape:border-l landscape:border-t-0 landscape:pt-[env(safe-area-inset-top)] landscape:pr-[max(0.75rem,env(safe-area-inset-right))]'
             : 'inset-x-0 bottom-0 top-[calc(env(safe-area-inset-top)+0.75rem)]'
@@ -326,7 +326,7 @@ export function ReviewSheet({
         <header className="flex shrink-0 items-end justify-between px-[18px] pb-3">
           <div>
             <p className="text-xs text-muted-foreground">This scan</p>
-            <h2 id="phone-review-title" className="text-[22px] font-bold leading-7">
+            <h2 id="phone-review-title" className="font-display text-[44px] leading-none">
               Review
             </h2>
           </div>
@@ -363,7 +363,7 @@ export function ReviewSheet({
                 onClick={() => setCheckOnly(only as boolean)}
                 className={cn(
                   'h-8 rounded-full px-3.5 text-[13px] font-medium active:bg-white/[0.14]',
-                  checkOnly === only ? 'bg-white text-black' : GLASS
+                  checkOnly === only ? 'bg-chip-on text-chip-on-ink' : 'bg-chip'
                 )}
               >
                 {label}
@@ -384,7 +384,7 @@ export function ReviewSheet({
             </ul>
           )}
         </div>
-        <footer className="flex shrink-0 gap-2.5 border-t border-white/[0.06] px-3.5 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <footer className="flex shrink-0 gap-2.5 px-3.5 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <button
             type="button"
             disabled={session.rows.length === 0 || session.committing}
@@ -400,7 +400,7 @@ export function ReviewSheet({
             type="button"
             disabled={addable === 0 || session.committing}
             onClick={() => void commit()}
-            className="h-[52px] flex-1 rounded-full bg-white text-[15px] font-bold text-black shadow-lg active:bg-white/80 disabled:opacity-40"
+            className="h-[52px] flex-1 rounded-full bg-chip-on text-[15px] font-bold text-chip-on-ink shadow-lg disabled:opacity-40"
           >
             Add {plural(addable, 'card', 'cards')}
           </button>

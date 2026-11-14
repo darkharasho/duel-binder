@@ -50,7 +50,7 @@ function Chip({
   children: React.ReactNode
 }): React.JSX.Element {
   return (
-    <span className="rounded-full bg-white/[0.06] px-3 py-1 text-xs">
+    <span className="rounded-full bg-popover px-3 py-1 text-xs">
       <span className="text-muted-foreground">{label}</span> {children}
     </span>
   )

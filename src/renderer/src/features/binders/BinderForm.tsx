@@ -80,7 +80,7 @@ function ValueRule({
             type="button"
             aria-label={`Remove ${labelOf(v)}`}
             onClick={() => onChange({ ...rule, values: rule.values.filter((x) => x !== v) })}
-            className="rounded-full bg-white/[0.08] px-2.5 py-0.5 text-xs hover:bg-white/[0.14]"
+            className="rounded-full bg-popover px-2.5 py-0.5 text-xs hover:bg-chip"
           >
             {labelOf(v)} ×
           </button>
@@ -95,7 +95,7 @@ function ValueRule({
         onBlur={() => setOpen(false)}
       />
       {open && options.length > 0 && (
-        <ul className="max-h-40 overflow-y-auto rounded-md border border-white/[0.08]">
+        <ul className="max-h-40 overflow-y-auto rounded-md bg-popover">
           {options.map((v) => (
             <li key={v}>
               <button
@@ -244,7 +244,7 @@ export function BinderForm({
           )}
         </div>
         {rules.map((r, i) => (
-          <div key={i} className="space-y-1.5 rounded-lg border border-white/[0.08] p-3">
+          <div key={i} className="space-y-1.5 py-1">
             <div className="flex items-center justify-between gap-2">
               <span className="text-sm font-medium">{FIELD_LABEL(r.field)}</span>
               <Button

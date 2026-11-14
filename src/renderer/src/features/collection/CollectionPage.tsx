@@ -3,7 +3,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { LayoutGrid, Table2 } from 'lucide-react'
 import { LANGUAGES } from '@shared/languages'
 import type { CollectionFilters, EntryView, Friend, SortKey } from '@shared/types'
-import { cardArtUrl, useArtWash } from '@/components/artWashContext'
+import { cardArtUrl, useArtWashSrc } from '@/components/artWashContext'
 import { CardSheet } from '@/components/CardSheet'
 import { FilterBar } from '@/components/FilterBar'
 import {
@@ -212,7 +212,7 @@ export function CollectionPage({
     friend || openIndex === -1 ? undefined : list[openIndex + 1]?.card.id
   )
   // The collection tints the page with its first card in the current order.
-  useArtWash(list[0] ? cardArtUrl(list[0].imageId) : null)
+  useArtWashSrc(list[0] ? cardArtUrl(list[0].imageId) : null)
   const { def } = useGame()
   const setNames = useSetNames(languageFilter)
   const facetList = facetsFor(def)

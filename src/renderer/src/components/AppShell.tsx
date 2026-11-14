@@ -12,7 +12,7 @@ import { isMac, isWeb } from '@/lib/platform'
 import { cn } from '@/lib/utils'
 import { track, trackOpen } from '@/lib/usage'
 import { ArtWash } from './ArtWash'
-import { ArtWashContext } from './artWashContext'
+import { ArtWashSrcContext } from './artWashContext'
 import { SidebarGameSwitch } from './GameSwitch'
 import { MainScrollContext, type MainScroll } from './mainScroll'
 import { ArtDownloads } from './ArtDownloads'
@@ -234,9 +234,9 @@ export function AppShell({
         <div className="relative flex min-w-0 flex-1 flex-col">
           <SyncBanner />
           <main ref={mainRef} data-main-scroll className="min-h-0 flex-1 overflow-auto">
-            <ArtWashContext.Provider value={setWash}>
+            <ArtWashSrcContext.Provider value={setWash}>
               <MainScrollContext.Provider value={scroll}>{children}</MainScrollContext.Provider>
-            </ArtWashContext.Provider>
+            </ArtWashSrcContext.Provider>
           </main>
           <ArtDownloads />
         </div>

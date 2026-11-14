@@ -3,7 +3,7 @@ import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-quer
 import type { GameId } from '@shared/games'
 import { LANGUAGES } from '@shared/languages'
 import type { BrowseCard, BrowseFilters, BrowseSort, CardSearchResult } from '@shared/types'
-import { cardArtUrl, useArtWash } from '@/components/artWashContext'
+import { cardArtUrl, useArtWashSrc } from '@/components/artWashContext'
 import { CardArt } from '@/components/CardArt'
 import { CardSheet } from '@/components/CardSheet'
 import { FavouriteHeart } from '@/components/FavouriteHeart'
@@ -122,7 +122,7 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
   })
   const cards = useMemo(() => pages.data?.pages.flatMap((p) => p.cards) ?? [], [pages.data])
   const total = pages.data?.pages[0]?.total ?? 0
-  useArtWash(cards[0] ? cardArtUrl(cards[0].imageId) : null)
+  useArtWashSrc(cards[0] ? cardArtUrl(cards[0].imageId) : null)
 
   // Load the next page as the end of the grid scrolls into view.
   const sentinel = useRef<HTMLDivElement>(null)

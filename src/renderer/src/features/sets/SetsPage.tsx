@@ -5,7 +5,7 @@ import { byGame, type GameId } from '@shared/games'
 import type { Language } from '@shared/languages'
 import type { CardSearchResult, CountMode, SetSummary } from '@shared/types'
 import { SET_TYPES, type SetType } from '@shared/setTypes'
-import { coverArtUrl, setArtUrl, useArtWash } from '@/components/artWashContext'
+import { coverArtUrl, setArtUrl, useArtWashSrc } from '@/components/artWashContext'
 import { FilterBar } from '@/components/FilterBar'
 import { useMainScroll } from '@/components/mainScroll'
 import { PageHeader } from '@/components/PageHeader'
@@ -214,7 +214,7 @@ export function SetsPage({
   const washSet =
     visible.find((s) => hasArt(s) && (s.ownedCards > 0 || s.ownedRarities > 0)) ??
     visible.find(hasArt)
-  useArtWash(
+  useArtWashSrc(
     openSet
       ? undefined
       : washSet?.coverImageId

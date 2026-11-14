@@ -3,7 +3,7 @@ import { printingReverseLook } from '@shared/reverseHolo'
 import { useQuery } from '@tanstack/react-query'
 import type { CollectionStats, EntryView } from '@shared/types'
 import type { NavigateFn } from '@/components/AppShell'
-import { cardArtUrl, useArtWash } from '@/components/artWashContext'
+import { cardArtUrl, useArtWashSrc } from '@/components/artWashContext'
 import { CardArt } from '@/components/CardArt'
 import { CardSheet } from '@/components/CardSheet'
 import { GameChip } from '@/components/GameSwitch'
@@ -429,7 +429,7 @@ export function DashboardPage({ onNavigate, onAddCard, onSearch }: Props): React
   const top = data?.topEntries[0]
   const { available } = useGame()
   const phoneChip = isPhone() && available.length > 1
-  useArtWash(top ? cardArtUrl(top.imageId) : null)
+  useArtWashSrc(top ? cardArtUrl(top.imageId) : null)
 
   return (
     <TooltipProvider>

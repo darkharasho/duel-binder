@@ -15,7 +15,7 @@ import {
   type LucideIcon
 } from 'lucide-react'
 import { ArtWash } from '@/components/ArtWash'
-import { ArtWashContext } from '@/components/artWashContext'
+import { ArtWashSrcContext } from '@/components/artWashContext'
 import type { Page } from '@/components/AppShell'
 import { MainScrollContext, type MainScroll } from '@/components/mainScroll'
 import { PageSwitch, PagesAddCard, usePages } from '@/components/pageSwitch'
@@ -210,7 +210,7 @@ function Shell({ engineFactory }: { engineFactory?: EngineFactory }): React.JSX.
             : 'overflow-auto overscroll-contain pt-[env(safe-area-inset-top)]'
         )}
       >
-        <ArtWashContext.Provider value={setWash}>
+        <ArtWashSrcContext.Provider value={setWash}>
           <MainScrollContext.Provider value={scroll}>
             <PageSwitch
               pages={pages}
@@ -224,7 +224,7 @@ function Shell({ engineFactory }: { engineFactory?: EngineFactory }): React.JSX.
               settings={<Settings onContribute={(g) => void openContribute(g)} />}
             />
           </MainScrollContext.Provider>
-        </ArtWashContext.Provider>
+        </ArtWashSrcContext.Provider>
       </main>
 
       {contribute !== null && (

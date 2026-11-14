@@ -179,6 +179,9 @@ Port `wash.js` to TypeScript, for example `src/renderer/src/lib/wash/`, with uni
   accent, appears only inside solid surfaces: pills, popovers, dialogs and menus. Muted grey text over the
   wash becomes ink at a lighter weight or a smaller size, not lower opacity.
 - **Phone:** it gets the new wash and the new fonts (shared tokens in `index.css`) but no layout rework.
+  *Updated 2026-11-14 (owner):* iOS, Android and web all get the full stage 2 look. The phone-only screens are
+  restyled too (pills, underline fields, display titles), still without a layout rework.
+- **Add Card window** (owner, 2026-11-14): restyled to the new look as its own task.
 - **Standard controls get the new look** through the shared `components/ui` files, so pages don't need
   editing one by one:
   - button, input, select, tabs, toggle, badge and table;

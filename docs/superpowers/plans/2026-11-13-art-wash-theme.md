@@ -492,6 +492,48 @@ it('places pools the same way for the same seed, differently for another', () =>
   keeps its own dark background. Fix only regressions.
 - [ ] **Step 4: Run `npm test && npm run typecheck:web && npm run typecheck:phone`** and check everything passes.
 
+### Task 11a: Add Card window
+
+Owner, 2026-11-14: "fix the add card modal and style it properly". Today it is a small stock shadcn
+command palette (`src/renderer/src/features/add-card/AddCardDialog.tsx`, 435 lines): a grey box, small text,
+art thumbnails 36 px wide, sitting over the page without any of the new look.
+
+**Files:** `src/renderer/src/features/add-card/AddCardDialog.tsx`, `src/renderer/src/components/ui/command.tsx`
+and `dialog.tsx` only if the change is shared. Test: extend the existing add-card tests.
+
+**Look:**
+- A solid `bg-popover` surface (the wash is not behind it), wider (about 720 px on desktop), positioned in the
+  upper third, with a soft shadow and a dimmed, blurred overlay behind it.
+- The search is the underline field in Bricolage at about 22 px, placeholder in italic, with the game name in
+  mono caps above it.
+- Results are rows with bigger art (about 48 px wide), the name at 600 weight, and set code, rarity and price in
+  Geist Mono on one line. The highlighted row is a `bg-chip` pill-shaped band, not a grey block.
+- The printing step and the quantity step use the same pills (Task 8) and the same mono numbers.
+- Empty and loading states are ink text in the new type, not muted grey.
+- Behaviour, keyboard handling and props do not change; existing tests must keep passing with only class
+  expectations updated.
+
+Commit: `feat(theme): restyle the Add Card window`.
+
+### Task 11b: Phone, iOS, Android and web
+
+Owner, 2026-11-14: "make sure the ios and android app get this … and web". This replaces the spec's "phone gets
+the wash and fonts only".
+- **Web** is the same renderer build (`app.duelbinder.com`), so it gets stages 1 and 2 automatically. Check it
+  in Task 12: build the web target, open it, confirm the wash samples art (portal `/img/` is same-origin) and
+  the fonts load from the bundle.
+- **iOS and Android** are the Capacitor shell around `src/phone`. Phone pages that reuse renderer pages and
+  `components/ui` already change with Tasks 7–11. This task restyles the phone-only screens to match:
+  `PhoneShell.tsx` navigation, `Settings.tsx`, `SignIn.tsx`, `SessionsSheet.tsx`, `PickerSheet.tsx`,
+  `PrintingSheet.tsx`, `ReviewSheet.tsx`, `UpdateBanner.tsx`, `SyncProblems.tsx` and `phone.css`:
+  - pills and underline fields from Task 8, `font-display` titles sized for the phone (about 44 px), mono numbers;
+  - sheets keep a solid `bg-popover` surface;
+  - no boxes over the wash, ink-only text over it.
+- The camera / Scan screens stay as they are (dark, no wash).
+- Keep layout and navigation structure; this is a look pass, not a layout rework.
+
+Commit: `feat(theme): phone screens get the new look`.
+
 ### Task 12: Stage 2 check with the owner, then the PR
 
 - [ ] Screenshot every desktop page, three phone screens and one Pokémon page in the real app, and send

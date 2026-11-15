@@ -189,6 +189,20 @@ describe('chineseListSets', () => {
     expect(r.sets[0].cards[3].localName).toBe('玩家庆典')
     expect(r).toMatchObject({ named: 2, unnamed: 1 })
   })
+  it("corrects a card the list names wrong, by set and number: Gem Pack Vol. 7's Misty's Psyduck", () => {
+    const index: ZhSetEntry[] = [
+      { id: 'CBB7C', code: 'CBB7C', series: 'SV', count: 1 },
+      { id: 'CSV10C', code: 'CSV10C', series: 'SV', count: 1 }
+    ]
+    const rows = new Map([
+      ['CBB7C', [zh('0305', '可达鸭', 'Psyduck', '★')]],
+      ['CSV10C', [zh('045', '小霞的可达鸭', "Misty's Psyduck")]]
+    ])
+    const gem = chineseListSets(index, rows).sets.find((s) => s.set.id === 'CBB7C')!
+    expect(gem.cards[0]).toMatchObject({ name: "Misty's Psyduck", localName: '小霞的可达鸭' })
+    // Psyduck elsewhere is left alone.
+    expect(list('CSV5C', [zh('010', '可达鸭', 'Psyduck')]).sets[0].cards[0].name).toBe('Psyduck')
+  })
   it('corrects a GX the list calls a V, and drops zero-width spaces', () => {
     const names = list('CSV5C', [zh('001', '冰伊布GX', 'Glaceon V'), zh('002', '偷儿狐', '\u200bThievul')])
     expect(names.sets[0].cards.map((c) => c.name)).toEqual(['Glaceon GX', 'Thievul'])

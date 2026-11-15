@@ -214,6 +214,16 @@ const RARITY_FIXES: Record<string, Record<string, string>> = {
 /** The letter codes the list uses for energy and the like, kept as they are printed. */
 const LETTER_INDEX = new Set([...LETTER_CARDS, 'FAI'])
 
+/**
+ * Chinese names the list has wrong, by set and number: Gem Pack Vol. 7's 03 is Misty's Psyduck
+ * (小霞的可达鸭, as the owner's cards print it), which the list has as plain Psyduck.
+ */
+const CARD_NAME_FIXES: Record<string, Record<string, string>> = {
+  CBB7C: Object.fromEntries(
+    ['01', '02', '03', '04', '05', '06', '07'].map((v) => [`03${v}`, '小霞的可达鸭'])
+  )
+}
+
 /** English names the list lacks or has wrong, by Chinese name. */
 const NAME_FIXES: Record<string, string> = {
   '船长 皮卡丘': 'Captain Pikachu',
@@ -262,8 +272,10 @@ export function chineseListSets(index: ZhSetEntry[], rows: Map<string, ZhCard[]>
     const ref = { id, name: CHINESE_SET_NAMES[id] ?? id }
     const seen = new Set<string>()
     const cards: TdCard[] = []
-    list.forEach((row, i) => {
-      const number = row.cardIndex.replace(/[^A-Za-z0-9]/g, '')
+    list.forEach((listed, i) => {
+      const number = listed.cardIndex.replace(/[^A-Za-z0-9]/g, '')
+      const fixedName = CARD_NAME_FIXES[id]?.[number]
+      const row = fixedName ? { ...listed, cardName: fixedName, nameEn: '' } : listed
       const rarity = RARITY_FIXES[id]?.[number] ?? row.rarity
       if (!/^\d+$/.test(number) && !LETTER_INDEX.has(number)) out.oddNumbers++
       const localId = number || `X${i + 1}`

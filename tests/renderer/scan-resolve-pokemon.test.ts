@@ -818,6 +818,14 @@ describe('Simplified Chinese, as the user said', () => {
         }
       })
 
+      it('lists each version once though its art matched too', async () => {
+        // The versions share the art, so each one's own image is close as well.
+        const near = [art[0], { imageId: 3004, distance: 31 }, { imageId: 3003, distance: 32 }]
+        const item = await recognized(raw({ art: near }), gem())
+        const ids = item.options.map((o) => o.printingId)
+        expect(ids).toEqual([...new Set(ids)])
+      })
+
       /** Version cues whose Gem Pack template scores are as given; the rest plain. */
       const pattern = (gem: Partial<GemScores>): RawSignals['version'] => ({
         frame: 0,

@@ -128,6 +128,12 @@ const LIST_RARITIES: Record<string, string> = {
   '★★★': 'Triple rare'
 }
 
+/**
+ * Gem Packs whose ★★★ is each card's Illustration Rare, new art by another illustrator: from Vol.
+ * 4 on, nearly every ★★★ has an English Illustration Rare of its name, as few before do.
+ */
+export const GEM_ILLUSTRATION_SETS = new Set(['CBB4C', 'CBB5C', 'CBB6C', 'CBB7C'])
+
 const BALL = 'Poke Ball Pattern'
 const MASTER = 'Master Ball Pattern'
 const STARLIGHT = 'Starlight Holo'
@@ -328,7 +334,10 @@ export function chineseListSets(
         name,
         localName: row.cardName,
         category: categoryOf(row.cardType),
-        rarity: LIST_RARITIES[rarity] ?? null,
+        rarity:
+          rarity === '★★★' && GEM_ILLUSTRATION_SETS.has(id)
+            ? 'Illustration rare'
+            : (LIST_RARITIES[rarity] ?? null),
         variants_detailed: [
           ...listFinishes(id, { ...row, rarity }),
           ...(DEX_MASTERS[id]?.has(number) ? [MASTER] : [])

@@ -73,7 +73,9 @@ describe('englishTwins', () => {
   })
 
   it('counts a set no English set has, and a code two sets share, as unmapped', () => {
-    expect(find([enSet([en('001', 'Oddish', 'Common')])], zh('1', 'C', 'XXX'), 'Oddish')).toBe('unmapped set')
+    expect(find([enSet([en('001', 'Oddish', 'Common')])], zh('1', 'C', 'XXX'), 'Oddish')).toBe(
+      'unmapped set'
+    )
     const two = [enSet([en('001', 'Oddish', 'Common')]), enSet([en('001', 'Oddish', 'Common')])]
     expect(find(two, zh('1', 'C'), 'Oddish')).toBe('unmapped set')
   })
@@ -84,7 +86,9 @@ describe('englishTwins', () => {
   })
 
   it('counts a number the English set lacks', () => {
-    expect(find([enSet([en('001', 'Oddish', 'Common')])], zh('2', 'C'), 'Oddish')).toBe('number missing')
+    expect(find([enSet([en('001', 'Oddish', 'Common')])], zh('2', 'C'), 'Oddish')).toBe(
+      'number missing'
+    )
   })
 
   it('links whatever the print: the label says the art is English', () => {
@@ -98,7 +102,9 @@ describe('englishTwins', () => {
   it('links a twin from another series, or past the printed count', () => {
     const sm = enSet([en('123', 'Nest Ball', 'Uncommon')], { serie: { id: 'sm' } })
     expect(find([sm], zh('123', 'U'), 'Nest Ball')).toBe('linked')
-    expect(find([enSet([en('223', 'Charizard ex', 'Common')])], zh('223', 'C'), 'Charizard ex')).toBe('linked')
+    expect(
+      find([enSet([en('223', 'Charizard ex', 'Common')])], zh('223', 'C'), 'Charizard ex')
+    ).toBe('linked')
   })
 
   it('links one of several prints of the same rules', () => {
@@ -108,9 +114,9 @@ describe('englishTwins', () => {
   })
 
   it('counts a twin with no art, and a card with no twin', () => {
-    expect(find([enSet([en('001', 'Oddish', 'Common', { image: undefined })])], zh('1', 'C'), 'Oddish')).toBe(
-      'no English art'
-    )
+    expect(
+      find([enSet([en('001', 'Oddish', 'Common', { image: undefined })])], zh('1', 'C'), 'Oddish')
+    ).toBe('no English art')
     expect(find([enSet([])], { ...zh('1', 'C'), englishTwin: undefined }, 'Oddish')).toBe('no twin')
   })
 
@@ -191,6 +197,45 @@ describe('englishTwins', () => {
   })
 })
 
+describe('englishTwins for a Gem Pack Illustration Rare', () => {
+  // Gem Pack Vol. 7's 07s are Illustration Rares; the list links each to its plain card's number.
+  const gemAr = (number: string): TdCard => ({
+    id: `CBB7C-${number}`,
+    localId: number,
+    name: 'x',
+    rarity: 'Illustration rare',
+    englishTwin: { setCode: 'OBF', number: '148', mark: '★★★' },
+    set: { id: 'CBB7C', name: 'x' }
+  })
+  const plain = enSet([en('148', "Team Rocket's Raticate", 'Common')])
+  const ir = (localId: string, serie = 'sv'): EnglishPlan =>
+    enSet(
+      [
+        en(localId, "Team Rocket's Raticate", 'Illustration Rare', { id: `s${localId}-${localId}` })
+      ],
+      {
+        id: `s${localId}`,
+        serie: { id: serie },
+        abbreviation: { official: `X${localId}` }
+      }
+    )
+
+  it("takes the English Illustration Rare of its name, not the list's plain card", () => {
+    const r = englishTwins([plain, ir('202')]).find(gemAr('0107'), "Team Rocket's Raticate")
+    expect(r).toMatchObject({ outcome: 'illustration print', twin: { id: 's202-202' } })
+  })
+
+  it("takes none when there is no one Illustration Rare: the plain card's art isn't its art", () => {
+    expect(englishTwins([plain]).find(gemAr('0107'), "Team Rocket's Raticate")).toMatchObject({
+      outcome: 'no illustration print',
+      twin: null
+    })
+    expect(
+      englishTwins([plain, ir('202'), ir('203')]).find(gemAr('0107'), "Team Rocket's Raticate").twin
+    ).toBeNull()
+  })
+})
+
 describe('traditionalTwins', () => {
   const hant = (
     localId: string,
@@ -198,7 +243,14 @@ describe('traditionalTwins', () => {
     over: Partial<TdCard> = {},
     imageUrl: string | null = `https://assets.tcgdex.net/zh-tw/${localId}`
   ): TraditionalPlan['cards'][number] => ({
-    card: { id: `SV8-${localId}`, localId, name: '走路草', category: 'Pokemon', set: { id: 'SV8', name: 'x' }, ...over },
+    card: {
+      id: `SV8-${localId}`,
+      localId,
+      name: '走路草',
+      category: 'Pokemon',
+      set: { id: 'SV8', name: 'x' },
+      ...over
+    },
     name,
     imageUrl
   })
@@ -243,7 +295,9 @@ describe('traditionalTwins', () => {
 
   it('rarities agree across case, and a difference rules the candidate out', () => {
     const triple = hans({ rarity: 'Triple rare' })
-    expect(find(plans(hant('001', 'Oddish', { rarity: 'Triple Rare' })), triple).outcome).toBe('linked')
+    expect(find(plans(hant('001', 'Oddish', { rarity: 'Triple Rare' })), triple).outcome).toBe(
+      'linked'
+    )
     expect(find(plans(hant('001', 'Oddish', { rarity: 'Common' })), triple)).toEqual({
       outcome: 'rarity mismatch',
       twin: null
@@ -323,7 +377,12 @@ describe('refreshPokemon with English art', () => {
         return [{ ...set, cards: [{ id: enCard.id, localId: '001', name: enCard.name }] }]
       }
       return lang === 'zh-hans'
-        ? [{ ...ZH_SET, cards: zhCards.map((c) => ({ id: c.id, localId: c.localId, name: c.name })) }]
+        ? [
+            {
+              ...ZH_SET,
+              cards: zhCards.map((c) => ({ id: c.id, localId: c.localId, name: c.name }))
+            }
+          ]
         : []
     },
     async cards(lang: PkmLang) {
@@ -336,7 +395,10 @@ describe('refreshPokemon with English art', () => {
   const row = (): { image_url: string | null; art_twin_id: number | null } =>
     db
       .prepare('SELECT image_url, art_twin_id FROM pokemon_cards WHERE card_id = ?')
-      .get(pokemonId('zh-hans/CSV5C-001')) as { image_url: string | null; art_twin_id: number | null }
+      .get(pokemonId('zh-hans/CSV5C-001')) as {
+      image_url: string | null
+      art_twin_id: number | null
+    }
   const run = (cards: TdCard[]): ReturnType<typeof refreshPokemon> =>
     refreshPokemon(db, sources(cards), { langs: ['en', 'zh-hans'] })
 
@@ -404,7 +466,9 @@ describe('refreshPokemon with English art', () => {
     const named = { ...zhCard(), category: 'Pokemon', localName: '走路草' }
     const links = (id = 'zh-hans/CSV5C-001'): unknown =>
       db
-        .prepare('SELECT art_twin_id, traditional_twin_id, image_url FROM pokemon_cards WHERE card_id = ?')
+        .prepare(
+          'SELECT art_twin_id, traditional_twin_id, image_url FROM pokemon_cards WHERE card_id = ?'
+        )
         .get(pokemonId(id))
     const go = (zhCards: TdCard[], hantCards: TdCard[]): ReturnType<typeof refreshPokemon> =>
       refreshPokemon(db, hanted(zhCards, hantCards), { langs: ['en', 'zh-hans', 'zh-hant'] })
@@ -466,7 +530,14 @@ describe('refreshPokemon with English art', () => {
     })
 
     it('a set cover prefers a card showing Traditional art over one with none', async () => {
-      const blank = { ...named, id: 'CSV5C-001', localId: '001', name: 'Nothing', localName: '无', englishTwin: undefined }
+      const blank = {
+        ...named,
+        id: 'CSV5C-001',
+        localId: '001',
+        name: 'Nothing',
+        localName: '无',
+        englishTwin: undefined
+      }
       const linked = { ...named, id: 'CSV5C-002', localId: '002', englishTwin: undefined }
       await go([blank, linked], [hantCard()])
       setMeta(db, 'active_game', 'pkm')
@@ -513,11 +584,18 @@ describe('japaneseMirror', () => {
         [card('30thC-001', 'Pikachu & Zekrom-GX'), card('30thC-002', 'Nidoran♀')],
         [ja('001', 'Pikachu & Zekrom GX'), ja('002', 'Nidoran')]
       )
-    ).toEqual(new Map([['30thC-001', 'M6a-001'], ['30thC-002', 'M6a-002']]))
+    ).toEqual(
+      new Map([
+        ['30thC-001', 'M6a-001'],
+        ['30thC-002', 'M6a-002']
+      ])
+    )
   })
 
   it('not where the number holds another card', () => {
-    expect(twins([card('30thC-003', 'Mew')], [ja('003', 'Mewtwo')]).get('30thC-003')).toBe('unmatched')
+    expect(twins([card('30thC-003', 'Mew')], [ja('003', 'Mewtwo')]).get('30thC-003')).toBe(
+      'unmatched'
+    )
   })
 
   it('finds a card numbered otherwise by its name when it alone is left with it', () => {
@@ -526,7 +604,12 @@ describe('japaneseMirror', () => {
         [card('30thC-169', 'Grass Energy'), card('30thC-170', 'Fire Energy')],
         [ja('GRA', 'Basic Grass Energy'), ja('FIR', 'Basic Fire Energy')]
       )
-    ).toEqual(new Map([['30thC-169', 'M6a-GRA'], ['30thC-170', 'M6a-FIR']]))
+    ).toEqual(
+      new Map([
+        ['30thC-169', 'M6a-GRA'],
+        ['30thC-170', 'M6a-FIR']
+      ])
+    )
   })
 
   it('leaves cards of one name it cannot tell apart, and a print with no art', () => {
@@ -604,7 +687,10 @@ describe('refreshPokemon with a set printed from a Japanese one', () => {
     const reports = await refreshPokemon(db, sources, { langs: ['ja', 'zh-hans'] })
     expect(twinOf('zh-hans/30thC-001')).toBe(pokemonId('ja/M6a-001'))
     expect(twinOf('zh-hans/30thC-166')).toBeNull()
-    expect(reports.find((r) => r.lang === 'zh-hans')!.artJapanese).toEqual({ linked: 1, unmatched: 2 })
+    expect(reports.find((r) => r.lang === 'zh-hans')!.artJapanese).toEqual({
+      linked: 1,
+      unmatched: 2
+    })
     const link = [pokemonId('zh-hans/30thC-001#img'), pokemonId('ja/M6a-001#img')]
     expect(borrowedArt(db)).toEqual([link])
     expect(japaneseArt(db)).toEqual([link])

@@ -3,6 +3,7 @@ import { detectOs, isAndroid } from '../../workers/portal/src/site/os'
 import { formatSize, renderPage } from '../../workers/portal/src/site/page'
 import { renderPrivacy } from '../../workers/portal/src/site/privacy'
 import { MAGIC_FAN_CONTENT, SCRYFALL_CREDIT } from '../../src/shared/legal'
+import { MAGIC_LANGUAGE_COUNT } from '../../src/shared/games/magic'
 import { renderTerms } from '../../workers/portal/src/site/terms'
 import { pickDownloads, RELEASES_FALLBACK } from '../../workers/portal/src/site/releases'
 import { releaseV021 } from './fixtures/release'
@@ -280,6 +281,14 @@ describe('Android', () => {
   it('points the phone column at the APK only when the release has one', () => {
     expect(page()).not.toContain('The Android app is in the download list below.')
     expect(page({ downloads: withApk })).toContain('The Android app is in the download list below.')
+  })
+
+  it('sends iPhone users to the home-screen scanner', () => {
+    expect(page()).toMatch(/On iPhone, open <a href="[^"]+\/scan\/">[^<]+\/scan\/<\/a> in Safari/)
+  })
+
+  it('counts Magic languages from the game itself', () => {
+    expect(page()).toContain(`in ${MAGIC_LANGUAGE_COUNT} languages`)
   })
 
   it('lists Android in the download table only when the APK exists', () => {

@@ -14,8 +14,8 @@ const ART_DIRS = ['small', 'full', 'cropped']
 
 /**
  * The cache files (relative paths without extension) of every card in the collection, any local
- * owner, tombstones left out: its art by image id, and its printing's photo and small copy under
- * the photo's key. Throws if a key can't be read, so a trim never runs on a partial list.
+ * owner, tombstones left out: its art by image id (and the art it shows that isn't its own), and
+ * its printing's photo and small copy under the photo's key. Throws if a key can't be read, so a trim never runs on a partial list.
  */
 export async function ownedImageKeys(
   db: SqlDb,
@@ -26,12 +26,28 @@ export async function ownedImageKeys(
       'SELECT DISTINCT printing_id AS printing, image_id AS image FROM collection_entries WHERE deleted_at IS NULL'
     )
     .all() as { printing: number; image: number }[]
+  // Art an owned card shows that isn't its own image: a Pokémon twin's (English, Japanese or
+  // Traditional Chinese art a card borrows) and a Magic double-faced card's back.
+  const shown = db
+    .prepare(
+      `SELECT t.image_id AS image FROM collection_entries e
+       JOIN card_images i ON i.image_id = e.image_id
+       JOIN pokemon_cards p ON p.card_id = i.card_id
+       JOIN card_images t ON t.card_id IN (p.art_twin_id, p.traditional_twin_id) AND t.sort_order = 0
+       WHERE e.deleted_at IS NULL
+       UNION
+       SELECT m.back_image_id FROM collection_entries e
+       JOIN mtg_images m ON m.image_id = e.image_id
+       WHERE e.deleted_at IS NULL AND m.back_image_id IS NOT NULL`
+    )
+    .all() as { image: number }[]
   const keys = new Set<string>()
   const printings = new Set<number>()
   for (const r of rows) {
     for (const d of ART_DIRS) keys.add(`${d}/${r.image}`)
     printings.add(r.printing)
   }
+  for (const r of shown) for (const d of ART_DIRS) keys.add(`${d}/${r.image}`)
   for (const id of printings) {
     const key = await printingKey(id)
     if (key) keys.add(`printings/${key}`).add(`printings-small/${key}`)

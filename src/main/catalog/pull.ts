@@ -3,7 +3,7 @@ import type Database from 'better-sqlite3'
 import { catalogShape, SNAPSHOT_GAMES } from '../../shared/catalogSnapshot'
 import type { GameId } from '../../shared/games'
 import type { SyncStatus } from '../../shared/types'
-import type { CatalogApplier } from '../catalogApplier'
+import { CatalogApplierStopped, type CatalogApplier } from '../catalogApplier'
 import type { CloudClient } from '../cloud/client'
 import { deleteMeta, getMeta, setMeta } from '../db/meta'
 import { catalogCursorKey, catalogStagingKey } from './apply'
@@ -33,8 +33,8 @@ function firstPull(db: Database.Database, game: GameId): boolean {
 /**
  * Fills a first pull of `game` from its snapshot, or carries on an import a quit stopped. Any
  * failure is logged and forgotten, and the feed takes over (from 0 when nothing landed; rows
- * an import left are upserted again by the feed). A quit keeps `catalog_snapshot:<game>` and the
- * file, and the next pull resumes the import.
+ * an import left are upserted again by the feed). A quit (the applier stopped) keeps
+ * `catalog_snapshot:<game>` and the file, and the next pull resumes the import.
  */
 async function fromSnapshot(deps: PullGameDeps): Promise<void> {
   const { db, game, client } = deps
@@ -71,10 +71,15 @@ async function fromSnapshot(deps: PullGameDeps): Promise<void> {
       dbVersion: offer.dbVersion
     })
   } catch (e) {
+    // The app is quitting: the import's progress and file stay for the next launch.
+    if (e instanceof CatalogApplierStopped) {
+      file = null
+      throw e
+    }
     console.warn(`Catalog ${game}: snapshot skipped`, e)
     deleteMeta(db, snapshotKey(game))
   } finally {
-    // Kept only for an import still under way (the app quit partway).
+    // Kept only for an import still under way.
     if (file !== null && snapshotProgress(db, game) === null) rmSync(file, { force: true })
   }
 }

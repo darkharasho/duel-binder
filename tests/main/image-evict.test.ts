@@ -9,6 +9,7 @@ import {
   runEviction
 } from '../../src/main/images/evict'
 import { seededDb } from './helpers'
+import { seedMagic } from '../fixtures/magic'
 
 let dir: string
 beforeEach(async () => {
@@ -125,6 +126,51 @@ describe('ownedImageKeys', () => {
         'printings-small/tp-own'
       ].sort()
     )
+  })
+})
+
+describe('ownedImageKeys: art an owned card shows that is not its own', () => {
+  it("keeps a Pokémon twin's art and a Magic card's back face", async () => {
+    const db = await seededDb()
+    const { printingIds, imageIds } = seedMagic(db)
+    db.prepare('UPDATE mtg_images SET back_image_id = 777001 WHERE image_id = ?').run(imageIds[0])
+    const card = db.prepare(
+      `INSERT INTO cards (id, game, name, type, frame_type, race, "desc", updated_at)
+       VALUES (?, 'pkm', ?, 'Pokemon', 'pkm', '', '', 'x')`
+    )
+    const image = db.prepare(
+      "INSERT INTO card_images (image_id, game, card_id, sort_order) VALUES (?, 'pkm', ?, 0)"
+    )
+    const pkm = db.prepare(
+      `INSERT INTO pokemon_cards (card_id, category, source_id, art_twin_id, traditional_twin_id)
+       VALUES (?, 'Pokemon', ?, ?, ?)`
+    )
+    card.run(801, 'English Twin')
+    card.run(802, 'Traditional Twin')
+    card.run(803, 'Owned Chinese Card')
+    for (const id of [801, 802, 803]) image.run(id * 10, id)
+    pkm.run(801, 'en/1', null, null)
+    pkm.run(802, 'zh-hant/1', null, null)
+    pkm.run(803, 'zh-hans/1', 801, 802)
+    db.prepare(
+      `INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity)
+       VALUES ('pkm', 803, 'zh-hans', 'Set', 'S1', 'Common')`
+    ).run()
+    const pkmPrinting = (
+      db.prepare('SELECT id FROM card_printings WHERE card_id = 803').get() as { id: number }
+    ).id
+    const add = db.prepare(
+      `INSERT INTO collection_entries (uid, printing_id, image_id, quantity, notes, created_at, updated_at)
+       VALUES (?, ?, ?, 1, '', 'x', 'x')`
+    )
+    add.run('mtg', printingIds[0], imageIds[0])
+    add.run('pkm', pkmPrinting, 8030)
+
+    const keys = await ownedImageKeys(db, async () => null)
+
+    for (const id of [777001, 8010, 8020, 8030, imageIds[0]])
+      for (const d of ['small', 'full', 'cropped'])
+        expect(keys, `${d}/${id}`).toContain(`${d}/${id}`)
   })
 })
 

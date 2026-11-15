@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { gunzipSync, gzipSync } from 'node:zlib'
 import type Database from 'better-sqlite3'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { inProcessApplier } from '../../src/main/catalogApplier'
+import { CatalogApplierStopped, inProcessApplier } from '../../src/main/catalogApplier'
 import { pullGame } from '../../src/main/catalog/pull'
 import { catalogGames } from '../../src/main/catalog/service'
 import { exportSnapshot } from '../../src/main/catalog/snapshot'
@@ -217,6 +217,37 @@ describe('pullGame with a snapshot', () => {
     await pull(client)
     expect(getMeta(db, 'catalog_snapshot:mtg')).toBeNull()
     expect(client.feedSince).toEqual([0])
+  })
+})
+
+describe('pullGame when the app quits mid-import', () => {
+  it('keeps the progress and the file for the next launch', async () => {
+    const stopping = {
+      async run(job: { kind: string; game?: string; file?: string; cursor?: number }) {
+        if (job.kind !== 'snapshot') return
+        // The import got going, then the app quit and the applier was stopped.
+        setMeta(
+          db,
+          'catalog_snapshot:mtg',
+          JSON.stringify({
+            cursor: job.cursor,
+            file: job.file,
+            dbVersion: null,
+            table: 'cards',
+            after: 3
+          })
+        )
+        throw new CatalogApplierStopped()
+      },
+      dispose() {}
+    }
+    const client = fakeClient()
+    await expect(
+      pullGame({ db, client, game: 'mtg', applier: stopping, set: () => {}, snapshotDir: dir })
+    ).rejects.toBeInstanceOf(CatalogApplierStopped)
+    const saved = JSON.parse(getMeta(db, 'catalog_snapshot:mtg')!) as { file: string }
+    expect(existsSync(saved.file)).toBe(true)
+    expect(client.feedSince).toEqual([])
   })
 })
 

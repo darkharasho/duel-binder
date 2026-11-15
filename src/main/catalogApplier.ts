@@ -2,6 +2,17 @@ import type { Worker } from 'node:worker_threads'
 import type Database from 'better-sqlite3'
 import { runApplyJob, withoutForeignKeys, type CatalogApplyJob } from './catalog/applyJob'
 
+/**
+ * A job cut off because the applier was stopped (the app is quitting): not a failure of the job,
+ * so whatever it was doing is left to carry on next launch.
+ */
+export class CatalogApplierStopped extends Error {
+  constructor() {
+    super('Catalog worker stopped')
+    this.name = 'CatalogApplierStopped'
+  }
+}
+
 /** Applies staged catalog changes and rebuilds the search index (see runApplyJob). */
 export interface CatalogApplier {
   run(job: CatalogApplyJob): Promise<void>
@@ -74,7 +85,7 @@ export function workerApplier(start: () => Worker): CatalogApplier {
     dispose() {
       const w = worker
       worker = null
-      failAll(new Error('Catalog worker stopped'))
+      failAll(new CatalogApplierStopped())
       void w?.terminate()
     }
   }

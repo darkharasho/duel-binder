@@ -12,6 +12,9 @@ import { gamesFor } from '../../workers/portal/src/auth'
 import { addUser, memoryBucket, noPrices, noPrintingArt, seededServerDb } from './helpers'
 import { seedOnePiece } from '../fixtures/onePiece'
 import { seedPokemon } from '../fixtures/pokemon'
+import { withGameAccess } from '../fixtures/ownerOnlyGame'
+
+withGameAccess('op', 'testers')
 
 const BASE = 'https://portal.test'
 const NOW = new Date('2026-11-04T12:00:00.000Z')

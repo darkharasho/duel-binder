@@ -8,9 +8,11 @@ import { GAMES } from '../../src/shared/games'
 import { addUser, seededServerDb, memoryBucket, noPrintingArt, noPrices } from './helpers'
 import { SHARED_SET_NAME, seedPokemon } from '../fixtures/pokemon'
 import type { Facets, FriendsOverview } from '../../src/shared/types'
-import { withOwnerOnlyPokemon } from '../fixtures/ownerOnlyGame'
+import { withGameAccess, withOwnerOnlyPokemon } from '../fixtures/ownerOnlyGame'
 
 withOwnerOnlyPokemon()
+withGameAccess('mtg', 'testers')
+withGameAccess('op', 'testers')
 
 const BASE = 'https://portal.test'
 const NOW = new Date('2026-10-24T12:00:00.000Z')
@@ -251,7 +253,7 @@ describe('per-user game access', () => {
 })
 
 describe('/api/me games list', () => {
-  // The file-wide fixture makes Pokémon owner-only; here it is open, as shipped.
+  // The file-wide fixtures hide Pokémon, Magic and One Piece; here Pokémon is open, as shipped.
   beforeEach(() => {
     GAMES.pkm.access = 'everyone'
   })
@@ -286,5 +288,8 @@ describe('/api/me games list', () => {
     }
     expect(await gamesOf(ownerId, 'o')).toEqual(['ygo', 'pkm', 'op', 'mtg'])
     expect(await gamesOf(otherId, 'x')).toEqual(['ygo', 'pkm'])
+    GAMES.mtg.access = 'everyone'
+    GAMES.op.access = 'everyone'
+    expect(await gamesOf(otherId, 'y')).toEqual(['ygo', 'pkm', 'op', 'mtg'])
   })
 })

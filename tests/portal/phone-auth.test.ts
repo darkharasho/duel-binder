@@ -3,9 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type Database from 'better-sqlite3'
 import { addUser, memoryBucket, noPrintingArt, noPrices, seededServerDb } from './helpers'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
-import { withOwnerOnlyPokemon } from '../fixtures/ownerOnlyGame'
-
-withOwnerOnlyPokemon()
 
 const BASE = 'https://portal.test'
 const DAY = 24 * 60 * 60 * 1000
@@ -81,7 +78,7 @@ describe('phone sign-in', () => {
     expect(res.status).toBe(200)
     expect(res.headers.get('cache-control')).toBe('no-store')
     const body = (await res.json()) as { token: string; user: unknown }
-    expect(body.user).toEqual({ id: alice, username: 'alice', displayName: null, avatarUrl: null, games: ['ygo'], usernameChosen: true, linkHint: null })
+    expect(body.user).toEqual({ id: alice, username: 'alice', displayName: null, avatarUrl: null, games: ['ygo', 'pkm', 'op', 'mtg'], usernameChosen: true, linkHint: null })
     expect(body.token).toMatch(/^[A-Za-z0-9_-]{43}$/)
     expect(body.token).not.toBe(WEB_TOKEN)
 

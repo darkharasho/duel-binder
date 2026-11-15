@@ -3,9 +3,6 @@ import Database from 'better-sqlite3'
 import { memoryBucket, noPrintingArt, noPrices } from './helpers'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
 import { migrateServer } from '../../workers/portal/src/migrate'
-import { withOwnerOnlyPokemon } from '../fixtures/ownerOnlyGame'
-
-withOwnerOnlyPokemon()
 
 const BASE = 'https://portal.test'
 let clock = new Date('2026-10-24T12:00:00.000Z')
@@ -163,7 +160,7 @@ describe('Discord sign-in and sessions', () => {
       username: 'kaiba',
       displayName: 'Seto',
       avatarUrl: 'https://cdn.discordapp.com/avatars/111/abc.png',
-      games: ['ygo'],
+      games: ['ygo', 'pkm', 'op', 'mtg'],
       usernameChosen: false,
       linkHint: 'apple'
     })
@@ -205,7 +202,7 @@ describe('Discord sign-in and sessions', () => {
       username: 'kaiba',
       displayName: 'Seto K',
       avatarUrl: null,
-      games: ['ygo'],
+      games: ['ygo', 'pkm', 'op', 'mtg'],
       usernameChosen: false,
       linkHint: 'apple'
     })

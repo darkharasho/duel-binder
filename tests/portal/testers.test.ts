@@ -7,6 +7,10 @@ import { gamesFor } from '../../workers/portal/src/auth'
 import { beginLink } from '../../workers/portal/src/link'
 import { mergeAccounts } from '../../workers/portal/src/merge'
 import { bindTesterInvites, testerGames } from '../../workers/portal/src/testers'
+import { withGameAccess } from '../fixtures/ownerOnlyGame'
+
+withGameAccess('mtg', 'testers')
+withGameAccess('op', 'testers')
 
 const BASE = 'https://portal.test'
 const DAY = 24 * 60 * 60 * 1000

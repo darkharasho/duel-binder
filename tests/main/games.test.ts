@@ -16,8 +16,7 @@ import {
   pokemonId
 } from '../../src/shared/games'
 import { sha256 } from '../../src/shared/games/ids'
-
-
+import { withGameAccess } from '../fixtures/ownerOnlyGame'
 
 const hex = (b: Uint8Array): string => [...b].map((x) => x.toString(16).padStart(2, '0')).join('')
 
@@ -104,7 +103,7 @@ describe('games', () => {
     expect(m.color).toBe('#c2410c')
     expect(m.features).toEqual({ scan: true, pokedex: false })
     expect(m.cardAspect).toEqual({ width: 488, height: 680 })
-    expect([m.access, m.priceRule, m.crossLanguagePriceFallback]).toEqual(['testers', 'marketOnly', false])
+    expect([m.access, m.priceRule, m.crossLanguagePriceFallback]).toEqual(['everyone', 'marketOnly', false])
     expect(new Set(Object.values(GAMES).map((g) => g.color)).size).toBe(4)
   })
   test('gameOfId boundaries', () => {
@@ -122,18 +121,25 @@ describe('games', () => {
     // Computed from today's pokemonId (sha256 of 'pkm:en/me05-068', folded into [2^40, 2^53)).
     expect(pokemonId('en/me05-068')).toBe(2449488009539745)
   })
-  test('access: testers see a testers game, the owner sees all', () => {
-    expect(allowedGames({ isOwner: false, testerGames: [] })).toEqual(['ygo', 'pkm'])
-    expect(allowedGames({ isOwner: false, testerGames: ['op'] })).toEqual(['ygo', 'pkm', 'op'])
-    expect(allowedGames({ isOwner: true, testerGames: [] })).toEqual(['ygo', 'pkm', 'op', 'mtg'])
-    expect(allowedGames({ isOwner: false, testerGames: ['mtg'] })).toEqual(['ygo', 'pkm', 'mtg'])
+  test('access: every game is open to everyone as shipped', () => {
+    expect(allowedGames({ isOwner: false, testerGames: [] })).toEqual(['ygo', 'pkm', 'op', 'mtg'])
+  })
+  describe('access gate', () => {
+    withGameAccess('op', 'testers')
+    withGameAccess('mtg', 'testers')
+    test('testers see a testers game, the owner sees all', () => {
+      expect(allowedGames({ isOwner: false, testerGames: [] })).toEqual(['ygo', 'pkm'])
+      expect(allowedGames({ isOwner: false, testerGames: ['op'] })).toEqual(['ygo', 'pkm', 'op'])
+      expect(allowedGames({ isOwner: true, testerGames: [] })).toEqual(['ygo', 'pkm', 'op', 'mtg'])
+      expect(allowedGames({ isOwner: false, testerGames: ['mtg'] })).toEqual(['ygo', 'pkm', 'mtg'])
+    })
   })
   test('One Piece definition', () => {
     const op = gameDef('op')
     expect(op.name).toBe('One Piece')
     expect(op.features).toEqual({ scan: true, pokedex: false })
     expect(op.cardAspect).toEqual({ width: 600, height: 838 })
-    expect([op.access, op.priceRule, op.crossLanguagePriceFallback]).toEqual(['testers', 'marketOnly', false])
+    expect([op.access, op.priceRule, op.crossLanguagePriceFallback]).toEqual(['everyone', 'marketOnly', false])
     expect(isGameId('op')).toBe(true)
     expect(new Set(Object.values(GAMES).map((g) => g.color)).size).toBe(4)
   })

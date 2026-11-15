@@ -5,6 +5,10 @@ import { join } from 'path'
 import { createFingerprintStore } from '../../src/main/scan/fingerprints'
 import { encodeFingerprints } from '../../src/shared/scan/fingerprintFile'
 import { encodeFingerprintRefs } from '../../src/shared/scan/fingerprintRefs'
+import { withGameAccess } from '../fixtures/ownerOnlyGame'
+
+withGameAccess('mtg', 'testers')
+withGameAccess('op', 'testers')
 
 const body = (n: number): Uint8Array =>
   encodeFingerprints(

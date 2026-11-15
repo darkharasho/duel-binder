@@ -72,7 +72,7 @@ export const MAGIC: GameDef = {
   cardAspect: { width: 488, height: 680 },
   crossLanguagePriceFallback: false,
   priceRule: 'marketOnly',
-  access: 'testers',
+  access: 'everyone',
   vocab: {
     cardId: 'Card',
     printingCode: 'Set & number',

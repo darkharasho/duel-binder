@@ -41,7 +41,7 @@ function snapBucket(): SnapshotBucket & {
   const multipart = (key: string, uploadId: string) => ({
     uploadId,
     async uploadPart(n: number, body: ReadableStream | ArrayBuffer | Uint8Array) {
-      const bytes = new Uint8Array(await new Response(body).arrayBuffer())
+      const bytes = new Uint8Array(await new Response(body as BodyInit).arrayBuffer())
       uploads.get(uploadId)!.set(n, bytes)
       return { partNumber: n, etag: `e${n}-${bytes.byteLength}` }
     },

@@ -53,10 +53,12 @@ const b64url = (b: ArrayBuffer): string =>
     .replace(/\//g, '_')
     .replace(/=+$/, '')
 
-const fromB64url = (s: string): Uint8Array | null => {
+const fromB64url = (s: string): Uint8Array<ArrayBuffer> | null => {
   try {
     const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/'))
-    return Uint8Array.from(bin, (c) => c.charCodeAt(0))
+    const out = new Uint8Array(new ArrayBuffer(bin.length))
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
+    return out
   } catch {
     return null
   }
@@ -72,7 +74,8 @@ const signingKey = (adminToken: string): Promise<CryptoKey> =>
     ['sign', 'verify']
   )
 
-const signed = (key: string, exp: number): Uint8Array => new TextEncoder().encode(`${key}\n${exp}`)
+const signed = (key: string, exp: number): Uint8Array<ArrayBuffer> =>
+  new Uint8Array(new TextEncoder().encode(`${key}\n${exp}`))
 
 /** A download URL for `key`, good for an hour from `now` (ms). */
 export async function signSnapshotUrl(

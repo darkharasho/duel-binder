@@ -2,7 +2,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RGB } from '@/lib/wash/color'
 import { fit } from '@/lib/wash/fit'
-import { clearMisses, gameFallback, readPixels, sampleCard, sampleMemory } from '@/lib/wash/sample'
+import {
+  clearMisses,
+  gameFallback,
+  readPixels,
+  rememberedCard,
+  sampleCard,
+  sampleMemory
+} from '@/lib/wash/sample'
 
 const px: RGB[] = Array.from({ length: 1024 }, () => [200, 40, 40] as RGB)
 const reader = () => vi.fn(async (..._a: unknown[]): Promise<RGB[] | null> => px)
@@ -116,7 +123,39 @@ describe('sampleCard', () => {
   })
 })
 
+describe('rememberedCard', () => {
+  it('returns a card read earlier for this game, from memory or storage', async () => {
+    await sampleCard({ imageId: 5 }, 'ygo', reader())
+    await sampleCard({ imageId: 9 }, 'pkm', reader())
+    expect(rememberedCard('ygo', () => 0)).toMatchObject({ imageId: 5 })
+    sampleMemory.clear()
+    expect(rememberedCard('ygo', () => 0)?.imageId).toBe(5)
+    expect(rememberedCard('pkm', () => 0)?.imageId).toBe(9)
+  })
+
+  it('is null with nothing remembered or only failed reads', async () => {
+    expect(rememberedCard('ygo', Math.random)).toBeNull()
+    await sampleCard(
+      { imageId: 7 },
+      'ygo',
+      vi.fn(async () => null)
+    )
+    expect(rememberedCard('ygo', Math.random)).toBeNull()
+  })
+})
+
 describe('gameFallback', () => {
+  it('turns both colours by the same random hue, keeping their gap', async () => {
+    const { lch } = await import('@/lib/wash/color')
+    const plain = gameFallback('pkm').fams.map((f) => lch(f.lab))
+    const turned = gameFallback('pkm', () => 0.25).fams.map((f) => lch(f.lab))
+    for (let i = 0; i < 2; i++) {
+      expect(turned[i][0]).toBeCloseTo(plain[i][0])
+      expect(turned[i][1]).toBeCloseTo(plain[i][1])
+      expect((turned[i][2] - plain[i][2] + 360) % 360).toBeCloseTo(90)
+    }
+  })
+
   it('has two families', () => {
     expect(gameFallback('pkm').fams).toHaveLength(2)
   })

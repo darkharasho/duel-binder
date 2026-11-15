@@ -126,6 +126,33 @@ function store(key: string, value: unknown): void {
   }
 }
 
+/**
+ * A random card of this game read on an earlier visit (this run or a past one), for a page with no
+ * cards of its own. Skips grey art. Null when none is remembered.
+ */
+export function rememberedCard(
+  game: GameId,
+  rand: () => number
+): { imageId: number; families: Families } | null {
+  const prefix = keyOf(game, 0).slice(0, -1)
+  const keys = new Set([...sampleMemory.keys()].filter((k) => k.startsWith(prefix)))
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(INDEX_KEY) ?? '[]')
+    if (Array.isArray(parsed))
+      for (const k of parsed) if (typeof k === 'string' && k.startsWith(prefix)) keys.add(k)
+  } catch {
+    /* memory only */
+  }
+  const pool = [...keys]
+  for (let tries = 0; tries < 8 && pool.length > 0; tries++) {
+    const key = pool.splice(Math.floor(rand() * pool.length), 1)[0]
+    const imageId = Number(key.slice(prefix.length))
+    const families = sampleMemory.get(key) ?? stored(key)
+    if (families && !families.greyArt && Number.isFinite(imageId)) return { imageId, families }
+  }
+  return null
+}
+
 /** The colour families of a card's art, or null if its image can't be read. */
 export async function sampleCard(
   card: WashCard,
@@ -173,14 +200,35 @@ function sampleSrc(game: GameId, imageId: number): string {
 
 /** The first two colours of each game's glow (from ArtWash), for where there is no art to read. */
 const GAME_COLOURS: Record<GameId, [RGB, RGB]> = {
-  ygo: [[139, 92, 246], [245, 158, 11]],
-  pkm: [[37, 99, 235], [250, 204, 21]],
-  op: [[59, 130, 196], [234, 179, 8]],
-  mtg: [[194, 65, 12], [245, 158, 11]]
+  ygo: [
+    [139, 92, 246],
+    [245, 158, 11]
+  ],
+  pkm: [
+    [37, 99, 235],
+    [250, 204, 21]
+  ],
+  op: [
+    [59, 130, 196],
+    [234, 179, 8]
+  ],
+  mtg: [
+    [194, 65, 12],
+    [245, 158, 11]
+  ]
 }
 
-export function gameFallback(game: GameId): Families {
-  const [a, b] = GAME_COLOURS[game].map(toOklab)
+/**
+ * The game's colours as a wash. With `rand`, both colours are turned round the colour wheel by the
+ * same random amount, keeping their lightness, strength and the gap between them: for an empty page
+ * with no card to read, so it isn't the same colour every time.
+ */
+export function gameFallback(game: GameId, rand?: () => number): Families {
+  const turn = rand ? rand() * 360 : 0
+  const [a, b] = GAME_COLOURS[game].map((rgb) => {
+    const [L, C, H] = lch(toOklab(rgb))
+    return unlch([L, C, (H + turn) % 360])
+  })
   const [, c, h] = lch(a)
   return {
     fams: [

@@ -1,12 +1,19 @@
 import { act, render } from '@testing-library/react'
 import { StrictMode, type ReactNode } from 'react'
-import { ArtWashContext, pickOrder, useArtWash, type WashState } from '@/components/artWashContext'
+import {
+  ArtWashContext,
+  EMPTY_WASH_MS,
+  pickOrder,
+  useArtWash,
+  type WashState
+} from '@/components/artWashContext'
 import type { Families } from '@/lib/wash/families'
-import { type WashCard, gameFallback, sampleCard } from '@/lib/wash/sample'
+import { type WashCard, gameFallback, rememberedCard, sampleCard } from '@/lib/wash/sample'
 
 vi.mock('@/lib/wash/sample', () => ({
   sampleCard: vi.fn(),
-  gameFallback: vi.fn()
+  gameFallback: vi.fn(),
+  rememberedCard: vi.fn()
 }))
 
 const colourful = { greyArt: false, fams: [{}], tag: 'colour' } as unknown as Families
@@ -34,6 +41,7 @@ beforeEach(() => {
   set = vi.fn()
   sample.mockReset()
   vi.mocked(gameFallback).mockReturnValue(fallback)
+  vi.mocked(rememberedCard).mockReset().mockReturnValue(null)
 })
 afterEach(() => vi.restoreAllMocks())
 
@@ -179,5 +187,52 @@ describe('useArtWash', () => {
     resolve(colourful)
     await flush()
     expect(set).not.toHaveBeenCalled()
+  })
+
+  describe('an empty page', () => {
+    beforeEach(() => vi.useFakeTimers())
+    afterEach(() => vi.useRealTimers())
+
+    it('takes a remembered card after a short wait', async () => {
+      vi.mocked(rememberedCard).mockReturnValue({ imageId: 42, families: colourful })
+      render(tree([]))
+      await act(async () => vi.advanceTimersByTime(EMPTY_WASH_MS - 1))
+      expect(set).not.toHaveBeenCalled()
+      await act(async () => vi.advanceTimersByTime(1))
+      expect(set).toHaveBeenCalledTimes(1)
+      const w = set.mock.calls[0][0] as WashState
+      expect(w.families).toBe(colourful)
+      expect(w.seed).toBe(42)
+    })
+
+    it('falls back to the game colours with a seed when nothing is remembered', async () => {
+      render(tree(null))
+      await act(async () => vi.advanceTimersByTime(EMPTY_WASH_MS))
+      const w = set.mock.calls[0][0] as WashState
+      expect(w.families).toBe(fallback)
+      expect(w.seed).toBeGreaterThan(0)
+    })
+
+    it('does nothing for a child view or a list that fills in time', async () => {
+      sample.mockResolvedValue(colourful)
+      const { rerender } = render(tree(undefined))
+      await act(async () => vi.advanceTimersByTime(EMPTY_WASH_MS))
+      expect(set).not.toHaveBeenCalled()
+      rerender(tree([]))
+      rerender(tree([a]))
+      await act(async () => vi.advanceTimersByTime(EMPTY_WASH_MS))
+      expect(set).toHaveBeenCalledTimes(1)
+      expect(rememberedCard).not.toHaveBeenCalled()
+    })
+
+    it('still picks from cards that arrive later', async () => {
+      sample.mockResolvedValue(colourful)
+      const { rerender } = render(tree([]))
+      await act(async () => vi.advanceTimersByTime(EMPTY_WASH_MS))
+      rerender(tree([a]))
+      await act(async () => {})
+      expect(set).toHaveBeenCalledTimes(2)
+      expect((set.mock.calls[1][0] as WashState).seed).toBe(1)
+    })
   })
 })

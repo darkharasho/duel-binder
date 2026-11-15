@@ -3,6 +3,7 @@ import type { CatalogChange } from '../../shared/catalogFeed'
 import type { GameId } from '../../shared/games'
 import { deleteMeta, setMeta } from '../db/meta'
 import { applyChanges, catalogCursorKey, catalogStagingKey } from './apply'
+import { importSnapshot, SNAPSHOT_CHUNK } from './snapshot'
 import { STAGED_GAME } from './switch'
 import { finishPending, noteUnannounced } from './unannounced'
 
@@ -29,6 +30,14 @@ export type CatalogApplyJob =
       dbVersion: string | null
     }
   | { kind: 'finish' }
+  | {
+      kind: 'snapshot'
+      game: GameId
+      /** A downloaded, unpacked snapshot file (see exportSnapshot). */
+      file: string
+      cursor: number
+      dbVersion: string | null
+    }
 
 export interface ApplyJobOptions {
   /** Take the write lock when each transaction starts: another connection may be writing. */
@@ -68,6 +77,11 @@ export function runApplyJob(
   }
   if (db.pragma('foreign_keys', { simple: true }) !== 0)
     throw new Error('The catalog is applied with foreign keys off')
+  if (job.kind === 'snapshot') {
+    importSnapshot(db, job, tx, opts.chunk ?? SNAPSHOT_CHUNK, opts.pause)
+    checkReferences(db, job.game)
+    return
+  }
   const chunk = opts.chunk ?? APPLY_CHUNK
   const page = db.prepare(
     `SELECT seq, row FROM catalog_staging WHERE seq > ? AND ${STAGED_GAME} = ? ORDER BY seq LIMIT ?`

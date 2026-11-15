@@ -6,7 +6,7 @@ import {
   LEGACY_CATALOG_TABLES,
   type CatalogTable
 } from '../../../src/shared/catalogTables'
-import type { GameId } from '../../../src/shared/games'
+import { GAME_IDS, type GameId } from '../../../src/shared/games'
 import {
   MAX_CHANGES,
   MAX_CONTRIBUTE,
@@ -17,6 +17,8 @@ import {
 import type { AppDeps } from './app'
 import { currentUser, gamesFor } from './auth'
 import { contributePrintings } from './contribute'
+import { snapshotOffer } from './catalogSnapshot'
+import { adminAuthorized } from './thumbs'
 
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
@@ -182,11 +184,33 @@ function tablesParam(raw: string | null, game: GameId | undefined): CatalogTable
 }
 
 export async function catalogRoute(req: Request, deps: AppDeps, path: string): Promise<Response> {
-  if (path !== 'changes' && path !== 'contribute') return json({ error: 'Not found' }, 404)
-  if (req.method !== (path === 'changes' ? 'GET' : 'POST'))
+  const snapshot = /^snapshot\/([a-z]+)$/.exec(path)
+  if (path !== 'changes' && path !== 'contribute' && !snapshot)
+    return json({ error: 'Not found' }, 404)
+  if (req.method !== (path === 'contribute' ? 'POST' : 'GET'))
     return json({ error: 'method-not-allowed' }, 405)
-  const user = await currentUser(req, deps)
-  if (!user || user.kind !== 'desktop') return json({ error: 'signed-out' }, 401)
+  // The nightly job reads the feed and snapshots with the admin token, as an account with every
+  // game; it never contributes.
+  const adminReader = path !== 'contribute' && (await adminAuthorized(req, deps.env.ADMIN_TOKEN))
+  const user = adminReader ? null : await currentUser(req, deps)
+  if (!adminReader && (!user || user.kind !== 'desktop')) return json({ error: 'signed-out' }, 401)
+  const games = (asked?: string): GameId[] =>
+    adminReader ? [...GAME_IDS] : gamesFor(deps, user!.id, asked)
+
+  if (snapshot) {
+    const game = games(snapshot[1]).find((g) => g === snapshot[1])
+    if (!game) return json({ error: 'game-not-allowed' }, 403)
+    const url = new URL(req.url)
+    const offer = await snapshotOffer(
+      deps.images,
+      game,
+      url.searchParams.get('shape') ?? '',
+      url.origin,
+      deps.env.ADMIN_TOKEN,
+      deps.now().getTime()
+    )
+    return offer ? json(offer) : json({ error: 'none' }, 404)
+  }
 
   if (path === 'contribute') {
     const body = (await req.json().catch(() => null)) as { printings?: unknown } | null
@@ -194,7 +218,7 @@ export async function catalogRoute(req: Request, deps: AppDeps, path: string): P
     if (body.printings.length > MAX_CONTRIBUTE) return json({ error: 'too-many' }, 413)
     const rows = body.printings
     const results = deps.db.transaction(() =>
-      contributePrintings(deps.db, user.id, rows, deps.now(), gamesFor(deps, user.id))
+      contributePrintings(deps.db, user!.id, rows, deps.now(), gamesFor(deps, user!.id))
     )()
     return json({ results })
   }
@@ -202,7 +226,7 @@ export async function catalogRoute(req: Request, deps: AppDeps, path: string): P
   const q = new URL(req.url).searchParams
   // No `game` is the legacy feed; a game must be one of the user's, as on sync and RPC.
   const asked = q.get('game')
-  const game = asked === null ? undefined : gamesFor(deps, user.id, asked).find((g) => g === asked)
+  const game = asked === null ? undefined : games(asked).find((g) => g === asked)
   if (asked !== null && !game) return json({ error: 'game-not-allowed' }, 403)
 
   try {

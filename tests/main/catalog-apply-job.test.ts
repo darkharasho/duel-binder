@@ -4,7 +4,7 @@ import type Database from 'better-sqlite3'
 import { describe, expect, it, vi } from 'vitest'
 import { runApplyJob, withoutForeignKeys } from '../../src/main/catalog/applyJob'
 import { stageChanges } from '../../src/main/catalog/switch'
-import { workerApplier } from '../../src/main/catalogApplier'
+import { CatalogApplierStopped, workerApplier } from '../../src/main/catalogApplier'
 import { getMeta, setMeta } from '../../src/main/db/meta'
 import type { CatalogChange } from '../../src/shared/catalogFeed'
 import { seededDb } from './helpers'
@@ -250,6 +250,7 @@ describe('workerApplier', () => {
     const c = applier.run({ kind: 'finish' })
     applier.dispose()
     await expect(c).rejects.toThrow('Catalog worker stopped')
+    await expect(c).rejects.toBeInstanceOf(CatalogApplierStopped)
     expect(workers[1].terminated).toBe(true)
   })
 })

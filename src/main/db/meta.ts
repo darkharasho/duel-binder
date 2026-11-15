@@ -40,6 +40,10 @@ export type MetaKey =
   | 'catalog_staging_cursor:op'
   /** The same for a Magic delta pull. */
   | 'catalog_staging_cursor:mtg'
+  /** Where a snapshot import of a game has got to, as JSON (see catalog/snapshot.ts). */
+  | 'catalog_snapshot:pkm'
+  | 'catalog_snapshot:op'
+  | 'catalog_snapshot:mtg'
   /** When this desktop switched to the server's catalog (ISO); absent means not yet. */
   | 'catalog_switched_at'
   /** Path of the database copy taken just before the switch. */

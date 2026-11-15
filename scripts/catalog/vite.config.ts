@@ -31,6 +31,7 @@ export default defineConfig({
         parity: `${root}scripts/catalog/parity.ts`,
         'set-art': `${root}scripts/catalog/setArtDryRun.ts`,
         thumbs: `${root}scripts/catalog/thumbs.ts`,
+        snapshots: `${root}scripts/catalog/snapshots.ts`,
         'pull-training': `${root}scripts/scan/pull-training.ts`,
         'op-number-replay': `${root}scripts/scan/op-number-replay.ts`,
         'code-replay': `${root}scripts/scan/code-replay.ts`,

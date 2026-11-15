@@ -226,6 +226,7 @@ const ENTRY_REFS: Record<string, [count: number, kind: string]> = {
   'src/main/dev/fakeData.ts': [5, LIVE],
   'src/main/dev/fakeFriends.ts': [9, LIVE],
   'src/main/index.ts': [1, LIVE],
+  'src/main/images/evict.ts': [3, 'live rows of every local owner: their art is never trimmed'],
   'src/main/sync/sync.ts': [1, FK],
   'src/main/sync/intl.ts': [1, FK],
   'src/main/sync/tokens.ts': [1, FK],

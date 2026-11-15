@@ -30,6 +30,7 @@ import {
 } from './dev/directSources'
 import { createImageCache, defaultLimiter, portalLimiter, throttleDownloads } from './images/cache'
 import { portalImageSources } from './images/portalSources'
+import { createEvictionScheduler, ownedImageKeys, runEviction } from './images/evict'
 import { prepareLogo } from './images/prepareLogo'
 import { handleImageProtocol, registerImageScheme } from './images/protocol'
 import { createUpdater, updateMode, RELEASES_URL } from './updater'
@@ -339,29 +340,42 @@ async function bootstrap(): Promise<void> {
   const rarityOf = db.prepare(
     'SELECT set_rarity AS rarity, variant FROM card_printings WHERE id = ?'
   )
+  const imageSources = fakeData
+    ? directImageSources({
+        db,
+        version: app.getVersion(),
+        resolvePrintingArt: directPrintingArt(db, app.getVersion())
+      })
+    : portalImageSources({
+        portal,
+        token: () => tokens.get(),
+        remoteId: (id) => (remoteIdOf.get(id) as number | null | undefined) ?? null,
+        photoSuffix: (id) => {
+          const p = rarityOf.get(id) as { rarity: string; variant: string | null } | undefined
+          return p ? printingPhotoSuffix(p) : ''
+        }
+      })
   const images = createImageCache({
     dir: join(userData, 'images'),
-    sources: fakeData
-      ? directImageSources({
-          db,
-          version: app.getVersion(),
-          resolvePrintingArt: directPrintingArt(db, app.getVersion())
-        })
-      : portalImageSources({
-          portal,
-          token: () => tokens.get(),
-          remoteId: (id) => (remoteIdOf.get(id) as number | null | undefined) ?? null,
-          photoSuffix: (id) => {
-            const p = rarityOf.get(id) as { rarity: string; variant: string | null } | undefined
-            return p ? printingPhotoSuffix(p) : ''
-          }
-        }),
+    sources: imageSources,
     // Dev fake data fetches upstream directly, so it keeps the slow, polite pace.
     limit: fakeData ? defaultLimiter() : portalLimiter(),
     prepareLogo,
-    onDownloads: throttleDownloads((d) => broadcast(IMAGE_DOWNLOADS, d), 250)
+    onDownloads: throttleDownloads((d) => broadcast(IMAGE_DOWNLOADS, d), 250),
+    onDownloaded: (bytes) => imageTrim.downloaded(bytes)
   })
   handleImageProtocol(images)
+  // Owned cards' art stays; everything else shares a 1 GB budget, least recently used out first.
+  const imageTrim = createEvictionScheduler({
+    run: () =>
+      runEviction({
+        dir: join(userData, 'images'),
+        owned: () =>
+          ownedImageKeys(db, async (id) => (await imageSources.printing(id))?.key ?? null),
+        busy: () => images.busy()
+      })
+  })
+  app.on('will-quit', () => imageTrim.dispose())
 
   const emitSync = (s: SyncStatus): void => {
     // Seed before the renderer hears "idle" and refetches.
@@ -466,7 +480,8 @@ async function bootstrap(): Promise<void> {
         emit: emitSync,
         launchedAt,
         // A first Magic pull is about two million rows: applied here, it froze the app.
-        applier: catalogApplier
+        applier: catalogApplier,
+        snapshotDir: join(userData, 'catalog-snapshot')
       })
 
   // Signed out, the fake profile still has a user and fake friends, so the Friends pages show.

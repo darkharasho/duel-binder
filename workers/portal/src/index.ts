@@ -14,6 +14,7 @@ import { createAnonImageQuota, createImageQuota, createMissCache, edgeImage } fr
 import { doSql } from './doSql'
 import { migrateServer } from './migrate'
 import { opArtRoute } from './opArt'
+import { catalogSnapshotRoute } from './catalogSnapshot'
 import { thumbsRoute } from './thumbs'
 import { alarmQueue, priceClientFor, runPriceAlarm, type PriceQueue } from './prices'
 import { sweepClientFor } from './sweep'
@@ -131,6 +132,8 @@ export default {
       )
     const store = (r: Request): Promise<Response> =>
       env.STORE.get(env.STORE.idFromName('main')).fetch(r)
+    const snapshot = await catalogSnapshotRoute(req, env.IMAGES, env.ADMIN_TOKEN)
+    if (snapshot) return snapshot
     const thumbs = await thumbsRoute(req, env.IMAGES, env.ADMIN_TOKEN)
     if (thumbs) return thumbs
     const opArt = await opArtRoute(req, env.IMAGES, env.ADMIN_TOKEN)

@@ -166,6 +166,18 @@ jobs:
           npm run catalog:job -- --stage upload
           ${{ inputs.full && '--full' || '' }}
           ${{ inputs.allow_shrink && '--allow-shrink' || '' }}
+      # Each game's catalog snapshot, which a device's first pull of the game imports instead of the
+      # whole feed: rebuilt from last night's snapshot plus the day's feed. Bounded and never blocks
+      # the stages after it; a failure turns the night red.
+      - name: Catalog snapshots
+        id: snapshots
+        if: steps.upload.outcome == 'success'
+        timeout-minutes: 90
+        continue-on-error: true
+        run: npm run catalog:snapshots
+      - name: Flag failed snapshots
+        if: steps.snapshots.outcome == 'failure'
+        run: echo "CATALOG_PROBLEMS=1" >> "$GITHUB_ENV"
       - name: Yu-Gi-Oh fingerprints
         run: npm run catalog:job -- --stage fingerprints-ygo
       - name: Pokémon fingerprints

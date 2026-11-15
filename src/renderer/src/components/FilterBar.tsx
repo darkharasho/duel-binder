@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import type { ActiveChip } from '@/lib/filters'
 import { isPhone } from '@/lib/platform'
 import { cn } from '@/lib/utils'
-import { usePinned } from './PageHeader'
+import { usePinned } from './pageHeaderContext'
 
 /**
  * The bar every list page shares. Row 1: search, Filters, sort, then the page's own toggle. Row 2,

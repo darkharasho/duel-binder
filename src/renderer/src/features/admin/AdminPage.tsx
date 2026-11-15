@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
-import { PAGE_TITLE, PageHeader } from '@/components/PageHeader'
+import { PageHeader } from '@/components/PageHeader'
+import { PAGE_TITLE } from '@/components/pageHeaderContext'
 import { Button } from '@/components/ui/button'
 import { UnderlineTabs } from '@/components/UnderlineTabs'
 import { api } from '@/lib/api'

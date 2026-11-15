@@ -37,15 +37,15 @@ export function ArtWash({
     return { base: css(fitted.base), pools: field(fitted, { seed, withBase: false }) }
   }, [families, seed])
 
+  // Adjusting state while rendering: when `pools` changes, fade to the other layer.
   const [layers, setLayers] = useState<Layers>({ active: 0, bg: [pools, ''] })
-  useEffect(() => {
-    setLayers((l): Layers => {
-      if (l.bg[l.active] === pools) return l
-      return l.active === 0
-        ? { active: 1, bg: [l.bg[0], pools] }
-        : { active: 0, bg: [pools, l.bg[1]] }
-    })
-  }, [pools])
+  if (layers.bg[layers.active] !== pools) {
+    setLayers(
+      layers.active === 0
+        ? { active: 1, bg: [layers.bg[0], pools] }
+        : { active: 0, bg: [pools, layers.bg[1]] }
+    )
+  }
 
   // The pinned header row fades from this colour, so it reads as the wash rather than a bar.
   useEffect(() => {

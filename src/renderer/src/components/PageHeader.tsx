@@ -1,15 +1,9 @@
-import { createContext, useContext, useLayoutEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { useGame } from '@/lib/game'
 import { isPhone } from '@/lib/platform'
 import { cn } from '@/lib/utils'
 import { GameChip } from './GameSwitch'
-
-/** The big condensed page title: 96 px, 56 px under 1100 px. For a page that draws its own h1. */
-export const PAGE_TITLE = 'font-display text-[56px] leading-[.8] min-[1100px]:text-[96px]'
-
-/** True inside a desktop page header while its pinned row is held at the top of the page. */
-const PinnedContext = createContext(false)
-export const usePinned = (): boolean => useContext(PinnedContext)
+import { PAGE_TITLE, PinnedContext } from './pageHeaderContext'
 
 /** Gap between the top of the page and the pinned row, in px. */
 const PIN_GAP = 12

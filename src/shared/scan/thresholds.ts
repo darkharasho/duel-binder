@@ -367,3 +367,17 @@ export const TILT_MAX_ART_DISTANCE = ART_MAX_DISTANCE * 1.5
 export const REVERSE_BODY_LUM_MAX = 0.69
 /** Reverse holo check: body brightness spread this far above the reference's is Reverse. */
 export const REVERSE_SPREAD_MIN = 0.2
+
+/**
+ * Gem Pack patterns (gemPattern.ts), as template correlations. Tuned on 66 of the owner's Gem Pack
+ * Vol. 7 photos, each card's own photos left out of its templates: 17/17 Poké Ball, 13/14 Master
+ * Ball, 13/18 energy and 3/4 stamped named, none wrong. The glitter versions match no template
+ * past 0.56, the stamp past 0.48.
+ */
+export const GEM_BALL_MIN = 0.65
+export const GEM_MASTER_MIN = 0.65
+export const GEM_ENERGY_MIN = 0.55
+export const GEM_STAMP_MIN = 0.55
+/** How far a symbol's template must beat the others': the near one, and the far one(s). */
+export const GEM_MARGIN_NEAR = 0.05
+export const GEM_MARGIN_WIDE = 0.12

@@ -1,11 +1,23 @@
 import { describe, expect, it } from 'vitest'
-import { chineseFiles, chineseListSets, chineseSet, type ZhCard, type ZhSetEntry } from '../../scripts/catalog/pokemon/chinese'
+import {
+  chineseFiles,
+  chineseListSets,
+  chineseSet,
+  type ZhCard,
+  type ZhSetEntry
+} from '../../scripts/catalog/pokemon/chinese'
 import { cardVersions } from '../../scripts/catalog/pokemon/versions'
 import { matchDexRows, type DexCatalogPrinting } from '../../src/shared/dex/match'
 import type { DexRow } from '../../src/shared/dex/parse'
 import { chinesePromoSets } from '../../scripts/catalog/pokemon/chinesePromos'
 
-const zh = (cardIndex: string, cardName: string, nameEn: string, rarity = 'C', cardType = 'Pokemon'): ZhCard => ({
+const zh = (
+  cardIndex: string,
+  cardName: string,
+  nameEn: string,
+  rarity = 'C',
+  cardType = 'Pokemon'
+): ZhCard => ({
   cardIndex,
   cardName,
   nameEn,
@@ -24,13 +36,21 @@ describe('chineseSet', () => {
   ])
 
   it('names the set in English, with the printed total', () => {
-    expect(set).toMatchObject({ id: '30thC', name: '30th Celebration', cardCount: { official: 103 } })
+    expect(set).toMatchObject({
+      id: '30thC',
+      name: '30th Celebration',
+      cardCount: { official: 103 }
+    })
   })
   it('keeps the printed numbers, turning the letter codes into 166 to 176', () => {
     expect(cards.map((c) => c.localId)).toEqual(['001', '059', '156', '166', '169', '176'])
   })
   it('restores a tag the English name lost, and keeps the Chinese name', () => {
-    expect(cards[1]).toMatchObject({ name: 'Sylveon ex', localName: '仙子伊布ex', rarity: 'Double rare' })
+    expect(cards[1]).toMatchObject({
+      name: 'Sylveon ex',
+      localName: '仙子伊布ex',
+      rarity: 'Double rare'
+    })
     expect(cards[2].name).toBe('M Gardevoir-EX')
   })
   it('reads energy, and leaves a rarity the list does not give', () => {
@@ -93,8 +113,7 @@ const entry = (id: string, code = id, count: number | null = 1): ZhSetEntry => (
   series: 'Scarlet & Violet',
   count
 })
-const list = (id: string, rows: ZhCard[]) =>
-  chineseListSets([entry(id)], new Map([[id, rows]]))
+const list = (id: string, rows: ZhCard[]) => chineseListSets([entry(id)], new Map([[id, rows]]))
 const labels = (id: string, row: ZhCard): string[] => {
   const card = list(id, [row]).sets[0].cards[0]
   return cardVersions(card, [], new Map()).versions.map((v) => v.label)
@@ -114,8 +133,21 @@ describe('chinesePromoSets', () => {
       }))
     )
   )
-  const promo = (id: string, set: string, number: string, name: string, variant: string): DexRow => ({
-    locale: 'Simplified Chinese', series: '', set, id, number, name, variant, quantity: 1
+  const promo = (
+    id: string,
+    set: string,
+    number: string,
+    name: string,
+    variant: string
+  ): DexRow => ({
+    locale: 'Simplified Chinese',
+    series: '',
+    set,
+    id,
+    number,
+    name,
+    variant,
+    quantity: 1
   })
 
   it('lands every row of the export', () => {
@@ -136,15 +168,24 @@ describe('chinesePromoSets', () => {
 
 describe('chineseListSets Master Ball mirrors', () => {
   it('adds one only to a card a Dex export holds it on', () => {
-    expect(labels('CSV5C', zh('077', '鬼斯通', 'Haunter', 'C'))).toEqual(['Master Ball Pattern', 'Normal', 'Poke Ball Pattern'])
-    expect(labels('CSV5C', zh('078', '耿鬼', 'Gengar', 'C'))).toEqual(['Normal', 'Poke Ball Pattern'])
+    expect(labels('CSV5C', zh('077', '鬼斯通', 'Haunter', 'C'))).toEqual([
+      'Master Ball Pattern',
+      'Normal',
+      'Poke Ball Pattern'
+    ])
+    expect(labels('CSV5C', zh('078', '耿鬼', 'Gengar', 'C'))).toEqual([
+      'Normal',
+      'Poke Ball Pattern'
+    ])
   })
 })
 
 describe('chineseListSets rarity fixes', () => {
   it('takes a mark the list has wrong from the table, finish and all', () => {
     const index: ZhSetEntry[] = [{ id: 'CSV5C', code: 'CSV5C', series: 'SV', count: 2 }]
-    const rows = new Map([['CSV5C', [zh('074', '红腿鹬', 'Flamigo', 'C'), zh('075', '宝贝龙', 'Bagon', 'C')]]])
+    const rows = new Map([
+      ['CSV5C', [zh('074', '红腿鹬', 'Flamigo', 'C'), zh('075', '宝贝龙', 'Bagon', 'C')]]
+    ])
     const [fixed, plain] = chineseListSets(index, rows).sets[0].cards
     expect(fixed.rarity).toBe('Rare')
     expect(fixed.variants_detailed?.map((v) => v.type)).toEqual(['holo', 'Poke Ball Pattern'])
@@ -166,11 +207,17 @@ describe('chineseFiles', () => {
 
 describe('chineseListSets', () => {
   it('leaves 30th Celebration to chineseSet', () => {
-    expect(chineseListSets([entry('30thC')], new Map([['30thC', [zh('001', '蛋蛋', 'Exeggcute')]]])).sets).toEqual([])
+    expect(
+      chineseListSets([entry('30thC')], new Map([['30thC', [zh('001', '蛋蛋', 'Exeggcute')]]])).sets
+    ).toEqual([])
   })
   it('names the set in English, with the list series and the printed number as the id', () => {
     const { set, cards } = list('CSV5C', [zh('012', '蛋蛋', 'Exeggcute')]).sets[0]
-    expect(set).toMatchObject({ id: 'CSV5C', name: 'Ardent Obsidian', serie: { id: 'Scarlet & Violet' } })
+    expect(set).toMatchObject({
+      id: 'CSV5C',
+      name: 'Ardent Obsidian',
+      serie: { id: 'Scarlet & Violet' }
+    })
     expect(cards[0]).toMatchObject({ id: 'CSV5C-012', localId: '012', localName: '蛋蛋' })
   })
   it('keeps a number it can not read, and counts it', () => {
@@ -185,12 +232,34 @@ describe('chineseListSets', () => {
       zh('003', '船长 皮卡丘', ''),
       zh('004', '玩家庆典', '', '无标记', 'Stadium')
     ])
-    expect(r.sets[0].cards.map((c) => c.name)).toEqual(['Alcremie', 'Alcremie ex', 'Captain Pikachu', 'CSV5C 004'])
+    expect(r.sets[0].cards.map((c) => c.name)).toEqual([
+      'Alcremie',
+      'Alcremie ex',
+      'Captain Pikachu',
+      'CSV5C 004'
+    ])
     expect(r.sets[0].cards[3].localName).toBe('玩家庆典')
     expect(r).toMatchObject({ named: 2, unnamed: 1 })
   })
+  it("corrects a card the list names wrong, by set and number: Gem Pack Vol. 7's Misty's Psyduck", () => {
+    const index: ZhSetEntry[] = [
+      { id: 'CBB7C', code: 'CBB7C', series: 'SV', count: 1 },
+      { id: 'CSV10C', code: 'CSV10C', series: 'SV', count: 1 }
+    ]
+    const rows = new Map([
+      ['CBB7C', [zh('0305', '可达鸭', 'Psyduck', '★')]],
+      ['CSV10C', [zh('045', '小霞的可达鸭', "Misty's Psyduck")]]
+    ])
+    const gem = chineseListSets(index, rows).sets.find((s) => s.set.id === 'CBB7C')!
+    expect(gem.cards[0]).toMatchObject({ name: "Misty's Psyduck", localName: '小霞的可达鸭' })
+    // Psyduck elsewhere is left alone.
+    expect(list('CSV5C', [zh('010', '可达鸭', 'Psyduck')]).sets[0].cards[0].name).toBe('Psyduck')
+  })
   it('corrects a GX the list calls a V, and drops zero-width spaces', () => {
-    const names = list('CSV5C', [zh('001', '冰伊布GX', 'Glaceon V'), zh('002', '偷儿狐', '\u200bThievul')])
+    const names = list('CSV5C', [
+      zh('001', '冰伊布GX', 'Glaceon V'),
+      zh('002', '偷儿狐', '\u200bThievul')
+    ])
     expect(names.sets[0].cards.map((c) => c.name)).toEqual(['Glaceon GX', 'Thievul'])
   })
   it('reads the base finish from the mark, in sets with no measured mirror', () => {
@@ -200,16 +269,25 @@ describe('chineseListSets', () => {
   })
   it('adds the mirror only in the sets that show one', () => {
     expect(labels('CSV5C', zh('001', '蛋蛋', 'Exeggcute'))).toEqual(['Normal', 'Poke Ball Pattern'])
-    expect(labels('CS2aC', zh('001', '蛋蛋', 'Exeggcute', 'R'))).toEqual(['Holofoil', 'Reverse Holofoil'])
+    expect(labels('CS2aC', zh('001', '蛋蛋', 'Exeggcute', 'R'))).toEqual([
+      'Holofoil',
+      'Reverse Holofoil'
+    ])
     expect(labels('CSV5C', zh('001', '蛋蛋', 'Exeggcute', 'RR'))).toEqual(['Holofoil'])
     expect(labels('CSV5C', zh('001', '能量', 'Energy', 'U', 'Special Energy'))).toEqual(['Normal'])
   })
   it('foils an unmarked card only on a foil tag', () => {
     expect(labels('CSVH3C', zh('001', '蛋蛋', 'Exeggcute', '无标记'))).toEqual(['Normal'])
-    expect(labels('CSVH3C', { ...zh('001', '铁辙迹ex', 'Iron Treads ex', '无标记'), is: ['ex', 'Basic'] })).toEqual(['Holofoil'])
+    expect(
+      labels('CSVH3C', {
+        ...zh('001', '铁辙迹ex', 'Iron Treads ex', '无标记'),
+        is: ['ex', 'Basic']
+      })
+    ).toEqual(['Holofoil'])
   })
   it('reads a Gem Pack finish from the number, and leaves an unmeasured one plain', () => {
-    const gem = (id: string, n: string, mark: string): string[] => labels(id, zh(n, '蛋蛋', 'Exeggcute', mark))
+    const gem = (id: string, n: string, mark: string): string[] =>
+      labels(id, zh(n, '蛋蛋', 'Exeggcute', mark))
     expect(gem('CBB4C', '0101', '●')).toEqual(['Holofoil'])
     expect(gem('CBB4C', '0102', '●')).toEqual(['Poke Ball Pattern'])
     expect(gem('CBB4C', '0103', '◆')).toEqual(['Starlight Holo'])
@@ -228,7 +306,13 @@ describe('chineseListSets', () => {
 })
 
 describe('a Dex export of the other Chinese sets', () => {
-  const zhPrinting = (id: number, sourceId: string, setName: string, version: string, cardName: string): DexCatalogPrinting => ({
+  const zhPrinting = (
+    id: number,
+    sourceId: string,
+    setName: string,
+    version: string,
+    cardName: string
+  ): DexCatalogPrinting => ({
     id,
     cardId: id,
     sourceId: `zh-hans/${sourceId}`,
@@ -254,10 +338,15 @@ describe('a Dex export of the other Chinese sets', () => {
     zhPrinting(4, 'CBB4C-0103', 'Gem Pack Vol. 4', 'Starlight Holo', 'Ponyta'),
     zhPrinting(5, 'CBB4C-0106', 'Gem Pack Vol. 4', 'Set Logo Holofoil', 'Ponyta'),
     zhPrinting(6, 'CBB6C-1001', 'Gem Pack Vol. 6', 'Holofoil', 'Castform Sunny Form'),
-    { ...zhPrinting(7, 'CSV5C-012', 'Ardent Obsidian', 'Normal', 'Mew'), sourceId: 'en/sv05-012', language: 'en' }
+    {
+      ...zhPrinting(7, 'CSV5C-012', 'Ardent Obsidian', 'Normal', 'Mew'),
+      sourceId: 'en/sv05-012',
+      language: 'en'
+    }
   ]
   const landed = (row: DexRow): number[] => [...matchDexRows([row], catalog).wanted.keys()]
-  const reason = (row: DexRow): string | undefined => matchDexRows([row], catalog).missing[0]?.reason
+  const reason = (row: DexRow): string | undefined =>
+    matchDexRows([row], catalog).missing[0]?.reason
 
   it('finds a set by its scn_ code: dots dropped, trailing C dropped, any case', () => {
     expect(landed(scn('scn_csv95-12', 'Terastal Gathering', 'Mew', 'Normal'))).toEqual([1])
@@ -272,10 +361,14 @@ describe('a Dex export of the other Chinese sets', () => {
     expect(landed(scn('scn_cbb4-106', 'Gem Pack Vol. 4', 'Ponyta', 'Expansion Stamp'))).toEqual([5])
   })
   it('takes a Chinese form in Dex word order', () => {
-    expect(landed(scn('scn_cbb6-1001', 'Gem Pack Vol. 6', 'Sunny Form Castform', 'Holo'))).toEqual([6])
+    expect(landed(scn('scn_cbb6-1001', 'Gem Pack Vol. 6', 'Sunny Form Castform', 'Holo'))).toEqual([
+      6
+    ])
   })
   it('reports a finish it can not place', () => {
-    expect(reason(scn('scn_csv95-12', 'Terastal Gathering', 'Mew', 'Master Ball Holo'))).toBe('finish')
+    expect(reason(scn('scn_csv95-12', 'Terastal Gathering', 'Mew', 'Master Ball Holo'))).toBe(
+      'finish'
+    )
   })
   it('reports a set the list lacks, and never reaches the English twin', () => {
     expect(reason(scn('scn_svp-131', 'Scarlet & Violet Promos', 'Darumaka', 'Normal'))).toBe('set')

@@ -71,7 +71,8 @@ async function makeHandlers(opts: { signedIn?: boolean } = {}) {
     getSprite: vi.fn(async () => null),
     getPrinting: vi.fn(),
     sizeBytes: async () => 0,
-    clear: async () => {}
+    clear: async () => {},
+    busy: () => new Set<string>()
   }
   const openTrace = vi.fn(async () => '')
   const scanTrace = createScanTrace({

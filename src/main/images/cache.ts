@@ -84,6 +84,17 @@ export const SMALL_RETRY_MS = 24 * 60 * 60 * 1000
  */
 export const BRIEF_ART_RECHECK_MS = 24 * 60 * 60 * 1000
 
+/** A served file last used longer ago than this gets its mtime (its last use) set to now. */
+export const TOUCH_AFTER_MS = 24 * 60 * 60 * 1000
+
+/** In-flight keys' folders: `set/abc` is downloading to `sets/abc.jpg`, and so on. */
+const KEY_DIRS: [string, string][] = [
+  ['set/', 'sets/'],
+  ['sprite/', 'sprites/'],
+  ['printing/', 'printings/'],
+  ['printing-small/', 'printings-small/']
+]
+
 export interface ImageCache {
   /** `priority` downloads it ahead of what's already queued (an image someone's waiting on). */
   get(size: ImageSize, id: number, opts?: { priority?: boolean }): Promise<string | null>
@@ -97,6 +108,8 @@ export interface ImageCache {
   getPrinting(printingId: number, opts?: { small?: boolean }): Promise<string | null>
   sizeBytes(): Promise<number>
   clear(): Promise<void>
+  /** Downloads under way, as cache paths without extension (`full/12`, `printings/tp-…`). */
+  busy(): ReadonlySet<string>
 }
 
 /** Where one image is fetched from, and the headers that fetch carries. */
@@ -179,6 +192,8 @@ export function createImageCache(opts: {
   prepareLogo?: (file: string) => Promise<void>
   /** Hears every change to the downloads under way (cached files never count). */
   onDownloads?: (d: ImageDownloads) => void
+  /** Hears the size of each image saved (the cache trim counts them). */
+  onDownloaded?: (bytes: number) => void
 }): ImageCache {
   const fetchFn = opts.fetchFn ?? fetch
   const now = opts.now ?? Date.now
@@ -198,7 +213,15 @@ export function createImageCache(opts: {
 
   const exists = (p: string): Promise<boolean> =>
     fs.stat(p).then(
-      (s) => s.isFile() && s.size > 0,
+      (s) => {
+        if (!s.isFile() || s.size === 0) return false
+        // Served from disk: mark it used (its mtime is what the cache trim goes by).
+        if (now() - s.mtimeMs > TOUCH_AFTER_MS) {
+          const t = new Date(now())
+          void fs.utimes(p, t, t).catch(() => undefined)
+        }
+        return true
+      },
       () => false
     )
 
@@ -235,6 +258,7 @@ export function createImageCache(opts: {
       if ((await fs.stat(tmpPath)).size === 0) throw new Error('empty image body')
       await prepare?.(tmpPath)
       await fs.rename(tmpPath, target)
+      opts.onDownloaded?.((await fs.stat(target)).size)
       if (brief !== undefined) {
         if (/\bimmutable\b/.test(res.headers.get('cache-control') ?? ''))
           await fs.rm(brief, { force: true })
@@ -433,6 +457,15 @@ export function createImageCache(opts: {
 
     async clear() {
       await fs.rm(opts.dir, { recursive: true, force: true })
+    },
+
+    busy() {
+      const out = new Set<string>()
+      for (const key of inFlight.keys()) {
+        const kd = KEY_DIRS.find(([k]) => key.startsWith(k))
+        out.add(kd ? kd[1] + key.slice(kd[0].length) : key)
+      }
+      return out
     }
   }
 }

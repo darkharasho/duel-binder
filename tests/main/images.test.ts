@@ -681,3 +681,49 @@ describe('Magic art the portal marks as short-lived (borrowed English art)', () 
     expect(fetchFn).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('image cache last use and downloads', () => {
+  it('touches a served file older than a day', async () => {
+    const fetchFn = vi.fn(async () => okResponse())
+    const cache = createImageCache({ sources: direct(), dir, fetchFn: fetchFn as unknown as typeof fetch, limit: noLimit })
+    const file = (await cache.get('small', 5))!
+    const old = new Date(Date.now() - 3 * 86_400_000)
+    await fs.utimes(file, old, old)
+    await cache.get('small', 5)
+    await vi.waitFor(async () => {
+      expect((await fs.stat(file)).mtimeMs).toBeGreaterThan(Date.now() - 60_000)
+    })
+    expect(fetchFn).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves a recently used file as it is', async () => {
+    const cache = createImageCache({ sources: direct(), dir, fetchFn: (async () => okResponse()) as unknown as typeof fetch, limit: noLimit })
+    const file = (await cache.get('small', 6))!
+    const recent = new Date(Date.now() - 3_600_000)
+    await fs.utimes(file, recent, recent)
+    await cache.get('small', 6)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(Math.round((await fs.stat(file)).mtimeMs / 1000)).toBe(Math.round(recent.getTime() / 1000))
+  })
+
+  it('reports downloaded bytes', async () => {
+    const onDownloaded = vi.fn()
+    const cache = createImageCache({ sources: direct(), dir, fetchFn: (async () => okResponse('12345')) as unknown as typeof fetch, limit: noLimit, onDownloaded })
+    await cache.get('full', 8)
+    await cache.get('full', 8)
+    expect(onDownloaded).toHaveBeenCalledTimes(1)
+    expect(onDownloaded).toHaveBeenCalledWith(5)
+  })
+
+  it('lists downloads under way by their cache path', async () => {
+    let finish: (r: Response) => void = () => {}
+    const fetchFn = vi.fn(() => new Promise<Response>((r) => (finish = r)))
+    const cache = createImageCache({ sources: direct(), dir, fetchFn: fetchFn as unknown as typeof fetch, limit: noLimit })
+    const pending = cache.get('full', 9)
+    await vi.waitFor(() => expect(fetchFn).toHaveBeenCalled())
+    expect([...cache.busy()]).toEqual(['full/9'])
+    finish(okResponse())
+    await pending
+    expect([...cache.busy()]).toEqual([])
+  })
+})

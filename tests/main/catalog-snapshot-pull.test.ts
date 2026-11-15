@@ -239,7 +239,7 @@ describe('pullGame when the app quits mid-import', () => {
         )
         throw new CatalogApplierStopped()
       },
-      dispose() {}
+      dispose: () => {}
     }
     const client = fakeClient()
     await expect(

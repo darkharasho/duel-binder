@@ -23,9 +23,11 @@ import {
 import { seedPokemon } from '../fixtures/pokemon'
 import { inProcessPortal, PORTAL } from './cloudHelpers'
 import { seededDb } from './helpers'
-import { withOwnerOnlyPokemon } from '../fixtures/ownerOnlyGame'
+import { withGameAccess, withOwnerOnlyPokemon } from '../fixtures/ownerOnlyGame'
 
 withOwnerOnlyPokemon()
+withGameAccess('mtg', 'testers')
+withGameAccess('op', 'testers')
 
 const T1 = new Date('2026-10-25T11:00:00.000Z')
 const T2 = new Date('2026-10-25T12:00:00.000Z')

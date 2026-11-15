@@ -8,6 +8,10 @@ import { addUser, memoryBucket, noPrices, noPrintingArt, seededServerDb } from '
 import { seedOnePiece } from '../fixtures/onePiece'
 import { GAMES } from '../../src/shared/games'
 import { seedPokemon } from '../fixtures/pokemon'
+import { withGameAccess } from '../fixtures/ownerOnlyGame'
+
+withGameAccess('mtg', 'testers')
+withGameAccess('op', 'testers')
 
 const BASE = 'https://portal.test'
 const NOW = new Date('2026-11-04T12:00:00.000Z')

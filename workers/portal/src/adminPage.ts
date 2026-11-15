@@ -13,7 +13,7 @@ import { GAME_IDS } from '../../../src/shared/games/types'
 import { HOLDER_LABELS } from '../../../src/shared/training'
 
 /** The games only listed testers see: the panel's tables and its add form. */
-const TESTER_GAMES = GAME_IDS.filter((id) => GAMES[id].access === 'testers').map((id) => ({
+const testerGames = (): { id: string; name: string }[] => GAME_IDS.filter((id) => GAMES[id].access === 'testers').map((id) => ({
   id,
   name: GAMES[id].name
 }))
@@ -106,10 +106,10 @@ details.error pre{margin:4px 0 8px;padding:8px;border-radius:6px;background:rgb(
 [hidden]{display:none!important}
 `
 
-const SCRIPT = `
+const script = (): string => `
 const $ = (id) => document.getElementById(id)
 const FREE = ${FREE_STORAGE_BYTES}
-const TESTER_GAMES = ${JSON.stringify(TESTER_GAMES)}
+const TESTER_GAMES = ${JSON.stringify(testerGames())}
 const HOLDER_LABELS = ${JSON.stringify(HOLDER_LABELS)}
 const n = (v) => (v ?? 0).toLocaleString()
 const bytes = (b) => b == null ? 'unknown' : b < 1e6 ? (b / 1e3).toFixed(1) + ' KB' : b < 1e9 ? (b / 1e6).toFixed(1) + ' MB' : (b / 1e9).toFixed(2) + ' GB'
@@ -841,7 +841,7 @@ export function adminPage(): Response {
 <section data-tab id="admins" hidden></section>
 <section data-tab id="photos" hidden></section>
 </main>
-<script nonce="${nonce}">${SCRIPT}</script>
+<script nonce="${nonce}">${script()}</script>
 </body>
 </html>`
   return new Response(html, {

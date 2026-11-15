@@ -18,9 +18,11 @@ import { inProcessPortal, PORTAL, SERVER_NOW } from './cloudHelpers'
 import { seedPokemon } from '../fixtures/pokemon'
 import { seedOnePiece } from '../fixtures/onePiece'
 import { GAMES } from '../../src/shared/games'
-import { withOwnerOnlyPokemon } from '../fixtures/ownerOnlyGame'
+import { withGameAccess, withOwnerOnlyPokemon } from '../fixtures/ownerOnlyGame'
 
 withOwnerOnlyPokemon()
+withGameAccess('mtg', 'testers')
+withGameAccess('op', 'testers')
 
 type Portal = Awaited<ReturnType<typeof inProcessPortal>>
 

@@ -18,6 +18,10 @@ import { NOTHING, fakeEngine, stubCamera, stubVideo } from './scanFakes'
 import type { EngineFactory } from '@/features/scan/engine'
 import type { SnapResult } from '../../src/phone/training/numberSnap'
 import { SNAP_MANY, SNAP_NONE } from '../../src/phone/training/copy'
+import { withGameAccess } from '../fixtures/ownerOnlyGame'
+
+withGameAccess('mtg', 'testers')
+withGameAccess('op', 'testers')
 
 const CARD_ID = 2 ** 39 + 5
 const NOW = new Date('2026-11-05T12:00:00.000Z')

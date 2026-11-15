@@ -16,6 +16,10 @@ import type { PhoneStore } from '../../src/phone/data/store'
 import { DELETE_WARNING } from '@/features/settings/accountText'
 import { fakeEngine, stubCamera, stubVideo } from './scanFakes'
 import { SETO, fakeOcr, fakeStore, installPhoneApi, json, setOnline, stubFetch } from './phoneFakes'
+import { withGameAccess } from '../fixtures/ownerOnlyGame'
+
+withGameAccess('mtg', 'testers')
+withGameAccess('op', 'testers')
 
 /** The phone scanner's saved list of unsaved scans, and whose they are (see savedScans.ts). */
 const SESSION_KEY = 'scan.session.v1'

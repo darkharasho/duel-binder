@@ -25,9 +25,11 @@ import { runPriceAlarm } from '../../workers/portal/src/prices'
 import type { PriceClient } from '../../src/main/prices/client'
 import { inProcessPortal, PORTAL } from './cloudHelpers'
 import { seededDb } from './helpers'
-import { withOwnerOnlyPokemon } from '../fixtures/ownerOnlyGame'
+import { withGameAccess, withOwnerOnlyPokemon } from '../fixtures/ownerOnlyGame'
 
 withOwnerOnlyPokemon()
+withGameAccess('mtg', 'testers')
+withGameAccess('op', 'testers')
 
 const ALL = { sort: 'name', dir: 'asc' } as const
 const T1 = new Date('2026-10-25T11:00:00.000Z')

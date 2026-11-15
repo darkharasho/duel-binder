@@ -6,6 +6,10 @@ import type { AdminStats } from '@shared/admin'
 import type { Api } from '@shared/ipc'
 import type { AccountStatus } from '@shared/types'
 import { createMockApi, renderWithProviders } from './mockApi'
+import { withGameAccess } from '../fixtures/ownerOnlyGame'
+
+withGameAccess('mtg', 'testers')
+withGameAccess('op', 'testers')
 
 const seto = { id: 1, username: 'seto', displayName: 'Seto', avatarUrl: null }
 const status = (admin: boolean): AccountStatus => ({

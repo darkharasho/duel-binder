@@ -39,7 +39,7 @@ export const ONE_PIECE: GameDef = {
   cardAspect: { width: 600, height: 838 },
   crossLanguagePriceFallback: false,
   priceRule: 'marketOnly',
-  access: 'testers',
+  access: 'everyone',
   vocab: {
     cardId: 'Card',
     printingCode: 'Card number',

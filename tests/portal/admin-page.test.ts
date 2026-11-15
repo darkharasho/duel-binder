@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { adminPage } from '../../workers/portal/src/adminPage'
+import { withGameAccess } from '../fixtures/ownerOnlyGame'
+
+withGameAccess('mtg', 'testers')
+withGameAccess('op', 'testers')
 
 describe('admin page', () => {
   it('has a Testers tab', async () => {

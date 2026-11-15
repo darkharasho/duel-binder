@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { contributeGame } from '@/features/training/contributeContext'
+import { withGameAccess } from '../fixtures/ownerOnlyGame'
+
+withGameAccess('mtg', 'testers')
+withGameAccess('op', 'testers')
 
 describe('contributeGame', () => {
   it('opens the game shown when testers may contribute to it', () => {

@@ -16,6 +16,10 @@ import type { AccountStatus, CardRow } from '@shared/types'
 import { createMockApi, renderWithProviders, type DeepPartial } from './mockApi'
 import { fakeStore, installPhoneApi, json, setOnline, stubFetch } from './phoneFakes'
 import { fakeEngine, stubCamera, stubVideo } from './scanFakes'
+import { withGameAccess } from '../fixtures/ownerOnlyGame'
+
+withGameAccess('mtg', 'testers')
+withGameAccess('op', 'testers')
 
 const signedIn: AccountStatus = {
   state: 'idle',

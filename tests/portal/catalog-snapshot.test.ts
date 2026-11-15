@@ -150,9 +150,7 @@ describe('snapshot files (Worker entry)', () => {
     const part = (await route(b, path, { headers: { range: 'bytes=10-' } }, null))!
     expect(part.status).toBe(206)
     expect(part.headers.get('content-range')).toBe(`bytes 10-35/36`)
-    expect(new TextDecoder().decode(await part.arrayBuffer())).toBe(
-      'abcdefghijklmnopqrstuvwxyz'
-    )
+    expect(new TextDecoder().decode(await part.arrayBuffer())).toBe('abcdefghijklmnopqrstuvwxyz')
 
     const exp = Number(new URL(url).searchParams.get('exp'))
     const late = (await route(b, path, {}, null, exp * 1000 + 1000))!
@@ -271,10 +269,7 @@ describe('GET /api/catalog/snapshot/<game> and the admin feed reader', () => {
   let bucket: ReturnType<typeof snapBucket>
 
   const get = (path: string, auth: string | null): Promise<Response> =>
-    handle(
-      new Request(`${ORIGIN}${path}`, { headers: auth ? { authorization: auth } : {} }),
-      deps
-    )
+    handle(new Request(`${ORIGIN}${path}`, { headers: auth ? { authorization: auth } : {} }), deps)
 
   beforeEach(async () => {
     db = await seededServerDb()

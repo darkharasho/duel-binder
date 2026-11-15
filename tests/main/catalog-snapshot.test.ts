@@ -53,16 +53,23 @@ describe('exportSnapshot', () => {
     const { file, source } = await built()
     const snap = new Database(file, { readonly: true })
     const meta = snap.prepare('SELECT * FROM snapshot_meta').get() as Record<string, unknown>
-    expect(meta).toMatchObject({ game: 'mtg', cursor: 4321, db_version: 'v7', shape: catalogShape() })
+    expect(meta).toMatchObject({
+      game: 'mtg',
+      cursor: 4321,
+      db_version: 'v7',
+      shape: catalogShape()
+    })
     const tables = (
       snap.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as {
         name: string
       }[]
     ).map((r) => r.name)
     expect(tables.sort()).toEqual([...MTG_TABLES, 'snapshot_meta'].sort())
-    const cols = (snap.prepare("SELECT name FROM pragma_table_info('card_printings')").all() as {
-      name: string
-    }[]).map((c) => c.name)
+    const cols = (
+      snap.prepare("SELECT name FROM pragma_table_info('card_printings')").all() as {
+        name: string
+      }[]
+    ).map((c) => c.name)
     expect(cols).not.toContain('id')
     expect(cols).not.toContain('pkey')
     expect(cols).toContain('remote_id')
@@ -127,9 +134,7 @@ describe("runApplyJob 'snapshot'", () => {
     w.close()
     const db = await seededDb()
 
-    expect(() => withoutForeignKeys(db, () => runApplyJob(db, job(file)))).toThrow(
-      'catalog shape'
-    )
+    expect(() => withoutForeignKeys(db, () => runApplyJob(db, job(file)))).toThrow('catalog shape')
     expect(getMeta(db, 'catalog_cursor:mtg')).toBeNull()
     expect(mtgCount(db, 'cards')).toBe(0)
     // Detached again: a later attach under the same name works.

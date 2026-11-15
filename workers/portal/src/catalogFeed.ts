@@ -193,8 +193,7 @@ export async function catalogRoute(req: Request, deps: AppDeps, path: string): P
   // game; it never contributes.
   const adminReader = path !== 'contribute' && (await adminAuthorized(req, deps.env.ADMIN_TOKEN))
   const user = adminReader ? null : await currentUser(req, deps)
-  if (!adminReader && (!user || user.kind !== 'desktop'))
-    return json({ error: 'signed-out' }, 401)
+  if (!adminReader && (!user || user.kind !== 'desktop')) return json({ error: 'signed-out' }, 401)
   const games = (asked?: string): GameId[] =>
     adminReader ? [...GAME_IDS] : gamesFor(deps, user!.id, asked)
 

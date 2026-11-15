@@ -38,6 +38,7 @@ import type {
   WireScanSession
 } from '../../shared/scanSessions'
 import type { GameId } from '../../shared/games'
+import type { SnapshotOffer } from '../../shared/catalogSnapshot'
 import type { PortalChannel } from '../../shared/portal'
 import {
   labelParams,
@@ -116,6 +117,13 @@ export interface CloudClient {
     tables?: readonly CatalogTableName[],
     game?: GameId
   ): Promise<CatalogChangesResponse>
+  /**
+   * The newest snapshot of `game` built for this app's catalog `shape`, with a signed download URL;
+   * null when there is none. Optional: stand-ins without it never use snapshots.
+   */
+  catalogSnapshot?(game: GameId, shape: string): Promise<SnapshotOffer | null>
+  /** A plain GET of a signed URL (no bearer token), through the client's fetch. */
+  download?(url: string, init?: { headers?: Record<string, string> }): Promise<Response>
   /** Offers printings the catalog lacks; one result per printing. */
   contribute(printings: ContributedPrinting[]): Promise<ContributeResult[]>
   revoke(): Promise<void>
@@ -148,6 +156,8 @@ const DEFAULT_TIMEOUT_MS = 30_000
 const CATALOG_TIMEOUT_MS = 120_000
 /** A training photo is up to 8 MB, so its upload gets longer than the other training calls. */
 const TRAINING_UPLOAD_TIMEOUT_MS = 60_000
+/** A whole snapshot download (Magic's is tens of MB); a cut-off one resumes next time. */
+const SNAPSHOT_TIMEOUT_MS = 30 * 60_000
 const TRAINING_TIMEOUT_MS = 15_000
 
 /** The portal API as the desktop calls it, with its desktop token as a Bearer token. */
@@ -320,6 +330,32 @@ export function createCloudClient(opts: {
         true,
         Math.max(timeoutMs, CATALOG_TIMEOUT_MS)
       ),
+    catalogSnapshot: async (game, shape) => {
+      try {
+        return await call<SnapshotOffer>(
+          `/api/catalog/snapshot/${game}?shape=${encodeURIComponent(shape)}`,
+          'GET'
+        )
+      } catch (e) {
+        if (e instanceof CloudNotFoundError) return null
+        throw e
+      }
+    },
+    download: async (url, init = {}) => {
+      const signals = [
+        AbortSignal.timeout(SNAPSHOT_TIMEOUT_MS),
+        ...(opts.signal ? [opts.signal] : [])
+      ]
+      try {
+        return await doFetch(url, {
+          headers: init.headers,
+          redirect: 'error',
+          signal: AbortSignal.any(signals)
+        })
+      } catch (e) {
+        throw new CloudOfflineError((e as Error | undefined)?.message || undefined)
+      }
+    },
     contribute: async (printings) =>
       (
         await call<{ results: ContributeResult[] }>('/api/catalog/contribute', 'POST', {

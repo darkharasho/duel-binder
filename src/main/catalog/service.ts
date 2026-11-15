@@ -6,10 +6,12 @@ import { syncedGames } from '../cloud/engine'
 import type { SyncStatus } from '../../shared/types'
 import { isGameId, type GameId } from '../../shared/games'
 import { inProcessApplier, type CatalogApplier } from '../catalogApplier'
-import { catalogCursorKey, catalogStagingKey } from './apply'
+import { catalogCursorKey } from './apply'
+import { pullGame } from './pull'
+import { snapshotKey } from './snapshot'
 import { backfillArtTwins } from './artTwinBackfill'
 import { backfillSetSeries } from './seriesBackfill'
-import { runSwitch, stageChanges, type SwitchFailure } from './switch'
+import { runSwitch, type SwitchFailure } from './switch'
 import { noteUnannounced, unannounced } from './unannounced'
 
 export interface CatalogUpdate {
@@ -32,6 +34,8 @@ export interface CatalogServiceDeps {
   launchedAt: Date
   /** Applies pulled changes; by default on `db` itself (the app passes a worker's). */
   applier?: CatalogApplier
+  /** Where catalog snapshots download to; without one, a game's first pull reads the whole feed. */
+  snapshotDir?: string
 }
 
 /** An unforced update within this long of the last one does nothing. */
@@ -40,7 +44,7 @@ const UNCHANGED: CatalogUpdate = { changed: false, imagesChanged: false }
 
 /**
  * The account's games whose catalogs this device keeps: Yu-Gi-Oh!, the game shown, and any game
- * pulled here before. A game the account has but this device has never shown stays unpulled until
+ * pulled here before (or started importing a snapshot of). A game the account has but this device has never shown stays unpulled until
  * it is shown: a first Magic pull is about two million rows, too much to put on every device
  * because the account may use the game. A pull staged but never applied doesn't count as pulled.
  */
@@ -48,7 +52,10 @@ export function catalogGames(db: SqlDb, account: readonly GameId[]): GameId[] {
   const shown = getMeta(db, 'active_game')
   return account.filter(
     (g) =>
-      g === 'ygo' || (isGameId(shown) && g === shown) || getMeta(db, catalogCursorKey(g)) !== null
+      g === 'ygo' ||
+      (isGameId(shown) && g === shown) ||
+      getMeta(db, catalogCursorKey(g)) !== null ||
+      getMeta(db, snapshotKey(g)) !== null
   )
 }
 
@@ -118,46 +125,8 @@ export function createCatalogService(deps: CatalogServiceDeps): CatalogService {
     return { changed: true, imagesChanged: u.imagesChanged }
   }
 
-  /**
-   * Downloads `game`'s change feed from its cursor (or, resuming, from its staging cursor) into
-   * `catalog_staging`, each page committing with its staging cursor; then, once the feed has no
-   * more, has the applier apply everything staged for the game in seq order (on a worker, in short
-   * transactions) and advance its cursor. Nothing is applied before the feed is done, so a stopped
-   * pull leaves the catalog as it was. A game never pulled before starts from 0.
-   */
-  async function pullDeltas(client: CloudClient, game: GameId): Promise<void> {
-    const cursorKey = catalogCursorKey(game)
-    const stagingKey = catalogStagingKey(game)
-    let cursor = Number(getMeta(db, stagingKey) ?? getMeta(db, cursorKey) ?? 0)
-    for (;;) {
-      set('downloading')
-      const page = await client.catalogChanges(cursor, undefined, undefined, game)
-      if (page.more && page.cursor <= cursor) throw new Error('The catalog feed stopped advancing')
-      if (page.more) {
-        db.transaction(() => {
-          stageChanges(db, page.changes, game)
-          setMeta(db, stagingKey, String(page.cursor))
-        })()
-        cursor = page.cursor
-        continue
-      }
-      const anyStaged = getMeta(db, stagingKey) !== null
-      if (page.changes.length === 0 && !anyStaged) {
-        db.transaction(() => {
-          setMeta(db, cursorKey, String(page.cursor))
-          if (page.dbVersion !== null) setMeta(db, 'db_version', page.dbVersion)
-        })()
-        break
-      }
-      db.transaction(() => {
-        stageChanges(db, page.changes, game)
-        setMeta(db, stagingKey, String(page.cursor))
-      })()
-      set('saving')
-      await applier.run({ kind: 'apply', game, cursor: page.cursor, dbVersion: page.dbVersion })
-      break
-    }
-  }
+  const pullDeltas = (client: CloudClient, game: GameId): Promise<void> =>
+    pullGame({ db: deps.db, client, game, applier, set, snapshotDir: deps.snapshotDir })
 
   /** Runs the search index rebuild committed work still waits for. */
   const finishPending = async (): Promise<void> => {

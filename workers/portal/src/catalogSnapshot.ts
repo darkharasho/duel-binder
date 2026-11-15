@@ -14,10 +14,7 @@ export interface SnapshotBucket {
   ): Promise<{ body: ReadableStream; size: number } | null>
   head(key: string): Promise<{ size: number; uploaded: Date } | null>
   put(key: string, value: string | ArrayBuffer, opts?: unknown): Promise<unknown>
-  list(opts: {
-    prefix: string
-    cursor?: string
-  }): Promise<{
+  list(opts: { prefix: string; cursor?: string }): Promise<{
     objects: { key: string; size: number; uploaded: Date }[]
     truncated: boolean
     cursor?: string
@@ -134,7 +131,8 @@ async function serveFile(
     'accept-ranges': 'bytes',
     'cache-control': 'private, no-store'
   }
-  if (!range) return new Response(obj.body, { headers: { ...headers, 'content-length': String(head.size) } })
+  if (!range)
+    return new Response(obj.body, { headers: { ...headers, 'content-length': String(head.size) } })
   return new Response(obj.body, {
     status: 206,
     headers: {

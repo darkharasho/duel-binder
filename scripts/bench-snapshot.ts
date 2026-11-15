@@ -65,7 +65,9 @@ if (!isMainThread) {
     const src = join(dir, 'source.db')
     let t = performance.now()
     source(src)
-    console.log(`built + exported ${CARDS} cards, ${PRINTS} printings in ${(performance.now() - t).toFixed(0)} ms`)
+    console.log(
+      `built + exported ${CARDS} cards, ${PRINTS} printings in ${(performance.now() - t).toFixed(0)} ms`
+    )
 
     const file = join(dir, 'app.db')
     const db = openDatabase(file)
@@ -96,7 +98,9 @@ if (!isMainThread) {
     const total = performance.now() - t
     waits.sort((a, b) => a - b)
     const n = (sql: string): number => (db.prepare(sql).get() as { n: number }).n
-    console.log(`import + search index: ${total.toFixed(0)} ms (search index rebuild ${finishMs.toFixed(0)} ms)`)
+    console.log(
+      `import + search index: ${total.toFixed(0)} ms (search index rebuild ${finishMs.toFixed(0)} ms)`
+    )
     console.log(
       `main writes: ${waits.length}, p50 ${waits[waits.length >> 1].toFixed(2)} ms, p99 ${waits[Math.floor(waits.length * 0.99)].toFixed(1)} ms, max ${waits[waits.length - 1].toFixed(1)} ms, errors ${errors}`
     )

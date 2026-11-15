@@ -124,14 +124,12 @@ export function importSnapshot(
   db.prepare('ATTACH DATABASE ? AS snap').run(job.file)
   try {
     const meta = db.prepare('SELECT game, shape FROM snap.snapshot_meta').get() as
-      | { game: string; shape: string }
-      | undefined
+      { game: string; shape: string } | undefined
     if (meta?.game !== job.game || meta.shape !== catalogShape())
       throw new Error('Snapshot is for another game or catalog shape')
     const tables = snapshotTables(job.game).map((t) => t.name)
     const saved = snapshotProgress(db, job.game)
-    const resume =
-      saved && saved.file === job.file && saved.cursor === job.cursor ? saved : null
+    const resume = saved && saved.file === job.file && saved.cursor === job.cursor ? saved : null
     let at = resume ? Math.max(tables.indexOf(resume.table), 0) : 0
     let after = resume && tables[at] === resume.table ? resume.after : -1
     const progress = (table: string, last: number): void =>

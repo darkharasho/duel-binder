@@ -466,7 +466,8 @@ async function bootstrap(): Promise<void> {
         emit: emitSync,
         launchedAt,
         // A first Magic pull is about two million rows: applied here, it froze the app.
-        applier: catalogApplier
+        applier: catalogApplier,
+        snapshotDir: join(userData, 'catalog-snapshot')
       })
 
   // Signed out, the fake profile still has a user and fake friends, so the Friends pages show.

@@ -59,6 +59,8 @@ import { TokenStore, electronCipher } from './cloud/tokenStore'
 import { createRollupRunner } from './rollupRunner'
 import { createRollupWarmer } from './rollupWarmer'
 import createRollupWorker from './rollupWorker?nodeWorker'
+import createCatalogApplyWorker from './catalogApplyWorker?nodeWorker'
+import { workerApplier } from './catalogApplier'
 import { LOCAL, scopeGame } from './repo/scope'
 
 // Launched from a desktop menu, stdout/stderr can be closed pipes; a console.log then emits EPIPE,
@@ -327,6 +329,10 @@ async function bootstrap(): Promise<void> {
     createRollupWorker({ workerData: { file: join(userData, 'collection.db') } })
   )
   app.on('will-quit', () => rollups.dispose())
+  const catalogApplier = workerApplier(() =>
+    createCatalogApplyWorker({ workerData: { file: join(userData, 'collection.db') } })
+  )
+  app.on('will-quit', () => catalogApplier.dispose())
   const portal = portalUrl(process.env, app.isPackaged)
   const tokens = new TokenStore(join(userData, 'account.json'), await electronCipher())
   const remoteIdOf = db.prepare('SELECT remote_id FROM card_printings WHERE id = ?').pluck()
@@ -458,7 +464,9 @@ async function bootstrap(): Promise<void> {
         backupPath: (now) =>
           join(userData, 'backups', `${localDate(now)}-pre-server-catalog.sqlite`),
         emit: emitSync,
-        launchedAt
+        launchedAt,
+        // A first Magic pull is about two million rows: applied here, it froze the app.
+        applier: catalogApplier
       })
 
   // Signed out, the fake profile still has a user and fake friends, so the Friends pages show.

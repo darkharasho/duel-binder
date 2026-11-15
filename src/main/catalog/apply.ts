@@ -98,6 +98,9 @@ export function applyChanges(db: SqlDb, changes: CatalogChange[]): ApplyResult {
       if (exists('SELECT 1 FROM collection_entries WHERE printing_id = ? LIMIT 1', local.id)) {
         prepared(db, 'UPDATE card_printings SET missing_from_api = 1 WHERE id = ?').run(local.id)
       } else {
+        // What ON DELETE CASCADE would drop, dropped by hand: a worker applies with foreign keys off.
+        for (const t of ['intl_prices', 'printing_art', 'price_requests'])
+          prepared(db, `DELETE FROM ${t} WHERE printing_id = ?`).run(local.id)
         prepared(db, 'DELETE FROM card_printings WHERE id = ?').run(local.id)
       }
       result.applied++

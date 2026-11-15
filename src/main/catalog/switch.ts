@@ -210,7 +210,7 @@ export async function runSwitch(raw: Database.Database, deps: SwitchDeps): Promi
  * A staged change's game. It rides in the staged JSON; a change staged before games has none and
  * is a Yu-Gi-Oh! one.
  */
-const STAGED_GAME = "COALESCE(json_extract(row, '$.game'), 'ygo')"
+export const STAGED_GAME = "COALESCE(json_extract(row, '$.game'), 'ygo')"
 
 /** Stages changes from `game`'s feed. */
 export function stageChanges(db: SqlDb, changes: CatalogChange[], game: GameId): void {

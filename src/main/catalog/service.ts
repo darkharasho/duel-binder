@@ -5,10 +5,12 @@ import { CloudAuthError, CloudOfflineError, type CloudClient } from '../cloud/cl
 import { syncedGames } from '../cloud/engine'
 import type { SyncStatus } from '../../shared/types'
 import { isGameId, type GameId } from '../../shared/games'
-import { catalogCursorKey, catalogStagingKey, finishApply } from './apply'
+import { inProcessApplier, type CatalogApplier } from '../catalogApplier'
+import { catalogCursorKey, catalogStagingKey } from './apply'
 import { backfillArtTwins } from './artTwinBackfill'
 import { backfillSetSeries } from './seriesBackfill'
-import { applyStaged, clearStaged, runSwitch, stageChanges, type SwitchFailure } from './switch'
+import { runSwitch, stageChanges, type SwitchFailure } from './switch'
+import { noteUnannounced, unannounced } from './unannounced'
 
 export interface CatalogUpdate {
   changed: boolean
@@ -28,19 +30,13 @@ export interface CatalogServiceDeps {
   now?: () => Date
   /** When this app launched: a switch failure that waits for the next launch counts from here. */
   launchedAt: Date
+  /** Applies pulled changes; by default on `db` itself (the app passes a worker's). */
+  applier?: CatalogApplier
 }
 
 /** An unforced update within this long of the last one does nothing. */
 const FRESH_MS = 60 * 60 * 1000
 const UNCHANGED: CatalogUpdate = { changed: false, imagesChanged: false }
-
-/** Committed catalog work not yet announced; stored as JSON in meta `catalog_unannounced`. */
-interface Unannounced {
-  cardsChanged: boolean
-  imagesChanged: boolean
-  /** `finishApply` (the search index rebuild) hasn't run for it yet. */
-  needsFinish: boolean
-}
 
 /**
  * The account's games whose catalogs this device keeps: Yu-Gi-Oh!, the game shown, and any game
@@ -52,9 +48,7 @@ export function catalogGames(db: SqlDb, account: readonly GameId[]): GameId[] {
   const shown = getMeta(db, 'active_game')
   return account.filter(
     (g) =>
-      g === 'ygo' ||
-      (isGameId(shown) && g === shown) ||
-      getMeta(db, catalogCursorKey(g)) !== null
+      g === 'ygo' || (isGameId(shown) && g === shown) || getMeta(db, catalogCursorKey(g)) !== null
   )
 }
 
@@ -67,6 +61,7 @@ export function catalogGames(db: SqlDb, account: readonly GameId[]): GameId[] {
 export function createCatalogService(deps: CatalogServiceDeps): CatalogService {
   const db: SqlDb = deps.db
   const now = deps.now ?? (() => new Date())
+  const applier = deps.applier ?? inProcessApplier(deps.db)
   let state: SyncStatus['state'] = 'idle'
   let error: string | null = null
   let inFlight: Promise<CatalogUpdate> | null = null
@@ -115,44 +110,9 @@ export function createCatalogService(deps: CatalogServiceDeps): CatalogService {
     return f !== null && f.retry === 'next-launch' && Date.parse(f.at) >= deps.launchedAt.getTime()
   }
 
-  /**
-   * Catalog work already committed but not yet reported by a successful update (and, with
-   * `needsFinish`, not yet followed by `finishApply`). Survives a failed update and a restart.
-   */
-  const unannounced = (): Unannounced | null => {
-    const raw = getMeta(db, 'catalog_unannounced')
-    if (raw === null) return null
-    try {
-      return JSON.parse(raw) as Unannounced
-    } catch {
-      return { cardsChanged: true, imagesChanged: true, needsFinish: true }
-    }
-  }
-
-  /** ORs `work` into the unannounced record; call it in the transaction that commits the work. */
-  const noteUnannounced = (work: Unannounced): void => {
-    const u = unannounced()
-    const merged: Unannounced = {
-      cardsChanged: work.cardsChanged || (u?.cardsChanged ?? false),
-      imagesChanged: work.imagesChanged || (u?.imagesChanged ?? false),
-      needsFinish: work.needsFinish || (u?.needsFinish ?? false)
-    }
-    setMeta(db, 'catalog_unannounced', JSON.stringify(merged))
-  }
-
-  /** Runs the `finishApply` committed work still waits for. */
-  const finishPending = (): void => {
-    const u = unannounced()
-    if (!u?.needsFinish) return
-    db.transaction(() => {
-      finishApply(db, { applied: 1, cardsChanged: u.cardsChanged, imagesChanged: u.imagesChanged })
-      setMeta(db, 'catalog_unannounced', JSON.stringify({ ...u, needsFinish: false }))
-    })()
-  }
-
   /** Reports and clears the unannounced work. */
   const announce = (): CatalogUpdate => {
-    const u = unannounced()
+    const u = unannounced(db)
     if (u === null) return UNCHANGED
     deleteMeta(db, 'catalog_unannounced')
     return { changed: true, imagesChanged: u.imagesChanged }
@@ -161,10 +121,9 @@ export function createCatalogService(deps: CatalogServiceDeps): CatalogService {
   /**
    * Downloads `game`'s change feed from its cursor (or, resuming, from its staging cursor) into
    * `catalog_staging`, each page committing with its staging cursor; then, once the feed has no
-   * more, applies everything staged for the game in seq order in one transaction that also advances
-   * its cursor and clears its staging. Applying page by page could fail a foreign key forever: a
-   * card changed after its new printings is listed at its later seq, on a later page. A game never
-   * pulled before starts from 0.
+   * more, has the applier apply everything staged for the game in seq order (on a worker, in short
+   * transactions) and advance its cursor. Nothing is applied before the feed is done, so a stopped
+   * pull leaves the catalog as it was. A game never pulled before starts from 0.
    */
   async function pullDeltas(client: CloudClient, game: GameId): Promise<void> {
     const cursorKey = catalogCursorKey(game)
@@ -183,27 +142,30 @@ export function createCatalogService(deps: CatalogServiceDeps): CatalogService {
         continue
       }
       const anyStaged = getMeta(db, stagingKey) !== null
-      if (page.changes.length > 0 || anyStaged) set('saving')
+      if (page.changes.length === 0 && !anyStaged) {
+        db.transaction(() => {
+          setMeta(db, cursorKey, String(page.cursor))
+          if (page.dbVersion !== null) setMeta(db, 'db_version', page.dbVersion)
+        })()
+        break
+      }
       db.transaction(() => {
         stageChanges(db, page.changes, game)
-        const r = applyStaged(db, game)
-        if (r.applied > 0)
-          noteUnannounced({
-            cardsChanged: r.cardsChanged,
-            imagesChanged: r.imagesChanged,
-            needsFinish: true
-          })
-        setMeta(db, cursorKey, String(page.cursor))
-        if (page.dbVersion !== null) setMeta(db, 'db_version', page.dbVersion)
-        clearStaged(db, game)
-        deleteMeta(db, stagingKey)
+        setMeta(db, stagingKey, String(page.cursor))
       })()
+      set('saving')
+      await applier.run({ kind: 'apply', game, cursor: page.cursor, dbVersion: page.dbVersion })
       break
     }
   }
 
+  /** Runs the search index rebuild committed work still waits for. */
+  const finishPending = async (): Promise<void> => {
+    if (unannounced(db)?.needsFinish) await applier.run({ kind: 'finish' })
+  }
+
   async function doUpdate(client: CloudClient, force: boolean): Promise<CatalogUpdate> {
-    finishPending()
+    await finishPending()
     if (!force && fresh()) return announce()
     set('checking')
     try {
@@ -222,7 +184,7 @@ export function createCatalogService(deps: CatalogServiceDeps): CatalogService {
           set('idle')
           return UNCHANGED
         }
-        noteUnannounced({ cardsChanged: true, imagesChanged: true, needsFinish: true })
+        noteUnannounced(db, { cardsChanged: true, imagesChanged: true, needsFinish: true })
       }
       try {
         // Yu-Gi-Oh! first, which every account has; then the account's other games this device uses.
@@ -240,7 +202,7 @@ export function createCatalogService(deps: CatalogServiceDeps): CatalogService {
         }
         setMeta(db, 'last_sync_at', now().toISOString())
       } finally {
-        finishPending()
+        await finishPending()
       }
       const result = announce()
       set('idle')

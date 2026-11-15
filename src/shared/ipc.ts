@@ -73,6 +73,7 @@ import type { DexRow } from './dex/parse'
 import type { CardLanguage } from './scan/language'
 import type { OcrKind, TextModel } from './scan/ocr'
 import type { GameId } from './games'
+import type { Prefs } from './prefs'
 import type { BinderDraft, BinderEditAction, BinderTarget, RuleField } from './binders'
 
 /** The API exposed to the renderer as `window.api`. */
@@ -144,6 +145,11 @@ export interface Api {
     /** Whether friends can see this account's wishlist. */
     wishlistVisible(): Promise<boolean>
     setWishlistVisible(visible: boolean): Promise<void>
+  }
+  /** Synced account preferences (shared/prefs.ts); `set` merges a patch and answers the merged value. */
+  prefs: {
+    get(): Promise<Prefs>
+    set(patch: Partial<Prefs>): Promise<Prefs>
   }
   /** The cards this account wants, in the game shown. Local first, like the collection. */
   wishlist: {
@@ -487,6 +493,8 @@ export const INVOKE_CHANNELS = [
   'friends:owning',
   'friends:wishlistVisible',
   'friends:setWishlistVisible',
+  'prefs:get',
+  'prefs:set',
   'wishlist:list',
   'wishlist:forCard',
   'wishlist:set',

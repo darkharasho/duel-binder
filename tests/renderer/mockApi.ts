@@ -2,6 +2,7 @@ import { vi } from 'vitest'
 import { render } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { Api } from '@shared/ipc'
+import { DEFAULT_PREFS } from '@shared/prefs'
 import { createElement, type ReactElement, type ReactNode } from 'react'
 import { TooltipProvider } from '@/components/ui/tooltip'
 
@@ -123,6 +124,10 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
       owning: vi.fn(async () => []),
       wishlistVisible: vi.fn(async () => true),
       setWishlistVisible: vi.fn(async () => undefined)
+    },
+    prefs: {
+      get: vi.fn(async () => DEFAULT_PREFS),
+      set: vi.fn(async (p) => ({ ...DEFAULT_PREFS, ...p }))
     },
     wishlist: {
       list: vi.fn(async () => []),

@@ -15,6 +15,7 @@ export const queryKeys = {
   entries: (f: CollectionFilters) => ['entries', f] as const,
   facets: ['facets'] as const,
   stats: ['stats'] as const,
+  prefs: ['prefs'] as const,
   sync: ['sync'] as const,
   setsList: ['sets', 'list'] as const,
   /**

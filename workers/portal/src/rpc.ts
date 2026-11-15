@@ -1,5 +1,5 @@
 import type { Api, InvokeChannel } from '../../../src/shared/ipc'
-import type { AccountLinkChannel, PortalChannel, PrefsChannel } from '../../../src/shared/portal'
+import type { AccountLinkChannel, PortalChannel } from '../../../src/shared/portal'
 import type { BrowseFilters, CollectionFilters } from '../../../src/shared/types'
 import type { Scope } from '../../../src/main/repo/scope'
 import { settleRollups } from './rollups'
@@ -168,8 +168,8 @@ function friendId(db: AppDeps['db'], me: number, id: unknown): number {
 type WorkerHandler = (deps: RpcDeps, scope: Scope, ...args: unknown[]) => unknown
 
 // Arguments come off the wire untyped: every handler checks its own before use.
-const HANDLERS: { [C in Exclude<PortalChannel, AccountLinkChannel | PrefsChannel>]: Handler<C> } & {
-  [C in AccountLinkChannel | PrefsChannel]: WorkerHandler
+const HANDLERS: { [C in Exclude<PortalChannel, AccountLinkChannel>]: Handler<C> } & {
+  [C in AccountLinkChannel]: WorkerHandler
 } = {
   'cards:search': ({ db }, scope, q) => searchCards(db, checkString(q, 'q'), undefined, scope),
   'cards:get': ({ db }, scope, cardId) => getCardDetail(db, checkId(cardId, 'cardId'), scope),

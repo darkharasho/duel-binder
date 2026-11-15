@@ -93,17 +93,7 @@ function unseenTwins(
   cardIds: number[],
   scope: Scope
 ): { key: string; code: string; twinId: number }[] {
-  // CROSS JOIN keeps this order: the few cards asked for first, then the cards with no artwork.
-  const rows = db
-    .prepare(
-      `SELECT pc.card_id AS cardId, c.name AS name, pc.local_name AS localName,
-         pc.illustrator AS illustrator, t.card_id AS twinId, tc.name AS twinName, t.local_name AS twinLocal
-       FROM pokemon_cards pc CROSS JOIN cards c CROSS JOIN pokemon_cards t CROSS JOIN cards tc
-       WHERE pc.card_id IN (${cardIds.map(() => '?').join(',')}) AND c.id = pc.card_id
-         AND (t.image_url IS NULL OR t.image_url LIKE 'https://tcgplayer-cdn.%')
-         AND t.card_id <> pc.card_id AND t.illustrator IS pc.illustrator AND tc.id = t.card_id`
-    )
-    .all(...cardIds) as {
+  type Row = {
     cardId: number
     name: string
     localName: string | null
@@ -111,7 +101,43 @@ function unseenTwins(
     twinId: number
     twinName: string
     twinLocal: string | null
-  }[]
+  }
+  const marks = cardIds.map(() => '?').join(',')
+  const columns = `pc.card_id AS cardId, c.name AS name, pc.local_name AS localName,
+    pc.illustrator AS illustrator, t.card_id AS twinId, tc.name AS twinName, t.local_name AS twinLocal`
+  const artless = `(t.image_url IS NULL OR t.image_url LIKE 'https://tcgplayer-cdn.%') AND t.card_id <> pc.card_id`
+  // CROSS JOIN keeps these orders: the few cards asked for first, then their twins by index. A card
+  // with an illustrator finds its twins by it. One with none (every Chinese card) by its name or
+  // local name, as the name check below compares them: by illustrator alone, it would read every
+  // other artless card with none, ~15,000, at ~40 ms a card.
+  const rows = [
+    ...(db
+      .prepare(
+        `SELECT ${columns}
+         FROM pokemon_cards pc CROSS JOIN cards c CROSS JOIN pokemon_cards t CROSS JOIN cards tc
+         WHERE pc.card_id IN (${marks}) AND pc.illustrator IS NOT NULL AND c.id = pc.card_id
+           AND t.illustrator = pc.illustrator AND ${artless} AND tc.id = t.card_id`
+      )
+      .all(...cardIds) as Row[]),
+    ...(db
+      .prepare(
+        `SELECT ${columns}
+         FROM pokemon_cards pc CROSS JOIN cards c CROSS JOIN cards tc CROSS JOIN pokemon_cards t
+         WHERE pc.card_id IN (${marks}) AND pc.illustrator IS NULL AND c.id = pc.card_id
+           AND tc.name COLLATE NOCASE IN (c.name, COALESCE(pc.local_name, c.name))
+           AND t.card_id = tc.id AND t.illustrator IS NULL AND ${artless}`
+      )
+      .all(...cardIds) as Row[]),
+    ...(db
+      .prepare(
+        `SELECT ${columns}
+         FROM pokemon_cards pc CROSS JOIN cards c CROSS JOIN pokemon_cards t CROSS JOIN cards tc
+         WHERE pc.card_id IN (${marks}) AND pc.illustrator IS NULL AND c.id = pc.card_id
+           AND t.local_name = COALESCE(pc.local_name, c.name) COLLATE NOCASE
+           AND t.illustrator IS NULL AND ${artless} AND tc.id = t.card_id`
+      )
+      .all(...cardIds) as Row[])
+  ].filter((r, i, all) => all.findIndex((o) => o.cardId === r.cardId && o.twinId === r.twinId) === i)
   const named = rows.filter(
     (r) =>
       nameKey(r.name) === nameKey(r.twinName) ||

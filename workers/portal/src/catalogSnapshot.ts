@@ -35,7 +35,7 @@ interface SnapshotUpload {
 
 /** How long a signed download URL works. */
 const URL_TTL_S = 3600
-/** Files of a shape the manifest no longer names are kept this long, for downloads under way. */
+/** Files of a shape the manifest no longer names are kept this long after, for downloads under way. */
 const KEEP_OLD_MS = 7 * 86_400_000
 const KEY_RE = /^catalog-snapshots\/[a-z]+\/[0-9a-f]{8}\/\d+\.sqlite\.gz$/
 const FILE_PREFIX = '/api/catalog/snapshot-file/'
@@ -115,7 +115,12 @@ async function serveFile(
 ): Promise<Response> {
   if (req.method !== 'GET') return json({ error: 'method-not-allowed' }, 405)
   const url = new URL(req.url)
-  const key = decodeURIComponent(url.pathname.slice(FILE_PREFIX.length))
+  let key: string
+  try {
+    key = decodeURIComponent(url.pathname.slice(FILE_PREFIX.length))
+  } catch {
+    return json({ error: 'forbidden' }, 403)
+  }
   if (!KEY_RE.test(key) || !(await signatureValid(key, url.searchParams, adminToken, now)))
     return json({ error: 'forbidden' }, 403)
   const head = await bucket.head(key)
@@ -156,22 +161,40 @@ const isManifest = (m: unknown): m is SnapshotManifest => {
     typeof o.sha256 === 'string' &&
     /^[0-9a-f]{64}$/.test(o.sha256) &&
     typeof o.builtAt === 'string' &&
+    (o.builder === undefined ||
+      (typeof o.builder === 'string' && /^[0-9a-f]{12}$/.test(o.builder))) &&
     (o.dbVersion === null || typeof o.dbVersion === 'string') &&
     o.key === snapshotFileKey(o.game, o.shape, o.cursor!)
   )
 }
 
-/** Deletes this shape's files the manifest doesn't name, once they're a week old. */
+/**
+ * Deletes this shape's files the manifest doesn't name, a week after it stopped naming them (for
+ * downloads under way). When each was retired is kept in the shape's `retired.json`; a file it
+ * doesn't list is retired now.
+ */
 async function prune(bucket: SnapshotBucket, m: SnapshotManifest, now: number): Promise<void> {
   const prefix = snapshotManifestKey(m.game, m.shape).replace(/manifest\.json$/, '')
+  const retiredKey = `${prefix}retired.json`
+  const saved = await bucket.get(retiredKey)
+  const was = saved
+    ? ((await new Response(saved.body).json().catch(() => ({}))) as Record<string, unknown>)
+    : {}
+  const retired: Record<string, number> = {}
   let cursor: string | undefined
   do {
     const page = await bucket.list({ prefix, cursor })
-    for (const o of page.objects)
-      if (o.key !== m.key && KEY_RE.test(o.key) && now - o.uploaded.getTime() > KEEP_OLD_MS)
-        await bucket.delete(o.key)
+    for (const o of page.objects) {
+      if (o.key === m.key || !KEY_RE.test(o.key)) continue
+      const at = typeof was[o.key] === 'number' ? (was[o.key] as number) : now
+      if (now - at > KEEP_OLD_MS) await bucket.delete(o.key)
+      else retired[o.key] = at
+    }
     cursor = page.truncated ? page.cursor : undefined
   } while (cursor)
+  await bucket.put(retiredKey, JSON.stringify(retired), {
+    httpMetadata: { contentType: 'application/json' }
+  })
 }
 
 async function admin(

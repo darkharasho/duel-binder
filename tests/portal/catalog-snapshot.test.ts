@@ -241,27 +241,42 @@ describe('snapshot files (Worker entry)', () => {
     expect(res.status).toBe(400)
   })
 
-  it('publishing prunes files older than 7 days that the manifest does not name', async () => {
+  it('publishing prunes files a week after the manifest stopped naming them', async () => {
     const b = snapBucket()
     const old = snapshotFileKey('mtg', shape, 100)
-    const recent = snapshotFileKey('mtg', shape, 500)
     const otherShape = snapshotFileKey('mtg', 'ffffffff', 50)
-    b.store.set(old, { bytes: BYTES, uploaded: new Date(NOW.getTime() - 8 * DAY) })
-    b.store.set(recent, { bytes: BYTES, uploaded: new Date(NOW.getTime() - DAY) })
+    // Uploaded long ago, but named by the manifest until this publish: downloads may be under way.
+    b.store.set(old, { bytes: BYTES, uploaded: new Date(NOW.getTime() - 30 * DAY) })
     b.store.set(otherShape, { bytes: BYTES, uploaded: new Date(NOW.getTime() - 30 * DAY) })
     b.store.set(fileKey, { bytes: BYTES, uploaded: new Date(NOW.getTime() - 9 * DAY) })
-    const pub = (await route(b, '/api/admin/catalog-snapshot/manifest', {
-      method: 'PUT',
-      body: JSON.stringify(manifest())
-    }))!
-    expect(pub.status).toBe(200)
+    const publish = async (at: number): Promise<void> => {
+      const r = (await route(
+        b,
+        '/api/admin/catalog-snapshot/manifest',
+        { method: 'PUT', body: JSON.stringify(manifest()) },
+        ADMIN,
+        at
+      ))!
+      expect(r.status).toBe(200)
+    }
+    await publish(NOW.getTime())
+    expect(b.store.has(old)).toBe(true)
+    await publish(NOW.getTime() + 6 * DAY)
+    expect(b.store.has(old)).toBe(true)
+    await publish(NOW.getTime() + 8 * DAY)
     expect(b.store.has(old)).toBe(false)
-    expect(b.store.has(recent)).toBe(true)
     expect(b.store.has(fileKey)).toBe(true)
     // Another shape's files serve apps that haven't updated; this shape's publish leaves them be.
     expect(b.store.has(otherShape)).toBe(true)
   })
+
+  it('a malformed path escape is refused, not an error', async () => {
+    const r = (await route(b0(), '/api/catalog/snapshot-file/%E0%A4%A?exp=1&sig=x', {}, null))!
+    expect(r.status).toBe(403)
+  })
 })
+
+const b0 = (): SnapshotBucket => snapBucket()
 
 describe('GET /api/catalog/snapshot/<game> and the admin feed reader', () => {
   let db: Database.Database

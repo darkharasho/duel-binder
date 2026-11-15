@@ -19,6 +19,8 @@ export interface PullGameDeps {
   set: (state: SyncStatus['state']) => void
   /** Where snapshots download to; without one, a first pull reads the whole feed. */
   snapshotDir?: string
+  /** The pause before a snapshot download's second try (doubled before its third). */
+  snapshotRetryDelayMs?: number
 }
 
 /** A game never pulled here, with nothing staged and no cards: a snapshot may fill it. */
@@ -59,7 +61,9 @@ async function fromSnapshot(deps: PullGameDeps): Promise<void> {
     deps.set('downloading')
     const offer = await client.catalogSnapshot(game, catalogShape())
     if (!offer) return
-    file = await downloadSnapshot(client, offer, deps.snapshotDir)
+    file = await downloadSnapshot(client, offer, deps.snapshotDir, {
+      retryDelayMs: deps.snapshotRetryDelayMs
+    })
     // Another update may have pulled the game while this one downloaded.
     if (!firstPull(db, game)) return
     deps.set('saving')

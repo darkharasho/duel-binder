@@ -99,9 +99,25 @@ const pull = (client: CloudClient, snapshotDir: string | null = dir): Promise<vo
     game: 'mtg',
     applier: inProcessApplier(db),
     set: (s) => states.push(s),
-    snapshotDir: snapshotDir ?? undefined
+    snapshotDir: snapshotDir ?? undefined,
+    snapshotRetryDelayMs: 0
   })
 }
+
+/** A 200/206 whose body stops with an error after `n` bytes. */
+const cutOff = (bytes: Uint8Array, n: number, status: number): Response =>
+  new Response(
+    new ReadableStream({
+      start(c) {
+        c.enqueue(bytes.subarray(0, n))
+      },
+      async pull(c) {
+        await new Promise((r) => setTimeout(r, 20))
+        c.error(new Error('connection reset'))
+      }
+    }),
+    { status }
+  )
 
 const mtgCards = (): number =>
   (db.prepare("SELECT count(*) AS n FROM cards WHERE game = 'mtg'").get() as { n: number }).n
@@ -136,6 +152,35 @@ describe('pullGame with a snapshot', () => {
     expect(getMeta(db, 'catalog_cursor:mtg')).toBe('1')
     expect(readdirSync(dir)).toEqual([])
     expect(warn).toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
+  it('retries a cut-off download from where it stopped', async () => {
+    const ranges: (string | null)[] = []
+    let calls = 0
+    const client = fakeClient({
+      download: vi.fn(async (_url: string, init?: { headers?: Record<string, string> }) => {
+        const range = init?.headers?.range ?? null
+        ranges.push(range)
+        const from = range ? Number(/bytes=(\d+)-/.exec(range)![1]) : 0
+        const rest = new Uint8Array(gz.subarray(from))
+        return calls++ === 0 ? cutOff(rest, 100, 200) : new Response(rest, { status: 206 })
+      }) as never
+    })
+    await pull(client)
+    expect(ranges).toEqual([null, 'bytes=100-'])
+    expect(client.feedSince).toEqual([CURSOR])
+    expect(readdirSync(dir)).toEqual([])
+  })
+
+  it('falls back to the feed after three failed downloads, leaving no partial file', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const download = vi.fn(async () => cutOff(new Uint8Array(gz), 50, 200))
+    const client = fakeClient({ download: download as never })
+    await pull(client)
+    expect(download).toHaveBeenCalledTimes(3)
+    expect(client.feedSince).toEqual([0])
+    expect(readdirSync(dir)).toEqual([])
     warn.mockRestore()
   })
 

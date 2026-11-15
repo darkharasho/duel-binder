@@ -715,6 +715,22 @@ describe('image cache last use and downloads', () => {
     expect(onDownloaded).toHaveBeenCalledWith(5)
   })
 
+  it('a download the trim removes right after saving still counts as downloaded', async () => {
+    const onDownloaded = vi.fn()
+    const rename = fs.rename
+    const spy = vi.spyOn(fs, 'rename').mockImplementation(async (from, to) => {
+      await rename(from, to)
+      await fs.rm(to, { force: true })
+    })
+    try {
+      const cache = createImageCache({ sources: direct(), dir, fetchFn: (async () => okResponse('12345')) as unknown as typeof fetch, limit: noLimit, onDownloaded })
+      expect(await cache.get('full', 10)).not.toBeNull()
+      expect(onDownloaded).toHaveBeenCalledWith(5)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
   it('lists downloads under way by their cache path', async () => {
     let finish: (r: Response) => void = () => {}
     const fetchFn = vi.fn(() => new Promise<Response>((r) => (finish = r)))

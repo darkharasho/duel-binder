@@ -12,6 +12,7 @@
  *
  * A game that fails is logged and the next one tried; exits 1 if any failed.
  */
+import { createHash } from 'node:crypto'
 import { createReadStream, createWriteStream, rmSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
@@ -28,6 +29,30 @@ import { getMeta } from '../../src/main/db/meta'
 import { catalogShape, SNAPSHOT_GAMES } from '../../src/shared/catalogSnapshot'
 import type { GameId } from '../../src/shared/games'
 import { uploadSnapshot } from './snapshotUpload'
+
+/**
+ * A hash of the code that writes and reads a snapshot, kept in each manifest: when it changes, a
+ * game is exported again even though its feed hasn't moved.
+ */
+const builderSources = import.meta.glob(
+  ['../../src/main/catalog/snapshot.ts', '../../src/shared/catalogSnapshot.ts'],
+  { query: '?raw', import: 'default', eager: true }
+) as Record<string, string>
+export const SNAPSHOT_BUILDER = createHash('sha256')
+  .update(
+    Object.keys(builderSources)
+      .sort()
+      .map((k) => builderSources[k])
+      .join('\n')
+  )
+  .digest('hex')
+  .slice(0, 12)
+
+/** Whether the published snapshot is current to `cursor` and was made by this export code. */
+export const snapshotUpToDate = (
+  before: { cursor: number; builder?: string } | null,
+  cursor: number
+): boolean => !!before && before.cursor === cursor && before.builder === SNAPSHOT_BUILDER
 
 const rmDb = (file: string): void => {
   for (const f of [file, `${file}-wal`, `${file}-shm`]) rmSync(f, { force: true })
@@ -58,7 +83,7 @@ async function buildGame(
       snapshotDir: join(dir, 'snap-dl')
     })
     const cursor = Number(getMeta(db, catalogCursorKey(game)))
-    if (before && before.cursor === cursor) {
+    if (snapshotUpToDate(before, cursor)) {
       log(`${game}: unchanged at ${cursor}, nothing to upload`)
       return
     }
@@ -75,6 +100,7 @@ async function buildGame(
         shape,
         cursor,
         dbVersion: getMeta(db, 'db_version'),
+        builder: SNAPSHOT_BUILDER,
         builtAt: new Date().toISOString()
       }
     })

@@ -54,6 +54,8 @@ export interface SnapshotManifest {
   bytes: number
   sha256: string
   builtAt: string
+  /** A hash of the export code that built it (absent on the first snapshots). */
+  builder?: string
   /** The file's R2 key. */
   key: string
 }

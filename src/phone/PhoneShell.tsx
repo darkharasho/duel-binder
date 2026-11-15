@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   BookOpenIcon,
@@ -15,7 +15,7 @@ import {
   type LucideIcon
 } from 'lucide-react'
 import { ArtWash } from '@/components/ArtWash'
-import { ArtWashContext, type WashState } from '@/components/artWashContext'
+import { ArtWashContext, createWashStore, type WashStore } from '@/components/artWashContext'
 import type { Page } from '@/components/AppShell'
 import { MainScrollContext, type MainScroll } from '@/components/mainScroll'
 import { PageSwitch, PagesAddCard, usePages } from '@/components/pageSwitch'
@@ -160,7 +160,8 @@ function Shell({ engineFactory }: { engineFactory?: EngineFactory }): React.JSX.
     }),
     []
   )
-  const [wash, setWash] = useState<WashState | null>(null)
+  // Held outside the shell's state: a page's wash pick re-renders only the wash, not the page.
+  const [washStore] = useState(createWashStore)
   // Each page opens at its top.
   useLayoutEffect(() => {
     scroll.set(0)
@@ -198,19 +199,21 @@ function Shell({ engineFactory }: { engineFactory?: EngineFactory }): React.JSX.
       data-phone-shell
       className="fixed inset-0 isolate flex flex-col overflow-hidden bg-background text-foreground tabular-nums"
     >
-      <ArtWash wash={wash} enabled={!scan} />
+      <ShellWash store={washStore} enabled={!scan} />
       <main
         ref={mainRef}
         data-main-scroll
         className={cn(
           'min-h-0 flex-1',
-          // The scanner is full screen and pads for the notch itself.
+          // The scanner is full screen and pads for the notch itself. Elsewhere the scroll box
+          // starts below the status bar, which the iOS app draws over the page: cards scrolling up
+          // stop at its edge, and the wash (fixed to the whole window) shows behind the clock.
           scan
             ? 'overflow-hidden'
-            : 'overflow-auto overscroll-contain pt-[env(safe-area-inset-top)]'
+            : 'mt-[env(safe-area-inset-top)] overflow-auto overscroll-contain'
         )}
       >
-        <ArtWashContext.Provider value={setWash}>
+        <ArtWashContext.Provider value={washStore.set}>
           <MainScrollContext.Provider value={scroll}>
             <PageSwitch
               pages={pages}
@@ -235,15 +238,6 @@ function Shell({ engineFactory }: { engineFactory?: EngineFactory }): React.JSX.
             engineFactory={engineFactory}
           />
         </div>
-      )}
-
-      {/* Behind the status bar, which the iOS app draws over the page: solid, so the cards
-          scrolling up under the clock don't show through. */}
-      {!scan && (
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-0 z-30 h-[env(safe-area-inset-top)] bg-background"
-        />
       )}
 
       {/* The Android APK's newer version, when there is one. */}
@@ -344,6 +338,12 @@ function Shell({ engineFactory }: { engineFactory?: EngineFactory }): React.JSX.
   )
 }
 
+/** The art wash, reading the store the pages set. */
+function ShellWash({ store, enabled }: { store: WashStore; enabled: boolean }): React.JSX.Element {
+  const wash = useSyncExternalStore(store.subscribe, store.get)
+  return <ArtWash wash={wash} enabled={enabled} />
+}
+
 function TabButton({
   label,
   icon: Icon,
@@ -370,7 +370,9 @@ function TabButton({
     >
       <Icon aria-hidden className="size-6" />
       {label}
-      {current && <span aria-hidden className="absolute bottom-0.5 h-1 w-5 rounded-full bg-foreground" />}
+      {current && (
+        <span aria-hidden className="absolute bottom-0.5 h-1 w-5 rounded-full bg-foreground" />
+      )}
       {badge > 0 && (
         <span
           aria-hidden

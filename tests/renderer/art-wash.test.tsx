@@ -5,6 +5,7 @@ import { ArtWash } from '@/components/ArtWash'
 import type { WashState } from '@/components/artWashContext'
 import { resetWashStoreForTests } from '@/lib/washPref'
 import { gameFallback } from '@/lib/wash/sample'
+import { createMockApi } from './mockApi'
 
 vi.mock('@/lib/friends', () => ({ useFriendsReady: () => false }))
 
@@ -63,6 +64,44 @@ describe('ArtWash', () => {
   it('scales the visible layer by strength', () => {
     render(<ArtWash wash={state(0.5)} />)
     expect(screen.getByTestId('wash-a').style.opacity).toBe('0.5')
+  })
+
+  it('sets the --wash variables for the pinned header on desktop', () => {
+    render(<ArtWash wash={state()} />)
+    expect(document.documentElement.style.getPropertyValue('--wash-pools')).not.toBe('')
+    expect(screen.getByTestId('wash-grain').style.mixBlendMode).toBe('overlay')
+  })
+
+  describe('on the phone', () => {
+    const saved = window.api
+    beforeEach(() => {
+      window.api = createMockApi({ window: { platform: 'phone' } })
+    })
+    afterEach(() => {
+      window.api = saved
+    })
+
+    it('is fixed still layers, with pool layers kept for the cross-fade', () => {
+      render(<ArtWash wash={state()} />)
+      const wash = screen.getByTestId('art-wash')
+      expect(wash.className).toContain('fixed')
+      expect(wash.style.transform).toBe('translateZ(0)')
+      expect(screen.getByTestId('wash-a').style.willChange).toBe('opacity')
+      expect(screen.getByTestId('wash-b').style.willChange).toBe('opacity')
+    })
+
+    it('draws the grain without a blend mode', () => {
+      render(<ArtWash wash={state()} />)
+      const grain = screen.getByTestId('wash-grain')
+      expect(grain.style.mixBlendMode).toBe('')
+      expect(grain.style.transform).toBe('translateZ(0)')
+    })
+
+    it('leaves the root variables alone, which only the desktop reads', () => {
+      render(<ArtWash wash={state()} />)
+      expect(document.documentElement.style.getPropertyValue('--wash-pools')).toBe('')
+      expect(document.documentElement.style.getPropertyValue('--wash-base')).toBe('')
+    })
   })
 
   it('colourless ignores the page wash', () => {

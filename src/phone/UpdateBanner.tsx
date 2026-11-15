@@ -35,7 +35,7 @@ export function UpdateBanner({
 
   if (!enabled || !update) return null
   return (
-    <div className="relative z-30 flex shrink-0 items-center gap-2 border-t border-white/[0.06] bg-background/90 px-4 py-2 text-sm backdrop-blur-xl">
+    <div className="relative z-30 flex shrink-0 items-center gap-2 px-4 py-2 text-sm">
       <a
         href={update.url}
         target="_blank"

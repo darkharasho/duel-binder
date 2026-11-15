@@ -92,7 +92,7 @@ describe('SetChecklist', () => {
     expect(tiles[0]).toHaveAttribute('data-owned', 'true')
     expect(within(tiles[0]).getByText('×2')).toBeInTheDocument()
     expect(tiles[1]).toHaveAttribute('data-owned', 'false')
-    expect(tiles[1]).toHaveClass('grayscale', 'opacity-40')
+    expect(tiles[1]).toHaveClass('grayscale', 'brightness-[.4]')
   })
 
   it('Missing filter hides owned cards', async () => {

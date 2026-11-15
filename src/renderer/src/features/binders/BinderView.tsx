@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { PencilIcon } from 'lucide-react'
 import type { BinderCard, BinderDetail } from '@shared/types'
 import { normalizeRules, type BinderRule } from '@shared/binders'
+import { useArtWash } from '@/components/artWashContext'
 import { CardSheet } from '@/components/CardSheet'
 import { PageHeader } from '@/components/PageHeader'
 import { binderScanFor } from '@/components/scanFor'
@@ -49,7 +50,7 @@ function Chip({
   children: React.ReactNode
 }): React.JSX.Element {
   return (
-    <span className="rounded-full bg-white/[0.06] px-3 py-1 text-xs">
+    <span className="rounded-full bg-popover px-3 py-1 text-xs">
       <span className="text-muted-foreground">{label}</span> {children}
     </span>
   )
@@ -118,6 +119,15 @@ export function BinderView({
       ),
     [sorted, view]
   )
+  // Slots with no art (imageId 0) can't wash the page.
+  const washCards = useMemo(
+    () =>
+      detail.cards.flatMap((c) =>
+        c.imageId > 0 ? [{ imageId: c.imageId, frameType: c.card.frameType }] : []
+      ),
+    [detail.cards]
+  )
+  useArtWash(washCards)
   const summary = [
     hasGoal && progress.total === 0
       ? 'Nothing to track yet'
@@ -154,7 +164,7 @@ export function BinderView({
 
   // The first of two lines above the binder: name and rules; progress and the Show tabs follow.
   const nameLine = (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+    <div data-pin className="flex flex-wrap items-center gap-x-4 gap-y-2">
       {back}
       <h2 className="min-w-0 max-w-[40%] shrink-0 truncate text-xl font-semibold max-md:max-w-[75%]">
         {detail.name}

@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
 import { PageHeader } from '@/components/PageHeader'
+import { PAGE_TITLE } from '@/components/pageHeaderContext'
 import { Button } from '@/components/ui/button'
 import { UnderlineTabs } from '@/components/UnderlineTabs'
 import { api } from '@/lib/api'
@@ -100,13 +101,11 @@ export function AdminPage({
     <div className="space-y-5 p-8 max-md:p-4">
       <PageHeader>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <h1 className="text-xl font-semibold">Admin</h1>
+          <h1 className={PAGE_TITLE}>Admin</h1>
           <Pulse view={runs.data} />
           <span className="flex-1" />
           {needsStats && stats.data && (
-            <span className="text-xs text-muted-foreground">
-              Updated {new Date(stats.data.at).toLocaleString()}
-            </span>
+            <span className="text-xs">Updated {new Date(stats.data.at).toLocaleString()}</span>
           )}
           <Button variant="outline" size="sm" disabled={fetching} onClick={refresh}>
             Refresh

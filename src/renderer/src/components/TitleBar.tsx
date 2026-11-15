@@ -65,7 +65,11 @@ export function TitleBar(): React.JSX.Element {
       )}
     >
       <div className="flex-1" />
-      {platform === 'linux' && <LinuxControls />}
+      {platform === 'linux' && (
+        <div className="relative">
+          <LinuxControls />
+        </div>
+      )}
     </div>
   )
 }

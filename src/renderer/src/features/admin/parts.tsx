@@ -22,7 +22,7 @@ export function Panel({
   children: React.ReactNode
 }): React.JSX.Element {
   return (
-    <section className={cn('rounded-lg border border-white/[0.06] bg-white/[0.02] p-4', className)}>
+    <section className={className}>
       <h2 className="mb-3 text-sm font-semibold">{title}</h2>
       {children}
     </section>
@@ -44,7 +44,7 @@ export function Tile({
   up?: string
 }): React.JSX.Element {
   return (
-    <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-4 py-3">
+    <div>
       <p className="text-3xl font-semibold tracking-tight">{value}</p>
       <p className="text-[13px] text-muted-foreground">{label}</p>
       {up && <p className="text-xs text-emerald-400">{up}</p>}
@@ -61,7 +61,7 @@ export function Rows({ rows }: { rows: [string, string][] }): React.JSX.Element 
           key={k}
           className="flex justify-between gap-4 border-t border-white/[0.06] py-1.5 first:border-t-0"
         >
-          <dt className="text-foreground/75">{k}</dt>
+          <dt className="text-foreground">{k}</dt>
           <dd className="font-mono text-xs leading-5">{v}</dd>
         </div>
       ))}

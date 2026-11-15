@@ -1,59 +1,170 @@
-import { useLayoutEffect, useRef } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { useGame } from '@/lib/game'
 import { isPhone } from '@/lib/platform'
 import { cn } from '@/lib/utils'
 import { GameChip } from './GameSwitch'
+import { PAGE_TITLE, PinnedContext } from './pageHeaderContext'
+
+/** Gap between the top of the page and the pinned row, in px. */
+const PIN_GAP = 12
 
 /**
- * A page's title bar, pinned to the top of the scrolling main area. Sits first in a `p-8` page
- * (`max-md:p-4` under 768 px). On the phone it scrolls away under the shell's sticky status line,
- * and carries the game chip at its right when the account has more than one game.
+ * Desktop only: once the title scrolls away, keeps the header's `[data-pin]` row (the search and
+ * Filters bar, or a binder's Back line) at the top of the page. The whole header is sticky with a
+ * negative top, so everything above the pin row scrolls off and the row stays. Returns the sticky
+ * top (null when there is nothing to pin) and whether the row is currently held.
+ */
+function usePin(
+  ref: React.RefObject<HTMLDivElement | null>,
+  on: boolean
+): {
+  top: number | null
+  pinned: boolean
+} {
+  const [top, setTop] = useState<number | null>(null)
+  const [pinned, setPinned] = useState(false)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!on || !el) return
+    const pin = (): HTMLElement | null => el.querySelector<HTMLElement>('[data-pin]')
+    const measure = (): void => {
+      const row = pin()
+      setTop(
+        row ? PIN_GAP - (row.getBoundingClientRect().top - el.getBoundingClientRect().top) : null
+      )
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    const scroller = el.closest('[data-main-scroll]')
+    const onScroll = (): void => {
+      const row = pin()
+      // A page kept mounted but hidden (the Sets list under an open set) has no boxes: never held.
+      if (!row || !scroller || row.getClientRects().length === 0) return setPinned(false)
+      const scrollerTop = scroller.getBoundingClientRect().top
+      const fromTop = row.getBoundingClientRect().top - scrollerTop
+      const held = scroller.scrollTop > 0 && fromTop <= PIN_GAP + 0.5
+      setPinned(held)
+    }
+    onScroll()
+    scroller?.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      ro.disconnect()
+      scroller?.removeEventListener('scroll', onScroll)
+    }
+  }, [ref, on])
+  const held = on && top !== null && pinned
+  return { top: on ? top : null, pinned: held }
+}
+
+export interface PageStat {
+  label: string
+  value: React.ReactNode
+}
+
+/**
+ * A page's header, first in a `p-8` page (`max-md:p-4` under 768 px). It has no box: the page's art
+ * wash shows through. On desktop the title scrolls away but a child marked `data-pin` (the
+ * FilterBar marks itself) stays pinned at the top; while held, a copy of the wash (fixed to the
+ * window, see `.pin-fade` in index.css) sits behind it so cards scrolling under stay out of the way.
+ * On the phone it all scrolls away. `title` is the big condensed heading (96 px, 56 px under
+ * 1100 px); `stats` sit right-aligned beside it, a mono value over a mono label. Pages that draw
+ * their own heading pass it as children. On the phone it carries the game chip at its right when the
+ * account has more than one game.
  */
 export function PageHeader({
   className,
+  title,
+  stats,
   children
 }: {
   className?: string
-  children: React.ReactNode
+  title?: string
+  stats?: PageStat[]
+  children?: React.ReactNode
 }): React.JSX.Element {
-  const ref = useRef<HTMLDivElement>(null)
   const { available } = useGame()
   const chip = isPhone() && available.length > 1
-  // Tells the main scroll area how tall the header is, so its scrollbar gutter can match the glass.
-  useLayoutEffect(() => {
-    const el = ref.current
-    const main = el?.closest<HTMLElement>('main[data-main-scroll]')
-    if (!el || !main) return
-    const update = (): void => {
-      // Sets keeps its list's header mounted, hidden, under an open set: that one measures nothing.
-      if (el.offsetHeight > 0) main.style.setProperty('--page-header-h', `${el.offsetHeight}px`)
-    }
-    update()
-    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update)
-    observer?.observe(el)
-    return () => {
-      observer?.disconnect()
-      main.style.removeProperty('--page-header-h')
-    }
-  }, [])
+  const phone = isPhone()
+  const ref = useRef<HTMLDivElement>(null)
+  const { top, pinned } = usePin(ref, !phone)
+  const heading =
+    title || stats?.length ? (
+      <div
+        className={cn(
+          phone
+            ? 'flex flex-col items-start gap-y-3'
+            : 'flex flex-wrap items-end justify-between gap-x-8 gap-y-3'
+        )}
+      >
+        {title && (
+          <h1 className={cn(PAGE_TITLE, 'min-w-0 break-words', phone && 'text-[44px]')}>{title}</h1>
+        )}
+        {stats && stats.length > 0 && (
+          <dl
+            className={cn(
+              'flex gap-8',
+              phone ? 'justify-start gap-6 text-left' : 'ml-auto text-right'
+            )}
+          >
+            {stats.map((s) => (
+              <div key={s.label} className="flex flex-col-reverse">
+                <dt className="font-mono text-[10.5px] uppercase tracking-[1.5px]">{s.label}</dt>
+                <dd
+                  className={cn(
+                    'font-mono font-medium leading-none',
+                    phone ? 'text-[22px]' : 'text-[30px]'
+                  )}
+                >
+                  {s.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        )}
+      </div>
+    ) : null
+  const body = (
+    <>
+      {heading}
+      {children}
+    </>
+  )
   return (
     <div
       ref={ref}
       data-page-header
+      data-pinned={pinned || undefined}
       className={cn(
-        'sticky top-0 z-20 -mx-8 -mt-8 space-y-3 border-b border-white/[0.06] bg-background/60 px-8 pb-3 pt-3 backdrop-blur-xl max-md:-mx-4 max-md:-mt-4 max-md:px-4',
-        isPhone() && 'relative',
+        'space-y-3 pb-3',
+        phone ? 'relative' : top !== null && 'sticky z-20',
         className
       )}
+      style={top !== null ? { top } : undefined}
     >
-      {chip ? (
-        <div className="flex items-start gap-3">
-          <div className="min-w-0 flex-1 space-y-3">{children}</div>
-          <GameChip />
-        </div>
-      ) : (
-        children
+      {top !== null && (
+        // Not a box: the wash itself, lined up with the window, from the window's top edge to a
+        // little below the row, where it fades out.
+        <div
+          aria-hidden
+          data-pin-fade
+          className={cn(
+            'pin-fade pointer-events-none absolute -inset-x-8 bottom-[-44px] -z-10 transition-opacity duration-150',
+            !pinned && 'opacity-0'
+          )}
+          style={{ top: -top }}
+        />
       )}
+      <PinnedContext.Provider value={pinned}>
+        {chip ? (
+          <div className="flex items-start gap-3">
+            <div className="min-w-0 flex-1 space-y-3">{body}</div>
+            <GameChip />
+          </div>
+        ) : (
+          body
+        )}
+      </PinnedContext.Provider>
     </div>
   )
 }

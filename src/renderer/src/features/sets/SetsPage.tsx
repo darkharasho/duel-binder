@@ -3,9 +3,9 @@ import { useQuery } from '@tanstack/react-query'
 import { LayoutGrid, List } from 'lucide-react'
 import { byGame, type GameId } from '@shared/games'
 import type { Language } from '@shared/languages'
-import type { CardSearchResult, CountMode, SetSummary } from '@shared/types'
+import type { CardSearchResult, CountMode } from '@shared/types'
 import { SET_TYPES, type SetType } from '@shared/setTypes'
-import { coverArtUrl, setArtUrl, useArtWash } from '@/components/artWashContext'
+import { useArtWash } from '@/components/artWashContext'
 import { FilterBar } from '@/components/FilterBar'
 import { useMainScroll } from '@/components/mainScroll'
 import { PageHeader } from '@/components/PageHeader'
@@ -209,20 +209,15 @@ export function SetsPage({
     setFilterState(f)
     persist(FILTER_KEY, f)
   }
-  // The most complete set in view (else the first) tints the page; an open set tints its own.
-  const hasArt = (s: SetSummary): boolean => s.coverImageId !== null || s.imageKey !== null
-  const washSet =
-    visible.find((s) => hasArt(s) && (s.ownedCards > 0 || s.ownedRarities > 0)) ??
-    visible.find(hasArt)
-  useArtWash(
-    openSet
-      ? undefined
-      : washSet?.coverImageId
-        ? coverArtUrl(washSet.coverImageId)
-        : washSet?.imageKey
-          ? setArtUrl(washSet.imageKey)
-          : null
+  // The cover cards of the sets in view wash the page; an open set washes from its own cards.
+  const washCards = useMemo(
+    () =>
+      openSet
+        ? undefined
+        : visible.flatMap((s) => (s.coverImageId !== null ? [{ imageId: s.coverImageId }] : [])),
+    [openSet, visible]
   )
+  useArtWash(washCards)
 
   const chips: ActiveChip[] = [
     ...languageChip(language, setLanguage),
@@ -263,21 +258,22 @@ export function SetsPage({
       <div hidden={openSet !== null}>
         <div className="flex items-start">
           <div className="min-w-0 flex-1 space-y-4 p-8 max-md:p-4">
-            <PageHeader>
-              <div>
-                <h1 className="text-2xl font-semibold tracking-tight">Sets</h1>
-                {sets.isSuccess && (
-                  <p className="mt-0.5 text-[13px] text-foreground/75 tabular-nums">
-                    You&apos;ve started {header.started} of {header.total} sets · {header.complete}{' '}
-                    complete
-                  </p>
-                )}
-                {sets.isPending && (
-                  <p className="mt-0.5">
-                    <InlineLoading label="Loading sets…" className="text-[13px]" />
-                  </p>
-                )}
-              </div>
+            <PageHeader
+              title="Sets"
+              stats={
+                sets.isSuccess
+                  ? [
+                      { label: 'Started', value: `${header.started} / ${header.total}` },
+                      { label: 'Complete', value: header.complete }
+                    ]
+                  : undefined
+              }
+            >
+              {sets.isPending && (
+                <p>
+                  <InlineLoading label="Loading sets…" className="text-[13px]" />
+                </p>
+              )}
               <FilterBar
                 search={
                   <SearchInput

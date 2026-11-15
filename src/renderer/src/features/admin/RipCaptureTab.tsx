@@ -341,7 +341,7 @@ export function RipCaptureTab(): React.JSX.Element {
               rows={2}
               maxLength={4000}
               placeholder="e.g. 3 Foundations play boosters, foils in pack 2"
-              className="w-full resize-y rounded-md border border-white/[0.08] bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-white/20"
+              className="w-full resize-y rounded-md border border-border bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-white/20"
             />
           </label>
         )}

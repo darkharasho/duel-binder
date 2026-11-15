@@ -124,7 +124,7 @@ describe('FilterBar', () => {
     )
     const button = screen.getByRole('button', { name: 'Filters, 1 active' })
     expect(button).toHaveTextContent('Filters1')
-    expect(button.className).toContain('bg-primary')
+    expect(button.className).toContain('bg-chip-on')
     expect(screen.getByText('3 cards')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
     expect(onClearAll).toHaveBeenCalled()

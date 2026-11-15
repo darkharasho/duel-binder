@@ -21,6 +21,14 @@ export function registerImageScheme(): void {
   ])
 }
 
+/** A served image with CORS open, so a canvas can read it (the wash samples card art). */
+async function served(file: string): Promise<Response> {
+  const res = await net.fetch(pathToFileURL(file).toString())
+  const out = new Response(res.body, res)
+  out.headers.set('access-control-allow-origin', '*')
+  return out
+}
+
 export function handleImageProtocol(cache: ImageCache): void {
   protocol.handle(SCHEME, async (request) => {
     const smallId = parseSmallPrintingImageUrl(request.url)
@@ -28,14 +36,14 @@ export function handleImageProtocol(cache: ImageCache): void {
     if (printingId !== null) {
       const file = await cache.getPrinting(printingId, { small: smallId !== null })
       return file
-        ? net.fetch(pathToFileURL(file).toString())
+        ? served(file)
         : new Response('Not found', { status: 404 })
     }
     const spriteN = parseSpriteImageUrl(request.url)
     if (spriteN !== null) {
       const file = await cache.getSprite(spriteN)
       return file
-        ? net.fetch(pathToFileURL(file).toString())
+        ? served(file)
         : new Response('Not found', { status: 404 })
     }
     const parsed = parseImageUrl(request.url)
@@ -47,6 +55,6 @@ export function handleImageProtocol(cache: ImageCache): void {
       ? await cache.get(parsed.size, parsed.id, { priority })
       : await cache.getSet(setKey!, { priority })
     if (!file) return new Response('Not found', { status: 404 })
-    return net.fetch(pathToFileURL(file).toString())
+    return served(file)
   })
 }

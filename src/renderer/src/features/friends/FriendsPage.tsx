@@ -3,6 +3,7 @@ import { BookOpen, Heart, Users } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { EmptyHero, EmptySteps } from '@/components/EmptyHero'
 import { PageHeader } from '@/components/PageHeader'
+import { PAGE_TITLE } from '@/components/pageHeaderContext'
 import { Button } from '@/components/ui/button'
 import { RowsSkeleton } from '@/components/ui/loading'
 import { useAccountUser } from '@/lib/accountUser'
@@ -97,7 +98,7 @@ export function FriendsPage(): React.JSX.Element {
 
   const header = (
     <PageHeader>
-      <h1 className="text-2xl font-semibold tracking-tight">Friends</h1>
+      <h1 className={PAGE_TITLE}>Friends</h1>
     </PageHeader>
   )
 
@@ -172,7 +173,10 @@ export function FriendsPage(): React.JSX.Element {
         </div>
       )}
       {act.isError && (
-        <p role="alert" className="text-sm text-destructive">
+        <p
+          role="alert"
+          className="inline-block rounded-2xl bg-popover px-3 py-1.5 text-sm text-destructive"
+        >
           {friendsErrorMessage(act.error)}
         </p>
       )}

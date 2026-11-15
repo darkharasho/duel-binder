@@ -3,7 +3,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { LayoutGrid, Table2 } from 'lucide-react'
 import { LANGUAGES } from '@shared/languages'
 import type { CollectionFilters, EntryView, Friend, SortKey } from '@shared/types'
-import { cardArtUrl, useArtWash } from '@/components/artWashContext'
+import { useArtWash } from '@/components/artWashContext'
 import { CardSheet } from '@/components/CardSheet'
 import { FilterBar } from '@/components/FilterBar'
 import {
@@ -211,8 +211,12 @@ export function CollectionPage({
     friend || openIndex === -1 ? undefined : list[openIndex - 1]?.card.id,
     friend || openIndex === -1 ? undefined : list[openIndex + 1]?.card.id
   )
-  // The collection tints the page with its first card in the current order.
-  useArtWash(list[0] ? cardArtUrl(list[0].imageId) : null)
+  // The collection washes the page from one of its cards.
+  const washCards = useMemo(
+    () => list.map((e) => ({ imageId: e.imageId, frameType: e.card.frameType })),
+    [list]
+  )
+  useArtWash(washCards)
   const { def } = useGame()
   const setNames = useSetNames(languageFilter)
   const facetList = facetsFor(def)
@@ -233,15 +237,14 @@ export function CollectionPage({
     (friend ? friend.cardCount > 0 : (stats.data?.uniqueCards ?? 0) > 0)
   const languageLabel = LANGUAGES.find((l) => l.code === languageFilter)?.label ?? ''
   const entryCount = (
-    <p className="text-sm text-muted-foreground tabular-nums">
+    <p className="text-sm tabular-nums">
       {/* No count until the list arrives: "0 entries" would flash on every first open. */}
-      {entries.data !== undefined && (
+      {entries.data !== undefined && friend && (
         <>
           {list.length} {list.length === 1 ? 'entry' : 'entries'}
         </>
       )}
       {entries.data === undefined && entries.isPending && <InlineLoading label="Loading cards…" />}
-      {entries.data !== undefined && !friend && stats.data !== undefined && ' · '}
       {!friend && stats.data !== undefined && (
         <>Prices updated {formatRelative(stats.data.pricesUpdatedAt)}</>
       )}
@@ -263,7 +266,19 @@ export function CollectionPage({
     <TooltipProvider>
       <div className="flex items-start">
         <div className="min-w-0 flex-1 space-y-4 p-8 max-md:p-4">
-          <PageHeader>
+          <PageHeader
+            title={!inFriendHeader && !friend ? 'Collection' : undefined}
+            stats={
+              entries.data !== undefined && !friend
+                ? [
+                    {
+                      label: list.length === 1 ? 'Entry' : 'Entries',
+                      value: list.length.toLocaleString('en-US')
+                    }
+                  ]
+                : undefined
+            }
+          >
             {friendHeader?.(
               inFriendHeader && (
                 <>
@@ -274,10 +289,7 @@ export function CollectionPage({
             )}
             {!inFriendHeader && (
               <header className="flex flex-wrap items-end justify-between gap-2 max-md:flex-col max-md:items-start">
-                <div>
-                  {!friend && <h1 className="text-xl font-semibold">Collection</h1>}
-                  {entryCount}
-                </div>
+                <div>{entryCount}</div>
               </header>
             )}
 

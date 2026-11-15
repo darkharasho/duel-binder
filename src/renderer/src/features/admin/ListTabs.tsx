@@ -49,7 +49,7 @@ export function ErrorsTab({ groups }: { groups: AdminErrorGroup[] }): React.JSX.
                 {[r.day, r.platform, r.appVersion].join(' · ')}
               </p>
               {r.stack && (
-                <pre className="mt-1 whitespace-pre-wrap rounded-md bg-white/[0.04] p-2 font-mono text-[11px] [overflow-wrap:anywhere]">
+                <pre className="mt-1 whitespace-pre-wrap rounded-md bg-popover p-2 font-mono text-[11px] [overflow-wrap:anywhere]">
                   {r.stack}
                 </pre>
               )}

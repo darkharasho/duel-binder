@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/PageHeader'
 import { isSyncing, useSyncStatus } from '@/components/useSyncStatus'
 import { useUpdateStatus } from './useUpdateToasts'
 import { api, queryKeys } from '@/lib/api'
@@ -26,7 +27,7 @@ function Section({
   children: React.ReactNode
 }): React.JSX.Element {
   return (
-    <section className="border-t border-white/[0.08] pt-5">
+    <section className="border-t border-border pt-5">
       <h2 className="mb-3 text-sm font-semibold">{title}</h2>
       <div className="space-y-3">{children}</div>
     </section>
@@ -37,7 +38,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }):
   return (
     <div className="flex items-center justify-between gap-4 text-sm">
       <span className="text-muted-foreground">{label}</span>
-      <span className="text-right tabular-nums">{children}</span>
+      <span className="text-right font-mono tabular-nums">{children}</span>
     </div>
   )
 }
@@ -149,7 +150,7 @@ function DesktopSettings(): React.JSX.Element {
 
   return (
     <div className="max-w-2xl space-y-8 px-8 pb-10 pt-3">
-      <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+      <PageHeader title="Settings" />
 
       <Section title="Account">
         <AccountSection />
@@ -192,7 +193,11 @@ function DesktopSettings(): React.JSX.Element {
         </Row>
         <Row label="Cards">{(sync?.cardCount ?? 0).toLocaleString('en-US')}</Row>
         <Row label="Database version">{sync?.dbVersion ?? '—'}</Row>
-        {sync?.error && <p className="text-sm text-destructive">Last error: {sync.error}</p>}
+        {sync?.error && (
+          <p className="inline-block rounded-2xl bg-popover px-3 py-1.5 text-sm text-destructive">
+            Last error: {sync.error}
+          </p>
+        )}
         <Button size="sm" disabled={syncing} onClick={() => refresh.mutate()}>
           Refresh card data
         </Button>
@@ -280,7 +285,7 @@ function DesktopSettings(): React.JSX.Element {
 function WebSettings(): React.JSX.Element {
   return (
     <div className="max-w-2xl space-y-8 px-8 pb-10 pt-3">
-      <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+      <PageHeader title="Settings" />
       <Section title="Account">
         <AccountSection />
       </Section>

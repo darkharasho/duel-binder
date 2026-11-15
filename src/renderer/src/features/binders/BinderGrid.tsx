@@ -125,7 +125,7 @@ function Pocket({
         <div className="binder-card">
           {c.imageId ? (
             // Faded on a wrapper: the art's own fade-in would otherwise light a missing card up.
-            <div className={cn(missing && 'opacity-[0.13] grayscale')}>
+            <div className={cn(missing && 'grayscale brightness-[.2]')}>
               <CardArt
                 imageId={c.imageId}
                 printingId={binderScanFor(c)}
@@ -138,9 +138,10 @@ function Pocket({
           ) : (
             <div className="w-full bg-white/5" style={{ aspectRatio: cssAspect(aspect) }} />
           )}
+          {/* on art: fixed */}
           {missing && (
             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-b from-transparent to-[#0d0d0f]/90 to-40% px-2 pb-2 pt-6 text-left max-md:px-1.5 max-md:pb-1.5">
-              <div className="line-clamp-2 text-[11.5px] font-medium leading-tight text-foreground/80 max-md:text-[10px]">
+              <div className="line-clamp-2 text-[11.5px] font-medium leading-tight text-foreground max-md:text-[10px]">
                 {c.card.name}
               </div>
               <div className="mt-0.5 flex justify-between gap-1 text-[11px] tabular-nums text-muted-foreground max-md:text-[9.5px]">
@@ -151,19 +152,22 @@ function Pocket({
           )}
         </div>
       </button>
+      {/* on art: fixed */}
       {!missing && c.owned > 1 && (
         <Badge className="pointer-events-none absolute bottom-3.5 right-3.5 z-[3] h-5 bg-background/80 px-1.5 text-[11px] text-foreground tabular-nums shadow ring-1 ring-white/15 backdrop-blur-sm max-md:bottom-2.5 max-md:right-2.5">
           ×{c.owned}
         </Badge>
       )}
+      {/* on art: fixed */}
       {c.added && (
         <Badge
           variant="secondary"
-          className="pointer-events-none absolute left-3.5 top-5 z-[3] text-[10px] max-md:left-2 max-md:top-3"
+          className="pointer-events-none absolute left-3.5 top-5 z-[3] bg-black/70 text-[10px] text-white max-md:left-2 max-md:top-3"
         >
           added by hand
         </Badge>
       )}
+      {/* on art: fixed */}
       {favourites && (
         <FavouriteHeart
           cardId={c.card.id}
@@ -173,6 +177,7 @@ function Pocket({
           className="absolute bottom-3.5 left-3.5 z-[3] bg-background/75 backdrop-blur-sm max-md:hidden"
         />
       )}
+      {/* on art: fixed */}
       {onRemove && (
         <button
           type="button"

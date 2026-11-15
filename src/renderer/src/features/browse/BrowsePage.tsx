@@ -3,7 +3,7 @@ import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-quer
 import type { GameId } from '@shared/games'
 import { LANGUAGES } from '@shared/languages'
 import type { BrowseCard, BrowseFilters, BrowseSort, CardSearchResult } from '@shared/types'
-import { cardArtUrl, useArtWash } from '@/components/artWashContext'
+import { useArtWash } from '@/components/artWashContext'
 import { CardArt } from '@/components/CardArt'
 import { CardSheet } from '@/components/CardSheet'
 import { FavouriteHeart } from '@/components/FavouriteHeart'
@@ -122,7 +122,11 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
   })
   const cards = useMemo(() => pages.data?.pages.flatMap((p) => p.cards) ?? [], [pages.data])
   const total = pages.data?.pages[0]?.total ?? 0
-  useArtWash(cards[0] ? cardArtUrl(cards[0].imageId) : null)
+  const washCards = useMemo(
+    () => cards.map((c) => ({ imageId: c.imageId, frameType: c.frameType })),
+    [cards]
+  )
+  useArtWash(washCards)
 
   // Load the next page as the end of the grid scrolls into view.
   const sentinel = useRef<HTMLDivElement>(null)
@@ -212,17 +216,17 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
   return (
     <div className="flex items-start">
       <div className="min-w-0 flex-1 space-y-5 p-8 max-md:p-4">
-        <PageHeader>
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Browse</h1>
-            <p className="mt-0.5 text-[13px] text-foreground/75 tabular-nums">
-              {pages.isSuccess ? (
-                `${total.toLocaleString('en-US')} cards`
-              ) : pages.isPending ? (
-                <InlineLoading label="Loading cards…" className="text-[13px]" />
-              ) : null}
+        <PageHeader
+          title="Browse"
+          stats={
+            pages.isSuccess ? [{ label: 'Cards', value: total.toLocaleString('en-US') }] : undefined
+          }
+        >
+          {pages.isPending && (
+            <p className="text-[13px] tabular-nums">
+              <InlineLoading label="Loading cards…" className="text-[13px]" />
             </p>
-          </div>
+          )}
           <div className="flex flex-wrap items-end gap-x-3 gap-y-2 border-b border-white/[0.08]">
             <UnderlineTabs
               label="Show"
@@ -322,7 +326,7 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
                   </TiltCard>
                   {/* With every language shown, a Magic card's languages are same-named tiles. */}
                   <div
-                    className={cn('flex items-center gap-1 text-[13px] font-semibold', TILE_NAME)}
+                    className={cn('flex items-center gap-1 text-[15px] font-semibold', TILE_NAME)}
                     title={c.localName}
                   >
                     <span className="truncate">{c.name}</span>
@@ -330,16 +334,14 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
                       <LanguageTag language={c.language} className="shrink-0" />
                     )}
                   </div>
-                  <div className="mt-0.5 min-w-0 space-y-0.5">
-                    <div className="truncate font-mono text-[11px] text-muted-foreground">
-                      {statsLine(c)}
-                    </div>
-                    <div className="flex justify-between font-mono text-[11px]">
-                      <span>{c.price !== null ? formatUsd(c.price) : '—'}</span>
-                      <span className="text-muted-foreground">
-                        {c.releasedAt?.slice(0, 4) ?? ''}
+                  <div className="mt-0.5 min-w-0 space-y-0.5 font-mono text-[11.5px] font-medium">
+                    <div className="flex justify-between gap-2">
+                      <span className="truncate">{statsLine(c)}</span>
+                      <span className="shrink-0">
+                        {c.price !== null ? formatUsd(c.price) : '—'}
                       </span>
                     </div>
+                    {c.releasedAt && <div>{c.releasedAt.slice(0, 4)}</div>}
                   </div>
                 </button>
                 <FavouriteHeart

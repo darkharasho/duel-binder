@@ -238,8 +238,21 @@ export function AddCardDialog({
   const downloading = sync?.cardCount === 0
   // On the phone the dialog fills the screen, so its lists can grow to the space left.
   const phone = isPhone()
-  const listClass = phone ? 'max-h-none flex-1' : 'max-h-80'
-  const commandClass = phone ? 'min-h-0 flex-1 rounded-none' : 'rounded-xl'
+  const listClass = phone ? 'max-h-none flex-1' : 'max-h-[min(26rem,calc(100dvh-18dvh-9rem))] min-h-0'
+  const commandClass = phone ? 'min-h-0 flex-1 rounded-none' : 'rounded-none'
+  // The search underline: Bricolage at 22 px, italic placeholder (the Input primitive's field).
+  const inputWrapClass =
+    'h-auto gap-3 border-b-[1.5px] border-foreground px-0 focus-within:border-b-[3px]'
+  const inputClass =
+    'font-display h-12 rounded-none py-0 text-[22px] placeholder:italic placeholder:text-muted-foreground'
+  const itemClass =
+    'gap-4 rounded-full px-3 py-2 text-base data-[selected=true]:bg-chip data-[selected=true]:text-foreground'
+  const emptyClass = 'py-8 text-center text-base text-foreground'
+  const gameLabel = (
+    <p className="font-mono text-[11px] tracking-[0.14em] text-foreground uppercase">
+      {def.name}
+    </p>
+  )
 
   return (
     <Dialog
@@ -253,8 +266,9 @@ export function AddCardDialog({
         className={
           phone
             ? 'inset-0 top-0 left-0 flex h-dvh max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 p-0 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] data-[state=closed]:zoom-out-100 data-[state=open]:zoom-in-100 sm:max-w-none'
-            : 'gap-0 overflow-hidden p-0 sm:max-w-xl'
+            : 'top-[18%] flex max-h-[calc(100dvh-18dvh-1.5rem)] translate-y-0 flex-col gap-0 overflow-hidden rounded-2xl border-0 bg-popover p-0 shadow-2xl sm:max-w-[720px]'
         }
+        overlayClassName={phone ? undefined : 'bg-black/60 backdrop-blur-sm'}
         data-layout={phone ? 'full-screen' : undefined}
         showCloseButton={!phone}
         onKeyDown={onKeyDown}
@@ -283,18 +297,18 @@ export function AddCardDialog({
         </DialogHeader>
 
         {card && step !== 'search' && (
-          <div className={cn('flex items-center gap-3 border-b px-4 py-3', !phone && 'pr-10')}>
+          <div className={cn('flex items-center gap-4 border-b px-5 py-4', !phone && 'pr-12')}>
             <CardArt
               imageId={imageId(printing)}
               printingId={printing?.id}
               reverse={reverse}
               size="small"
               alt=""
-              className="w-9"
+              className="w-12"
             />
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium">{card.name}</p>
-              <p className="truncate text-xs text-muted-foreground">
+              <p className="truncate text-lg font-semibold">{card.name}</p>
+              <p className="truncate font-mono text-xs text-foreground">
                 {printing ? printingText(labelOf(printing)) : card.type}
               </p>
             </div>
@@ -303,14 +317,17 @@ export function AddCardDialog({
 
         {step === 'search' &&
           (downloading ? (
-            <p className="px-6 py-10 text-center text-sm text-muted-foreground">
+            <p className="px-6 py-10 text-center text-base text-foreground">
               {sync?.state === 'error'
                 ? "Couldn't download the card database. Check your connection and retry from the banner."
                 : 'Card database is still downloading'}
             </p>
           ) : (
             <Command shouldFilter={false} className={commandClass}>
+              <div className="px-5 pt-5 pb-1">{gameLabel}</div>
               <CommandInput
+                wrapperClassName={cn(inputWrapClass, 'mx-5')}
+                className={inputClass}
                 autoFocus
                 placeholder={`Search cards by name or ${def.vocab.printingCode.toLowerCase()}…`}
                 value={text}
@@ -318,36 +335,36 @@ export function AddCardDialog({
               />
               <CommandList className={listClass}>
                 {text.trim() !== '' && (!settled || search.isFetching) && (
-                  <p className="py-6 text-center text-sm text-muted-foreground">Searching…</p>
+                  <p className={emptyClass}>Searching…</p>
                 )}
                 {settled && q !== '' && !search.isFetching && (search.data?.length ?? 0) === 0 && (
-                  <CommandEmpty>No cards found.</CommandEmpty>
+                  <CommandEmpty className={emptyClass}>No cards found.</CommandEmpty>
                 )}
-                <CommandGroup>
+                <CommandGroup className="px-3 py-3">
                   {(!settled || q === '' ? [] : (search.data ?? [])).map((c) => (
                     <CommandItem
                       key={c.id}
                       value={String(c.id)}
                       onSelect={() => pickCard(c)}
-                      className="gap-3 py-2"
+                      className={itemClass}
                     >
                       <CardArt
                         imageId={c.defaultImageId}
                         size="small"
                         alt=""
-                        className="w-9 shrink-0"
+                        className="w-12 shrink-0"
                       />
                       <span className="min-w-0 flex-1">
                         <span className="flex items-center gap-1.5">
-                          <span className="truncate font-medium">{c.name}</span>
+                          <span className="truncate font-semibold">{c.name}</span>
                           {c.language && <LanguageTag language={c.language} className="shrink-0" />}
                         </span>
-                        <span className="block truncate text-xs text-muted-foreground">
+                        <span className="block truncate font-mono text-xs text-foreground">
                           {c.localName ? `${c.localName} · ${c.type}` : c.type}
                         </span>
                       </span>
                       {c.matchedSetCode && (
-                        <span className="text-xs tabular-nums text-muted-foreground">
+                        <span className="font-mono text-xs tabular-nums text-foreground">
                           {c.matchedSetCode}
                         </span>
                       )}
@@ -360,36 +377,42 @@ export function AddCardDialog({
 
         {step === 'printing' && (
           <Command className={commandClass} value={highlighted} onValueChange={setHighlight}>
-            <div className="flex items-center justify-end border-b px-3 py-2">
+            <div className="flex items-center justify-between gap-3 px-5 pt-5 pb-1">
+              {gameLabel}
               <LanguageSelect
                 value={languageFilter}
                 onChange={setPickedLanguage}
                 available={availableLanguages}
               />
             </div>
-            <CommandInput autoFocus placeholder="Filter printings…" />
+            <CommandInput
+              wrapperClassName={cn(inputWrapClass, 'mx-5')}
+              className={inputClass}
+              autoFocus
+              placeholder="Filter printings…"
+            />
             <CommandList className={listClass}>
-              <CommandEmpty>
+              <CommandEmpty className={emptyClass}>
                 {detail.isLoading
                   ? 'Loading…'
                   : printings.length > 0
                     ? `No ${languageLabel} printings — choose another language above.`
                     : 'No printings available.'}
               </CommandEmpty>
-              <CommandGroup>
+              <CommandGroup className="px-3 py-3">
                 {shownPrintings.map((p) => (
                   <CommandItem
                     key={p.id}
                     value={printingValue(p)}
                     onSelect={() => pickPrinting(p)}
-                    className="gap-3 py-2"
+                    className={itemClass}
                   >
                     <PrintingLabel
                       chip={printingChip(labelOf(p))}
                       {...printingParts(labelOf(p))}
                       tag={<LanguageTag language={p.language} />}
                     />
-                    <span className="w-16 text-right text-xs">
+                    <span className="w-20 text-right font-mono text-sm">
                       <PrintingPrice
                         setPrice={p.setPrice}
                         cardPrice={detail.data?.card.tcgplayerPrice ?? null}
@@ -405,13 +428,13 @@ export function AddCardDialog({
 
         {step === 'quantity' && (
           <form
-            className="flex items-end gap-3 p-4"
+            className="flex items-end gap-4 px-5 py-6"
             onSubmit={(e) => {
               e.preventDefault()
               if (qtyValid && !add.isPending) add.mutate()
             }}
           >
-            <label className="grid gap-1.5 text-sm font-medium">
+            <label className="grid gap-1.5 font-mono text-[11px] tracking-[0.14em] uppercase">
               Quantity
               <Input
                 autoFocus
@@ -421,10 +444,10 @@ export function AddCardDialog({
                 inputMode="numeric"
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
-                className="w-28 tabular-nums"
+                className="w-28 font-mono text-xl tabular-nums"
               />
             </label>
-            <Button type="submit" disabled={!qtyValid || add.isPending}>
+            <Button type="submit" className="rounded-full px-6" disabled={!qtyValid || add.isPending}>
               Save
             </Button>
           </form>

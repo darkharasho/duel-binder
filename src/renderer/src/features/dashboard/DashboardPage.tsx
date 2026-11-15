@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { printingReverseLook } from '@shared/reverseHolo'
 import { useQuery } from '@tanstack/react-query'
 import type { CollectionStats, EntryView } from '@shared/types'
 import type { NavigateFn } from '@/components/AppShell'
-import { cardArtUrl, useArtWash } from '@/components/artWashContext'
+import { useArtWash } from '@/components/artWashContext'
 import { CardArt } from '@/components/CardArt'
 import { CardSheet } from '@/components/CardSheet'
 import { GameChip } from '@/components/GameSwitch'
@@ -176,7 +176,7 @@ const titleCase = (s: string): string =>
 
 /** A stat on one line; under 768 px, a tile in a 2-column grid. */
 const statTile =
-  'flex gap-1.5 max-md:flex-wrap max-md:rounded-md max-md:border max-md:border-white/[0.06] max-md:bg-white/[0.03] max-md:px-3 max-md:py-2'
+  'flex gap-1.5 max-md:flex-wrap'
 
 const STALE_MS = 24 * 60 * 60 * 1000
 const isStale = (iso: string | null): boolean => {
@@ -355,12 +355,12 @@ function Content({
     <>
       <div className="grid gap-x-12 gap-y-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <header className="self-end">
-          <p className="text-[13px] text-foreground/75">Your collection is worth</p>
+          <p className="text-[13px] text-foreground">Your collection is worth</p>
           <p className="mt-1 text-5xl font-semibold tracking-tight tabular-nums max-md:text-4xl">
             {formatUsd(stats.totalValue)}
           </p>
           <PriceNotes stats={stats} />
-          <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-[13px] text-foreground/75 max-md:grid max-md:grid-cols-2 max-md:gap-2">
+          <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-[13px] text-foreground max-md:grid max-md:grid-cols-2 max-md:gap-2">
             <div className={statTile}>
               <span className="font-semibold text-foreground">{stats.totalCards}</span>
               <span>Total cards</span>
@@ -371,11 +371,11 @@ function Content({
             </div>
             <div className={cn(statTile, 'items-baseline max-md:col-span-2')}>
               <span>Prices updated</span>
-              <span className={stale ? 'text-amber-400' : undefined}>
+              <span>
                 {formatRelative(stats.pricesUpdatedAt)}
               </span>
               {stale && (
-                <span className="rounded-sm border border-amber-400/50 px-1 text-[11px] text-amber-400">
+                <span className="rounded-full bg-popover px-2 text-[11px] text-amber-400">
                   stale
                 </span>
               )}
@@ -426,10 +426,13 @@ function DashboardSkeleton(): React.JSX.Element {
 export function DashboardPage({ onNavigate, onAddCard, onSearch }: Props): React.JSX.Element {
   const stats = useQuery({ queryKey: queryKeys.stats, queryFn: () => api.stats.get() })
   const data = stats.data
-  const top = data?.topEntries[0]
   const { available } = useGame()
   const phoneChip = isPhone() && available.length > 1
-  useArtWash(top ? cardArtUrl(top.imageId) : null)
+  const washCards = useMemo(
+    () => data?.topEntries.map((e) => ({ imageId: e.imageId, frameType: e.card.frameType })),
+    [data]
+  )
+  useArtWash(washCards ?? null)
 
   return (
     <TooltipProvider>

@@ -81,7 +81,7 @@ export function PrintingSheet({
 }
 
 const BADGE =
-  'flex h-8 min-w-14 shrink-0 items-center justify-center rounded-lg bg-white/[0.08] px-2 font-mono text-xs font-semibold tracking-wide text-white/85'
+  'flex h-8 min-w-14 shrink-0 items-center justify-center rounded-full bg-chip px-2 font-mono text-xs font-semibold tracking-wide'
 
 function Sheet({
   title,
@@ -153,15 +153,15 @@ function Sheet({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="absolute inset-x-2 bottom-[max(0.5rem,env(safe-area-inset-bottom))] flex max-h-[72%] flex-col rounded-[32px] border border-white/[0.1] bg-[#1c1c1f]/90 shadow-2xl backdrop-blur-2xl animate-in slide-in-from-bottom duration-200"
+        className="absolute inset-x-2 bottom-[max(0.5rem,env(safe-area-inset-bottom))] flex max-h-[72%] flex-col rounded-[32px] bg-popover shadow-2xl animate-in slide-in-from-bottom duration-200"
       >
         <header className="flex shrink-0 items-center justify-between gap-3 px-5 pb-3 pt-4">
-          <h2 className="truncate text-[22px] font-bold">{title}</h2>
+          <h2 className="truncate font-display text-[32px] leading-none">{title}</h2>
           <button
             type="button"
             aria-label="Close"
             onClick={onClose}
-            className="flex size-11 shrink-0 items-center justify-center rounded-full border border-white/[0.13] bg-white/[0.07] active:bg-white/[0.14]"
+            className="flex size-11 shrink-0 items-center justify-center rounded-full bg-chip active:bg-chip-on active:text-chip-on-ink"
           >
             <XIcon aria-hidden className="size-5" />
           </button>
@@ -172,7 +172,7 @@ function Sheet({
           onChange={setQuery}
           debounceMs={0}
           className="mx-3 shrink-0"
-          inputClassName="h-11 rounded-2xl border-0 bg-white/[0.07] text-base dark:bg-white/[0.07]"
+          inputClassName="h-11 text-base"
         />
         <div className="mt-2.5 min-h-0 flex-1 overflow-auto overscroll-contain px-3 pb-3">
           {shown.length === 0 ? (
@@ -202,10 +202,10 @@ function Sheet({
                       aria-controls={expanded ? `${id}-${i}` : undefined}
                       onClick={() => setOpened(expanded ? null : g.key)}
                       className={cn(
-                        'flex min-h-16 w-full items-center gap-3.5 rounded-2xl border px-4 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-white/30 active:bg-white/[0.12]',
+                        'flex min-h-16 w-full items-center gap-3.5 rounded-2xl px-4 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-white/30 active:bg-chip-on active:text-chip-on-ink',
                         holdsPicked
-                          ? 'border-emerald-300/40 bg-white/[0.1]'
-                          : 'border-transparent bg-white/[0.06]'
+                          ? 'bg-chip-on text-chip-on-ink'
+                          : 'bg-chip'
                       )}
                     >
                       {g.badge && <span className={BADGE}>{g.badge}</span>}{' '}
@@ -260,8 +260,8 @@ function VersionRow({
         }
       }}
       className={cn(
-        'flex min-h-14 cursor-pointer items-center gap-3.5 rounded-2xl border px-4 py-2 outline-none focus-visible:ring-2 focus-visible:ring-white/30 active:bg-white/[0.12]',
-        picked ? 'border-emerald-300/40 bg-white/[0.1]' : 'border-transparent bg-white/[0.06]'
+        'flex min-h-14 cursor-pointer items-center gap-3.5 rounded-2xl px-4 py-2 outline-none focus-visible:ring-2 focus-visible:ring-white/30 active:bg-chip-on active:text-chip-on-ink',
+        picked ? 'bg-chip-on text-chip-on-ink' : 'bg-chip'
       )}
     >
       <span className="min-w-0 flex-1 text-base leading-5">{text}</span>

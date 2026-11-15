@@ -1,57 +1,96 @@
+import { useEffect, useMemo, useState } from 'react'
 import { useGame } from '@/lib/game'
-import type { GameId } from '@shared/games'
+import { css } from '@/lib/wash/color'
+import { field, GRAIN } from '@/lib/wash/field'
+import { fit } from '@/lib/wash/fit'
+import { gameFallback } from '@/lib/wash/sample'
+import type { WashState } from './artWashContext'
+
+const reducedMotion = (): boolean =>
+  typeof window !== 'undefined' &&
+  !!window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
+
+type Layers = { active: 0 | 1; bg: [string, string] }
 
 /**
- * Soft glows for a page with no art to blur (or art still loading, or near black): radial
- * gradients in the game's colours over the app's own background. Static, so it costs one paint.
- */
-const GLOW: Record<GameId, string> = {
-  ygo: 'radial-gradient(ellipse 75% 85% at 12% -10%, rgb(139 92 246 / 0.42), transparent 75%), radial-gradient(ellipse 60% 70% at 92% 0%, rgb(245 158 11 / 0.26), transparent 75%), radial-gradient(ellipse 50% 45% at 50% 70%, rgb(217 70 239 / 0.1), transparent 75%)',
-  pkm: 'radial-gradient(ellipse 75% 85% at 12% -10%, rgb(37 99 235 / 0.46), transparent 75%), radial-gradient(ellipse 60% 70% at 92% 0%, rgb(250 204 21 / 0.26), transparent 75%), radial-gradient(ellipse 50% 45% at 50% 70%, rgb(239 68 68 / 0.1), transparent 75%)',
-  op: 'radial-gradient(ellipse 75% 85% at 12% -10%, rgb(59 130 196 / 0.46), transparent 75%), radial-gradient(ellipse 60% 70% at 92% 0%, rgb(234 179 8 / 0.26), transparent 75%), radial-gradient(ellipse 50% 45% at 50% 70%, rgb(220 38 38 / 0.1), transparent 75%)',
-  mtg: 'radial-gradient(ellipse 75% 85% at 12% -10%, rgb(194 65 12 / 0.46), transparent 75%), radial-gradient(ellipse 60% 70% at 92% 0%, rgb(245 158 11 / 0.22), transparent 75%), radial-gradient(ellipse 50% 45% at 50% 70%, rgb(120 53 15 / 0.12), transparent 75%)'
-}
-
-const FADE = '[mask-image:linear-gradient(180deg,#000_25%,transparent)]'
-
-/**
- * A heavily blurred copy of the page's key art, fading out down the window, over a quiet glow in
- * the game's colours that shows alone where there is no art. Purely decorative. `glow` is off
- * where something else (the phone's camera) fills the background.
+ * A full-window colour field painted from one card's art: a base colour, two pool layers that
+ * cross-fade when the wash changes, a shade toward the bottom and a little grain. Purely decorative.
+ * `enabled` is off where something else (the scan camera) fills the background.
  */
 export function ArtWash({
-  src,
-  glow = true
+  wash,
+  enabled = true
 }: {
-  src: string | null
-  glow?: boolean
+  wash: WashState | null
+  enabled?: boolean
 }): React.JSX.Element | null {
   const { game } = useGame()
-  if (!src && !glow) return null
+  const fallback = useMemo(() => gameFallback(game), [game])
+  const families = wash?.families ?? fallback
+  const seed = wash?.seed ?? 0
+  const strength = wash?.strength ?? 1
+
+  const { base, pools } = useMemo(() => {
+    const fitted = fit(families, 'dark')
+    return { base: css(fitted.base), pools: field(fitted, { seed, withBase: false }) }
+  }, [families, seed])
+
+  // Adjusting state while rendering: when `pools` changes, fade to the other layer.
+  const [layers, setLayers] = useState<Layers>({ active: 0, bg: [pools, ''] })
+  if (layers.bg[layers.active] !== pools) {
+    setLayers(
+      layers.active === 0
+        ? { active: 1, bg: [layers.bg[0], pools] }
+        : { active: 0, bg: [pools, layers.bg[1]] }
+    )
+  }
+
+  // The pinned header row fades from this colour, so it reads as the wash rather than a bar.
+  useEffect(() => {
+    if (!enabled) return
+    const root = document.documentElement
+    root.style.setProperty('--wash-base', base)
+    root.style.setProperty('--wash-pools', pools)
+    root.style.setProperty('--wash-grain', GRAIN)
+    return () => {
+      root.style.removeProperty('--wash-grain')
+      root.style.removeProperty('--wash-base')
+      root.style.removeProperty('--wash-pools')
+    }
+  }, [base, pools, enabled])
+
+  if (!enabled) return null
+  const transition = reducedMotion() ? 'none' : 'opacity 700ms ease'
+  const layer = (i: 0 | 1, id: string): React.JSX.Element => (
+    <div
+      data-testid={id}
+      className="absolute inset-0"
+      style={{ background: layers.bg[i], opacity: layers.active === i ? strength : 0, transition }}
+    />
+  )
   return (
-    <>
-      {glow && (
-        <div
-          aria-hidden
-          data-testid="art-glow"
-          data-game={game}
-          className={`pointer-events-none absolute inset-x-0 top-0 -z-10 h-[560px] ${FADE}`}
-          style={{ backgroundImage: GLOW[game] }}
-        />
-      )}
-      {src && (
-        <div
-          aria-hidden
-          data-testid="art-wash"
-          className={`pointer-events-none absolute inset-x-0 top-0 -z-10 h-[560px] overflow-hidden ${FADE}`}
-        >
-          <div
-            key={src}
-            className="absolute -inset-16 animate-in fade-in bg-cover bg-[center_30%] opacity-30 blur-[70px] saturate-[1.15] duration-700"
-            style={{ backgroundImage: `url("${src}")` }}
-          />
-        </div>
-      )}
-    </>
+    <div
+      aria-hidden
+      data-game={game}
+      className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
+    >
+      <div
+        className="absolute inset-0"
+        style={{
+          background: base,
+          transition: reducedMotion() ? 'none' : 'background-color 700ms ease'
+        }}
+      />
+      {layer(0, 'wash-a')}
+      {layer(1, 'wash-b')}
+      <div
+        className="absolute inset-0"
+        style={{ background: 'linear-gradient(180deg, transparent 45%, rgb(8 7 12 / .5))' }}
+      />
+      <div
+        className="absolute inset-0"
+        style={{ backgroundImage: GRAIN, opacity: 0.22, mixBlendMode: 'overlay' }}
+      />
+    </div>
   )
 }

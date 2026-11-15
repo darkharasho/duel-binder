@@ -1,8 +1,13 @@
 import { createElement } from 'react'
 import { render, screen } from '@testing-library/react'
 import { CardArt } from '@/components/CardArt'
-import { cardArtUrl, coverArtUrl, setArtUrl } from '@/components/artWashContext'
-import { cardImageSrc, printingImageSrc, printingPhotoSrc, setImageSrc, spriteSrc } from '@/lib/images'
+import {
+  cardImageSrc,
+  printingImageSrc,
+  printingPhotoSrc,
+  setImageSrc,
+  spriteSrc
+} from '@/lib/images'
 import { isMac, isPhone, isWeb } from '@/lib/platform'
 import { createMockApi } from './mockApi'
 
@@ -42,13 +47,6 @@ describe('image URL helpers', () => {
     expect(printingPhotoSrc(9)).toBe('/img/printing/9')
     expect(printingPhotoSrc(9, { small: true })).toBe('/img/printing-small/9')
     expect(setImageSrc('LOB')).toBe('/img/set/LOB')
-  })
-
-  it('artWashContext URLs delegate to the helpers', () => {
-    usePlatformApi('web')
-    expect(cardArtUrl(1)).toBe('/img/small/1')
-    expect(coverArtUrl(2)).toBe('/img/cropped/2')
-    expect(setArtUrl('X')).toBe('/img/set/X')
   })
 
   it('renders CardArt with a /img/ src on the web', () => {

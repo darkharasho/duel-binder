@@ -32,7 +32,7 @@ import {
   NUMBERED_TILE_HEART,
   TILE_NAME
 } from '@/components/tileLayout'
-import { coverArtUrl, setArtUrl, useArtWash } from '@/components/artWashContext'
+import { useArtWash } from '@/components/artWashContext'
 import { LanguageTag } from '@/components/LanguageTag'
 import { PageHeader } from '@/components/PageHeader'
 import { listNav } from '@/components/panelNav'
@@ -232,13 +232,8 @@ export function SetChecklist({
   const data = checklist.data
   // An OCG set's unpriced printings: the portal prices them and they show after the next sync.
   useRequestPrices(useMemo(() => (friend ? [] : checklistUnpriced(data)), [friend, data]))
-  useArtWash(
-    data?.set.coverImageId
-      ? coverArtUrl(data.set.coverImageId)
-      : data?.set.imageKey
-        ? setArtUrl(data.set.imageKey)
-        : null
-  )
+  const washCards = useMemo(() => data?.cards.filter((c) => c.imageId > 0).map((c) => ({ imageId: c.imageId })), [data])
+  useArtWash(washCards ?? null)
   const tiles = useMemo(
     () =>
       data
@@ -514,6 +509,7 @@ export function SetChecklist({
             </div>
             <FilterBar
               sizable
+              lead={<BackButton onBack={onBack} />}
               // Bulk mode has its own search box, and shows every rarity.
               search={
                 !bulk && (
@@ -573,7 +569,7 @@ export function SetChecklist({
               className="size-24 rounded-[3px] shadow-[0_8px_20px_rgb(0_0_0/0.5)]"
             />
             <div className="min-w-0 flex-1">
-              <p className="font-mono text-[13px] text-foreground/75">
+              <p className="font-mono text-[13px]">
                 {data.set.setCode}
                 {data.set.tcgDate && ` · ${data.set.tcgDate}`} · {progress.owned} of{' '}
                 {progress.total}
@@ -629,7 +625,7 @@ export function SetChecklist({
                         NUMBERED_TILE_BUTTON,
                         // On the tile, so the hover stays while the pointer is on the heart.
                         'relative rounded-lg p-1.5 text-left outline-none group-hover/tile:bg-accent focus-visible:ring-2 focus-visible:ring-ring',
-                        !owned && 'grayscale opacity-40'
+                        !owned && 'grayscale brightness-[.4]' /* on art: fixed */
                       )}
                     >
                       <TiltCard className="mb-1">
@@ -651,23 +647,24 @@ export function SetChecklist({
                           ×{t.owned}
                         </span>
                       )}
-                      <span className="mb-1 text-xs tabular-nums text-muted-foreground">
-                        {tileNumberLabel(t)}
-                      </span>
-                      <span className={cn('truncate text-xs font-medium', favourites && TILE_NAME)}>
+                      <span
+                        className={cn(
+                          'truncate text-[15px] font-semibold',
+                          favourites && TILE_NAME
+                        )}
+                      >
                         {t.card.name}
                       </span>
-                      <span className="mt-1 flex min-w-0 flex-col gap-1">
+                      <span className="mt-1 flex min-w-0 flex-col gap-1 font-mono text-[11.5px] font-medium">
+                        <span className="flex justify-between gap-2">
+                          <span className="truncate">{tileNumberLabel(t)}</span>
+                          {/* A card's own price isn't otherwise on its tile, so the order would be a mystery. */}
+                          {priced?.price != null && (
+                            <span className="shrink-0">{formatUsd(priced.price)}</span>
+                          )}
+                        </span>
                         {(priced?.rarity ?? t.rarity) && (
-                          <span className="truncate text-xs text-muted-foreground">
-                            {priced?.rarity ?? t.rarity}
-                          </span>
-                        )}
-                        {/* A card's own price isn't otherwise on its tile, so the order would be a mystery. */}
-                        {priced?.price != null && (
-                          <span className="text-xs tabular-nums text-emerald-400">
-                            {formatUsd(priced.price)}
-                          </span>
+                          <span className="truncate">{priced?.rarity ?? t.rarity}</span>
                         )}
                       </span>
                     </button>

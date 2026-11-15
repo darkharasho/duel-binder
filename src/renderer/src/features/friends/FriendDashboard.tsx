@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { LoadingState } from '@/components/ui/loading'
 import type { EntryView, Friend } from '@shared/types'
-import { cardArtUrl, useArtWash } from '@/components/artWashContext'
+import { useArtWash } from '@/components/artWashContext'
 import { CardSheet } from '@/components/CardSheet'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
@@ -40,8 +40,11 @@ export function FriendDashboard({
     retry: false
   })
   const data = stats.data
-  const top = data?.topEntries[0]
-  useArtWash(top ? cardArtUrl(top.imageId) : null)
+  const washCards = useMemo(
+    () => data?.topEntries.map((e) => ({ imageId: e.imageId, frameType: e.card.frameType })),
+    [data]
+  )
+  useArtWash(washCards ?? null)
   const [open, setOpen] = useState<EntryView | null>(null)
   // The friend's other copies of the card, for the panel's list; the opened entry shows meanwhile.
   const all = useQuery({

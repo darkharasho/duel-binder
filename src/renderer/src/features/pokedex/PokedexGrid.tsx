@@ -30,7 +30,11 @@ export function DexSprite({
       draggable={false}
       onError={hideBroken}
       style={{ imageRendering: 'pixelated' }}
-      className={cn('object-contain', !caught && 'opacity-25 brightness-0 invert', className)}
+      className={cn(
+        'object-contain',
+        !caught && 'opacity-25 brightness-0 invert' /* on art: fixed */,
+        className
+      )}
     />
   )
 }
@@ -76,15 +80,12 @@ const Tile = memo(function Tile({
         type="button"
         data-caught={caught}
         onClick={() => onOpen(tile.dexNo)}
-        className="relative flex aspect-square w-full flex-col items-center justify-center rounded-md bg-white/[0.03] p-1.5 text-center outline-none transition-colors duration-150 hover:bg-white/[0.07] focus-visible:ring-2 focus-visible:ring-ring"
+        className="relative flex aspect-square w-full flex-col items-center justify-center rounded-md p-1.5 text-center outline-none transition-colors duration-150 hover:bg-white/[0.07] focus-visible:ring-2 focus-visible:ring-ring"
       >
         <DexSprite dexNo={tile.dexNo} caught={caught} className="size-16 max-md:size-12" />
         <span
           data-dex-name
-          className={cn(
-            'w-full truncate text-xs font-medium',
-            !caught && 'text-muted-foreground/70'
-          )}
+          className={cn('w-full truncate text-xs font-medium', !caught && 'font-normal')}
         >
           {tile.name}
         </span>

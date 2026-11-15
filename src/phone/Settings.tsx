@@ -62,11 +62,7 @@ type Refresh =
   | { state: 'error'; message: string }
 
 function Group({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return (
-    <div className="divide-y divide-white/[0.06] overflow-hidden rounded-2xl border border-white/[0.06] bg-card">
-      {children}
-    </div>
-  )
+  return <div className="space-y-1">{children}</div>
 }
 
 function Row({ children }: { children: React.ReactNode }): React.JSX.Element {
@@ -74,7 +70,7 @@ function Row({ children }: { children: React.ReactNode }): React.JSX.Element {
 }
 
 const rowButton =
-  'flex min-h-12 w-full items-center px-4 py-2 text-left text-[15px] active:bg-white/[0.06] disabled:opacity-50'
+  'flex min-h-12 w-full items-center px-4 py-2 text-left text-[15px] active:bg-chip disabled:opacity-50'
 
 /**
  * The phone's Settings: the account, card data, sync problems, privacy, the stream's hit price and
@@ -208,7 +204,7 @@ export function Settings({
 
   return (
     <div className="mx-auto max-w-lg space-y-6 px-4 pb-8 pt-2">
-      <h1 className="px-1 text-3xl font-bold tracking-tight">Settings</h1>
+      <h1 className="px-1 font-display text-[44px] leading-none">Settings</h1>
 
       <section aria-label="Account" className="space-y-2">
         <Group>
@@ -226,7 +222,7 @@ export function Settings({
             Sign out
           </button>
         </Group>
-        <div className="rounded-2xl border border-white/[0.06] bg-card p-4">
+        <div className="p-4">
           <SignInMethods
             linkable={linkable}
             linking={linking}
@@ -242,7 +238,10 @@ export function Settings({
           )}
         </div>
         {signOutFailed && (
-          <p role="alert" className="px-4 text-[13px] text-destructive">
+          <p
+            role="alert"
+            className="mx-4 inline-block rounded-2xl bg-popover px-3 py-1.5 text-[13px] text-destructive"
+          >
             {SIGN_OUT_FAILED}
           </p>
         )}
@@ -260,7 +259,7 @@ export function Settings({
           </button>
           {problems > 0 && (
             <button type="button" className={rowButton} onClick={() => setProblemsOpen(true)}>
-              Sync problems ({problems})
+              Sync problems (<span className="font-mono">{problems}</span>)
             </button>
           )}
         </Group>
@@ -325,7 +324,13 @@ export function Settings({
           <UsageToggle className="flex min-h-12 items-start gap-3 px-4 py-3 text-[15px]" />
           <Row>
             <span className="text-muted-foreground">
-              {[age, version.data ? `Version ${version.data}` : null].filter(Boolean).join(' · ')}
+              {age}
+              {age && version.data && ' · '}
+              {version.data && (
+                <>
+                  Version <span className="font-mono">{version.data}</span>
+                </>
+              )}
             </span>
           </Row>
         </Group>

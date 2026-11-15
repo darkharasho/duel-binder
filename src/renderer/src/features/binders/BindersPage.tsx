@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { CardGridSkeleton, LoadingState } from '@/components/ui/loading'
 import { toast } from 'sonner'
@@ -6,7 +6,9 @@ import { ChevronLeftIcon } from 'lucide-react'
 import type { BinderCard, BinderDetail, BinderSummary } from '@shared/types'
 import { reverseLook } from '@shared/reverseHolo'
 import { CardArt } from '@/components/CardArt'
+import { useArtWash } from '@/components/artWashContext'
 import { PageHeader } from '@/components/PageHeader'
+import { PAGE_TITLE } from '@/components/pageHeaderContext'
 import { Button } from '@/components/ui/button'
 import { SetProgress } from '@/features/sets/SetProgress'
 import { api, queryKeys } from '@/lib/api'
@@ -204,6 +206,15 @@ export function BindersPage(): React.JSX.Element {
   const [uid, setUid] = useState<string | null>(null)
   // The form: a binder being edited, or true for a new one.
   const [form, setForm] = useState<BinderDetail | true | null>(null)
+  // The covers wash the list; an open binder washes from its own cards.
+  const washCards = useMemo(
+    () =>
+      uid
+        ? undefined
+        : (list.data ?? []).flatMap((b) => (b.coverImageId ? [{ imageId: b.coverImageId }] : [])),
+    [uid, list.data]
+  )
+  useArtWash(washCards)
   if (form)
     return (
       <BinderForm
@@ -223,7 +234,7 @@ export function BindersPage(): React.JSX.Element {
     <div className="space-y-4 p-8 max-md:p-4">
       <PageHeader>
         <div className="flex items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold">Binders</h1>
+          <h1 className={PAGE_TITLE}>Binders</h1>
           {!empty && <Button onClick={() => setForm(true)}>New binder</Button>}
         </div>
       </PageHeader>

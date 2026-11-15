@@ -32,7 +32,7 @@ export function UnderlineTabs<T extends string>({
         <ToggleGroupPrimitive.Item
           key={o.value}
           value={o.value}
-          className="-mb-px border-b-2 border-transparent pb-2 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring data-[state=on]:border-foreground data-[state=on]:font-semibold data-[state=on]:text-foreground"
+          className="-mb-px border-b-2 border-transparent pb-2 text-sm text-foreground transition-colors hover:opacity-80 focus-visible:outline-2 focus-visible:outline-ring data-[state=on]:border-foreground data-[state=on]:font-bold data-[state=on]:text-foreground"
         >
           {o.label}
         </ToggleGroupPrimitive.Item>

@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import logo from '@/assets/logo.svg'
+import logoMark from '@/assets/logo-mark.svg'
 import { toast } from 'sonner'
 import type { Language } from '@shared/languages'
 import type { AdminPageTab } from '@/features/admin/adminTabs'
@@ -10,9 +10,10 @@ import { useContribute } from '@/features/training/contributeContext'
 import { pageInGame, useGame } from '@/lib/game'
 import { isMac, isWeb } from '@/lib/platform'
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 import { track, trackOpen } from '@/lib/usage'
 import { ArtWash } from './ArtWash'
-import { ArtWashContext } from './artWashContext'
+import { ArtWashContext, type WashState } from './artWashContext'
 import { SidebarGameSwitch } from './GameSwitch'
 import { MainScrollContext, type MainScroll } from './mainScroll'
 import { ArtDownloads } from './ArtDownloads'
@@ -72,8 +73,9 @@ const NAV_GROUPS: readonly { heading?: string; pages: readonly { page: Page; lab
     { heading: 'Social', pages: [{ page: 'friends', label: 'Friends' }] }
   ]
 
+// Plain ink text over the wash, fully opaque. The active link grows and gets a dot to its left.
 const ITEM =
-  'flex items-center gap-2 rounded-sm py-1.5 text-left text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring'
+  'relative flex items-center gap-2 rounded-sm py-[3px] text-left text-[15px] font-normal text-foreground transition-colors duration-150 hover:underline focus-visible:outline-2 focus-visible:outline-ring'
 
 interface AppShellProps {
   page: Page
@@ -83,7 +85,7 @@ interface AppShellProps {
 }
 
 const GROUP_HEADING =
-  'mb-0.5 mt-2 text-[10.5px] font-medium uppercase tracking-[0.08em] text-muted-foreground/60'
+  'mb-1 mt-4 font-mono text-[10.5px] font-medium uppercase tracking-[1.5px] text-foreground'
 
 export function AppShell({
   page,
@@ -105,7 +107,7 @@ export function AppShell({
     }),
     []
   )
-  const [wash, setWash] = useState<string | null>(null)
+  const [wash, setWash] = useState<WashState | null>(null)
   // The portal flags only the owner's account as admin.
   const { user } = useAccountUser()
   // Each page opens at its top, not wherever the previous page was scrolled to.
@@ -122,32 +124,22 @@ export function AppShell({
   }, [page, def, onNavigate])
   return (
     <div className="group/shell relative isolate flex h-screen flex-col overflow-hidden bg-background text-foreground tabular-nums">
-      <ArtWash src={wash} />
-      {!isWeb() && (
-        <>
-          {/* Carries a page header's glass up to the top of the window, so it doesn't float as a box. */}
-          <div
-            aria-hidden
-            className="absolute left-[199px] right-0 top-0 hidden h-9 border-l border-white/[0.06] bg-background/60 backdrop-blur-xl group-has-[[data-page-header]]/shell:block"
-          />
-          <TitleBar />
-        </>
-      )}
+      <ArtWash wash={wash} enabled={page !== 'scan'} />
+      {!isWeb() && <TitleBar />}
       <div className="flex min-h-0 flex-1">
-        <aside className="flex w-[200px] shrink-0 flex-col gap-5 border-r border-white/[0.06] px-4 pb-5 pt-1">
-          {available.length > 1 ? (
-            <SidebarGameSwitch />
-          ) : (
-            <div className="flex items-center gap-2.5">
-              <img src={logo} alt="" className="h-9 w-9" />
-              <span className="whitespace-nowrap text-[15px] font-semibold tracking-[-0.01em]">
+        <aside className="flex w-[200px] shrink-0 flex-col gap-5 pb-5 pl-6 pr-3 pt-3">
+          <div className="flex flex-col items-start gap-3">
+            <div className="-ml-1 flex items-center gap-2">
+              <img src={logoMark} alt="" className="h-auto w-[34px] shrink-0" />
+              <span className="whitespace-nowrap font-display text-[24px] leading-none">
                 Duel Binder
               </span>
             </div>
-          )}
+            {available.length > 1 && <SidebarGameSwitch />}
+          </div>
           <nav
             aria-label="Main"
-            className="-mx-1 flex min-h-0 flex-1 flex-col overflow-y-auto px-1"
+            className="-ml-6 -mr-1 flex min-h-0 flex-1 flex-col overflow-y-auto pl-6 pr-1"
           >
             {NAV_GROUPS.map(({ heading, pages }) => {
               const shown = pages.filter(
@@ -168,6 +160,7 @@ export function AppShell({
                   {shown.map(({ page: p, label }) => (
                     <NavItem
                       key={p}
+                      indent={heading !== undefined}
                       label={label}
                       active={page === p}
                       onClick={() => onNavigate(p)}
@@ -178,17 +171,16 @@ export function AppShell({
               )
             })}
           </nav>
-          <button
+          <Button
             type="button"
+            variant="outline"
             onClick={onAddCard}
-            className="flex items-center justify-between rounded-md border border-white/20 px-3 py-1.5 text-sm font-semibold transition-colors hover:border-white/40 hover:bg-white/5 focus-visible:outline-2 focus-visible:outline-ring"
+            className="justify-between px-4"
           >
             Add card
-            <kbd className="font-mono text-xs font-normal text-muted-foreground">
-              {isMac() ? '⌘K' : 'Ctrl K'}
-            </kbd>
-          </button>
-          <div className="-mt-2 flex flex-col border-t border-white/[0.06] pt-2">
+            <kbd className="font-mono text-xs font-normal">{isMac() ? '⌘K' : 'Ctrl K'}</kbd>
+          </Button>
+          <div className="-mt-2 flex flex-col pt-2">
             {testerGame !== undefined && (
               <button
                 type="button"
@@ -199,7 +191,6 @@ export function AppShell({
                 }}
                 className={ITEM}
               >
-                <span aria-hidden className="size-1.5 rounded-full bg-transparent" />
                 Contribute photos
               </button>
             )}
@@ -249,12 +240,15 @@ function NavItem({
   label,
   active,
   onClick,
-  badge = 0
+  badge = 0,
+  indent = false
 }: {
   label: string
   active: boolean
   onClick: () => void
   badge?: number
+  /** Set in from its group heading. */
+  indent?: boolean
 }): React.JSX.Element {
   return (
     <button
@@ -264,12 +258,14 @@ function NavItem({
       }
       aria-current={active ? 'page' : undefined}
       onClick={onClick}
-      className={cn(ITEM, active && 'font-semibold text-foreground')}
+      className={cn(ITEM, indent && 'ml-3', active && 'text-base font-extrabold')}
     >
-      <span
-        aria-hidden
-        className={cn('size-1.5 rounded-full', active ? 'bg-foreground' : 'bg-transparent')}
-      />
+      {active && (
+        <span
+          aria-hidden
+          className="absolute -left-3.5 top-1/2 size-[7px] -translate-y-1/2 rounded-full bg-foreground"
+        />
+      )}
       {label}
       {badge > 0 && (
         <span

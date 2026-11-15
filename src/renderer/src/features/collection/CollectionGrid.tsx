@@ -97,18 +97,20 @@ const GridTile = memo(
             />
             <Badge className="absolute right-1.5 top-1.5 font-mono shadow">×{e.quantity}</Badge>
           </TiltCard>
-          <div className={cn('truncate text-[13px] font-semibold', favourites && TILE_NAME)}>
+          <div className={cn('truncate text-[15px] font-semibold', favourites && TILE_NAME)}>
             {e.card.name}
           </div>
           <div className="mt-0.5 min-w-0 space-y-0.5">
-            <div className="flex items-center gap-1 font-mono text-[11px] text-muted-foreground">
-              <span className="truncate">
-                {e.printing.setCode} · {e.printing.setRarity}
+            <div className="flex items-center justify-between gap-2 font-mono text-[11.5px] font-medium">
+              <span className="flex min-w-0 items-center gap-1">
+                <span className="truncate">
+                  {e.printing.setCode} · {e.printing.setRarity}
+                </span>
+                <LanguageTag language={e.printing.language} />
               </span>
-              <LanguageTag language={e.printing.language} />
-            </div>
-            <div className="font-mono text-xs">
-              <EntryValue entry={e} amount={displayTotal(e)} />
+              <span className="shrink-0">
+                <EntryValue entry={e} amount={displayTotal(e)} />
+              </span>
             </div>
             <StaleBadge entry={e} />
           </div>

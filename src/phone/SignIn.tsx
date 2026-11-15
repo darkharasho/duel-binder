@@ -143,7 +143,7 @@ export function SignIn({
         {native ? NATIVE_SIGN_IN_COPY : SIGN_IN_COPY}
       </p>
       {failed && (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="inline-block rounded-2xl bg-popover px-3 py-1.5 text-sm text-destructive">
           {SIGN_IN_FAILED}
         </p>
       )}

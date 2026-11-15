@@ -59,7 +59,7 @@ describe('routeHost', () => {
     })
   })
   it('sends app-host /app/ paths straight to assets', () => {
-    for (const p of ['/favicon.ico', '/favicon.svg', '/apple-touch-icon.png']) {
+    for (const p of ['/favicon.ico', '/favicon.svg', '/apple-touch-icon.png', '/mark.svg']) {
       expect(routeHost(new URL(`https://app.duelbinder.com${p}`), SITE)).toEqual({
         kind: 'app-asset'
       })
@@ -134,7 +134,7 @@ describe('handleSite', () => {
       const res = await handleSite(new Request(`https://duelbinder.com${path}`), d)
       expect(res.status).toBe(200)
       expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8')
-      expect(res.headers.get('cache-control')).toBe('private, max-age=300')
+      expect(res.headers.get('cache-control')).toBe('private, no-cache')
       expect(await res.text()).toContain('<h1>A binder for every card you own.</h1>')
     }
   })
@@ -158,7 +158,7 @@ describe('handleSite', () => {
     const res = await handleSite(new Request('https://duelbinder.com/', { method: 'HEAD' }), d)
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8')
-    expect(res.headers.get('cache-control')).toBe('private, max-age=300')
+    expect(res.headers.get('cache-control')).toBe('private, no-cache')
     expect(await res.text()).toBe('')
   })
 

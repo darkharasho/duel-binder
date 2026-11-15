@@ -5,8 +5,8 @@ export type HostRoute =
   | { kind: 'app-asset' }
   | { kind: 'scan-asset'; asset: string }
 
-/** Icons the app host serves from the shared assets so its pages show the same favicon as the site. */
-export const ICON_PATHS = ['/favicon.ico', '/favicon.svg', '/apple-touch-icon.png']
+/** Icons the app host serves from the shared assets so its pages show the same favicon and D mark as the site. */
+export const ICON_PATHS = ['/favicon.ico', '/favicon.svg', '/apple-touch-icon.png', '/mark.svg']
 
 /**
  * The /scan/ paths the app answers itself (see phonePage.ts and getFingerprints): the page with its

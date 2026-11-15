@@ -7,15 +7,59 @@ import { MAGIC_LANGUAGE_COUNT } from '../../src/shared/games/magic'
 import { renderTerms } from '../../workers/portal/src/site/terms'
 import { pickDownloads, RELEASES_FALLBACK } from '../../workers/portal/src/site/releases'
 import { releaseV021 } from './fixtures/release'
+import { pickWash } from '../../workers/portal/src/site/wash'
+import { WASHES } from '../../workers/portal/src/site/washes'
 
 const downloads = pickDownloads(releaseV021)
 const appUrl = 'https://app.duelbinder.com'
 const page = (over: Partial<Parameters<typeof renderPage>[0]> = {}): string =>
-  renderPage({ downloads, os: null, android: false, appUrl, ...over })
+  renderPage({ downloads, os: null, android: false, appUrl, wash: WASHES[0], ...over })
 
 describe('brand mark', () => {
-  it('shows the favicon in the nav, not a drawing of its own', () => {
-    expect(page()).toContain('<a class="brand" href="/"><img src="/favicon.svg"')
+  it('shows the D binder mark in the nav, standing in for the name', () => {
+    expect(page()).toContain(
+      '<a class="brand" href="/"><img class="mark" src="/mark.svg" width="30" height="34" alt="Duel Binder"></a>'
+    )
+  })
+
+  it('shows the big D beside the headline, hidden from screen readers', () => {
+    expect(page()).toMatch(/<\/div><img class="bigmark" src="\/mark.svg"[^>]* alt=""><\/header>/)
+  })
+
+  it('puts the D mark on the privacy and terms pages too', () => {
+    for (const html of [renderPrivacy({ appUrl }), renderTerms({ appUrl })])
+      expect(html).toContain('<a class="brand" href="/"><img class="mark" src="/mark.svg"')
+  })
+})
+
+describe('colour wash', () => {
+  it('paints the chosen card wash behind the page, with its base on <html> and the browser bar', () => {
+    const w = WASHES[3]
+    const html = page({ wash: w })
+    expect(html).toContain(`<html lang="en" style="background:${w.base}">`)
+    expect(html).toContain(`<meta name="theme-color" content="${w.base}">`)
+    expect(html).toContain(
+      `<div class="wash" aria-hidden="true" data-card="${w.card}" style="background:${w.pools}"></div>`
+    )
+  })
+
+  it('picks a random wash per page load, covering the whole list', () => {
+    expect(pickWash(() => 0)).toBe(WASHES[0])
+    expect(pickWash(() => 0.999999)).toBe(WASHES[WASHES.length - 1])
+    expect(page({ wash: undefined })).toMatch(
+      /<div class="wash" aria-hidden="true" data-card="[^"]+" style="background:radial-gradient/
+    )
+  })
+
+  it('has washes from all four games, each with pools and a base colour', () => {
+    expect(WASHES.length).toBeGreaterThanOrEqual(8)
+    for (const w of WASHES) {
+      expect(w.base).toMatch(/^rgb\(\d+ \d+ \d+ \/ 1\)$/)
+      expect(w.pools).toMatch(/^radial-gradient\(/)
+      expect(w.pools).not.toMatch(/["<>]/)
+    }
+    for (const card of ['Dark Magician', 'Charizard ex', 'Lightning Bolt', 'Monkey.D.Luffy'])
+      expect(WASHES.map((w) => w.card)).toContain(card)
   })
 })
 
@@ -120,7 +164,7 @@ describe('renderPage', () => {
   it('has the four games, the scanner and the feature rows', () => {
     const html = page()
     for (const g of ['Yu-Gi-Oh!', 'Pokémon', 'Magic: The Gathering', 'One Piece'])
-      expect(html).toContain(`<h3>${g}</h3>`)
+      expect(html).toContain(`<h3><i class="dot" aria-hidden="true"></i>${g}</h3>`)
     expect(html).toContain('id="games"')
     expect(html).toContain('id="scan"')
     expect(html).toContain('<h2>Hold a card up to the camera</h2>')

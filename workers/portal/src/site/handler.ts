@@ -50,6 +50,6 @@ export async function handleSite(req: Request, deps: SiteDeps): Promise<Response
 function html(req: Request, body: string): Response {
   return new Response(req.method === 'HEAD' ? null : body, {
     status: 200,
-    headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'private, max-age=300' }
+    headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'private, no-cache' }
   })
 }

@@ -1,4 +1,5 @@
 import { esc, footer, MARK, REPO_URL } from './page'
+import { pickWash, washLayer, washRootStyle } from './wash'
 
 export interface LegalView {
   appUrl: string
@@ -23,8 +24,9 @@ function section(heading: string, body: string): string {
 
 /** The privacy policy and terms share this page: the site's nav, a header, then titled sections. */
 export function renderLegal(page: LegalPage, view: LegalView): string {
+  const wash = pickWash()
   return `<!doctype html>
-<html lang="en">
+<html lang="en" style="${washRootStyle(wash)}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -38,9 +40,9 @@ export function renderLegal(page: LegalPage, view: LegalView): string {
 <script src="/account.js" defer></script>
 </head>
 <body>
-<div class="wash" aria-hidden="true"><div></div></div>
+${washLayer(wash)}
 <nav><div class="wrap navin">
-<a class="brand" href="/">${MARK}Duel Binder</a>
+<a class="brand" href="/">${MARK}</a>
 <a href="${REPO_URL}">GitHub</a>
 <span class="grow"></span><a class="signin" href="${esc(view.appUrl)}">Sign in</a>
 </div></nav>

@@ -2,6 +2,7 @@ import type { AppDeps } from './app'
 import { currentUser } from './auth'
 import { emailEnabled } from './emailSend'
 import { MARK, esc } from './site/page'
+import { pickWash, washLayer, washRootStyle } from './site/wash'
 
 /** What the app host's front page knows about the visitor. */
 export interface HomeView {
@@ -23,7 +24,9 @@ function body(v: HomeView): string {
 <p class="lead">The web app couldn't load. Try refreshing; your collection is safe in the desktop app.</p>
 <div class="actions">${download}<form method="post" action="/auth/logout"><button class="btn out" type="submit">Sign out</button></form></div>`
   }
-  const email = v.emailEnabled ? `<a class="btn out" href="/auth/email">Continue with email</a>` : ''
+  const email = v.emailEnabled
+    ? `<a class="btn out" href="/auth/email">Continue with email</a>`
+    : ''
   const failed = v.signInFailed ? `<p class="note">Sign-in didn't go through. Try again.</p>` : ''
   return `<h1>Duel Binder on the web.</h1>
 <p class="lead">Sign in with Discord to open your collection in the browser.</p>
@@ -33,8 +36,9 @@ ${failed}<div class="actions"><a class="btn pri" href="/auth/discord/start">Sign
 /** The app host's page shell (the site's stylesheet and header); `inner` is trusted markup. */
 export function pageShell(siteUrl: string, inner: string, title = 'Duel Binder'): string {
   const site = esc(siteUrl)
+  const wash = pickWash()
   return `<!doctype html>
-<html lang="en">
+<html lang="en" style="${washRootStyle(wash)}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -47,8 +51,8 @@ export function pageShell(siteUrl: string, inner: string, title = 'Duel Binder')
 <style>.note{font-size:13px;color:#e8a87c;margin:-12px 0 20px}form{margin:0}button.btn{font:inherit;font-size:14px;font-weight:500;color:inherit;background:none;cursor:pointer}input.field{display:block;width:100%;max-width:340px;box-sizing:border-box;margin:0 0 16px;padding:10px 12px;font:inherit;color:inherit;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.2);border-radius:8px}label.lab{display:block;font-size:13px;margin-bottom:6px;opacity:.8}.actions form{display:inline}</style>
 </head>
 <body>
-<div class="wash" aria-hidden="true"><div></div></div>
-<nav><div class="wrap navin"><a class="brand" href="${site}">${MARK}Duel Binder</a></div></nav>
+${washLayer(wash)}
+<nav><div class="wrap navin"><a class="brand" href="${site}">${MARK}</a></div></nav>
 <main class="wrap"><header class="hero">
 ${inner}
 </header></main>

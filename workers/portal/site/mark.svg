@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="40 26 180 206">
+<defs>
+    <linearGradient id="cover" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#fffaf0"/><stop offset="1" stop-color="#efe5d2"/>
+  </linearGradient>
+  <linearGradient id="card" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#f0523a"/><stop offset="1" stop-color="#d0301f"/>
+  </linearGradient>
+  <filter id="drop" x="-20%" y="-20%" width="140%" height="150%">
+    <feDropShadow dx="0" dy="7" stdDeviation="7" flood-color="#000" flood-opacity=".5"/>
+  </filter>
+  <clipPath id="pocket"><rect x="118" y="82" width="66" height="92" rx="8"/></clipPath>
+  <path id="d" d="M82 38H144C186 38 212 66 212 108V148C212 190 186 218 144 218H82A10 10 0 0 1 72 208V48A10 10 0 0 1 82 38Z"/>
+</defs>
+  <g filter="url(#drop)">
+    <use href="#d" xlink:href="#d" y="5" fill="#b8a98d"/>
+    <use href="#d" xlink:href="#d" fill="url(#cover)"/>
+  </g>
+  <rect x="102" y="38" width="1.6" height="180" fill="#cdbfa5"/>
+  <rect x="103.6" y="38" width="1.2" height="180" fill="#fff"/>
+  <g fill="#fbf4e5">
+    <path d="M72 73H57.5a5.5 5.5 0 0 0 0 11H72Z"/>
+    <path d="M72 122.5H57.5a5.5 5.5 0 0 0 0 11H72Z"/>
+    <path d="M72 172H57.5a5.5 5.5 0 0 0 0 11H72Z"/>
+  </g>
+  <g fill="#16203a">
+    <path d="M72 73H86.5a5.5 5.5 0 0 1 0 11H72Z"/>
+    <path d="M72 122.5H86.5a5.5 5.5 0 0 1 0 11H72Z"/>
+    <path d="M72 172H86.5a5.5 5.5 0 0 1 0 11H72Z"/>
+  </g>
+  <rect x="115" y="79" width="72" height="98" rx="10.5" fill="#d8cbb1"/>
+  <rect x="118" y="82" width="66" height="92" rx="8" fill="url(#card)"/>
+  <rect x="124" y="88" width="54" height="80" rx="4" fill="none" stroke="#ffe7d6" stroke-opacity=".85" stroke-width="1.8"/>
+  <g fill="none" stroke="#fff4e8" stroke-width="4.5" stroke-linejoin="round">
+    <path d="M145 110 163 128 145 146 127 128Z"/>
+    <path d="M157 110 175 128 157 146 139 128Z"/>
+  </g>
+  <path clip-path="url(#pocket)" d="M118 150 184 96V116L118 170Z" fill="#fff" opacity=".14"/>
+</svg>

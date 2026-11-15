@@ -3,7 +3,8 @@ import { useGame } from '@/lib/game'
 import { css } from '@/lib/wash/color'
 import { field, GRAIN } from '@/lib/wash/field'
 import { fit } from '@/lib/wash/fit'
-import { gameFallback } from '@/lib/wash/sample'
+import { useWashPref } from '@/lib/washPref'
+import { applyWashPref } from '@/lib/wash/applyPref'
 import type { WashState } from './artWashContext'
 
 const reducedMotion = (): boolean =>
@@ -25,10 +26,11 @@ export function ArtWash({
   enabled?: boolean
 }): React.JSX.Element | null {
   const { game } = useGame()
-  const fallback = useMemo(() => gameFallback(game), [game])
-  const families = wash?.families ?? fallback
-  const seed = wash?.seed ?? 0
-  const strength = wash?.strength ?? 1
+  const { wash: pref } = useWashPref()
+  const { families, seed, strength } = useMemo(
+    () => applyWashPref(wash, pref, game),
+    [wash, pref, game]
+  )
 
   const { base, pools } = useMemo(() => {
     const fitted = fit(families, 'dark')

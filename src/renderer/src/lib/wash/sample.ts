@@ -219,6 +219,26 @@ const GAME_COLOURS: Record<GameId, [RGB, RGB]> = {
 }
 
 /**
+ * The game's two colours drained to a dim near-grey, for the Colourless background.
+ * Starting values: tune with the owner.
+ */
+export function colourlessFamilies(game: GameId): Families {
+  const [a, b] = GAME_COLOURS[game].map((rgb) => {
+    const [L, C, H] = lch(toOklab(rgb))
+    return { lch: [L, C * 0.3, H] as [number, number, number] }
+  })
+  return {
+    fams: [
+      { lab: unlch(a.lch), share: 0.65 },
+      { lab: unlch(b.lch), share: 0.35 }
+    ],
+    dark: unlch([0.19, 0.004, a.lch[2]]),
+    vivid: a.lch[1],
+    greyArt: false
+  }
+}
+
+/**
  * The game's colours as a wash. With `rand`, both colours are turned round the colour wheel by the
  * same random amount, keeping their lightness, strength and the gap between them: for an empty page
  * with no card to read, so it isn't the same colour every time.

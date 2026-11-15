@@ -1,5 +1,5 @@
 import { reverseChecked, reverseVersion } from '@shared/scan/reverseHolo'
-import type { ScanDraft } from '@shared/scan/types'
+import type { ScanDraft, ScanPrinting } from '@shared/scan/types'
 import type { RawSignals } from './engine'
 import type { ResolveContext } from './resolve'
 import type { VersionCues } from './vision/pokemonVersion'
@@ -39,4 +39,31 @@ export function applyReverseCheck(
     rarity: named.rarity,
     flag: null
   }
+}
+
+/**
+ * The same Pokémon printing in the other of reverse holo and not: a Normal's or Holofoil's
+ * Reverse Holofoil, a Reverse Holofoil's Normal (else its Holofoil); same card, set code and
+ * language. Other stamped and pattern versions are no twins, on either side. Null when it has no
+ * such twin.
+ */
+export function reverseTwin(p: ScanPrinting, all: ScanPrinting[]): ScanPrinting | null {
+  const wants =
+    p.rarity === 'Reverse Holofoil'
+      ? ['Normal', 'Holofoil']
+      : p.rarity === 'Normal' || p.rarity === 'Holofoil'
+        ? ['Reverse Holofoil']
+        : []
+  for (const want of wants) {
+    const twin = all.find(
+      (o) =>
+        o.printingId !== p.printingId &&
+        o.cardId === p.cardId &&
+        o.setCode === p.setCode &&
+        o.language === p.language &&
+        o.rarity === want
+    )
+    if (twin) return twin
+  }
+  return null
 }

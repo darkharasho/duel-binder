@@ -310,7 +310,8 @@ async function reprintsOf(
     const n = numberOfCode(code)
     if (n) found.push(...(await ctx.lookups.printingsByNumber({ setAbbrev: null, ...n })))
   }
-  const seen = new Set<number>()
+  // A Gem Pack's versions are cards of their own that share the art: already offered, not reprints.
+  const seen = new Set(item.options.map((p) => p.printingId))
   return found.filter((p) => {
     if (
       seen.has(p.printingId) ||

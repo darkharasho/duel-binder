@@ -193,3 +193,45 @@ describe('groupPrintings', () => {
     expect(activeGroup(filterGroups(groups, 'rare'), groups[1].key)?.badge).toBe('LOB-EN005')
   })
 })
+
+describe('choicesFor a Gem Pack card', () => {
+  const gem = (printingId: number, number: string, rarity: string): ScanPrinting => ({
+    ...printing(printingId, rarity, null),
+    cardId: printingId,
+    name: "Marnie's Morpeko",
+    frameType: 'normal',
+    setName: 'Gem Pack Vol. 7',
+    setCode: `CBB7C ${number}`,
+    language: 'zh-hans'
+  })
+  const options = [
+    gem(1, '2501', 'Holofoil'),
+    gem(2, '2502', 'Poke Ball Pattern'),
+    gem(3, '2503', 'Holofoil'),
+    gem(4, '2504', 'Holofoil'),
+    gem(5, '2505', 'Master Ball Pattern'),
+    gem(6, '2506', 'Set Logo Holofoil'),
+    gem(7, '2507', 'Holofoil')
+  ]
+
+  it("names Vol. 7's plain Holofoil versions by what sets them apart", () => {
+    const row = rowOf(options, { game: 'pkm', cardId: 1, setCode: 'CBB7C 2501' })
+    expect(choicesFor(row, 'zh-hans').map((c) => c.rarity)).toEqual([
+      'Energy Symbol',
+      'Poke Ball Pattern',
+      'Glitter',
+      'Sunburst',
+      'Master Ball Pattern',
+      'Set Logo Holofoil',
+      'Illustration Rare'
+    ])
+    // Still found by the catalog's name.
+    expect(choicesFor(row, 'zh-hans')[3].search).toContain('holofoil')
+  })
+
+  it('leaves other sets alone', () => {
+    const other = options.map((o) => ({ ...o, setCode: o.setCode.replace('CBB7C', 'CBB1C') }))
+    const row = rowOf(other, { game: 'pkm', cardId: 1, setCode: 'CBB1C 2501' })
+    expect(choicesFor(row, 'zh-hans')[0].rarity).toBe('Holofoil')
+  })
+})

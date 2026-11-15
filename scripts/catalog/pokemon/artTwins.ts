@@ -28,6 +28,8 @@ import type { TdCard, TdSet } from './types'
 export type TwinOutcome =
   | 'linked'
   | 'shiny print'
+  | 'illustration print'
+  | 'no illustration print'
   | 'no twin'
   | 'unmapped set'
   | 'number missing'
@@ -48,12 +50,7 @@ const SHINY_RARITIES = new Set(['shiny rare', 'shiny ultra rare'])
 
 /** Traditional card names are only trusted once `nameTraditional` has run. */
 export type TraditionalOutcome =
-  | 'linked'
-  | 'unnamed'
-  | 'no candidate'
-  | 'category mismatch'
-  | 'rarity mismatch'
-  | 'ambiguous'
+  'linked' | 'unnamed' | 'no candidate' | 'category mismatch' | 'rarity mismatch' | 'ambiguous'
 
 export interface EnglishPlan {
   set: TdSet
@@ -83,6 +80,19 @@ export function englishTwins(sets: EnglishPlan[]): TwinFinder {
     }
   }
 
+  // English Illustration Rares with art, by name: a Gem Pack's ★★★ takes one (see below).
+  const illustration = new Map<string, { card: TdCard; serie: string | undefined }[]>()
+  for (const s of sets) {
+    for (const c of s.cards) {
+      if (!c.imageUrl || rarityKey(c.card.rarity) !== 'illustration rare') continue
+      const key = nameKey(c.card.name)
+      illustration.set(key, [
+        ...(illustration.get(key) ?? []),
+        { card: c.card, serie: s.set.serie?.id }
+      ])
+    }
+  }
+
   return {
     find(card, name) {
       const no = (outcome: TwinOutcome): { outcome: TwinOutcome; twin: null } => ({
@@ -95,6 +105,18 @@ export function englishTwins(sets: EnglishPlan[]): TwinFinder {
       const hit =
         link && plan?.cards.find((c) => numberKey(c.card.localId) === numberKey(link.number))
       const rarity = rarityKey(card.rarity)
+      // A Gem Pack's Illustration Rare is new art the list links to its plain card's number: it
+      // takes the English Illustration Rare of its name, or no art at all rather than the plain one.
+      if (rarity === 'illustration rare' && /^CBB\d+C-/.test(card.id)) {
+        if (rarityKey(hit?.card.rarity) === rarity && hit?.imageUrl)
+          return { outcome: 'linked', twin: hit.card }
+        const all = illustration.get(nameKey(name)) ?? []
+        const inSerie = all.filter((c) => c.serie === plan?.set.serie?.id)
+        const one = all.length === 1 ? all : inSerie
+        return one.length === 1
+          ? { outcome: 'illustration print', twin: one[0].card }
+          : no('no illustration print')
+      }
       if (SHINY_RARITIES.has(rarity) && rarityKey(hit?.card.rarity) !== rarity) {
         const all = shiny.get(`${nameKey(name)}|${rarity}`) ?? []
         const inSerie = all.filter((c) => c.serie === plan?.set.serie?.id)
@@ -117,7 +139,11 @@ export interface TraditionalPlan {
 }
 
 export interface TraditionalFinder {
-  find(card: TdCard, name: string, setId: string): { outcome: TraditionalOutcome; twin: TdCard | null }
+  find(
+    card: TdCard,
+    name: string,
+    setId: string
+  ): { outcome: TraditionalOutcome; twin: TdCard | null }
 }
 
 /** The name `nameTraditional` and the Simplified list give a card nothing names. */

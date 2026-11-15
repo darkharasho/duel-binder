@@ -9,6 +9,7 @@ import {
   XIcon
 } from 'lucide-react'
 import { GAMES, printingNoun } from '@shared/games'
+import { gemVersionName } from '@shared/gemVersions'
 import { languageInfo, type Language } from '@shared/languages'
 import { printingChip, printingParts, printingSearch, printingText } from '@shared/printingLabel'
 import { englishSetName } from '@shared/setNames'
@@ -83,18 +84,23 @@ export function choicesFor(row: ScanRow, language: Language | null): PickerOptio
         .filter(Boolean)
         .join(' · ')
       const search = `${o.rarity} ${o.setCode} ${o.setName} ${tag}`.toLowerCase()
+      const version = gemVersionName(o.setCode, o.rarity)
       if (!sets) {
-        const label = [o.rarity, note].filter(Boolean).join(' · ')
-        return { key: String(o.printingId), label, search }
+        const label = [version, note].filter(Boolean).join(' · ')
+        return {
+          key: String(o.printingId),
+          label,
+          search: version === o.rarity ? search : `${version.toLowerCase()} ${search}`
+        }
       }
       const title = englishSetName(o.setName)
       return {
         key: String(o.printingId),
-        label: [`${o.setCode} ${title} - ${o.rarity}`, note].filter(Boolean).join(' · '),
-        search,
+        label: [`${o.setCode} ${title} - ${version}`, note].filter(Boolean).join(' · '),
+        search: version === o.rarity ? search : `${version.toLowerCase()} ${search}`,
         badge: o.setCode || undefined,
         title,
-        rarity: o.rarity,
+        rarity: version,
         note: note || undefined
       }
     }

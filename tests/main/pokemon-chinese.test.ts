@@ -285,6 +285,13 @@ describe('chineseListSets', () => {
       })
     ).toEqual(['Holofoil'])
   })
+  it("calls a Gem Pack's ★★★ an Illustration Rare from Vol. 4 on", () => {
+    const rarity = (id: string): string | null | undefined =>
+      list(id, [zh('0107', '蛋蛋', 'Exeggcute', '★★★')]).sets[0].cards[0].rarity
+    expect(rarity('CBB7C')).toBe('Illustration rare')
+    expect(rarity('CBB4C')).toBe('Illustration rare')
+    expect(rarity('CBB2C')).toBe('Triple rare')
+  })
   it('reads a Gem Pack finish from the number, and leaves an unmeasured one plain', () => {
     const gem = (id: string, n: string, mark: string): string[] =>
       labels(id, zh(n, '蛋蛋', 'Exeggcute', mark))

@@ -257,8 +257,9 @@ export function createImageCache(opts: {
       )
       if ((await fs.stat(tmpPath)).size === 0) throw new Error('empty image body')
       await prepare?.(tmpPath)
+      const bytes = (await fs.stat(tmpPath)).size
       await fs.rename(tmpPath, target)
-      opts.onDownloaded?.((await fs.stat(target)).size)
+      opts.onDownloaded?.(bytes)
       if (brief !== undefined) {
         if (/\bimmutable\b/.test(res.headers.get('cache-control') ?? ''))
           await fs.rm(brief, { force: true })

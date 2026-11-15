@@ -55,11 +55,11 @@ export async function ownedImageKeys(
   return keys
 }
 
+/** One image: every file of its identity (a printing photo may be saved in two formats). */
 interface Entry {
-  file: string
+  files: { file: string; mtimeMs: number }[]
   size: number
   mtimeMs: number
-  markers: string[]
 }
 
 /** A file's cache identity: its path under `dir` without its extension (and without a marker's). */
@@ -88,14 +88,15 @@ async function walk(dir: string, base = dir, out: string[] = []): Promise<string
 
 /**
  * Deletes the least recently used images that aren't owned (`keep`) or being written (`busy`,
- * `.tmp`) once the rest of the folder passes `budget` bytes, until it is at or under `target`.
- * Last use is the file's mtime (the cache refreshes it when it serves an old file). A deleted
- * image's `.brief`/`.none` markers go with it.
+ * asked before each delete; `.tmp`) once the rest of the folder passes `budget` bytes, until it
+ * is at or under `target`. Last use is the file's mtime (the cache refreshes it when it serves an
+ * old file); a file used since the scan is spared. A deleted image's `.brief`/`.none` markers go
+ * with it.
  */
 export async function evictImages(opts: {
   dir: string
   keep: ReadonlySet<string>
-  busy: ReadonlySet<string>
+  busy: () => ReadonlySet<string>
   budget?: number
   target?: number
 }): Promise<{ deleted: number; freed: number }> {
@@ -114,7 +115,11 @@ export async function evictImages(opts: {
     if (opts.keep.has(id)) continue
     const st = await fs.stat(file).catch(() => null)
     if (!st) continue
-    images.set(id, { file, size: st.size, mtimeMs: st.mtimeMs, markers: [] })
+    const e = images.get(id) ?? { files: [], size: 0, mtimeMs: 0 }
+    e.files.push({ file, mtimeMs: st.mtimeMs })
+    e.size += st.size
+    e.mtimeMs = Math.max(e.mtimeMs, st.mtimeMs)
+    images.set(id, e)
   }
   let total = 0
   for (const e of images.values()) total += e.size
@@ -124,15 +129,24 @@ export async function evictImages(opts: {
   const oldestFirst = [...images.entries()].sort((a, b) => a[1].mtimeMs - b[1].mtimeMs)
   for (const [id, e] of oldestFirst) {
     if (total <= target) break
-    if (opts.busy.has(id)) continue
-    try {
-      await fs.rm(e.file)
-    } catch {
-      continue
+    if (opts.busy().has(id)) continue
+    let gone = 0
+    for (const f of e.files) {
+      const now = await fs.stat(f.file).catch(() => null)
+      // Served (touched) since the scan: in use, so the image stays.
+      if (now && now.mtimeMs > f.mtimeMs) continue
+      if (!now) continue
+      try {
+        await fs.rm(f.file)
+        gone += now.size
+      } catch {
+        // already gone or locked; the next trim tries again
+      }
     }
+    if (gone === 0) continue
     for (const m of markers.get(id) ?? []) await fs.rm(m, { force: true })
-    total -= e.size
-    freed += e.size
+    total -= gone
+    freed += gone
     deleted++
   }
   return { deleted, freed }
@@ -153,7 +167,7 @@ export async function runEviction(opts: {
     console.warn('Image cache trim skipped: owned cards unreadable', e)
     return null
   }
-  return evictImages({ ...opts, keep, busy: opts.busy() })
+  return evictImages({ ...opts, keep })
 }
 
 /**

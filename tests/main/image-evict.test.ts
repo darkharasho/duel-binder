@@ -1,4 +1,4 @@
-import { promises as fs } from 'node:fs'
+import { promises as fs, utimesSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -45,7 +45,7 @@ describe('evictImages', () => {
     const r = await evictImages({
       dir,
       keep: new Set(['full/1']),
-      busy: new Set(),
+      busy: () => new Set(),
       budget: 350,
       target: 250
     })
@@ -61,7 +61,13 @@ describe('evictImages', () => {
   it('does nothing under budget', async () => {
     await put('full/2.jpg', 100, 20)
     await put('small/3.jpg', 100, 10)
-    const r = await evictImages({ dir, keep: new Set(), busy: new Set(), budget: 200, target: 100 })
+    const r = await evictImages({
+      dir,
+      keep: new Set(),
+      busy: () => new Set(),
+      budget: 200,
+      target: 100
+    })
     expect(r).toEqual({ deleted: 0, freed: 0 })
     expect(await has('full/2.jpg')).toBe(true)
   })
@@ -72,12 +78,49 @@ describe('evictImages', () => {
     await put('printings-small/tp-y.jpg', 100, 19)
     await put('printings-small/tp-y.none', 0, 19)
     await put('small/9.jpg', 100, 1)
-    await evictImages({ dir, keep: new Set(), busy: new Set(), budget: 150, target: 100 })
+    await evictImages({ dir, keep: new Set(), busy: () => new Set(), budget: 150, target: 100 })
     expect(await has('full/2.jpg')).toBe(false)
     expect(await has('full/2.jpg.brief')).toBe(false)
     expect(await has('printings-small/tp-y.jpg')).toBe(false)
     expect(await has('printings-small/tp-y.none')).toBe(false)
     expect(await has('small/9.jpg')).toBe(true)
+  })
+
+  it('counts and deletes every format of one printing photo', async () => {
+    await put('printings/k.jpg', 100, 10)
+    await put('printings/k.png', 100, 5)
+    const r = await evictImages({
+      dir,
+      keep: new Set(),
+      busy: () => new Set(),
+      budget: 150,
+      target: 0
+    })
+    // One image, both its files.
+    expect(r).toEqual({ deleted: 1, freed: 200 })
+    expect(await has('printings/k.jpg')).toBe(false)
+    expect(await has('printings/k.png')).toBe(false)
+  })
+
+  it('asks what is downloading before each delete, and spares a file used since the scan', async () => {
+    await put('full/1.jpg', 100, 30)
+    await put('full/2.jpg', 100, 20)
+    await put('full/3.jpg', 100, 10)
+    let asks = 0
+    const busy = (): Set<string> => {
+      asks++
+      // While full/1 goes, full/2 starts downloading again and full/3 is served (touched).
+      if (asks === 1) {
+        const t = new Date()
+        utimesSync(path.join(dir, 'full/3.jpg'), t, t)
+        return new Set()
+      }
+      return new Set(['full/2'])
+    }
+    const r = await evictImages({ dir, keep: new Set(), busy, budget: 250, target: 0 })
+    expect(r).toEqual({ deleted: 1, freed: 100 })
+    expect(await has('full/2.jpg')).toBe(true)
+    expect(await has('full/3.jpg')).toBe(true)
   })
 
   it('leaves tmp and in-flight files alone', async () => {
@@ -88,7 +131,7 @@ describe('evictImages', () => {
     const r = await evictImages({
       dir,
       keep: new Set(),
-      busy: new Set(['full/2']),
+      busy: () => new Set(['full/2']),
       budget: 250,
       target: 100
     })

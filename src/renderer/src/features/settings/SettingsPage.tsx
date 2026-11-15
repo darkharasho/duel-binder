@@ -16,6 +16,7 @@ import { DexImportButton } from './DexImportDialog'
 import { EbayPricesToggle } from './EbayPricesToggle'
 import { ScanPingToggle } from './ScanPingToggle'
 import { UsageToggle } from './UsageToggle'
+import { WashSetting } from './WashSetting'
 import { WishlistToggle } from './WishlistToggle'
 import type { UpdateStatus } from '@shared/types'
 
@@ -183,6 +184,9 @@ function DesktopSettings(): React.JSX.Element {
             </Button>
           </div>
         </div>
+        <Row label="Background">
+          <WashSetting />
+        </Row>
       </Section>
 
       <Section title="Card data">
@@ -288,6 +292,11 @@ function WebSettings(): React.JSX.Element {
       <PageHeader title="Settings" />
       <Section title="Account">
         <AccountSection />
+      </Section>
+      <Section title="App">
+        <Row label="Background">
+          <WashSetting />
+        </Row>
       </Section>
       <Section title="Privacy">
         <WishlistToggle />

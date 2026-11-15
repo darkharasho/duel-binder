@@ -878,7 +878,9 @@ CREATE TABLE admin_handoffs (code_hash TEXT PRIMARY KEY,
   { name: 'server-41', sql: SCHEMA_V43 },
   magicStep(),
   magicLanguagesStep(),
-  rollupStep()
+  rollupStep(),
+  // Synced account preferences (JSON text; NULL means the defaults).
+  { name: 'server-45', sql: 'ALTER TABLE users ADD COLUMN prefs TEXT;' }
 ]
 
 /**

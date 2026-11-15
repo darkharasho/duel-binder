@@ -90,6 +90,7 @@ import {
   setWishlistVisible,
   wishlistVisible
 } from './wishlist'
+import { getPrefs, setPrefs } from './prefs'
 import { friendBinder, friendBinders } from './friendBinders'
 import { friendSessions } from './scanSessions'
 import { userScope } from './scope'
@@ -267,6 +268,8 @@ const HANDLERS: { [C in Exclude<PortalChannel, AccountLinkChannel>]: Handler<C> 
   'friends:wishlistVisible': ({ db, userId }) => wishlistVisible(db, userId),
   'friends:setWishlistVisible': ({ db, userId }, _s, visible) =>
     setWishlistVisible(db, userId, visible),
+  'prefs:get': ({ db, userId }) => getPrefs(db, userId),
+  'prefs:set': ({ db, userId }, _s, patch) => setPrefs(db, userId, patch),
   'wishlist:list': ({ db }, scope) => listWishlist(db, scope),
   'wishlist:forCard': ({ db }, scope, cardId) =>
     wishesForCard(db, checkId(cardId, 'cardId'), scope),

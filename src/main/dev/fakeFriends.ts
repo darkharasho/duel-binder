@@ -11,6 +11,7 @@ import type { Me } from '../../shared/cloud'
 import type { PortalChannel } from '../../shared/portal'
 import type { GameId } from '../../shared/games'
 import type { Language } from '../../shared/languages'
+import { DEFAULT_PREFS, type Prefs } from '../../shared/prefs'
 import type {
   CollectionFilters,
   Friend,
@@ -249,6 +250,7 @@ export function createFakeFriends(
   const blocked = new Map([[BLOCKED.id, BLOCKED]])
   const wishVisible = new Map(FAKE_PEOPLE.map((p) => [p.user.id, p.wishlistVisible]))
   let myWishlistVisible = true
+  let myPrefs: Prefs = DEFAULT_PREFS
 
   const userOf = (id: number): FriendUser | undefined => people.get(id)?.user ?? blocked.get(id)
   const game = (): GameId => scopeGame(db, LOCAL)
@@ -424,6 +426,11 @@ export function createFakeFriends(
     'friends:wishlistVisible': () => myWishlistVisible,
     'friends:setWishlistVisible': (visible) => {
       myWishlistVisible = visible === true
+    },
+    'prefs:get': () => myPrefs,
+    'prefs:set': (patch) => {
+      myPrefs = { ...myPrefs, ...(patch as Partial<Prefs>) }
+      return myPrefs
     }
   }
 

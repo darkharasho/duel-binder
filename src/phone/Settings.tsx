@@ -16,6 +16,7 @@ import { SignInMethods } from '@/features/settings/SignInMethods'
 import { EbayPricesToggle } from '@/features/settings/EbayPricesToggle'
 import { ScanPingToggle } from '@/features/settings/ScanPingToggle'
 import { UsageToggle } from '@/features/settings/UsageToggle'
+import { WashSetting } from '@/features/settings/WashSetting'
 import { WishlistToggle } from '@/features/settings/WishlistToggle'
 import { toast } from 'sonner'
 import type { CardChoice, MergePreview, SignInProvider } from '@shared/account'
@@ -311,6 +312,10 @@ export function Settings({
           </a>
           <ScanPingToggle className="flex min-h-12 items-start gap-3 px-4 py-3 text-[15px]" />
           <ScanTimingsToggle className="flex min-h-12 items-start gap-3 px-4 py-3 text-[15px]" />
+          <Row>
+            <span className="mr-auto">Background</span>
+            <WashSetting compact />
+          </Row>
           <Row>
             {/* The stream's hit moment: the same setting as the stream's start screen. */}
             <HitPriceInput

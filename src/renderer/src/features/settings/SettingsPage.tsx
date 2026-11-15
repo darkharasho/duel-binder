@@ -16,6 +16,7 @@ import { DexImportButton } from './DexImportDialog'
 import { EbayPricesToggle } from './EbayPricesToggle'
 import { ScanPingToggle } from './ScanPingToggle'
 import { UsageToggle } from './UsageToggle'
+import { WashSetting } from './WashSetting'
 import { WishlistToggle } from './WishlistToggle'
 import type { UpdateStatus } from '@shared/types'
 
@@ -158,6 +159,9 @@ function DesktopSettings(): React.JSX.Element {
 
       <Section title="App">
         <Row label="Version">{version.data ?? '—'}</Row>
+        <Row label="Background">
+          <WashSetting />
+        </Row>
         <div className="flex items-center justify-between gap-4">
           <span role="status" className="text-sm text-muted-foreground">
             {describeUpdate(update)}
@@ -288,6 +292,11 @@ function WebSettings(): React.JSX.Element {
       <PageHeader title="Settings" />
       <Section title="Account">
         <AccountSection />
+      </Section>
+      <Section title="App">
+        <Row label="Background">
+          <WashSetting />
+        </Row>
       </Section>
       <Section title="Privacy">
         <WishlistToggle />

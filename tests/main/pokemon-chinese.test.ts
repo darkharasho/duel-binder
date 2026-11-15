@@ -216,6 +216,8 @@ describe('chineseListSets', () => {
     expect(gem('CBB4C', '0105', '★')).toEqual(['Master Ball Pattern'])
     expect(gem('CBB4C', '0106', '★★')).toEqual(['Set Logo Holofoil'])
     expect(gem('CBB6C', '0103', '◆')).toEqual(['Holofoil'])
+    expect(gem('CBB7C', '0302', '●')).toEqual(['Poke Ball Pattern'])
+    expect(gem('CBB7C', '0306', '★★')).toEqual(['Set Logo Holofoil'])
     expect(gem('CBB2C', '0113', '★')).toEqual(['Holofoil'])
     expect(gem('CBB1C', '0105', '★')).toEqual(['Holofoil'])
   })

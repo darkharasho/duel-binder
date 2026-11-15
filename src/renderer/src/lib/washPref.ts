@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useSyncExternalStore } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { parsePrefs, type Prefs } from '@shared/prefs'
 import { api, queryKeys } from './api'
@@ -8,6 +8,8 @@ const KEY = 'prefs:v1'
 
 /** Window-wide copy of the prefs. Null until first read, so startup reads storage with no wait. */
 let cache: Prefs | null = null
+/** Newest query result already applied, window-wide: "new data" means new to the window, not to one instance. */
+let seenUpdatedAt = 0
 const listeners = new Set<() => void>()
 
 function readStorage(): Prefs {
@@ -61,6 +63,7 @@ function subscribe(cb: () => void): () => void {
 /** Test-only: forget the in-memory copy so the next read goes back to storage. */
 export function resetWashStoreForTests(): void {
   cache = null
+  seenUpdatedAt = 0
 }
 
 let setSeq = 0
@@ -80,10 +83,9 @@ export function useWashPref(): { wash: Prefs['wash']; setWash: (next: Prefs['was
   })
 
   // A query result becomes the value only when it is new, so a stale cached one can't undo a local change.
-  const seen = useRef(0)
   useEffect(() => {
-    if (!query.data || query.dataUpdatedAt === seen.current) return
-    seen.current = query.dataUpdatedAt
+    if (!query.data || query.dataUpdatedAt <= seenUpdatedAt) return
+    seenUpdatedAt = query.dataUpdatedAt
     commit(query.data)
   }, [query.data, query.dataUpdatedAt])
 
@@ -91,10 +93,12 @@ export function useWashPref(): { wash: Prefs['wash']; setWash: (next: Prefs['was
     (next: Prefs['wash']) => {
       const value: Prefs = { wash: next }
       commit(value)
+      // Keep the cached result in step so a later mount can't replay an older one over this choice.
+      queryClient.setQueryData(queryKeys.prefs, parsePrefs(value))
+      seenUpdatedAt = Math.max(seenUpdatedAt, queryClient.getQueryState(queryKeys.prefs)?.dataUpdatedAt ?? 0)
       if (!ready) return
       const mine = ++setSeq
       void queryClient.cancelQueries({ queryKey: queryKeys.prefs })
-      queryClient.setQueryData(queryKeys.prefs, parsePrefs(value))
       api.prefs
         .set({ wash: next })
         .then((saved) => {

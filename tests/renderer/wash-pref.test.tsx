@@ -81,6 +81,24 @@ describe('useWashPref', () => {
     await act(async () => result.current.setWash({ mode: 'colourless' }))
     expect(api.prefs.set).toHaveBeenCalledWith({ wash: { mode: 'colourless' } })
     expect(result.current.wash).toEqual({ mode: 'colourless' })
+    const second = renderHook(() => useWashPref(), { wrapper })
+    result.current.setWash({ mode: 'colourless' })
+    second.rerender()
+    expect(second.result.current.wash).toEqual({ mode: 'colourless' })
+  })
+
+  it('a later instance does not replay an older cached portal value over a signed-out choice', async () => {
+    ready.value = true
+    setup({ get: vi.fn(async () => ({ wash: locked })) })
+    const first = renderHook(() => useWashPref(), { wrapper })
+    await waitFor(() => expect(first.result.current.wash).toEqual(locked))
+    first.unmount()
+    ready.value = false
+    const second = renderHook(() => useWashPref(), { wrapper })
+    act(() => second.result.current.setWash({ mode: 'colourless' }))
+    const third = renderHook(() => useWashPref(), { wrapper })
+    expect(third.result.current.wash).toEqual({ mode: 'colourless' })
+    expect(JSON.parse(localStorage.getItem(KEY) as string)).toEqual({ wash: { mode: 'colourless' } })
   })
 
   it('a rejected set keeps the new local value', async () => {

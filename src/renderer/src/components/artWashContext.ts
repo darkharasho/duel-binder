@@ -11,6 +11,30 @@ export interface WashState {
 
 export const ArtWashContext = createContext<((w: WashState | null) => void) | null>(null)
 
+/** The shown wash outside React state, so setting it re-renders only the wash, not the shell's page. */
+export interface WashStore {
+  get: () => WashState | null
+  set: (w: WashState | null) => void
+  subscribe: (listener: () => void) => () => void
+}
+
+export function createWashStore(): WashStore {
+  let value: WashState | null = null
+  const listeners = new Set<() => void>()
+  return {
+    get: () => value,
+    set: (w) => {
+      if (w === value) return
+      value = w
+      for (const l of listeners) l()
+    },
+    subscribe: (l) => {
+      listeners.add(l)
+      return () => listeners.delete(l)
+    }
+  }
+}
+
 /** A pick landing later than this after the page opened is dropped. */
 export const PICK_DEADLINE_MS = 6000
 /** A page still without cards this long after opening counts as empty and gets a wash of its own. */

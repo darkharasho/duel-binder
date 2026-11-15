@@ -172,7 +172,25 @@ const GEM_SLOTS: Record<string, Record<string, Record<number, string>>> = {
 const STAMPED_GEMS = new Set(['CBB2C', 'CBB4C', 'CBB5C', 'CBB6C', 'CBB7C'])
 
 /** Deck and box cards have no mark; these tags are foil there too. */
-const FOIL_TAGS = new Set(['V', 'VMAX', 'VSTAR', 'V-UNION', 'GX', 'TAG TEAM', 'ex', 'EX', 'BREAK Evolution', 'Level Up', 'LEGEND', 'Prism Star', 'Radiant', 'ACE SPEC', 'SP', 'Mega', 'Mega Evolution'])
+const FOIL_TAGS = new Set([
+  'V',
+  'VMAX',
+  'VSTAR',
+  'V-UNION',
+  'GX',
+  'TAG TEAM',
+  'ex',
+  'EX',
+  'BREAK Evolution',
+  'Level Up',
+  'LEGEND',
+  'Prism Star',
+  'Radiant',
+  'ACE SPEC',
+  'SP',
+  'Mega',
+  'Mega Evolution'
+])
 
 /**
  * A card's finishes, from the rules a Dex export bears out (the list has none): C and U are Normal,
@@ -208,7 +226,17 @@ const DEX_MASTERS: Record<string, ReadonlySet<string>> = {
 
 /** Marks the list has wrong, by set and number, as a Dex export shows them. */
 const RARITY_FIXES: Record<string, Record<string, string>> = {
-  CSV5C: { '035': 'U', '037': 'U', '038': 'R', '054': 'U', '074': 'R', '083': 'R', '092': 'R', '098': 'R', '103': 'R' }
+  CSV5C: {
+    '035': 'U',
+    '037': 'U',
+    '038': 'R',
+    '054': 'U',
+    '074': 'R',
+    '083': 'R',
+    '092': 'R',
+    '098': 'R',
+    '103': 'R'
+  }
 }
 
 /** The letter codes the list uses for energy and the like, kept as they are printed. */
@@ -263,7 +291,10 @@ export interface ChineseListResult {
  * An odd number is kept as printed and a card no one names takes its set and number, so nothing is
  * dropped and no Chinese name reaches `name`; the counts go to the job's log.
  */
-export function chineseListSets(index: ZhSetEntry[], rows: Map<string, ZhCard[]>): ChineseListResult {
+export function chineseListSets(
+  index: ZhSetEntry[],
+  rows: Map<string, ZhCard[]>
+): ChineseListResult {
   const out: ChineseListResult = { sets: [], named: 0, unnamed: 0, oddNumbers: 0, repeats: 0 }
   const nameOf = chineseNamer([...rows.values()].flat())
   for (const [id, entry] of chineseFiles(index)) {

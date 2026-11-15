@@ -2,6 +2,7 @@ import { MAGIC_FAN_CONTENT } from '../../../../src/shared/legal'
 import { MAGIC_LANGUAGE_COUNT } from '../../../../src/shared/games/magic'
 import { RELEASES_FALLBACK, type Asset, type Downloads } from './releases'
 import type { Os } from './os'
+import { pickWash, washLayer, washRootStyle, type Wash } from './wash'
 
 export interface PageView {
   downloads: Downloads
@@ -9,6 +10,8 @@ export interface PageView {
   /** An Android visitor, offered the APK when the latest release has one. */
   android: boolean
   appUrl: string
+  /** The colour wash behind the page; a random one when left out. */
+  wash?: Wash
 }
 
 export const REPO_URL = 'https://github.com/darkharasho/duel-binder'
@@ -18,8 +21,9 @@ const DESCRIPTION =
 const LEAD =
   'Scan your <span class="nowrap">Yu-Gi-Oh!</span>, Pokémon, Magic and One Piece cards with a camera, or add them by hand. Duel Binder finds the exact printing, keeps prices up to date and shows what each set still needs. It runs on your computer and your phone, and works offline.'
 
-// The favicon, drawn for small sizes (resources/brand/small.svg); so there is only one mark to keep.
-export const MARK = `<img src="/favicon.svg" width="28" height="28" alt="">`
+// The D binder mark, as in the app's sidebar (src/renderer/src/assets/logo-mark.svg). It stands in
+// for the name, so its alt text is the name.
+export const MARK = `<img class="mark" src="/mark.svg" width="30" height="34" alt="Duel Binder">`
 
 const OS_LABEL: Record<Os, string> = { windows: 'Windows', mac: 'macOS', linux: 'Linux' }
 
@@ -38,9 +42,9 @@ export function formatSize(bytes: number): string {
 
 function nav(appUrl: string): string {
   return `<nav><div class="wrap navin">
-<a class="brand" href="/">${MARK}Duel Binder</a>
-<a class="sec" href="#scan">Scanner</a><a class="sec" href="#features">Features</a><a href="#download">Download</a><a class="sec" href="${REPO_URL}">GitHub</a>
-<span class="grow"></span><a class="signin" href="${esc(appUrl)}">Sign in</a>
+<a class="brand" href="/">${MARK}</a>
+<a class="sec" href="#games">Games</a><a class="sec" href="#scan">Scanner</a><a class="sec" href="#features">Features</a><a href="#download">Download</a>
+<span class="grow"></span><a class="sec mono gh" href="${REPO_URL}">GitHub</a><a class="signin" href="${esc(appUrl)}">Sign in</a>
 </div></nav>`
 }
 
@@ -58,14 +62,19 @@ function hero(v: PageView): string {
   const href = apk ? apk.url : os ? (asset ? asset.url : RELEASES_FALLBACK) : '#download'
   const platforms = apk ? `Android · free · ${ANDROID_NOTE}` : 'Windows, macOS, Linux · free'
   const meta = `${downloads.version ? `v${downloads.version} · ` : ''}${platforms}`
-  return `<header class="hero">
+  return `<header class="hero"><div>
+<div class="kick mono">Yu-Gi-Oh! · Pokémon · Magic · One Piece</div>
 <h1>A binder for every card you own.</h1>
 <p class="lead">${LEAD}</p>
 <div class="actions"><a class="btn pri" href="${esc(href)}">${label}</a><a class="btn out" href="${esc(appUrl)}">Open the web app</a></div>
 <div class="meta mono">${esc(meta)}</div>
-</header>
+</div><img class="bigmark" src="/mark.svg" width="180" height="206" alt=""></header>
 ${shot('/shots/collection.webp', 'The Collection page of the Duel Binder desktop app: Yu-Gi-Oh! cards sorted by total price, over a soft wash of colour from the card art.', false)}`
 }
+
+/** A section's small mono label, numbered like the app's catalogue headings. */
+const label = (n: number, text: string): string =>
+  `<div class="label mono"><span>${String(n).padStart(2, '0')}</span>${text}</div>`
 
 const GAMES: { id: string; name: string; body: string }[] = [
   {
@@ -93,21 +102,23 @@ const GAMES: { id: string; name: string; body: string }[] = [
 function games(): string {
   const tiles = GAMES.map(
     (g) =>
-      `<li class="game g-${g.id}"><div class="sw" aria-hidden="true"></div><h3>${g.name}</h3><p>${g.body}</p></li>`
+      `<li class="game g-${g.id}"><h3><i class="dot" aria-hidden="true"></i>${g.name}</h3><p>${g.body}</p></li>`
   ).join('')
-  return `<section class="games" id="games"><div class="head"><h2>Four games in one app</h2><p>Each game keeps its own collection, sets and prices. Switch between them from the sidebar.</p></div>
+  return `<section class="games" id="games"><div class="head"><div>${label(1, 'Games')}<h2>Four games in one app</h2></div><p>Each game keeps its own collection, sets and prices. Switch between them from the sidebar.</p></div>
 <ul class="tiles">${tiles}</ul>
 ${shot('/shots/collection-pokemon.webp', 'The Collection page showing Pokémon cards sorted by total price, from Umbreon VMAX down.')}
 </section>`
 }
 
 function feature(
+  n: number,
+  tag: string,
   id: string,
   heading: string,
   body: string,
   img?: { src: string; alt: string }
 ): string {
-  return `<section class="f"${id ? ` id="${id}"` : ''}><div class="ft"><h2>${heading}</h2>${body}</div>${img ? shot(img.src, img.alt) : ''}</section>`
+  return `<section class="f"${id ? ` id="${id}"` : ''}><div class="ft">${label(n, tag)}<h2>${heading}</h2>${body}</div>${img ? shot(img.src, img.alt) : ''}</section>`
 }
 
 const MODES: [string, string][] = [
@@ -119,6 +130,8 @@ const MODES: [string, string][] = [
 function scanner(): string {
   const modes = MODES.map(([m, d]) => `<li><b>${m}</b> ${d}</li>`).join('')
   return feature(
+    2,
+    'Scanner',
     'scan',
     'Hold a card up to the camera',
     `<p>Use a webcam or a capture card on your computer, or your phone's camera. Duel Binder reads the card, the printing and the rarity, then adds it to your collection.</p>
@@ -134,6 +147,8 @@ function scanner(): string {
 
 function worth(): string {
   return feature(
+    3,
+    'Value',
     'features',
     "What it's worth",
     '<p>Total value, card counts and your most valuable pulls. Prices update on their own, and Japanese, Korean and Chinese printings get prices from eBay listings.</p><p>The value chart is the same on every device you sign in on.</p>',
@@ -146,6 +161,8 @@ function worth(): string {
 
 function sets(): string {
   return feature(
+    4,
+    'Sets',
     '',
     'Finish your sets',
     '<p>Every set and printing in the catalog, with a checklist of what you still need. Print placeholders for the empty slots in your real binder.</p>',
@@ -179,7 +196,7 @@ const MORE: [string, string][] = [
 
 function more(): string {
   const items = MORE.map(([h, p]) => `<div><h3>${h}</h3><p>${esc(p)}</p></div>`).join('')
-  return `<section class="more"><h2>Also in the app</h2><div class="grid">${items}</div></section>`
+  return `<section class="more">${label(5, 'More')}<h2>Also in the app</h2><div class="grid">${items}</div></section>`
 }
 
 function devices(v: PageView): string {
@@ -188,7 +205,7 @@ function devices(v: PageView): string {
     : 'The Android app is on its way to the download list.'
   const app = esc(v.appUrl)
   const scan = `${v.appUrl.replace(/\/$/, '')}/scan/`
-  return `<section class="devices" id="devices"><h2>On your computer, your phone and the web</h2><div class="cols">
+  return `<section class="devices" id="devices">${label(6, 'Everywhere')}<h2>On your computer, your phone and the web</h2><div class="cols">
 <div><h3>Desktop</h3><p>Windows, macOS and Linux. Scan with a webcam or a capture card. The app updates itself.</p></div>
 <div><h3>Phone</h3><p>Scan with your phone's camera and carry your collection with you. ${android} On iPhone, open <a href="${esc(scan)}">${esc(scan.replace(/^https?:\/\//, ''))}</a> in Safari and add it to your home screen.</p></div>
 <div><h3>Web</h3><p>Open your collection, binders and friends in any browser at <a href="${app}">${esc(v.appUrl.replace(/^https?:\/\//, ''))}</a>.</p></div>
@@ -201,7 +218,7 @@ function downloadRow(name: string, asset: Asset | null, note = ''): string {
 }
 
 function downloadTable(d: Downloads): string {
-  return `<section class="f" id="download"><div class="ft"><h2>Download</h2><p>Free. The app checks for updates itself.</p></div>
+  return `<section class="f" id="download"><div class="ft">${label(7, 'Download')}<h2>Download</h2><p>Free. The app checks for updates itself.</p></div>
 <table>
 ${downloadRow('Windows', d.windows)}
 ${downloadRow('macOS', d.mac, d.mac ? ' · Apple silicon &amp; Intel' : '')}
@@ -215,11 +232,13 @@ export function footer(): string {
 }
 
 export function renderPage(view: PageView): string {
+  const wash = view.wash ?? pickWash()
   return `<!doctype html>
-<html lang="en">
+<html lang="en" style="${washRootStyle(wash)}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="${wash.base}">
 <title>${TITLE}</title>
 <meta name="description" content="${DESCRIPTION}">
 <link rel="icon" href="/favicon.ico" sizes="48x48">
@@ -236,7 +255,7 @@ export function renderPage(view: PageView): string {
 <script src="/account.js" defer></script>
 </head>
 <body class="home">
-<div class="wash" aria-hidden="true"><div></div></div>
+${washLayer(wash)}
 ${nav(view.appUrl)}
 <main class="wrap">
 ${hero(view)}

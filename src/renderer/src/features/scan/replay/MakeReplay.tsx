@@ -14,6 +14,7 @@ import {
 } from './encode'
 import type { ReplaySource } from './pulls'
 import { replayFileName, saveReplay, type SaveResult } from './save'
+import { makeHighlights, type Still } from './still'
 import { replayTimeline } from './timeline'
 
 type Make = (
@@ -53,19 +54,22 @@ const PHONE_CONTROL =
 
 /**
  * Make replay: a short video of the session's best pulls, saved to the device. Beside it, the format
- * (MP4 or GIF) where this device can record video at all.
+ * (MP4 or GIF) where this device can record video at all, and Save image: one PNG of the same pulls.
  */
 export function MakeReplay({
   source,
   variant,
-  make = makeReplay
+  make = makeReplay,
+  still = makeHighlights
 }: {
   source: ReplaySource
   variant: 'phone' | 'desktop'
   make?: Make
+  still?: Still
 }): React.JSX.Element {
   const [format, setFormat] = useState<ReplayFormat>('video')
   const [progress, setProgress] = useState<number | null>(null)
+  const [saving, setSaving] = useState(false)
   const controller = useRef<AbortController | null>(null)
   useEffect(() => () => controller.current?.abort(), [])
 
@@ -92,6 +96,19 @@ export function MakeReplay({
         controller.current = null
         setProgress(null)
       }
+    }
+  }
+
+  const saveImage = async (): Promise<void> => {
+    setSaving(true)
+    try {
+      const result = await still(source)
+      if (result.saved)
+        toast.success('Image saved', result.where ? { description: result.where } : undefined)
+    } catch (e) {
+      if (!isAbort(e)) toast.error(e instanceof Error ? e.message : "Couldn't save the image")
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -122,6 +139,7 @@ export function MakeReplay({
           ? PHONE_CONTROL
           : 'h-8 rounded-md border px-2 text-xs font-medium hover:bg-accent'
       }
+      disabled={saving}
       onClick={() => setFormat((f) => (f === 'video' ? 'gif' : 'video'))}
     >
       {format === 'video' ? videoLabel : 'GIF'}
@@ -131,14 +149,14 @@ export function MakeReplay({
   return (
     <span className="flex items-center gap-2">
       {variant === 'phone' ? (
-        <button type="button" className={PHONE_CONTROL} disabled={empty} onClick={start}>
+        <button type="button" className={PHONE_CONTROL} disabled={empty || saving} onClick={start}>
           Make replay
         </button>
       ) : (
         <Button
           variant="outline"
           size="sm"
-          disabled={empty}
+          disabled={empty || saving}
           title={empty ? 'No pulls to replay yet' : undefined}
           onClick={start}
         >
@@ -146,6 +164,20 @@ export function MakeReplay({
         </Button>
       )}
       {!empty && formatToggle}
+      {variant === 'phone' ? (
+        <button
+          type="button"
+          className={PHONE_CONTROL}
+          disabled={empty || saving}
+          onClick={saveImage}
+        >
+          {saving ? 'Saving…' : 'Save image'}
+        </button>
+      ) : (
+        <Button variant="outline" size="sm" disabled={empty || saving} onClick={saveImage}>
+          {saving ? 'Saving…' : 'Save image'}
+        </Button>
+      )}
       {empty && variant === 'phone' && (
         <span
           className={cn('text-xs', variant === 'phone' ? 'text-white/60' : 'text-muted-foreground')}

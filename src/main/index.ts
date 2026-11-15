@@ -408,7 +408,12 @@ async function bootstrap(): Promise<void> {
       const ext = name.slice(name.lastIndexOf('.') + 1)
       const { canceled, filePath } = await dialog.showSaveDialog({
         defaultPath: name,
-        filters: [{ name: ext === 'gif' ? 'GIF' : 'Video', extensions: [ext] }]
+        filters: [
+          {
+            name: ext === 'gif' ? 'GIF' : ext === 'png' ? 'PNG image' : 'Video',
+            extensions: [ext]
+          }
+        ]
       })
       if (canceled || !filePath) return null
       writeFileSync(filePath, data)

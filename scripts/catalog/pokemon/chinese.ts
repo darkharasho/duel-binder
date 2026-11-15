@@ -10,7 +10,7 @@ import { GENERATED_VARIANT_ID } from './versions'
  * shouldn't change the catalog unseen. The list has no art, prices or finishes; see listFinishes.
  */
 const LIST_URL =
-  'https://raw.githubusercontent.com/zsjy947/PTCG-card-data/7079b17a6844ea089b00d16d69e7060fc116911c/data'
+  'https://raw.githubusercontent.com/zsjy947/PTCG-card-data/7f03f38f4538f01d8ee03121aa91aad3b0ae1149/data'
 
 export interface ZhCard {
   cardIndex: string
@@ -164,11 +164,12 @@ const GEM_SLOTS: Record<string, Record<string, Record<number, string>>> = {
   CBB3C: { '●': { 2: BALL } },
   CBB4C: { '●': { 2: BALL }, '◆': { 3: STARLIGHT }, '★': { 5: MASTER } },
   CBB5C: { '●': { 2: BALL }, '★': { 5: MASTER } },
-  CBB6C: { '●': { 2: BALL }, '★': { 5: MASTER } }
+  CBB6C: { '●': { 2: BALL }, '★': { 5: MASTER } },
+  CBB7C: { '●': { 2: BALL }, '★': { 5: MASTER } }
 }
 
 /** Gem Packs whose ★★ are all Dex's "Expansion Stamp". */
-const STAMPED_GEMS = new Set(['CBB2C', 'CBB4C', 'CBB5C', 'CBB6C'])
+const STAMPED_GEMS = new Set(['CBB2C', 'CBB4C', 'CBB5C', 'CBB6C', 'CBB7C'])
 
 /** Deck and box cards have no mark; these tags are foil there too. */
 const FOIL_TAGS = new Set(['V', 'VMAX', 'VSTAR', 'V-UNION', 'GX', 'TAG TEAM', 'ex', 'EX', 'BREAK Evolution', 'Level Up', 'LEGEND', 'Prism Star', 'Radiant', 'ACE SPEC', 'SP', 'Mega', 'Mega Evolution'])

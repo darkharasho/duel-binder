@@ -8,6 +8,7 @@ import {
   VERSION_REFERENCE_RATIO
 } from '@shared/scan/thresholds'
 import { bodyStats, type BodyStats } from '@shared/scan/reverseHolo'
+import { gemScores, type GemScores } from '@shared/scan/gemPattern'
 import type { RgbaImage } from '@shared/scan/types'
 import { texture } from './foil'
 
@@ -22,6 +23,8 @@ export interface VersionCues {
   firstEdition: 'unknown'
   /** Body brightness against the art, and body evenness: the reverse holo check's input. */
   body: BodyStats
+  /** How well the Gem Pack patterns' templates match: which version of a Gem Pack card it is. */
+  gem?: GemScores
 }
 
 /**
@@ -36,7 +39,8 @@ export function pokemonVersionCues(card: RgbaImage, profile: ScanProfile): Versi
     art: texture(card, profile.foil.art).floor,
     reference: texture(card, profile.foil.reference).floor,
     firstEdition: 'unknown',
-    body: bodyStats(card)
+    body: bodyStats(card),
+    gem: gemScores(card)
   }
 }
 

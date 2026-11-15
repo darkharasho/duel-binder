@@ -23,6 +23,7 @@ import {
   PKM_GUESS_RULES,
   type PkmGuessRule
 } from '@shared/scan/thresholds'
+import { gemVersion } from '@shared/scan/gemPattern'
 import type { ScanDraft, ScanPrinting } from '@shared/scan/types'
 import type { RawSignals } from './engine'
 import { applyReverseCheck } from './reverseCheck'
@@ -340,8 +341,10 @@ async function draft(
   cardId: number,
   raw: RawSignals,
   ctx: ResolveContext,
-  via: ScanDraft['via']
+  via: ScanDraft['via'],
+  versionCards?: number[]
 ): Promise<ScanDraft | null> {
+  if (versionCards) return versionsDraft(cardId, versionCards, raw, ctx, via)
   const options = await ctx.lookups.printingsForCards([cardId])
   if (!options.length) return null
   const cheapest = (list: ScanPrinting[]): ScanPrinting =>
@@ -385,6 +388,43 @@ async function draft(
     ...(raw.slab ? { slab: true as const } : {})
   }
 }
+
+/**
+ * The draft of a card whose versions are cards of their own (a Gem Pack's, see inChinese), every
+ * version to pick from: on the version the foil's pattern names (gemVersion: energy symbol, Poké
+ * Ball, Master Ball, logo stamp), or else on cardId's own printing, flagged pick-printing.
+ */
+async function versionsDraft(
+  cardId: number,
+  cards: number[],
+  raw: RawSignals,
+  ctx: ResolveContext,
+  via: ScanDraft['via']
+): Promise<ScanDraft | null> {
+  const options = await ctx.lookups.printingsForCards(cards)
+  // The version the foil's pattern names, when it names one; else the card stood in for, to pick.
+  const told = gemVersion(raw.version?.gem, options)
+  const own = told ?? options.find((o) => o.cardId === cardId)
+  const imageId = own?.imageIds[0]
+  if (!own || imageId === undefined) return null
+  return {
+    cardId: own.cardId,
+    name: own.name,
+    imageId,
+    printingId: own.printingId,
+    setCode: own.setCode,
+    rarity: own.rarity,
+    options,
+    flag: told || options.length < 2 ? null : 'pick-printing',
+    via,
+    game: 'pkm',
+    ...(raw.slab ? { slab: true as const } : {})
+  }
+}
+
+/** Whether Chinese printings are all one set's, by one name: one card's versions. */
+const versionsOfOne = (list: ScanPrinting[]): boolean =>
+  list.every((p) => p.setName === list[0].setName && sameName(p.name, list[0].name))
 
 /**
  * What a frame shows of a Pokémon card, named for certain only when art, number and language
@@ -473,7 +513,7 @@ export async function resolvePokemonSignals(
     return closest < PKM_TWIN_MAYBE_ART ? 'yes' : 'maybe'
   }
   const named = async (cardId: number, via: ScanDraft['via']): Promise<ScanOutcome> => {
-    const drafted = await draft(cardId, raw, ctx, via)
+    const drafted = await draft(cardId, raw, ctx, via, versions.get(cardId))
     if (!drafted) return unsure
     // A Chinese card named through its twin is told from its reprints by the number already
     // (two Chinese cards at one name and number name neither), and having no art of its own, nor
@@ -496,17 +536,23 @@ export async function resolvePokemonSignals(
    */
   const stand = new Map<number, { twin: number; printing: ScanPrinting }>()
   const twinOf = (cardId: number): number => stand.get(cardId)?.twin ?? cardId
+  /** A Chinese card standing for several cards that are one card's versions: all of them. */
+  const versions = new Map<number, number[]>()
   /**
    * The Simplified Chinese cards among printings, own art or a twin's. A twin with several
-   * Chinese cards (two sets that print one name at one number) can't say which: none.
+   * Chinese cards (two sets that print one name at one number) can't say which: none. Unless
+   * they're all one set's, by one name: a Gem Pack numbers each version of a card as a card of
+   * its own (CBB7C 1501 to 1507), so they stand as the first, with the rest its versions.
    */
   const inChinese = async (printings: ScanPrinting[]): Promise<number[]> => {
     const ids = printings.filter((p) => p.language === 'zh-hans').map((p) => p.cardId)
     for (const [twin, list] of await chineseTwins(printings, ctx)) {
       const cards = unique(list.map((p) => p.cardId))
-      if (cards.length !== 1) continue
-      stand.set(cards[0], { twin, printing: list[0] })
-      ids.push(cards[0])
+      if (cards.length !== 1 && !versionsOfOne(list)) continue
+      const first = [...list].sort((a, b) => a.setCode.localeCompare(b.setCode))[0]
+      stand.set(first.cardId, { twin, printing: first })
+      if (cards.length > 1) versions.set(first.cardId, cards)
+      ids.push(first.cardId)
     }
     return unique(ids)
   }

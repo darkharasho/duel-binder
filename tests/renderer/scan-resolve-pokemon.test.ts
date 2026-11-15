@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { resolveSignals, type ResolveContext, type ScanDraft } from '@/features/scan/resolve'
 import type { RawSignals } from '@/features/scan/engine'
 import type { ScanPrinting } from '@shared/scan/types'
+import type { GemScores } from '@shared/scan/gemPattern'
 import {
   ART_FAR_DISTANCE,
   ART_MAX_DISTANCE,
@@ -774,6 +775,83 @@ describe('Simplified Chinese, as the user said', () => {
       ]
       expect(await resolveSignals(raw({ art }), main())).toEqual({ kind: 'unsure' })
       expect(await recognized(raw({ art }), main(ardent))).toMatchObject({ cardId: 204 })
+    })
+
+    describe('a Gem Pack, which numbers each version of a card as a card of its own', () => {
+      // Gem Pack Vol. 7 prints Steven's Beldum as 1501 to 1507, one card each, all linked to
+      // DRI Steven's Beldum's art.
+      const GEM: ScanPrinting[] = [
+        p(3011, 301, "Steven's Beldum", 'en', 'Destined Rivals', 'DRI 143/182', 3001),
+        p(3021, 302, "Steven's Beldum", 'zh-hans', 'Gem Pack Vol. 7', 'CBB7C 1501', 3002),
+        {
+          ...p(3031, 303, "Steven's Beldum", 'zh-hans', 'Gem Pack Vol. 7', 'CBB7C 1502', 3003),
+          rarity: 'Poke Ball Pattern'
+        },
+        p(3041, 304, "Steven's Beldum", 'zh-hans', 'Gem Pack Vol. 7', 'CBB7C 1503', 3004)
+      ]
+      const linked = GEM.filter((q) => q.language === 'zh-hans')
+      const gemLookups: ResolveContext['lookups'] = {
+        ...mainLookups,
+        printingsForCards: async (ids) => [...ALL, ...GEM].filter((q) => ids.includes(q.cardId)),
+        cardsForImages: async (ids) =>
+          [...ALL, ...GEM]
+            .map((q) => ({ imageId: q.imageIds[0], cardId: q.cardId }))
+            .filter((c) => ids.includes(c.imageId)),
+        chineseOfArt: async (ids) =>
+          ids.includes(301) ? linked.map((q) => ({ twinId: 301, printing: q })) : []
+      }
+      const gem = (setPrintings: ScanPrinting[] | null = null): ResolveContext => ({
+        ...zh(setPrintings),
+        lookups: gemLookups
+      })
+      const art = [{ imageId: 3001, distance: 30 }]
+
+      it('names the card, with every version to pick from', async () => {
+        for (const ctx of [gem(linked), gem()]) {
+          const item = await recognized(raw({ art }), ctx)
+          expect(item).toMatchObject({ cardId: 302, setCode: 'CBB7C 1501', flag: 'pick-printing' })
+          expect(item.options.map((o) => o.setCode).sort()).toEqual([
+            'CBB7C 1501',
+            'CBB7C 1502',
+            'CBB7C 1503'
+          ])
+        }
+      })
+
+      /** Version cues whose Gem Pack template scores are as given; the rest plain. */
+      const pattern = (gem: Partial<GemScores>): RawSignals['version'] => ({
+        frame: 0,
+        art: 0,
+        reference: 0,
+        firstEdition: 'unknown',
+        body: { ratio: 1, spread: 0 },
+        gem: { energy: 0, ball: 0, master: 0, stamp: 0, ...gem }
+      })
+
+      it('names the version the pattern tells, with the others still to switch to', async () => {
+        const ball = await recognized(
+          raw({ art, version: pattern({ ball: 0.9, energy: 0.7, master: 0.6 }) }),
+          gem()
+        )
+        expect(ball).toMatchObject({ cardId: 303, setCode: 'CBB7C 1502', flag: null })
+        expect(ball.options).toHaveLength(3)
+        // Vol. 7's energy-symbol version is 01, which the catalog calls only Holofoil.
+        const energy = await recognized(
+          raw({ art, version: pattern({ energy: 0.75, ball: 0.65, master: 0.4 }) }),
+          gem()
+        )
+        expect(energy).toMatchObject({ cardId: 302, setCode: 'CBB7C 1501', flag: null })
+      })
+
+      it('leaves the version to pick when the pattern is close or has no version here', async () => {
+        for (const gemScores of [
+          { energy: 0.7, ball: 0.72, master: 0.5 },
+          { master: 0.8, ball: 0.6, energy: 0.4 }
+        ]) {
+          const item = await recognized(raw({ art, version: pattern(gemScores) }), gem())
+          expect(item).toMatchObject({ cardId: 302, flag: 'pick-printing' })
+        }
+      })
     })
 
     it('stands in only by number without the link lookup', async () => {

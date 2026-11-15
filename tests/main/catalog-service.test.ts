@@ -437,6 +437,7 @@ describe('catalog service', () => {
       )
       expect(pkmCount('cards')).toBe(0)
       setMeta(db, 'catalog_cursor', String(serverClock()))
+      setMeta(db, 'active_game', 'pkm')
 
       const asked: { since: number; game: string | undefined }[] = []
       const watching: CloudClient = {
@@ -450,9 +451,8 @@ describe('catalog service', () => {
 
       expect(asked).toEqual([
         { since: serverClock(), game: 'ygo' },
-        { since: 0, game: 'pkm' },
-        { since: 0, game: 'op' }, // the owner sees the hidden games too, with no rows yet
-        { since: 0, game: 'mtg' }
+        { since: 0, game: 'pkm' }
+        // op and mtg: on the account, but never shown here, so never pulled
       ])
       expect(pkmCount('cards')).toBe(2)
       expect(pkmCount('card_images')).toBe(2)
@@ -476,6 +476,7 @@ describe('catalog service', () => {
         { force: true }
       )
       setMeta(db, 'catalog_cursor', String(serverClock()))
+      setMeta(db, 'active_game', 'op')
       const asked: { since: number; game: string | undefined }[] = []
       const watching: CloudClient = {
         ...ownerClient,
@@ -503,6 +504,7 @@ describe('catalog service', () => {
         { force: true }
       )
       setMeta(db, 'catalog_cursor', String(serverClock()))
+      setMeta(db, 'active_game', 'mtg')
       const asked: { since: number; game: string | undefined }[] = []
       const watching: CloudClient = {
         ...ownerClient,
@@ -539,6 +541,7 @@ describe('catalog service', () => {
     })
 
     it('a Pokémon pass cut off part way keeps its staged rows through a Yu-Gi-Oh! pass', async () => {
+      setMeta(db, 'active_game', 'pkm')
       const service = makeService()
       await service.update(ownerClient, { force: true })
       // A fresh Pokémon pass, a page at a time, offline after its first page.
@@ -577,6 +580,90 @@ describe('catalog service', () => {
       expect(pkmCount('pokemon_cards')).toBe(2)
       expect(getMeta(db, 'catalog_staging_cursor:pkm')).toBeNull()
       expect(db.prepare('SELECT count(*) AS n FROM catalog_staging').get()).toEqual({ n: 0 })
+    })
+
+    describe('only the games this device uses', () => {
+      const askedGames = async (
+        service: CatalogService,
+        games: string[]
+      ): Promise<{ since: number; game: string | undefined }[]> => {
+        const asked: { since: number; game: string | undefined }[] = []
+        await service.update(
+          {
+            ...ownerClient,
+            me: async () => ({ ...(await ownerClient.me()), games: games as never }),
+            catalogChanges: (since, limit, tables, game) => {
+              asked.push({ since, game })
+              return ownerClient.catalogChanges(since, limit, tables, game)
+            }
+          },
+          { force: true }
+        )
+        return asked
+      }
+
+      it('skips a game the account has but this device never showed or pulled', async () => {
+        seedMagic(owned.serverDb)
+        const asked = await askedGames(makeService(), ['ygo', 'pkm', 'op', 'mtg'])
+        expect(new Set(asked.map((a) => a.game))).toEqual(new Set(['ygo']))
+        expect(getMeta(db, 'catalog_cursor:mtg')).toBeNull()
+        expect(db.prepare("SELECT count(*) AS n FROM cards WHERE game = 'mtg'").get()).toEqual({
+          n: 0
+        })
+      })
+
+      it('keeps pulling a game pulled before, though another game is shown', async () => {
+        const service = makeService()
+        setMeta(db, 'active_game', 'pkm')
+        await askedGames(service, ['ygo', 'pkm'])
+        const cursor = Number(getMeta(db, 'catalog_cursor:pkm'))
+        expect(cursor).toBeGreaterThan(0)
+        setMeta(db, 'active_game', 'ygo')
+        const asked = await askedGames(service, ['ygo', 'pkm', 'mtg'])
+        expect(asked).toContainEqual({ since: cursor, game: 'pkm' })
+        expect(asked.map((a) => a.game)).not.toContain('mtg')
+      })
+
+      it('leaves a game staged but never finished alone until it is shown', async () => {
+        // A Magic pull stopped part way (the app closed while applying it).
+        seedMagic(owned.serverDb)
+        setMeta(db, 'catalog_staging_cursor:mtg', '1')
+        const service = makeService()
+        const asked = await askedGames(service, ['ygo', 'mtg'])
+        expect(asked.map((a) => a.game)).not.toContain('mtg')
+        expect(getMeta(db, 'catalog_staging_cursor:mtg')).toBe('1')
+
+        // Shown: it resumes from where it stopped.
+        setMeta(db, 'active_game', 'mtg')
+        const resumed = await askedGames(service, ['ygo', 'mtg'])
+        expect(resumed).toContainEqual({ since: 1, game: 'mtg' })
+      })
+
+      it('a forced update asked for during another runs again after it', async () => {
+        seedMagic(owned.serverDb)
+        setMeta(db, 'active_game', 'pkm')
+        const service = makeService()
+        const games: (string | undefined)[] = []
+        let second: Promise<unknown> | null = null
+        const watching: CloudClient = {
+          ...ownerClient,
+          me: async () => ({ ...(await ownerClient.me()), games: ['ygo', 'pkm', 'mtg'] }),
+          catalogChanges: (since, limit, tables, game) => {
+            games.push(game)
+            // The user switches to Magic once the first update has picked its games.
+            if (game === 'pkm' && second === null) {
+              setMeta(db, 'active_game', 'mtg')
+              second = service.update(watching, { force: true })
+            }
+            return ownerClient.catalogChanges(since, limit, tables, game)
+          }
+        }
+        await service.update(watching, { force: true })
+        expect(second).not.toBeNull()
+        await second
+        expect(games.filter((g) => g === 'mtg').length).toBe(1)
+        expect(Number(getMeta(db, 'catalog_cursor:mtg'))).toBeGreaterThan(0)
+      })
     })
   })
 })

@@ -8,6 +8,7 @@ import type { AccountService } from '../../src/main/cloud/account'
 import type { PortalChannel } from '../../src/shared/portal'
 import type Database from 'better-sqlite3'
 import type { AccountStatus, SetChecklist, SyncStatus } from '../../src/shared/types'
+import { setMeta } from '../../src/main/db/meta'
 import { seededDb } from './helpers'
 import { mkdtempSync, readFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -312,6 +313,17 @@ describe('createHandlers', () => {
     const refreshed: SyncStatus = { ...CATALOG_STATUS, state: 'error', error: 'offline' }
     account.refreshCatalog.mockResolvedValue(refreshed)
     await expect(handlers['sync:run']()).resolves.toEqual(refreshed)
+    expect(account.refreshCatalog).toHaveBeenCalledTimes(1)
+  })
+
+  it("switching to a game this device hasn't pulled yet updates the catalog", async () => {
+    const { db, handlers, account } = await makeHandlers({ signedIn: true })
+    account.games.mockReturnValue(['ygo', 'pkm', 'mtg'] as never)
+    account.refreshCatalog.mockResolvedValue({ ...CATALOG_STATUS })
+    setMeta(db, 'catalog_cursor:pkm', '5')
+    await handlers['games:setActive']('pkm')
+    expect(account.refreshCatalog).not.toHaveBeenCalled()
+    await handlers['games:setActive']('mtg')
     expect(account.refreshCatalog).toHaveBeenCalledTimes(1)
   })
 

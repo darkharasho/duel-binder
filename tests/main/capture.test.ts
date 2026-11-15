@@ -51,7 +51,11 @@ describe('captureShots', () => {
   })
 
   it('defines the site shots of each game', () => {
-    expect(SHOTS.ygo.map((s) => s.file)).toEqual(['collection.png', 'dashboard.png'])
+    expect(SHOTS.ygo.map((s) => s.file)).toEqual([
+      'collection.png',
+      'dashboard.png',
+      'sessions.png'
+    ])
     expect(SHOTS.pkm.map((s) => s.file)).toEqual(['collection-pokemon.png', 'sets.png'])
   })
 })

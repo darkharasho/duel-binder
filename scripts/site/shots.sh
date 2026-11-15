@@ -28,6 +28,6 @@ for game in ygo pkm; do
   npx cross-env YGO_FAKE_DATA=1 YGO_CAPTURE_DIR=out/shots YGO_CAPTURE_GAME="$game" electron-vite preview
 done
 mkdir -p workers/portal/site/shots
-for name in collection collection-pokemon dashboard sets; do
-  magick "out/shots/$name.png" -quality 82 "workers/portal/site/shots/$name.webp"
+for name in collection collection-pokemon dashboard sets sessions; do
+  magick "out/shots/$name.png" -quality 74 "workers/portal/site/shots/$name.webp"
 done

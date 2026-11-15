@@ -14,7 +14,10 @@ describe('withAssetCache', () => {
   const served = (status = 200): Response =>
     new Response(status === 304 ? null : 'x', {
       status,
-      headers: { 'cache-control': 'public, max-age=0, must-revalidate', 'content-type': 'text/javascript' }
+      headers: {
+        'cache-control': 'public, max-age=0, must-revalidate',
+        'content-type': 'text/javascript'
+      }
     })
   it('keeps hashed build files a year, and changes nothing else', () => {
     for (const p of [
@@ -28,14 +31,20 @@ describe('withAssetCache', () => {
       expect(res.headers.get('content-type')).toBe('text/javascript')
       expect(withAssetCache(p, served(304)).headers.get('cache-control')).toBe(HASHED_ASSET_CACHE)
     }
-    for (const p of ['/app/web.html', '/app/assets/x.js', '/scan/sw.js', '/scan/ocr/worker.min.js', '/favicon.svg']) {
+    for (const p of [
+      '/app/web.html',
+      '/app/assets/x.js',
+      '/scan/sw.js',
+      '/scan/ocr/worker.min.js',
+      '/favicon.svg'
+    ]) {
       expect(withAssetCache(p, served()).headers.get('cache-control'), p).toBe(
         'public, max-age=0, must-revalidate'
       )
     }
-    expect(withAssetCache('/app/assets/index-B9x_k2Qa.js', served(404)).headers.get('cache-control')).toBe(
-      'public, max-age=0, must-revalidate'
-    )
+    expect(
+      withAssetCache('/app/assets/index-B9x_k2Qa.js', served(404)).headers.get('cache-control')
+    ).toBe('public, max-age=0, must-revalidate')
   })
 })
 
@@ -126,9 +135,7 @@ describe('handleSite', () => {
       expect(res.status).toBe(200)
       expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8')
       expect(res.headers.get('cache-control')).toBe('private, max-age=300')
-      expect(await res.text()).toContain(
-        'A binder for your <span class="nowrap">Yu-Gi-Oh!</span> and Pokémon cards.'
-      )
+      expect(await res.text()).toContain('<h1>A binder for every card you own.</h1>')
     }
   })
 

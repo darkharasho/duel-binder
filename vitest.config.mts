@@ -19,7 +19,7 @@ export default defineConfig({
           name: 'main',
           environment: 'node',
           globals: true,
-          include: ['tests/main/**/*.test.ts']
+          include: ['tests/main/**/*.test.ts', 'tests/shared/**/*.test.ts']
         }
       },
       {

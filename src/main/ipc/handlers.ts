@@ -29,6 +29,9 @@ import type { INVOKE_CHANNELS } from '@shared/ipc'
 import { adminTabUrl, INVOKE_CHANNELS as CHANNELS } from '@shared/ipc'
 import type { ImageCache } from '../images/cache'
 import { createDataHandlers } from './dataHandlers'
+import { getMeta } from '../db/meta'
+import { catalogCursorKey } from '../catalog/apply'
+import { activeGame } from '../cloud/activeGame'
 import type { RollupRunner } from '../rollupRunner'
 import type { RollupWarmer } from '../rollupWarmer'
 import type { ScanWindowManager } from '../scanWindow'
@@ -185,7 +188,12 @@ export function createHandlers({
       db,
       onEdit: () => account.noteLocalEdit(),
       availableGames: () => account.games(),
-      onGameChanged: emitDataChanged,
+      onGameChanged: () => {
+        emitDataChanged()
+        // A game this device hasn't pulled yet (its catalog comes down only once it's shown).
+        if (getMeta(db, catalogCursorKey(activeGame(db, account.games()))) === null)
+          void account.refreshCatalog().catch((e) => console.warn('Catalog update failed', e))
+      },
       buildRollup: rollups && ((job) => rollups.build(job)),
       browsed: rollupWarmer && ((language) => rollupWarmer.browsed(language))
     }),

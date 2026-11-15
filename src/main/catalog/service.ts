@@ -4,7 +4,7 @@ import { deleteMeta, getMeta, setMeta } from '../db/meta'
 import { CloudAuthError, CloudOfflineError, type CloudClient } from '../cloud/client'
 import { syncedGames } from '../cloud/engine'
 import type { SyncStatus } from '../../shared/types'
-import type { GameId } from '../../shared/games'
+import { isGameId, type GameId } from '../../shared/games'
 import { catalogCursorKey, catalogStagingKey, finishApply } from './apply'
 import { backfillArtTwins } from './artTwinBackfill'
 import { backfillSetSeries } from './seriesBackfill'
@@ -43,6 +43,22 @@ interface Unannounced {
 }
 
 /**
+ * The account's games whose catalogs this device keeps: Yu-Gi-Oh!, the game shown, and any game
+ * pulled here before. A game the account has but this device has never shown stays unpulled until
+ * it is shown: a first Magic pull is about two million rows, too much to put on every device
+ * because the account may use the game. A pull staged but never applied doesn't count as pulled.
+ */
+export function catalogGames(db: SqlDb, account: readonly GameId[]): GameId[] {
+  const shown = getMeta(db, 'active_game')
+  return account.filter(
+    (g) =>
+      g === 'ygo' ||
+      (isGameId(shown) && g === shown) ||
+      getMeta(db, catalogCursorKey(g)) !== null
+  )
+}
+
+/**
  * The card catalog, kept in step with the server's: the one-time switch to the server's catalog
  * until it's done, then each of the account's games' change feeds from its own cursor
  * (`catalog_cursor` for Yu-Gi-Oh!, `catalog_cursor:pkm` for Pokémon), staged page by page and
@@ -54,6 +70,7 @@ export function createCatalogService(deps: CatalogServiceDeps): CatalogService {
   let state: SyncStatus['state'] = 'idle'
   let error: string | null = null
   let inFlight: Promise<CatalogUpdate> | null = null
+  let queued: Promise<CatalogUpdate> | null = null
 
   const switched = (): boolean => getMeta(db, 'catalog_switched_at') !== null
 
@@ -208,9 +225,9 @@ export function createCatalogService(deps: CatalogServiceDeps): CatalogService {
         noteUnannounced({ cardsChanged: true, imagesChanged: true, needsFinish: true })
       }
       try {
-        // Yu-Gi-Oh! first, which every account has; then the account's other games.
+        // Yu-Gi-Oh! first, which every account has; then the account's other games this device uses.
         await pullDeltas(client, 'ygo')
-        for (const game of await syncedGames(client)) {
+        for (const game of catalogGames(db, await syncedGames(client))) {
           if (game === 'pkm') {
             await backfillArtTwins(db, (since) =>
               client.catalogChanges(since, undefined, ['pokemon_cards'], game)
@@ -239,13 +256,29 @@ export function createCatalogService(deps: CatalogServiceDeps): CatalogService {
     }
   }
 
+  const start = (client: CloudClient, force: boolean): Promise<CatalogUpdate> => {
+    const run = doUpdate(client, force).finally(() => {
+      if (inFlight === run) inFlight = null
+    })
+    inFlight = run
+    return run
+  }
+
   return {
     status,
     update(client, opts = {}) {
-      inFlight ??= doUpdate(client, opts.force ?? false).finally(() => {
-        inFlight = null
-      })
-      return inFlight
+      const force = opts.force ?? false
+      if (inFlight === null) return start(client, force)
+      if (!force) return inFlight
+      // Forced during another update (a game just shown, say): that one may have picked its games
+      // already, so one more runs after it. Later forced asks share that one.
+      queued ??= inFlight
+        .catch(() => UNCHANGED)
+        .then(() => {
+          queued = null
+          return start(client, true)
+        })
+      return queued
     }
   }
 }

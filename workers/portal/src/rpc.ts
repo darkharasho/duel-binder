@@ -1,5 +1,5 @@
 import type { Api, InvokeChannel } from '../../../src/shared/ipc'
-import type { AccountLinkChannel, PortalChannel } from '../../../src/shared/portal'
+import type { AccountLinkChannel, PortalChannel, PrefsChannel } from '../../../src/shared/portal'
 import type { BrowseFilters, CollectionFilters } from '../../../src/shared/types'
 import type { Scope } from '../../../src/main/repo/scope'
 import { settleRollups } from './rollups'
@@ -90,6 +90,7 @@ import {
   setWishlistVisible,
   wishlistVisible
 } from './wishlist'
+import { getPrefs, setPrefs } from './prefs'
 import { friendBinder, friendBinders } from './friendBinders'
 import { friendSessions } from './scanSessions'
 import { userScope } from './scope'
@@ -167,8 +168,8 @@ function friendId(db: AppDeps['db'], me: number, id: unknown): number {
 type WorkerHandler = (deps: RpcDeps, scope: Scope, ...args: unknown[]) => unknown
 
 // Arguments come off the wire untyped: every handler checks its own before use.
-const HANDLERS: { [C in Exclude<PortalChannel, AccountLinkChannel>]: Handler<C> } & {
-  [C in AccountLinkChannel]: WorkerHandler
+const HANDLERS: { [C in Exclude<PortalChannel, AccountLinkChannel | PrefsChannel>]: Handler<C> } & {
+  [C in AccountLinkChannel | PrefsChannel]: WorkerHandler
 } = {
   'cards:search': ({ db }, scope, q) => searchCards(db, checkString(q, 'q'), undefined, scope),
   'cards:get': ({ db }, scope, cardId) => getCardDetail(db, checkId(cardId, 'cardId'), scope),
@@ -267,6 +268,8 @@ const HANDLERS: { [C in Exclude<PortalChannel, AccountLinkChannel>]: Handler<C> 
   'friends:wishlistVisible': ({ db, userId }) => wishlistVisible(db, userId),
   'friends:setWishlistVisible': ({ db, userId }, _s, visible) =>
     setWishlistVisible(db, userId, visible),
+  'prefs:get': ({ db, userId }) => getPrefs(db, userId),
+  'prefs:set': ({ db, userId }, _s, patch) => setPrefs(db, userId, patch),
   'wishlist:list': ({ db }, scope) => listWishlist(db, scope),
   'wishlist:forCard': ({ db }, scope, cardId) =>
     wishesForCard(db, checkId(cardId, 'cardId'), scope),

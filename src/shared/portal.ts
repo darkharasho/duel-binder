@@ -83,4 +83,14 @@ export const ACCOUNT_LINK_CHANNELS = ['account:linkCode', 'account:linkApple', '
 
 export type AccountLinkChannel = (typeof ACCOUNT_LINK_CHANNELS)[number]
 
-export type PortalChannel = (typeof PORTAL_CHANNELS)[number] | AccountLinkChannel
+/**
+ * Worker-only channels for synced account preferences (shared/prefs.ts). Like the account-link
+ * channels they aren't InvokeChannels: the clients call them directly, not through the shared Api.
+ * - `prefs:get()`: the user's `Prefs`.
+ * - `prefs:set(patch)`: merges a `Partial<Prefs>` over the stored value, answering the merged `Prefs`.
+ */
+export const PREFS_CHANNELS = ['prefs:get', 'prefs:set'] as const
+
+export type PrefsChannel = (typeof PREFS_CHANNELS)[number]
+
+export type PortalChannel = (typeof PORTAL_CHANNELS)[number] | AccountLinkChannel | PrefsChannel

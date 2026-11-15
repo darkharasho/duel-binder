@@ -91,9 +91,18 @@ body.home{font-size:17px;line-height:1.55;overflow-x:clip}
 .turn .face>.pgpage.right{left:calc(var(--u) * .15)}
 /* While the page turns the binder lies flat, so its layers are painted in a fixed order (turning
    page over the open cover) rather than depth-sorted: Chrome's sorting dropped the left page for a
-   few frames while the turning page was edge-on. */
+   few frames while the turning page was edge-on.
+   Once the cover has opened (.settled) the binder stays flat and the cover becomes a plain left
+   page: Firefox dropped the left page and the rings at the zoomed-in stage while they sat at a
+   depth. The leaves are flat too, with the back face mirrored in 2D: Firefox culled a flattened
+   rotateY(180) face as facing away. Script switches the faces at the halfway point. */
 .tilt.flat{transform-style:flat;perspective:2200px;perspective-origin:50% 50%}
-.tilt.flat .cover{z-index:5}.tilt.flat .rings{z-index:4}.tilt.flat .turn{z-index:6}
+.tilt.flat .leaf{transform-style:flat}.tilt.flat .flip{transform:scaleX(-1)}
+.tilt.flat .cover{z-index:4}.tilt.flat .rings{z-index:5}.tilt.flat .turn{z-index:6}
+.binder.settled .cover{left:0;transform:none;transition:none}
+.binder.settled .cover .flip{transform:none}
+.binder.settled .rings{transform:none}
+.binder.settled .face,.binder.settled .face *{backface-visibility:visible;-webkit-backface-visibility:visible}
 
 .chip{position:absolute;left:0;top:0;z-index:20;background:rgb(10 9 14 / 85%);border-radius:12px;padding:9px 13px;font-size:13px;line-height:1.35;pointer-events:none;opacity:0;transition:opacity 200ms;white-space:nowrap}
 .chip b{display:block;font-size:15px}

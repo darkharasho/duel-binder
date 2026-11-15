@@ -97,7 +97,7 @@
     cue.style.opacity = opened && p < 0.02 && !reduce ? 0.8 : 0
     // the page turn; each face is switched off once it faces away (Firefox ignores backface on layers)
     const a = -180 * back
-    tilt.classList.toggle('flat', back > 0)
+    tilt.classList.toggle('flat', back > 0 || binder.classList.contains('settled'))
     turn.style.transform = `translateZ(${back > 0 ? 6 : 0}px) rotateY(${a}deg)`
     turnFront.style.visibility = a > -90 ? 'visible' : 'hidden'
     turnBack.style.visibility = a <= -90 ? 'visible' : 'hidden'
@@ -122,7 +122,13 @@
   setTimeout(
     () => {
       binder.classList.add('opened')
-      if (reduce) return
+      // once the cover is down it lies flat as the left page (see .settled in home.css)
+      const settle = () => {
+        binder.classList.add('settled')
+        frame()
+      }
+      if (reduce) return settle()
+      setTimeout(settle, 1400)
       setTimeout(() => binder.classList.add('sweep'), 1100)
       setTimeout(() => {
         binder.classList.remove('sweep')

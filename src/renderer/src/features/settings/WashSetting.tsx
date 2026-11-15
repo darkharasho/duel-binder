@@ -1,4 +1,5 @@
 import type { Prefs, WashColours, WashMode } from '@shared/prefs'
+import { Button } from '@/components/ui/button'
 import { FilterOptionChip } from '@/components/FilterChip'
 import { useGame } from '@/lib/game'
 import { useWashPref } from '@/lib/washPref'
@@ -31,32 +32,7 @@ export function WashSetting({ compact = false }: { compact?: boolean }): React.J
   }
 
   return (
-    <div
-      className={
-        compact
-          ? 'flex flex-wrap items-center gap-2'
-          : 'flex flex-wrap items-center justify-end gap-2'
-      }
-    >
-      {wash.mode === 'locked' && wash.locked && (
-        <>
-          <span
-            data-testid="wash-swatch"
-            aria-hidden
-            className="size-7 shrink-0 rounded-md border border-border"
-            style={{
-              background: field(fit({ ...wash.locked, greyArt: false }, 'dark'), { seed: 1 })
-            }}
-          />
-          <button
-            type="button"
-            onClick={() => setWash({ mode: 'locked', locked: roll() })}
-            className="inline-flex h-7 items-center rounded-full bg-chip px-2.5 font-mono text-xs font-medium outline-none hover:bg-chip/70 focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            Randomize
-          </button>
-        </>
-      )}
+    <div className={compact ? 'flex flex-col items-end gap-2' : 'flex flex-col items-end gap-2.5'}>
       <div role="group" aria-label="Background" className="flex gap-1.5">
         {OPTIONS.map((o) => (
           <FilterOptionChip
@@ -67,6 +43,28 @@ export function WashSetting({ compact = false }: { compact?: boolean }): React.J
           />
         ))}
       </div>
+      {wash.mode === 'locked' && (
+        <div className="flex items-center gap-2">
+          {wash.locked && (
+            <span
+              data-testid="wash-swatch"
+              aria-hidden
+              className="size-7 shrink-0 rounded-md border border-border"
+              style={{
+                background: field(fit({ ...wash.locked, greyArt: false }, 'dark'), { seed: 1 })
+              }}
+            />
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setWash({ mode: 'locked', locked: roll() })}
+          >
+            Randomize
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

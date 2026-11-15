@@ -159,9 +159,6 @@ function DesktopSettings(): React.JSX.Element {
 
       <Section title="App">
         <Row label="Version">{version.data ?? '—'}</Row>
-        <Row label="Background">
-          <WashSetting />
-        </Row>
         <div className="flex items-center justify-between gap-4">
           <span role="status" className="text-sm text-muted-foreground">
             {describeUpdate(update)}
@@ -187,6 +184,9 @@ function DesktopSettings(): React.JSX.Element {
             </Button>
           </div>
         </div>
+        <Row label="Background">
+          <WashSetting />
+        </Row>
       </Section>
 
       <Section title="Card data">

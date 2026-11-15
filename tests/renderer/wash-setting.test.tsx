@@ -87,6 +87,15 @@ describe('WashSetting', () => {
     expect(stored().locked).not.toHaveProperty('greyArt')
   })
 
+  it('Locked with no colours still offers Randomize, which saves colours', async () => {
+    seed({ mode: 'locked' })
+    show()
+    expect(screen.queryByTestId('wash-swatch')).toBeNull()
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Randomize' }))
+    expect(stored().mode).toBe('locked')
+    expect(stored().locked?.fams.length).toBeGreaterThan(0)
+  })
+
   it('keeps the random default untouched when nothing is clicked', () => {
     show(true)
     expect(localStorage.getItem(KEY)).toBeNull()

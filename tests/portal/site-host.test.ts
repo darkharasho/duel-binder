@@ -135,7 +135,7 @@ describe('handleSite', () => {
       expect(res.status).toBe(200)
       expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8')
       expect(res.headers.get('cache-control')).toBe('private, no-cache')
-      expect(await res.text()).toContain('<h1>A binder for every card you own.</h1>')
+      expect(await res.text()).toContain('<h1>Every card you own, in one digital binder.</h1>')
     }
   })
 

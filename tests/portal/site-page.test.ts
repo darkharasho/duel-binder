@@ -22,8 +22,10 @@ describe('brand mark', () => {
     )
   })
 
-  it('shows the big D beside the headline, hidden from screen readers', () => {
-    expect(page()).toMatch(/<\/div><img class="bigmark" src="\/mark.svg"[^>]* alt=""><\/header>/)
+  it('puts the D on the closed binder cover, hidden from screen readers', () => {
+    expect(page()).toContain(
+      '<div class="face front"><div class="emblem"><svg viewBox="0 0 60 40" aria-hidden="true">'
+    )
   })
 
   it('puts the D mark on the privacy and terms pages too', () => {
@@ -108,7 +110,7 @@ describe('renderPage', () => {
   it('has the charset, headline and lead', () => {
     const html = page()
     expect(html).toContain('<meta charset="utf-8">')
-    expect(html).toContain('<h1>A binder for every card you own.</h1>')
+    expect(html).toContain('<h1>Every card you own, in one digital binder.</h1>')
     expect(html).toContain(
       'Scan your <span class="nowrap">Yu-Gi-Oh!</span>, Pokémon, Magic and One Piece cards with a camera, or add them by hand.'
     )
@@ -130,11 +132,12 @@ describe('renderPage', () => {
   })
 
   it('shows the meta line with or without a version', () => {
-    expect(page()).toContain('v0.2.1 · Windows, macOS, Linux · free')
+    expect(page()).toContain(
+      '<p class="meta">Free for Windows, macOS and Linux. Version 0.2.1.</p>'
+    )
     const none = page({ downloads: { ...downloads, version: null } })
-    expect(none).toContain('Windows, macOS, Linux · free')
-    expect(none).not.toMatch(/v\d[^<]* · Windows/)
-    expect(none).not.toContain('v · Windows')
+    expect(none).toContain('<p class="meta">Free for Windows, macOS and Linux.</p>')
+    expect(none).not.toContain('Version')
   })
 
   it('renders the download table', () => {
@@ -164,18 +167,23 @@ describe('renderPage', () => {
   it('has the four games, the scanner and the feature rows', () => {
     const html = page()
     for (const g of ['Yu-Gi-Oh!', 'Pokémon', 'Magic: The Gathering', 'One Piece'])
-      expect(html).toContain(`<h3><i class="dot" aria-hidden="true"></i>${g}</h3>`)
+      expect(html).toContain(`<h3>${g}</h3>`)
     expect(html).toContain('id="games"')
     expect(html).toContain('id="scan"')
     expect(html).toContain('<h2>Hold a card up to the camera</h2>')
-    for (const mode of ['Card', 'Code', 'Stream']) expect(html).toContain(`<li><b>${mode}</b>`)
+    for (const mode of ['Card', 'Code', 'Stream'])
+      expect(html).toMatch(
+        new RegExp(
+          `<button type="button" aria-pressed="(true|false)" data-mode="${mode.toLowerCase()}" data-note="${mode} [^"]+">${mode}</button>`
+        )
+      )
     for (const h of ["What it's worth", 'Finish your sets', 'Also in the app'])
       expect(html).toContain(h)
   })
 
   it('lists the smaller features as text only', () => {
     const html = page()
-    const more = html.slice(html.indexOf('<section class="more">'))
+    const more = html.slice(html.indexOf('<section class="more rise">'))
     const block = more.slice(0, more.indexOf('</section>'))
     for (const h of [
       'Binders',
@@ -196,10 +204,16 @@ describe('renderPage', () => {
     expect(html).not.toMatch(/apps\.apple\.com|play\.google\.com/)
   })
 
-  it('has no script but its account badge and escapes interpolated values', () => {
+  it('has only its own scripts and escapes interpolated values', () => {
     const evil = { name: 'a<b"&.exe', size: 5_000_000, url: 'https://x.test/a<b"&.exe' }
     const html = page({ downloads: { ...downloads, windows: evil } })
-    expect(html.replace('<script src="/account.js" defer></script>', '')).not.toContain('<script')
+    expect(html.match(/<script[^>]*>/g)).toEqual([
+      '<script>',
+      '<script src="/account.js" defer>',
+      '<script src="/home.js" defer>',
+      '<script type="application/json" id="washes">'
+    ])
+    expect(html).toContain("<script>document.documentElement.classList.add('js')</script>")
     expect(html).not.toContain('a<b"&.exe')
     expect(html).toContain('a&lt;b&quot;&amp;.exe')
   })
@@ -211,14 +225,48 @@ describe('renderPage', () => {
     expect(html).toContain('<meta property="og:url" content="https://duelbinder.com/">')
     expect(html).toContain('<meta name="twitter:card" content="summary_large_image">')
     const imgs = html.match(/<img [^>]*>/g)!.filter((img) => img.includes('/shots/'))
-    expect(imgs).toHaveLength(5)
-    for (const img of imgs) {
-      expect(img).toContain('width="2560" height="1600"')
-      expect(img).toMatch(/alt="[^"]+"/)
+    expect(imgs).toHaveLength(1)
+    expect(imgs[0]).toContain('/shots/dashboard.webp')
+    expect(imgs[0]).toContain('width="2560" height="1600"')
+    expect(imgs[0]).toMatch(/alt="[^"]+"/)
+    expect(html).toContain(
+      '<link rel="stylesheet" href="/site.css">\n<link rel="stylesheet" href="/home.css">'
+    )
+  })
+
+  it('opens a binder of two 9-pocket spreads, each card labelled for the hover tag', () => {
+    const html = page()
+    const pockets = html.match(
+      /<div class="pocket" data-name="[^"]+" data-code="[^"]+" data-price="[^"]+">/g
+    )!
+    expect(pockets).toHaveLength(36)
+    expect(html).toContain('data-name="Maxx &quot;C&quot;"')
+    expect(html).toContain('data-name="Ash Blossom &amp; Joyous Spring"')
+    // without script the binder lies open: home.css closes it only under html.js
+    expect(html).toContain('<div class="binder" id="binder"')
+  })
+
+  it('loads every card picture from the app host, lazily', () => {
+    const html = page({ appUrl: 'https://app.example.test/' })
+    const cards = html.match(/<img [^>]*\/img\/small\/[^>]*>/g)!
+    expect(cards.length).toBeGreaterThan(60)
+    for (const img of cards) {
+      expect(img).toMatch(/src="https:\/\/app\.example\.test\/img\/small\/\d+"/)
+      if (!img.includes('class="new"')) expect(img).toContain('loading="lazy"')
     }
-    expect(imgs[0]).toContain('/shots/collection.webp')
-    expect(imgs[0]).not.toContain('loading="lazy"')
-    for (const img of imgs.slice(1)) expect(img).toContain('loading="lazy"')
+  })
+
+  it('gives /home.js every wash by card, and the hero the one picked for this visit', () => {
+    const w = WASHES[5]
+    const html = page({ wash: w })
+    const json = html.match(/<script type="application\/json" id="washes">(.*?)<\/script>/)![1]
+    const map = JSON.parse(json) as Record<string, { base: string; pools: string }>
+    for (const x of WASHES) expect(map[x.card]).toEqual({ base: x.base, pools: x.pools })
+    expect(html).toContain(
+      `<div class="run" id="run" data-wash="${w.card}" data-turned="Black Luster Soldier">`
+    )
+    // every section's wash exists
+    for (const [, card] of html.matchAll(/data-wash="([^"]+)"/g)) expect(map[card]).toBeDefined()
   })
 })
 
@@ -314,7 +362,9 @@ describe('Android', () => {
   it('offers an Android phone the APK once a release has one', () => {
     const html = page({ android: true, downloads: withApk })
     expect(html).toContain(`<a class="btn pri" href="${apk.url}">Download for Android</a>`)
-    expect(html).toContain('Android · free')
+    expect(html).toContain(
+      '<p class="meta">Free for Android. Allow installs from your browser when Android asks.</p>'
+    )
     expect(html).toContain('Allow installs from your browser when Android asks.')
   })
 

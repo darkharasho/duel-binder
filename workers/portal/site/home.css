@@ -1,0 +1,261 @@
+/* The home page only (body.home), on top of site.css. Motion is transforms and opacity only so
+   phones stay smooth; /home.js drives it and everything settles in place under reduced motion.
+   Card art comes from the app host's /img/small/. */
+:root{--cream:#f3ecdc;--cream-2:#e2d5ba;--red:#d8402c;--navy:#16203a;--lining:#1c2034;--ease:cubic-bezier(.2,.8,.2,1);--spring:cubic-bezier(.34,1.4,.5,1)}
+html{transition:background-color 900ms ease}
+body.home{font-size:17px;line-height:1.55;overflow-x:clip}
+.home .wash{transition:opacity 1100ms ease}
+.home .wash.off{opacity:0}
+.home button:not(.btn){font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.home button.btn{font-family:inherit;cursor:pointer;background:transparent;color:inherit}
+.home h1{font-size:clamp(52px,7.4vw,104px);line-height:.86;max-width:none}
+.home h2{font-size:clamp(42px,5.6vw,76px);line-height:.9;margin:0}
+.home h3{margin:0}
+.home main section{padding:110px 0 40px}
+.home main section p.intro{max-width:34em;margin-top:18px;font-size:18px}
+.copy p{max-width:32em;margin-top:16px;font-size:18px}
+.copy p+p{margin-top:12px}
+
+/* ---------- Hero: a tall run whose sticky pin holds the binder while the page scrolls ---------- */
+.run{height:330vh;margin-top:-76px}
+.pin{position:sticky;top:0;height:100svh;overflow:hidden}
+.pin .wrap{padding-top:76px}
+.top{display:grid;grid-template-columns:1.2fr 1fr;gap:56px;align-items:end;padding:36px 0 20px;will-change:transform,opacity}
+.home .top .lead{font-size:19px;margin:0 0 26px}
+.home .top .meta{font-size:14px;letter-spacing:0;margin-top:14px;opacity:.9}
+.cue{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);font-size:14px;font-weight:600;padding:8px 16px;border-radius:99px;background:rgb(10 9 14 / 80%);opacity:0;transition:opacity 300ms;z-index:10;pointer-events:none}
+
+/* The binder. Inside, everything is sized in --u (one pocket width) so it scales with the page.
+   An open spread is 7.98u by 4.95u: two 9-pocket pages either side of a ringed spine. It lies open
+   by default; under .js it starts closed until /home.js adds .opened. */
+.binder{position:relative;max-width:1060px;margin:28px auto 0;container-type:inline-size;transform-origin:0 0;will-change:transform}
+.binder::before{content:"";display:block;padding-top:62%}
+.stage{position:absolute;inset:0;--u:calc(100cqw / 7.98);perspective:1900px;perspective-origin:50% 0}
+.slide{position:absolute;inset:0;transition:transform 1300ms cubic-bezier(.6,.05,.2,1);transform-style:preserve-3d}
+.js .binder:not(.opened) .slide{transform:translateX(-25%)}
+.tilt{position:absolute;left:0;top:0;width:100%;height:calc(var(--u) * 4.95);transform-origin:50% 100%;transform-style:preserve-3d;will-change:transform}
+.floor{position:absolute;left:-2%;right:-2%;top:6%;bottom:-8%;border-radius:40px;background:radial-gradient(ellipse at 50% 55%,rgb(0 0 0 / 65%),transparent 70%);transform:translateZ(-2px);transition:left 1300ms cubic-bezier(.6,.05,.2,1)}
+.js .binder:not(.opened) .floor{left:46%}
+
+.shell{position:absolute;left:calc(var(--u) * 3.99);top:0;width:calc(var(--u) * 3.99);height:100%;border-radius:0 calc(var(--u)*.16) calc(var(--u)*.16) 0;background:linear-gradient(160deg,#232842,var(--lining) 60%,#151827);box-shadow:inset 0 0 0 1px rgb(255 255 255 / 5%)}
+.spine{position:absolute;left:calc(var(--u) * 3.78);width:calc(var(--u) * .42);top:0;height:100%;background:linear-gradient(90deg,#141726,#2a3050 30%,#1a1e31 50%,#2a3050 70%,#141726);transition:opacity 300ms 600ms}
+.js .binder:not(.opened) .spine{opacity:0}
+
+.pgpage{position:absolute;top:calc(var(--u) * .12);width:calc(var(--u) * 3.72);height:calc(var(--u) * 4.71);border-radius:calc(var(--u)*.06);background:#0c0b10;padding:calc(var(--u)*.18);display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:calc(var(--u)*.08);overflow:hidden}
+.pgpage.right{left:calc(var(--u) * 4.14);padding-left:calc(var(--u)*.38)}
+.pgpage.under{box-shadow:2px 1px 0 #2a2733,4px 2px 0 #18161e,6px 3px 0 #2a2733,8px 4px 0 #18161e,10px 5px 0 #2a2733}
+.pgpage.left{left:calc(var(--u) * .12)}
+/* punched holes for the rings */
+.pgpage.right::before{content:"";position:absolute;left:calc(var(--u)*.1);top:0;bottom:0;width:calc(var(--u)*.13);background:radial-gradient(circle,#000 0 40%,rgb(255 255 255 / 12%) 42% 50%,transparent 52%) 0 calc(var(--u)*.92)/100% calc(var(--u)*1.37) repeat-y}
+/* the clear sheet over each page: a glare band that follows the pointer */
+.glare{position:absolute;inset:0;pointer-events:none;z-index:3;overflow:hidden}
+.glare::before{content:"";position:absolute;top:-30%;bottom:-30%;left:-60%;width:70%;background:linear-gradient(100deg,transparent,rgb(255 255 255 / 7%) 40%,rgb(255 255 255 / 13%) 50%,rgb(255 255 255 / 5%) 60%,transparent);transform:translateX(var(--gx,40%)) rotate(8deg);transition:transform 600ms var(--ease)}
+.sweep .glare::before{transform:translateX(260%) rotate(8deg);transition:transform 1400ms cubic-bezier(.4,0,.2,1)}
+
+.pocket{position:relative;border-radius:calc(var(--u)*.04);background:rgb(255 255 255 / 4%);box-shadow:inset 0 0 0 1px rgb(255 255 255 / 10%)}
+/* the sleeve's opening */
+.pocket::before{content:"";position:absolute;left:4%;right:4%;top:5%;height:1px;background:rgb(255 255 255 / 22%);z-index:2}
+.card{position:absolute;inset:3%;border-radius:calc(var(--u)*.04);overflow:hidden;transform:rotate(var(--r,0deg));transition:transform 240ms var(--ease);box-shadow:0 2px 6px rgb(0 0 0 / 50%);background:#1a1820}
+.card img{width:100%;height:100%;object-fit:cover;display:block}
+.card::after{content:"";position:absolute;inset:-40%;background:linear-gradient(105deg,transparent 42%,rgb(255 245 220 / 55%) 50%,rgb(170 215 255 / 32%) 55%,transparent 63%);transform:translateX(var(--sx,-70%));opacity:0;transition:opacity 200ms}
+.pocket.lit .card{transform:translateY(-2%) scale(1.04) rotate(var(--r,0deg))}
+.pocket.lit .card::after{opacity:1}
+
+.rings{position:absolute;left:calc(var(--u) * 3.82);width:calc(var(--u) * .56);top:0;height:100%;transition:opacity 300ms 700ms;transform:translateZ(4px)}
+.js .binder:not(.opened) .rings{opacity:0}
+.rings i{position:absolute;left:0;right:0;height:calc(var(--u)*.15);border-radius:99px;background:linear-gradient(180deg,#f4f6fa,#9aa1ad 45%,#5d636e 55%,#c9ced6);box-shadow:0 3px 6px rgb(0 0 0 / 55%)}
+.rings i:nth-child(1){top:calc(var(--u)*.98)}.rings i:nth-child(2){top:calc(var(--u)*2.4)}.rings i:nth-child(3){top:calc(var(--u)*3.78)}
+
+/* Two hinged leaves: the front cover (opens on load) and the first right page (turns on scroll).
+   A leaf's back face is turned 180deg, which puts its content back in spread coordinates.
+   Depths keep coplanar leaves from fighting: page under (0) < cover (3px) < turned page (6px). */
+.leaf{position:absolute;left:calc(var(--u) * 3.99);top:0;width:calc(var(--u) * 3.99);height:100%;transform-origin:0 50%;transform-style:preserve-3d}
+.cover{transform:translateZ(3px) rotateY(-180deg);transition:transform 1300ms cubic-bezier(.6,.05,.2,1)}
+.js .binder:not(.opened) .cover{transform:translateZ(3px)}
+.face{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden}
+.face *,.face::before,.face::after{backface-visibility:hidden;-webkit-backface-visibility:hidden}
+.flip{transform:rotateY(180deg)}
+/* Firefox shows a face's own layers (emblem, stitching, strap) through the turned leaf, so faces are
+   also switched off past the halfway point: by a delayed transition for the cover, by script for
+   the page turn. */
+.cover .front{visibility:hidden;transition:visibility 0s 650ms}
+.js .binder:not(.opened) .cover .front{visibility:visible}
+.cover .flip{transition:visibility 0s 650ms}
+.js .binder:not(.opened) .cover .flip{visibility:hidden}
+.front{border-radius:calc(var(--u)*.1) calc(var(--u)*.2) calc(var(--u)*.2) calc(var(--u)*.1);background:radial-gradient(ellipse at 40% 30%,#fbf6ea,var(--cream) 45%,var(--cream-2));box-shadow:inset calc(var(--u)*.12) 0 calc(var(--u)*.1) -4px rgb(120 95 60 / 30%),inset -6px -8px 20px rgb(120 95 60 / 20%)}
+.front::before{content:"";position:absolute;inset:calc(var(--u)*.12);border:2px dashed rgb(150 125 90 / 40%);border-radius:calc(var(--u)*.12)}
+.front::after{content:"";position:absolute;right:calc(var(--u)*.34);top:-3px;bottom:-3px;width:calc(var(--u)*.2);background:linear-gradient(90deg,#0f1628,#24304f 40%,#16203a);box-shadow:-3px 0 6px rgb(0 0 0 / 25%),3px 0 6px rgb(0 0 0 / 25%);border-radius:3px}
+.emblem{position:absolute;left:30%;top:24%;width:38%;aspect-ratio:66/92;border-radius:calc(var(--u)*.14);background:linear-gradient(var(--red),#b92d1c);box-shadow:0 8px 24px rgb(0 0 0 / 22%),inset 0 0 0 3px rgb(255 255 255 / 12%);display:grid;place-items:center}
+.emblem svg{width:52%}
+.cover .flip{border-radius:calc(var(--u)*.16) 0 0 calc(var(--u)*.16);background:linear-gradient(200deg,#232842,var(--lining) 60%,#151827)}
+.turn .face>.pgpage.right{left:calc(var(--u) * .15)}
+/* While the page turns the binder lies flat, so its layers are painted in a fixed order (turning
+   page over the open cover) rather than depth-sorted: Chrome's sorting dropped the left page for a
+   few frames while the turning page was edge-on. */
+.tilt.flat{transform-style:flat;perspective:2200px;perspective-origin:50% 50%}
+.tilt.flat .cover{z-index:5}.tilt.flat .rings{z-index:4}.tilt.flat .turn{z-index:6}
+
+.chip{position:absolute;left:0;top:0;z-index:20;background:rgb(10 9 14 / 85%);border-radius:12px;padding:9px 13px;font-size:13px;line-height:1.35;pointer-events:none;opacity:0;transition:opacity 200ms;white-space:nowrap}
+.chip b{display:block;font-size:15px}
+.chip .mono{margin-right:8px;opacity:.85}
+.chip.on{opacity:1}
+
+/* ---------- Games: the one in the middle of the screen fans its cards out ---------- */
+.home main section.games{padding-bottom:0}
+.games .intro{margin-bottom:24px}
+.game{display:grid;grid-template-columns:1fr 460px;gap:40px;align-items:center;padding:8px 0}
+.game h3{font-size:clamp(52px,8vw,112px);line-height:.85;transition:opacity 500ms,transform 700ms var(--ease)}
+.js .game h3{transform:translateX(-18px)}
+.js .game:not(.cur) h3{opacity:.3}
+.js .game.cur h3{transform:none}
+.game p{transition:opacity 500ms 120ms}
+.js .game:not(.cur) p{opacity:.4}
+.home main .game p{max-width:30em;margin-top:16px;font-size:18px}
+.home main .game p.data{font-size:12.5px;margin-top:18px}
+.fan{position:relative;height:350px}
+.fan img{position:absolute;left:50%;top:50%;width:210px;aspect-ratio:268/391;border-radius:10px;box-shadow:0 26px 50px rgb(0 0 0 / 55%);transform:translate(-50%,-40%) scale(.82);transition:transform 800ms var(--spring)}
+.game.cur .fan img:nth-child(1),html:not(.js) .fan img:nth-child(1){transform:translate(-118%,-46%) rotate(-13deg)}
+.game.cur .fan img:nth-child(2),html:not(.js) .fan img:nth-child(2){transform:translate(-50%,-56%);transition-delay:70ms}
+.game.cur .fan img:nth-child(3),html:not(.js) .fan img:nth-child(3){transform:translate(18%,-46%) rotate(13deg);transition-delay:140ms}
+
+/* ---------- Staggered entrances below the games ---------- */
+.js .rise>*,.js .rise .stag>*{opacity:0;transform:translateY(34px);transition:opacity 700ms var(--ease),transform 900ms var(--ease);transition-delay:calc(var(--i,0) * 90ms)}
+.js .rise.in>*,.js .rise.in .stag>*{opacity:1;transform:none}
+
+/* ---------- Scanner ---------- */
+.split{display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:center}
+.modes{display:inline-flex;gap:4px;margin-top:28px;padding:4px;border-radius:999px;background:rgb(0 0 0 / 30%)}
+.modes button{height:38px;padding:0 18px;border-radius:999px;font-weight:600;font-size:15px;transition:background-color 200ms,color 200ms}
+.modes button[aria-pressed=true]{background:var(--ink);color:var(--on)}
+.modes button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.home main section p.modenote{min-height:3.2em;margin-top:14px;font-size:16px;max-width:28em}
+.phone{position:relative;width:300px;height:610px;margin:0 auto;border-radius:46px;background:#0b0a0e;padding:11px;box-shadow:0 40px 80px -20px rgb(0 0 0 / 70%),inset 0 0 0 2px #2c2a33}
+.screen{position:relative;height:100%;border-radius:36px;overflow:hidden;background:radial-gradient(ellipse at 50% 40%,#3a3530,#1f1c19 70%);font-size:13px;line-height:1.35}
+.bar{position:absolute;left:0;right:0;top:0;padding:46px 18px 0;display:flex;justify-content:space-between;z-index:4;transition:opacity 300ms}
+.count b{font-variant-numeric:tabular-nums}
+.scard{position:absolute;left:19%;top:20%;width:62%;aspect-ratio:268/391;border-radius:6px;overflow:hidden;box-shadow:0 18px 30px rgb(0 0 0 / 60%);transform:rotate(-2deg);transition:transform 800ms var(--spring)}
+.scard img{width:100%;display:block}
+.js .screen:not(.run-scan) .scard{transform:translateY(130%) rotate(-9deg)}
+.target{position:absolute;left:17%;top:18.5%;width:66%;height:62%;transform-origin:0 0;opacity:0;transform:scale(1.2);transition:opacity 250ms,transform 450ms var(--ease)}
+.target i{position:absolute;width:22px;height:22px;border:3px solid #fff;border-radius:3px}
+.target i:nth-child(1){left:0;top:0;border-right:0;border-bottom:0}.target i:nth-child(2){right:0;top:0;border-left:0;border-bottom:0}
+.target i:nth-child(3){left:0;bottom:0;border-right:0;border-top:0}.target i:nth-child(4){right:0;bottom:0;border-left:0;border-top:0}
+.locked .target{opacity:1;transform:scale(1)}
+/* Code mode reads only the set code under the art */
+.m-code.locked .target{transform:translate(62%,58.5%) scale(.36,.09)}
+.m-code .target i{border-width:6px}
+.m-stream .target{display:none}
+.sheet{position:absolute;left:10px;right:10px;bottom:10px;border-radius:26px;background:rgb(18 16 22 / 92%);padding:14px;display:flex;gap:12px;align-items:center;transform:translateY(120%);transition:transform 500ms var(--spring);z-index:5}
+.added .sheet,html:not(.js) .sheet{transform:none}
+.sheet img{width:46px;border-radius:4px}
+.sheet .t{flex:1}.sheet .t b{display:block;font-size:16px}
+.sheet .p{font-weight:700;font-size:18px}
+.m-stream .bar{opacity:0}
+.m-stream .sheet{left:14px;right:auto;bottom:auto;top:44px;border-radius:14px;padding:10px 14px 10px 10px;transform:translateX(-130%)}
+.m-stream.added .sheet{transform:none}
+
+/* ---------- The dashboard screenshot settles as it arrives ---------- */
+.shot{margin:44px 0 0;border-radius:14px;overflow:hidden;box-shadow:0 40px 80px -24px rgb(0 0 0 / 70%),0 0 0 1px rgb(255 255 255 / 8%);transform-origin:50% 100%;transition:transform 1100ms var(--ease)}
+.js .shot:not(.settled){transform:perspective(1400px) rotateX(14deg) translateY(50px) scale(.95)}
+.shot img{display:block;width:100%;height:auto}
+
+/* ---------- Set checklist ---------- */
+.setcard{background:rgb(0 0 0 / 28%);border-radius:20px;padding:22px}
+.sethead{display:flex;align-items:baseline;gap:12px;margin-bottom:14px}
+.sethead b{font-size:18px}.sethead .n{margin-left:auto;font-variant-numeric:tabular-nums}
+.progress{height:6px;border-radius:9px;background:rgb(255 255 255 / 12%);overflow:hidden;margin-bottom:18px}
+.progress i{display:block;height:100%;background:var(--ink);transform-origin:0 0;transform:scaleX(var(--p,0));transition:transform 500ms var(--ease)}
+.slots{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+.slot{position:relative;aspect-ratio:268/391;border-radius:5px;overflow:hidden;display:block;width:100%;padding:0}
+.slot img{width:100%;height:100%;object-fit:cover;display:block;transition:filter 500ms,opacity 500ms}
+.slot.miss img{filter:grayscale(1) brightness(.6);opacity:.45}
+.slot.miss{box-shadow:inset 0 0 0 1.5px rgb(255 255 255 / 25%)}
+.slot.miss:hover img{opacity:.7}
+.slot:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.slot.got{animation:got 520ms var(--spring)}
+@keyframes got{40%{transform:scale(1.12)}}
+.home main section p.hint{font-size:14px;margin-top:14px;opacity:.85}
+
+/* ---------- More ---------- */
+.more .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:0 48px;margin-top:40px}
+.more .grid>div{padding:26px 0;border-top:1px solid rgb(255 255 255 / 18%)}
+.more h3{font-size:30px;line-height:1}
+.home main .more p{margin-top:10px;font-size:16px}
+
+/* ---------- Devices: a small, real-looking screen on each, kept inside its frame ---------- */
+.devs{display:grid;grid-template-columns:1.25fr .62fr 1.25fr;gap:36px;align-items:end;margin-top:48px}
+.dev h3{font-size:30px;margin-top:22px}
+.home main .dev p{font-size:16px;margin-top:8px;max-width:24em}
+.scr{position:relative;overflow:hidden;background:#100f15;box-shadow:0 0 0 1.5px rgb(255 255 255 / 22%),0 30px 60px -20px rgb(0 0 0 / 60%);font-size:10px;line-height:1.3}
+.laptop .scr{aspect-ratio:16/10;border-radius:12px 12px 0 0;border:8px solid #0b0a0e;border-bottom-width:12px}
+.laptop .base{height:12px;margin:0 -7%;border-radius:0 0 14px 14px;background:linear-gradient(#9b98a6,#5d5a66)}
+.mobile .scr{aspect-ratio:9/19;border-radius:28px;border:7px solid #0b0a0e}
+.browser .scr{aspect-ratio:4/3;border-radius:12px}
+.scr figure{margin:0}
+/* desktop app */
+.app{display:flex;height:100%}
+.app aside{width:15%;padding:10px 8px;background:rgb(255 255 255 / 4%);display:flex;flex-direction:column;gap:7px}
+.app aside img{width:16px;margin-bottom:6px}
+.app aside i{display:block;height:6px;border-radius:3px;background:rgb(255 255 255 / 16%)}
+.app aside i.on{background:rgb(255 255 255 / 55%)}
+.app .main{flex:1;padding:10px 12px;min-width:0}
+.ah{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+.ah b{font-size:13px}.ah span{font-size:11px;opacity:.8}
+.cgrid{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+.cgrid figure{min-width:0}
+.cgrid img{width:100%;aspect-ratio:63/88;object-fit:cover;border-radius:3px;display:block}
+.cgrid figcaption{font-size:8.5px;margin-top:2px;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* phone app */
+.papp{padding:16px 10px 10px}
+.papp .ah{padding:0 2px}
+.prow{display:flex;gap:7px;align-items:center;padding:5px 2px;border-top:1px solid rgb(255 255 255 / 8%)}
+.prow img{width:22px;aspect-ratio:63/88;object-fit:cover;border-radius:2px}
+.prow div{flex:1;min-width:0}.prow b{display:block;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prow .mono{font-size:8.5px;opacity:.7}.prow em{font-style:normal;font-weight:700;font-size:10px}
+/* web: a friend's binder */
+.url{display:flex;align-items:center;gap:10px;height:26px;padding:0 10px;background:rgb(255 255 255 / 5%)}
+.url::before{content:"";flex:none;width:34px;height:7px;background:radial-gradient(circle,rgb(255 255 255 / 30%) 3px,transparent 3.5px) 0 0/12px 7px repeat-x}
+.url span{flex:1;height:16px;border-radius:8px;background:rgb(255 255 255 / 7%);font-size:9px;line-height:16px;padding:0 8px;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wbody{padding:9px 12px}
+.spread{max-width:80%;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:7px;border-radius:6px;background:var(--lining)}
+.spread>div{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;padding:4px;border-radius:3px;background:#0c0b10}
+.spread img,.spread i{width:100%;aspect-ratio:63/88;border-radius:2px;display:block;object-fit:cover}
+.spread i{box-shadow:inset 0 0 0 1px rgb(255 255 255 / 22%)}
+.js .spread .new{transform:scale(.3);opacity:0;transition:transform 500ms var(--spring),opacity 200ms}
+.js .synced .spread .new{transform:none;opacity:1}
+.tick{position:absolute;right:8px;bottom:8px;font-size:10px;padding:3px 8px;border-radius:99px;background:var(--ink);color:var(--on);font-weight:700;opacity:0;transform:translateY(6px);transition:opacity 300ms,transform 400ms var(--spring)}
+.synced .tick{opacity:1;transform:none}
+.syncbar{display:flex;align-items:center;gap:18px;margin-top:36px;flex-wrap:wrap}
+.home main .syncbar p{font-size:16px}
+html:not(.js) #syncbtn{display:none}
+
+/* ---------- Download ---------- */
+.home table{margin-top:30px}
+.home td{padding:18px 0;border-top:1px solid var(--line)}
+.home td.plat{font-weight:800;font-stretch:75%;font-size:28px;width:30%}
+.home td.m{font-size:13px;opacity:.9;padding-right:16px;overflow-wrap:anywhere}
+.home td.act{text-align:right;white-space:nowrap}
+
+@media (max-width:900px){
+  .top,.split{grid-template-columns:1fr;gap:24px}
+  .game{grid-template-columns:1fr;gap:12px}
+  .fan{height:300px}.fan img{width:150px}
+  .more .grid{grid-template-columns:1fr 1fr}
+  .devs{grid-template-columns:1fr .6fr}.devs .browser{grid-column:1 / -1}
+  .slots{grid-template-columns:repeat(4,1fr)}
+}
+@media (max-width:720px){
+  .run{height:230vh;margin-top:-64px}
+  .fan{height:260px}.home .fan img{width:124px}
+  .pin .wrap{padding-top:64px}
+  .home .top .lead{font-size:17px}
+  .home main section{padding-top:72px}
+  .more .grid,.devs{grid-template-columns:1fr}
+  .home td.m{display:none}
+}
+@media (prefers-reduced-motion:reduce){
+  .home *,.home *::before,.home *::after{transition:none!important;animation:none!important}
+  .run{height:auto}.pin{position:static;height:auto}
+  .js .shot:not(.settled){transform:none}
+  .js .rise>*,.js .rise .stag>*{opacity:1;transform:none}
+}

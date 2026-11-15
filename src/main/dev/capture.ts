@@ -11,12 +11,22 @@ export interface Shot {
 
 export const SHOTS: Record<GameId, Shot[]> = {
   ygo: [
-    { file: 'collection.png', clicks: ['Collection', 'Date added', 'Total value'] },
-    { file: 'dashboard.png', clicks: ['Dashboard'] }
+    {
+      file: 'collection.png',
+      clicks: ['Collection', 'Date added: newest first', 'Total price: high to low']
+    },
+    { file: 'dashboard.png', clicks: ['Dashboard'] },
+    { file: 'sessions.png', clicks: ['Sessions'] }
   ],
   pkm: [
-    { file: 'collection-pokemon.png', clicks: ['Collection', 'Date added', 'Total value'] },
-    { file: 'sets.png', clicks: ['Sets', 'Base Set'] }
+    {
+      file: 'collection-pokemon.png',
+      clicks: ['Collection', 'Date added: newest first', 'Total price: high to low']
+    },
+    {
+      file: 'sets.png',
+      clicks: ['Sets', 'Date: newest first', 'Completion: high to low', 'Base Set']
+    }
   ],
   op: [],
   mtg: []

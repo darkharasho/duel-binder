@@ -63,11 +63,9 @@ describe('renderPage', () => {
   it('has the charset, headline and lead', () => {
     const html = page()
     expect(html).toContain('<meta charset="utf-8">')
+    expect(html).toContain('<h1>A binder for every card you own.</h1>')
     expect(html).toContain(
-      'A binder for your <span class="nowrap">Yu-Gi-Oh!</span> and Pokémon cards.'
-    )
-    expect(html).toContain(
-      "Log what you own by set, rarity and condition. Prices update on their own. It runs on your computer and works offline. Sign in with Discord to see your friends' collections on the web."
+      'Scan your <span class="nowrap">Yu-Gi-Oh!</span>, Pokémon, Magic and One Piece cards with a camera, or add them by hand.'
     )
   })
 
@@ -112,19 +110,45 @@ describe('renderPage', () => {
     expect(html).toMatch(new RegExp(`href="${appUrl}"[^>]*>Open the web app</a>`))
     expect(html).toContain('href="https://github.com/darkharasho/duel-binder"')
     expect(html).toContain(
-      'Duel Binder is not affiliated with Konami or The Pokémon Company. Card data and images from YGOPRODeck and TCGdex.'
+      'Duel Binder is not affiliated with Konami, The Pokémon Company, Wizards of the Coast or Bandai. Card data and images from YGOPRODeck, Yugipedia, TCGdex, Scryfall and Bandai; prices from TCGplayer and eBay.'
     )
     expect(html).toContain('<a href="/privacy">Privacy</a>')
     expect(html).toContain('<a href="/terms">Terms</a>')
   })
 
-  it('has the feature rows, with Friends as text only', () => {
+  it('has the four games, the scanner and the feature rows', () => {
     const html = page()
-    for (const h of ["What it's worth", 'Finish your sets', 'Friends']) expect(html).toContain(h)
-    expect(html.replace(/&#39;/g, "'")).toContain("What it's worth")
-    const friends = html.slice(html.indexOf('<h2>Friends</h2>'))
-    const row = friends.slice(0, friends.indexOf('</section>'))
-    expect(row).not.toContain('<img')
+    for (const g of ['Yu-Gi-Oh!', 'Pokémon', 'Magic: The Gathering', 'One Piece'])
+      expect(html).toContain(`<h3>${g}</h3>`)
+    expect(html).toContain('id="games"')
+    expect(html).toContain('id="scan"')
+    expect(html).toContain('<h2>Hold a card up to the camera</h2>')
+    for (const mode of ['Card', 'Code', 'Stream']) expect(html).toContain(`<li><b>${mode}</b>`)
+    for (const h of ["What it's worth", 'Finish your sets', 'Also in the app'])
+      expect(html).toContain(h)
+  })
+
+  it('lists the smaller features as text only', () => {
+    const html = page()
+    const more = html.slice(html.indexOf('<section class="more">'))
+    const block = more.slice(0, more.indexOf('</section>'))
+    for (const h of [
+      'Binders',
+      'Wishlist',
+      'Pokédex',
+      'Friends',
+      'Many languages',
+      'Offline first'
+    ])
+      expect(block).toContain(`<h3>${h}</h3>`)
+    expect(block).not.toContain('<img')
+  })
+
+  it('names desktop, phone and web, and the web app address', () => {
+    const html = page()
+    expect(html).toContain('<h2>On your computer, your phone and the web</h2>')
+    expect(html).toContain(`<a href="${appUrl}">app.duelbinder.com</a>`)
+    expect(html).not.toMatch(/apps\.apple\.com|play\.google\.com/)
   })
 
   it('has no script but its account badge and escapes interpolated values', () => {
@@ -137,14 +161,12 @@ describe('renderPage', () => {
 
   it('has the head metadata and well-formed images', () => {
     const html = page()
-    expect(html).toContain(
-      '<title>Duel Binder — a binder for your Yu-Gi-Oh! and Pokémon cards</title>'
-    )
+    expect(html).toContain('<title>Duel Binder — a binder for your trading cards</title>')
     expect(html).toContain('<meta property="og:image" content="https://duelbinder.com/og.png">')
     expect(html).toContain('<meta property="og:url" content="https://duelbinder.com/">')
     expect(html).toContain('<meta name="twitter:card" content="summary_large_image">')
     const imgs = html.match(/<img [^>]*>/g)!.filter((img) => img.includes('/shots/'))
-    expect(imgs).toHaveLength(4)
+    expect(imgs).toHaveLength(5)
     for (const img of imgs) {
       expect(img).toContain('width="2560" height="1600"')
       expect(img).toMatch(/alt="[^"]+"/)
@@ -192,10 +214,11 @@ describe('renderPrivacy', () => {
 })
 
 describe('marketing home page and Magic', () => {
-  it('stays free of the Magic notice while Magic is not open to everyone', () => {
+  it('carries the Wizards Fan Content notice and credits Scryfall, now that Magic is open to everyone', () => {
     const html = page()
-    expect(html).not.toContain(MAGIC_FAN_CONTENT)
-    expect(html).not.toContain(SCRYFALL_CREDIT)
+    expect(html).toContain(MAGIC_FAN_CONTENT)
+    expect(html).toContain('Scryfall')
+    expect(html).toContain('Magic: The Gathering')
   })
 })
 
@@ -229,7 +252,11 @@ describe('renderTerms', () => {
 describe('Android', () => {
   const PIXEL =
     'Mozilla/5.0 (Linux; Android 15; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Mobile Safari/537.36'
-  const apk = { name: 'Duel-Binder-0.48.0.apk', size: 25_000_000, url: 'https://x.test/Duel-Binder-0.48.0.apk' }
+  const apk = {
+    name: 'Duel-Binder-0.48.0.apk',
+    size: 25_000_000,
+    url: 'https://x.test/Duel-Binder-0.48.0.apk'
+  }
   const withApk = { ...downloads, android: apk }
 
   it('knows an Android phone', () => {
@@ -248,6 +275,11 @@ describe('Android', () => {
 
   it('leaves the hero as it is for Android without an APK', () => {
     expect(page({ android: true })).toBe(page())
+  })
+
+  it('points the phone column at the APK only when the release has one', () => {
+    expect(page()).not.toContain('The Android app is in the download list below.')
+    expect(page({ downloads: withApk })).toContain('The Android app is in the download list below.')
   })
 
   it('lists Android in the download table only when the APK exists', () => {

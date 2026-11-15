@@ -369,7 +369,7 @@ describe('image route', () => {
       upstream.mockImplementationOnce(jpeg(portrait))
       await get(`small/${plain}`)
       expect(new Uint8Array(bucket.store.get(`card/small/${plain}`)!.bytes)).toEqual(portrait)
-      // A BREAK card is landscape as it stands: kept as it came.
+      // A BREAK card is a standard card printed sideways: stood upright like a LEGEND half.
       const brk = addPokemon(
         12,
         'https://tcgplayer-cdn.tcgplayer.com/product/716162_200w.jpg',
@@ -377,7 +377,19 @@ describe('image route', () => {
       )
       upstream.mockImplementationOnce(jpeg(landscape))
       await get(`small/${brk}`)
-      expect(new Uint8Array(bucket.store.get(`card/small/${brk}`)!.bytes)).toEqual(landscape)
+      expect(jpegSize(new Uint8Array(bucket.store.get(`card/small/${brk}`)!.bytes))).toEqual({
+        width: 30,
+        height: 42
+      })
+      // A card with "break" inside a longer word is no BREAK card.
+      const word = addPokemon(
+        13,
+        'https://tcgplayer-cdn.tcgplayer.com/product/669669_200w.jpg',
+        "Ciphermaniac's Codebreaking"
+      )
+      upstream.mockImplementationOnce(jpeg(landscape))
+      await get(`small/${word}`)
+      expect(new Uint8Array(bucket.store.get(`card/small/${word}`)!.bytes)).toEqual(landscape)
     })
 
     it('serves cropped Pokémon art as the small art, under its own key', async () => {

@@ -255,13 +255,21 @@ interface Target {
   meterFirst?: boolean
   /** A fixed YGOPRODeck card image: signed-out requests may fill it too, under the per-address quota. */
   anonymous?: boolean
-  /** Stand a sideways JPEG upright before keeping it: TCGplayer photographs a LEGEND half sideways. */
+  /** Stand a sideways JPEG upright before keeping it: TCGplayer photographs LEGEND halves and BREAK cards sideways. */
   upright?: boolean
 }
 
 const TCGDEX_PREFIX = 'https://assets.tcgdex.net/'
 const HAND_PATH_RE = /^[a-z0-9-]+\/[a-z]+\.(?:jpg|png)$/
 const TCGPLAYER_CDN_PREFIX = 'https://tcgplayer-cdn.tcgplayer.com/'
+
+/**
+ * A card printed sideways on a standard card: a LEGEND half (portrait, its art running across it
+ * and its other half) or a BREAK card (the title runs up the left edge as it stands). TCGplayer
+ * photographs both wider than tall; TCGdex's scans already stand upright. Case matters: "Codebreaking".
+ */
+export const isSidewaysCard = (name: string, stage: string | null): boolean =>
+  /\bLEGEND\b/i.test(name) || /\bBREAK\b/.test(name) || stage === 'BREAK'
 
 /** The upstream URL of a Pokémon card image at `size`; null for a foreign host. */
 function pokemonArtUrl(base: string, size: 'small' | 'full'): string | null {
@@ -504,9 +512,9 @@ function resolve(deps: AppDeps, path: string): Target | null {
     if (game === 'pkm') {
       const row = deps.db
         .prepare(
-          'SELECT pc.image_url, c.name FROM card_images ci JOIN pokemon_cards pc ON pc.card_id = ci.card_id JOIN cards c ON c.id = ci.card_id WHERE ci.image_id = ?'
+          'SELECT pc.image_url, pc.stage, c.name FROM card_images ci JOIN pokemon_cards pc ON pc.card_id = ci.card_id JOIN cards c ON c.id = ci.card_id WHERE ci.image_id = ?'
         )
-        .get(n) as { image_url: string | null; name: string } | undefined
+        .get(n) as { image_url: string | null; stage: string | null; name: string } | undefined
       if (row?.image_url?.startsWith(HAND_ART_PREFIX))
         return handArt(`${row.image_url}/${kind === 'full' ? 'high' : 'low'}.jpg`, CARD_CACHE)
       // TCGdex and TCGplayer have no crop, so a Pokémon `cropped` (a set tile's backdrop) is the small art.
@@ -519,8 +527,8 @@ function resolve(deps: AppDeps, path: string): Target | null {
         source: fixed(url),
         cache: CARD_CACHE,
         anonymous: true,
-        // Only a LEGEND half: a BREAK card is landscape as it stands, and TCGplayer shows it so.
-        upright: url.startsWith(TCGPLAYER_CDN_PREFIX) && /\bLEGEND\b/i.test(row!.name)
+        // A LEGEND half or a BREAK card, which TCGplayer shows sideways; a portrait image is kept as is.
+        upright: isSidewaysCard(row!.name, row!.stage)
       }
     }
     if (!deps.db.prepare('SELECT 1 FROM card_images WHERE image_id = ?').get(n)) return null

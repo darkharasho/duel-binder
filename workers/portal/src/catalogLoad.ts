@@ -7,6 +7,7 @@ import { putFingerprintRefs, putFingerprints, rollbackFingerprints } from './sca
 import { isAdmin } from './auth'
 import { collectStats } from './stats'
 import { collectErrors } from './errors'
+import { costsResponse } from './costs'
 import { isSetSymbolKey, missingSetSymbols, storeSetSymbol, warmImage } from './images'
 import { MAX_SYMBOL_PNG_BYTES } from '../../../src/shared/imageSources'
 import { listSetNames } from '../../../src/main/repo/sets'
@@ -192,6 +193,11 @@ export async function adminRoute(req: Request, deps: AppDeps): Promise<Response>
     if (!(await authorized(req, deps)) && !(await isAdmin(req, deps)))
       return json({ error: 'Unauthorized' }, 401)
     return json(collectStats(deps))
+  }
+  if (req.method === 'GET' && path === '/admin/costs') {
+    if (!(await authorized(req, deps)) && !(await isAdmin(req, deps)))
+      return json({ error: 'Unauthorized' }, 401)
+    return costsResponse(req, deps)
   }
   if (req.method === 'GET' && path === '/admin/errors') {
     if (!(await authorized(req, deps)) && !(await isAdmin(req, deps)))

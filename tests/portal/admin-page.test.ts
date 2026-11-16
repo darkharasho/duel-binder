@@ -25,6 +25,13 @@ describe('admin page', () => {
     expect(html).toContain('"bare":"Bare"')
   })
 
+  it('has a Costs tab', async () => {
+    const html = await adminPage().text()
+    expect(html).toContain('href="#costs"')
+    expect(html).toContain('id="costs"')
+    expect(html).toContain("fetch('/admin/costs?days='")
+  })
+
   it('ships a script that parses', async () => {
     const html = await adminPage().text()
     const script = /<script nonce="[^"]+">([\s\S]*)<\/script>/.exec(html)![1]

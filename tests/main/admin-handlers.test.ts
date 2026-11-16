@@ -33,6 +33,8 @@ describe('admin handlers', () => {
     expect(await h['admin:testers']()).toEqual([{ id: 1 }])
     await h['admin:photos']()
     expect(admin).toHaveBeenLastCalledWith('/admin/training')
+    await h['admin:costs'](7)
+    expect(admin).toHaveBeenLastCalledWith('/admin/costs?days=7')
   })
 
   it('writes send checked bodies', async () => {
@@ -52,6 +54,7 @@ describe('admin handlers', () => {
     await expect(h['admin:removeTester']('1')).rejects.toThrow('Bad id')
     await expect(h['admin:undoMerge'](1.5)).rejects.toThrow('Bad id')
     await expect(h['admin:runs']('../x', 6)).rejects.toThrow('Bad workflow')
+    await expect(h['admin:costs'](3)).rejects.toThrow('Bad days')
     expect(admin).not.toHaveBeenCalled()
     expect(runs.runs).not.toHaveBeenCalled()
   })

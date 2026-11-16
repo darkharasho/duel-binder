@@ -12,6 +12,8 @@ import { withAppCors } from './appCors'
 import { bindingSender } from './emailSend'
 import { createAnonImageQuota, createImageQuota, createMissCache, edgeImage } from './images'
 import { doSql } from './doSql'
+import { areaOf, createCostMeter } from './meter'
+import { flushCosts } from './costs'
 import { migrateServer } from './migrate'
 import { handArtRoute } from './handArt'
 import { opArtRoute } from './opArt'
@@ -49,10 +51,11 @@ export class Store extends DurableObject<WorkerEnv> {
   private readonly imageQuota = createImageQuota(Date.now)
   private readonly anonImageQuota = createAnonImageQuota(Date.now)
   private readonly anonMisses = createMissCache(Date.now)
+  private readonly meter = createCostMeter(Date.now)
 
   constructor(ctx: DurableObjectState, env: WorkerEnv) {
     super(ctx, env)
-    this.db = doSql(ctx.storage)
+    this.db = doSql(ctx.storage, (read, written) => this.meter.rows(read, written))
     this.printingArt = createPrintingArtResolver({
       db: this.db,
       client: this.yugipedia,
@@ -68,7 +71,12 @@ export class Store extends DurableObject<WorkerEnv> {
 
   /** Keeps eBay prices fresh for every printing any user owns; re-arms itself. */
   async alarm(): Promise<void> {
-    await runPriceAlarm(
+    await this.meter.run('price alarm', () => this.priceAlarm())
+    this.flushCosts()
+  }
+
+  private priceAlarm(): Promise<void> {
+    return runPriceAlarm(
       this.db,
       priceClientFor(this.env),
       this.ctx.storage,
@@ -81,7 +89,24 @@ export class Store extends DurableObject<WorkerEnv> {
     )
   }
 
-  fetch(req: Request): Promise<Response> {
+  /** Writes the meter's totals about once a minute, outside any request so it isn't counted. */
+  private flushCosts(): void {
+    if (!this.meter.due()) return
+    try {
+      flushCosts(this.db, this.meter.take(), new Date())
+    } catch (e) {
+      // Counting must never fail a request; this minute's totals are dropped.
+      console.error('request_costs flush failed', e)
+    }
+  }
+
+  async fetch(req: Request): Promise<Response> {
+    const res = await this.meter.run(areaOf(new URL(req.url).pathname), () => this.route(req))
+    this.flushCosts()
+    return res
+  }
+
+  private route(req: Request): Promise<Response> {
     return handle(req, {
       db: this.db,
       assets: this.env.ASSETS,
@@ -98,6 +123,7 @@ export class Store extends DurableObject<WorkerEnv> {
       prices: this.prices,
       env: this.env,
       email: this.env.EMAIL ? bindingSender(this.env.EMAIL) : undefined,
+      meter: this.meter,
       storageBytes: () => this.ctx.storage.sql.databaseSize,
       now: () => new Date(),
       fetch: (input, init) => fetch(input, init)

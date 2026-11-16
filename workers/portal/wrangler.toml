@@ -1,6 +1,8 @@
 name = "duel-binder-portal"
 main = "src/index.ts"
 compatibility_date = "2026-10-01"
+# AsyncLocalStorage, so each request's database rows are counted against it (src/meter.ts).
+compatibility_flags = ["nodejs_als"]
 
 routes = [
   { pattern = "duelbinder.com", custom_domain = true },

@@ -12,6 +12,7 @@ import type {
   GhRun,
   RipFrameInfo
 } from './admin'
+import type { AdminCosts } from './costs'
 import type { PlaceholderRequest } from './placeholders'
 import type { ErrorDetails } from './errorReports'
 import type { UsageCounts } from './usage'
@@ -353,6 +354,8 @@ export interface Api {
     addAdmin(username: string): Promise<void>
     removeAdmin(userId: number): Promise<void>
     photos(): Promise<AdminPhotos>
+    /** What the portal's requests cost over the last 7 or 30 days, and the bill it projects. */
+    costs(days: 7 | 30): Promise<AdminCosts>
     /**
      * Rip capture: saves a key frame picked from a live pack opening under the app's data folder
      * (`rip-capture/<session>/<name>`, names as `RIP_SESSION` / `RIP_FRAME` in main); its path.
@@ -611,6 +614,7 @@ export const INVOKE_CHANNELS = [
   'admin:addAdmin',
   'admin:removeAdmin',
   'admin:photos',
+  'admin:costs',
   'admin:captureSave',
   'admin:captureRemove',
   'admin:captureNote',

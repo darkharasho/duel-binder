@@ -146,6 +146,7 @@ async function findSession(req: Request, deps: AppDeps): Promise<SessionUser | n
       'UPDATE users SET last_seen_at = ? WHERE id = ? AND (last_seen_at IS NULL OR last_seen_at < ?)'
     )
     .run(now.toISOString(), row.user_id, new Date(now.getTime() - LAST_SEEN_EVERY_MS).toISOString())
+  deps.meter?.user(row.user_id)
   return { id: row.user_id, kind: found.kind, tokenHash }
 }
 

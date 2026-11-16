@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
 import { PageHeader } from '@/components/PageHeader'
 import { PAGE_TITLE } from '@/components/pageHeaderContext'
@@ -7,6 +8,7 @@ import { api } from '@/lib/api'
 import { ADMIN_PAGE_TABS, ADMIN_QUERY, adminKeys, type AdminPageTab } from './adminTabs'
 import { AdminsTab, ErrorsTab, MergesTab, PhotosTab, TestersTab } from './ListTabs'
 import { Failed } from './parts'
+import { CostsTab } from './CostsTab'
 import { RipCaptureTab } from './RipCaptureTab'
 import { POLL_MS, loadRuns } from './runs'
 import { LatestRuns, Pulse, RunsTab } from './RunsTab'
@@ -93,7 +95,16 @@ export function AdminPage({
     enabled: tab === 'photos',
     ...ADMIN_QUERY
   })
-  const fetching = [stats, runs, errors, merges, testers, admins, photos].some((q) => q.isFetching)
+  const [costDays, setCostDays] = useState<7 | 30>(30)
+  const costs = useQuery({
+    queryKey: adminKeys.costs(costDays),
+    queryFn: () => admin().costs(costDays),
+    enabled: tab === 'costs',
+    ...ADMIN_QUERY
+  })
+  const fetching = [stats, runs, errors, merges, testers, admins, photos, costs].some(
+    (q) => q.isFetching
+  )
   // Only what's been read is read again; tabs not yet opened stay unread.
   const refresh = (): void => void qc.invalidateQueries({ queryKey: adminKeys.all })
 
@@ -159,6 +170,9 @@ export function AdminPage({
         />
       )}
       {tab === 'photos' && <Show q={photos} show={(p) => <PhotosTab photos={p} />} />}
+      {tab === 'costs' && (
+        <Show q={costs} show={(c) => <CostsTab costs={c} days={costDays} onDays={setCostDays} />} />
+      )}
       {tab === 'capture' && <RipCaptureTab />}
     </div>
   )

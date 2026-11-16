@@ -2,11 +2,13 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { DollarSign, Heart, Users } from 'lucide-react'
+import { affiliateOn } from '@shared/affiliate'
 import type { WishlistItem } from '@shared/types'
 import type { NavigateFn } from '@/components/AppShell'
 import { useArtWash } from '@/components/artWashContext'
 import { CardSheet } from '@/components/CardSheet'
 import { EmptyHero, EmptySteps } from '@/components/EmptyHero'
+import { AFFILIATE_DISCLOSURE } from '@/components/BuyLinks'
 import { PageHeader, type PageStat } from '@/components/PageHeader'
 import { SearchInput } from '@/components/SearchInput'
 import { Button } from '@/components/ui/button'
@@ -170,6 +172,9 @@ export function WishlistPage({ onNavigate }: { onNavigate?: NavigateFn } = {}): 
           />
         )}
       </PageHeader>
+      {shown.length > 0 && affiliateOn() && (
+        <p className="text-xs text-muted-foreground">{AFFILIATE_DISCLOSURE}</p>
+      )}
       {wishlist.isSuccess && items.length === 0 ? (
         <NoWishes onNavigate={onNavigate} />
       ) : wishlist.isPending ? (
@@ -183,6 +188,7 @@ export function WishlistPage({ onNavigate }: { onNavigate?: NavigateFn } = {}): 
           onOpen={setOpen}
           onQuantity={(w, quantity) => setQuantity.mutate({ printingId: w.printing.id, quantity })}
           onRemove={(w) => remove.mutate(w.printing.id)}
+          buy
         />
       )}
       {open && <WishCardSheet item={open} onClose={() => setOpen(null)} />}

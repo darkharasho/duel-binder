@@ -251,12 +251,20 @@ describe('WishlistPage', () => {
       wishlist: { list: async () => [item(1, { quantity: 2 }), item(2, { unitPrice: null })] },
       friends: { owning }
     })
-    expect(
-      await screen.findByText('1 without a price')
-    ).toBeInTheDocument()
+    expect(await screen.findByText('1 without a price')).toBeInTheDocument()
     expect(await screen.findByText('Bob has this')).toBeInTheDocument()
     expect(owning).toHaveBeenCalledTimes(1)
     expect(owning).toHaveBeenCalledWith([item(1).pkey, item(2).pkey])
+  })
+
+  it('each wishlist row links to eBay, with the disclosure once', async () => {
+    page({ wishlist: { list: async () => [item(1), item(2)] } })
+    const links = await screen.findAllByRole('link', { name: 'eBay' })
+    expect(links.map((l) => l.getAttribute('href'))).toEqual([
+      expect.stringContaining('LOB-001'),
+      expect.stringContaining('LOB-002')
+    ])
+    expect(screen.getAllByText('Affiliate links: we may earn a commission.')).toHaveLength(1)
   })
 
   it('marks a want as owned, and how far along a target is', async () => {

@@ -178,11 +178,7 @@ describe('CollectionPage', () => {
     expect(items()).toEqual(['LOB - Legend of Blue Eyes', 'Unlisted Set'])
 
     await u.click(screen.getByRole('button', { name: 'Japanese' }))
-    expect(items()).toEqual([
-      'LOB - Legend of Blue Eyes',
-      'PP01 - Premium Pack 1',
-      'Unlisted Set'
-    ])
+    expect(items()).toEqual(['LOB - Legend of Blue Eyes', 'PP01 - Premium Pack 1', 'Unlisted Set'])
   })
 
   it('offers Show all languages when only other-language cards are owned', async () => {
@@ -437,7 +433,8 @@ describe('CollectionPage', () => {
     setup([dm, bew], {}, { initialEntryId: 1 })
     const dialog = await screen.findByRole('dialog')
     await within(dialog).findByText('Value')
-    expect(within(dialog).queryByText(/eBay/)).not.toBeInTheDocument()
+    // The price line; the affiliate "Buy on eBay" link is not one.
+    expect(within(dialog).queryByText(/eBay/, { ignore: 'a, a *' })).not.toBeInTheDocument()
   })
 
   it('keeps the panel open when a filter excludes the initial entry', async () => {

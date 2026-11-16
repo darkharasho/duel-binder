@@ -8,6 +8,7 @@ import { CopyNameButton } from '@/components/CopyNameButton'
 import { CardDrawer } from '@/components/CardDrawer'
 import { PanelCardArt } from '@/components/PanelCardArt'
 import type { PanelNav } from '@/components/panelNav'
+import { BuyLinks } from '@/components/BuyLinks'
 import { PanelPrice } from '@/components/PanelPrice'
 import { scanFor } from '@/components/scanFor'
 import { Button } from '@/components/ui/button'
@@ -273,6 +274,7 @@ export function CardPanel({
           <p className="font-mono text-[13px] text-muted-foreground">{caption}</p>
         )}
         <PanelPrice entry={entry} price={price} label={priceLabel} plain={!!pokemonVersion} />
+        {name && <BuyLinks card={{ id: cardId, name }} printing={shown} />}
       </div>
 
       {phone && list}

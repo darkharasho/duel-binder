@@ -157,6 +157,22 @@ describe('one card panel, owned or not', () => {
     expect(within(section).getByText('You have 2')).toBeInTheDocument()
   })
 
+  it('shows buy links for the selected printing', async () => {
+    setup([entry(5, a)], { entryId: 5 })
+    const section = await showAll(await list())
+    await waitFor(() =>
+      expect(screen.getByRole('link', { name: 'Buy on eBay' }).getAttribute('href')).toContain(
+        'LOB-001'
+      )
+    )
+    await userEvent.click(
+      within(section).getByRole('button', { name: 'Dark Magician LOB-002 Secret Rare' })
+    )
+    expect(screen.getByRole('link', { name: 'Buy on eBay' }).getAttribute('href')).toContain(
+      'LOB-002'
+    )
+  })
+
   it('highlights the entry it opened on, and a click moves it and the price', async () => {
     setup([entry(5, a)], { entryId: 5 })
     const section = await showAll(await list())

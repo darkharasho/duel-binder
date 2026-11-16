@@ -21,7 +21,9 @@ export const USAGE_EVENTS = [
   'page:settings',
   'card:add',
   'scan:add',
-  'friend:request'
+  'friend:request',
+  'buy:tcgplayer',
+  'buy:ebay'
 ] as const
 export type UsageEvent = (typeof USAGE_EVENTS)[number]
 

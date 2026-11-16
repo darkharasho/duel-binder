@@ -7,11 +7,15 @@ import { languageInfo, type Language } from './languages'
 
 export const AFFILIATE = {
   /** eBay Partner Network campaign id ("campid"). */
-  ebayCampaignId: '',
+  ebayCampaignId: '5339251706',
   /** The Impact tracking link TCGplayer gives an affiliate; the target goes in its `u` parameter. */
   tcgplayerImpactBase: ''
 }
 export type AffiliateIds = typeof AFFILIATE
+
+/** True when any store's link can show. */
+export const affiliateOn = (ids: AffiliateIds = AFFILIATE): boolean =>
+  ids.ebayCampaignId !== '' || ids.tcgplayerImpactBase !== ''
 
 export interface BuyTarget {
   game: GameId

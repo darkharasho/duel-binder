@@ -3,6 +3,7 @@ import { printingReverseLook } from '@shared/reverseHolo'
 import { englishSetName } from '@shared/setNames'
 import { MAX_WANTED } from '@shared/cloud'
 import type { WishlistItem, WishOwners } from '@shared/types'
+import { BuyLinks } from '@/components/BuyLinks'
 import { CardArt } from '@/components/CardArt'
 import { LanguageTag } from '@/components/LanguageTag'
 import { scanFor } from '@/components/scanFor'
@@ -99,9 +100,12 @@ export function WishlistRows({
   owners,
   onOpen,
   onQuantity,
-  onRemove
+  onRemove,
+  buy = false
 }: {
   items: WishlistItem[]
+  /** Affiliate buy links on each row (the user's own list). */
+  buy?: boolean
   owners?: Map<string, WishOwners['friends']>
   onOpen: (item: WishlistItem) => void
   onQuantity?: (item: WishlistItem, quantity: number | null) => void
@@ -145,6 +149,7 @@ export function WishlistRows({
                 {formatUsd(item.unitPrice)}
               </span>
             </button>
+            {buy && <BuyLinks card={item.card} printing={p} compact />}
             {onQuantity && (
               <WantStepper item={item} label={label} onChange={(q) => onQuantity(item, q)} />
             )}

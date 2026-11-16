@@ -2,8 +2,8 @@ import { renderLegal, type LegalView } from './legal'
 import { esc } from './page'
 
 export interface BetaView extends LegalView {
-  /** The form went through (`?sent=1`). */
-  sent: boolean
+  /** The form went through: `waiting` (`?sent=1`) for the owner, or `in` (`?sent=in`), let in already. */
+  sent: 'waiting' | 'in' | null
   /** The app's `?error=` code from beta.ts, when the form came back. */
   error: string | null
 }
@@ -41,11 +41,16 @@ function form(view: BetaView): string {
 
 /** duelbinder.com/beta: the phone beta disclaimer and the form to ask to join. */
 export function renderBeta(view: BetaView): string {
-  const ask = view.sent
-    ? p(
-        "Thanks — you'll get an email when you're in. Testers are added by hand, so it can take a day or two."
-      )
-    : form(view)
+  const ask =
+    view.sent === 'in'
+      ? p(
+          'You’re in. We’ve emailed you what to do next; it can take a few minutes to arrive, so check your spam folder too.'
+        )
+      : view.sent === 'waiting'
+        ? p(
+            "Thanks — you'll get an email when you're in. Testers are added by hand, so it can take a day or two."
+          )
+        : form(view)
   return renderLegal(
     {
       path: '/beta',

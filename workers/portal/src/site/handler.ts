@@ -41,7 +41,12 @@ export async function handleSite(req: Request, deps: SiteDeps): Promise<Response
       req,
       renderBeta({
         appUrl: deps.appUrl,
-        sent: url.searchParams.get('sent') === '1',
+        sent:
+          url.searchParams.get('sent') === 'in'
+            ? 'in'
+            : url.searchParams.get('sent') === '1'
+              ? 'waiting'
+              : null,
         error: url.searchParams.get('error')
       })
     )

@@ -161,6 +161,20 @@ const jsonPart = (v: unknown): string => toBase64Url(new TextEncoder().encode(JS
 export async function appleClientSecret(deps: AppleDeps): Promise<string | null> {
   const { APPLE_TEAM_ID: team, APPLE_SIGNIN_KEY_ID: kid, APPLE_SIGNIN_KEY: pem } = deps.env
   if (!team || !kid || !pem) return null
+  const iat = Math.floor(deps.now().getTime() / 1000)
+  return signEs256Jwt(
+    pem,
+    { alg: 'ES256', kid },
+    { iss: team, iat, exp: iat + 300, aud: APPLE_ISSUER, sub: APPLE_AUDIENCE }
+  )
+}
+
+/** A JWT signed ES256 with an Apple .p8 key (a PKCS#8 PEM). */
+export async function signEs256Jwt(
+  pem: string,
+  header: Record<string, unknown>,
+  claims: Record<string, unknown>
+): Promise<string> {
   const der = fromBase64Url(pem.replace(/-----[^-]+-----/g, '').replace(/\s+/g, ''))
   const key = await crypto.subtle.importKey(
     'pkcs8',
@@ -169,14 +183,7 @@ export async function appleClientSecret(deps: AppleDeps): Promise<string | null>
     false,
     ['sign']
   )
-  const iat = Math.floor(deps.now().getTime() / 1000)
-  const input = `${jsonPart({ alg: 'ES256', kid })}.${jsonPart({
-    iss: team,
-    iat,
-    exp: iat + 300,
-    aud: APPLE_ISSUER,
-    sub: APPLE_AUDIENCE
-  })}`
+  const input = `${jsonPart(header)}.${jsonPart(claims)}`
   // WebCrypto's ECDSA signature is r || s, the form a JWT uses.
   const sig = await crypto.subtle.sign(
     { name: 'ECDSA', hash: 'SHA-256' },

@@ -2,11 +2,13 @@ import type { AppDeps } from './app'
 import { adminWriteAllowed, isAdmin, isJson } from './auth'
 import { clientIp, takeLimit } from './authLimits'
 import { brandedHtml, escapeHtml, para, small, type EmailMessage } from './emailSend'
+import { addTestFlightTester, testFlightConfigured } from './testflight'
 
 /**
  * Requests to join the phone app betas. The site's /beta page (site/beta.ts) posts its form here;
- * the owner works through the list in the admin Beta tab and adds people in Play Console or
- * TestFlight by hand.
+ * where it can, the request is let in straight away (iPhone: added to the TestFlight group through
+ * the App Store Connect API; Android: emailed the Google Group to join). Otherwise the owner works
+ * through the list in the admin Beta tab and adds people in Play Console or TestFlight by hand.
  */
 export type BetaPlatform = 'android' | 'ios'
 export type BetaStatus = 'pending' | 'added' | 'declined'
@@ -61,13 +63,45 @@ export async function betaSubmitRoute(req: Request, deps: AppDeps): Promise<Resp
   const now = deps.now()
   if (!takeLimit(deps.db, 'beta-ip', clientIp(req), now)) return back('error=limit')
   // Asking again is fine and changes nothing: the first request (and its status) stands.
-  deps.db
+  const inserted = deps.db
     .prepare(
       `INSERT OR IGNORE INTO beta_requests (email, platform, name, referred_by, created_at)
        VALUES (?, ?, ?, ?, ?)`
     )
     .run(email, platform, name, referred, now.toISOString())
-  return back('sent=1')
+  if (inserted.changes !== 1) return back('sent=1')
+  // Checked above: error is null only for a known platform.
+  const request = { email, name, platform: platform as BetaPlatform }
+  const automatic =
+    platform === 'android'
+      ? !!(deps.env.BETA_ANDROID_GROUP_URL && deps.env.BETA_ANDROID_OPTIN_URL)
+      : testFlightConfigured(deps.env) && (await addTestFlightTester(request, deps))
+  if (!automatic) return back('sent=1')
+  deps.db
+    .prepare(
+      "UPDATE beta_requests SET status = 'added', decided_at = ? WHERE email = ? AND platform = ?"
+    )
+    .run(now.toISOString(), email, platform)
+  await sendAdded(request, deps)
+  return back('sent=in')
+}
+
+/** Emails the "you're in" message; false when there's no sender or it fails. */
+async function sendAdded(
+  r: { email: string; name: string; platform: BetaPlatform },
+  deps: AppDeps
+): Promise<boolean> {
+  if (!deps.email) return false
+  try {
+    await deps.email.send(
+      betaAddedMessage(r, deps.env.BETA_ANDROID_OPTIN_URL, deps.env.BETA_ANDROID_GROUP_URL)
+    )
+    return true
+  } catch (e) {
+    // They're on the list either way; the admin tab says the email didn't go.
+    console.error('beta email failed', e)
+    return false
+  }
 }
 
 export interface BetaRequest {
@@ -84,20 +118,30 @@ export interface BetaRequest {
 /** The "you're in" email, sent when the owner marks a request added. */
 export function betaAddedMessage(
   r: { email: string; name: string; platform: BetaPlatform },
-  androidOptIn: string | undefined
+  androidOptIn: string | undefined,
+  androidGroup?: string
 ): EmailMessage {
   const hi = `Hi ${r.name}, you're in the Duel Binder beta.`
+  const links = new Set([androidOptIn, androidGroup].filter((l): l is string => !!l))
   const steps: string[] =
     r.platform === 'android'
-      ? androidOptIn
+      ? androidOptIn && androidGroup
         ? [
-            `On your phone, signed in to Google Play as ${r.email}, open this link and tap "Become a tester":`,
+            `First, signed in to Google as ${r.email}, join the testers' group (tap "Join group"):`,
+            androidGroup,
+            'Then, on your phone, open this link and tap "Become a tester":',
             androidOptIn,
-            'Then install Duel Binder from Google Play. It can take a few minutes to show up.'
+            'Then install Duel Binder from Google Play. It can take a few minutes to show up after you join.'
           ]
-        : [
-            `Your Google Play account ${r.email} is on the tester list. The link to join is on its way in another email.`
-          ]
+        : androidOptIn
+          ? [
+              `On your phone, signed in to Google Play as ${r.email}, open this link and tap "Become a tester":`,
+              androidOptIn,
+              'Then install Duel Binder from Google Play. It can take a few minutes to show up.'
+            ]
+          : [
+              `Your Google Play account ${r.email} is on the tester list. The link to join is on its way in another email.`
+            ]
       : [
           `Apple will email a TestFlight invite to ${r.email}. Install TestFlight from the App Store, then open the invite on your iPhone to install Duel Binder.`
         ]
@@ -106,7 +150,7 @@ export function betaAddedMessage(
   const html = [para(escapeHtml(hi))]
   for (const s of steps)
     html.push(
-      s === androidOptIn
+      links.has(s)
         ? para(
             `<a href="${escapeHtml(s)}" style="color:#c4b5fd;font-weight:600">${escapeHtml(s)}</a>`
           )
@@ -154,20 +198,19 @@ export async function adminBetaRoute(req: Request, deps: AppDeps): Promise<Respo
   const row = db.prepare(`${SELECT_REQUESTS} WHERE id = ?`).get(id) as BetaRequest | undefined
   if (!row) return notFound
   if (row.status === status) return json({ ok: true, emailed: false })
+  // With the API set up, adding an iPhone tester means adding them in TestFlight too.
+  if (
+    status === 'added' &&
+    row.platform === 'ios' &&
+    testFlightConfigured(deps.env) &&
+    !(await addTestFlightTester(row, deps))
+  )
+    return json({ error: 'testflight' }, 502)
   db.prepare('UPDATE beta_requests SET status = ?, decided_at = ? WHERE id = ?').run(
     status,
     deps.now().toISOString(),
     id
   )
-  let emailed = false
-  if (status === 'added' && deps.email) {
-    try {
-      await deps.email.send(betaAddedMessage(row, deps.env.BETA_ANDROID_OPTIN_URL))
-      emailed = true
-    } catch (e) {
-      // They're on the list either way; the admin tab says the email didn't go.
-      console.error('beta email failed', e)
-    }
-  }
+  const emailed = status === 'added' && (await sendAdded(row, deps))
   return json({ ok: true, emailed })
 }

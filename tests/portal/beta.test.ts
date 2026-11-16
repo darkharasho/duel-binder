@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHash, createPublicKey, generateKeyPairSync, verify } from 'node:crypto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type Database from 'better-sqlite3'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
@@ -11,6 +11,11 @@ const SITE = 'https://site.test'
 // The owner's desktop session; the admin routes go by the signed-in account, like the Testers tab.
 const TOKEN = 'tok-owner'
 const OPT_IN = 'https://play.google.com/apps/internaltest/123'
+const GROUP = 'https://groups.google.com/g/duelbinder-beta'
+const ASC_GROUP = 'group-1'
+const ascKey = generateKeyPairSync('ec', { namedCurve: 'P-256' })
+const ASC_PEM = ascKey.privateKey.export({ type: 'pkcs8', format: 'pem' }).toString()
+const ASC = 'https://api.appstoreconnect.apple.com'
 
 describe('phone beta requests', () => {
   let db: Database.Database
@@ -271,5 +276,212 @@ describe('phone beta requests', () => {
         }
       ).n
     ).toBe(1)
+  })
+})
+
+describe('phone beta: automatic invites', () => {
+  let db: Database.Database
+  let deps: AppDeps
+  let sent: EmailMessage[]
+  let calls: { url: string; method: string; auth: string; body: unknown }[]
+  // What App Store Connect answers, by "METHOD path".
+  let asc: Record<string, () => Response>
+
+  beforeEach(async () => {
+    db = await seededServerDb()
+    sent = []
+    calls = []
+    asc = {
+      'POST /v1/betaTesters': () =>
+        Response.json({ data: { type: 'betaTesters', id: 't1' } }, { status: 201 })
+    }
+    deps = {
+      db,
+      assets: { fetch: async () => new Response('nope', { status: 404 }) },
+      images: memoryBucket(),
+      printingArt: noPrintingArt,
+      prices: noPrices,
+      env: {
+        PUBLIC_URL: BASE,
+        SITE_URL: SITE,
+        DISCORD_CLIENT_ID: 'c',
+        DISCORD_CLIENT_SECRET: 's',
+        ADMIN_TOKEN: 'admin-secret',
+        ADMIN_DISCORD_ID: '999',
+        PRICE_WORKER_URL: 'https://prices.test',
+        BETA_ANDROID_OPTIN_URL: OPT_IN,
+        BETA_ANDROID_GROUP_URL: GROUP,
+        ASC_ISSUER_ID: 'issuer-1',
+        ASC_KEY_ID: 'KEY123',
+        ASC_KEY: ASC_PEM,
+        ASC_BETA_GROUP_ID: ASC_GROUP
+      },
+      email: { send: async (m) => void sent.push(m) },
+      now: () => new Date('2026-11-16T12:00:00.000Z'),
+      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(String(input))
+        const method = init?.method ?? 'GET'
+        calls.push({
+          url: url.toString(),
+          method,
+          auth: new Headers(init?.headers).get('authorization') ?? '',
+          body: init?.body ? JSON.parse(String(init.body)) : undefined
+        })
+        const answer = url.origin === ASC ? asc[`${method} ${url.pathname}`] : undefined
+        return answer ? answer() : new Response('?', { status: 404 })
+      }) as unknown as typeof fetch
+    }
+    const owner = addUser(db, '999', 'owner')
+    db.prepare(
+      "INSERT INTO sessions (token_hash, user_id, kind, created_at, expires_at) VALUES (?, ?, 'desktop', ?, ?)"
+    ).run(
+      createHash('sha256').update(TOKEN).digest('hex'),
+      owner,
+      '2026-11-01T00:00:00.000Z',
+      '2027-11-01T00:00:00.000Z'
+    )
+  })
+
+  const ask = (platform: string, email = 'sam@example.com'): Promise<Response> =>
+    handle(
+      new Request(BASE + '/beta', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          'cf-connecting-ip': '1.2.3.4',
+          origin: SITE
+        },
+        body: new URLSearchParams({
+          agree: 'on',
+          platform,
+          email,
+          name: 'Sam Lee',
+          referred: ''
+        }).toString()
+      }),
+      deps
+    )
+  const status = (platform: string): string | undefined =>
+    (
+      db
+        .prepare(
+          "SELECT status FROM beta_requests WHERE email = 'sam@example.com' AND platform = ?"
+        )
+        .get(platform) as { status: string } | undefined
+    )?.status
+  const decide = (platform: string): Promise<Response> => {
+    const { id } = db
+      .prepare("SELECT id FROM beta_requests WHERE email = 'sam@example.com' AND platform = ?")
+      .get(platform) as { id: number }
+    return handle(
+      new Request(BASE + '/admin/beta/decide', {
+        method: 'POST',
+        headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ id, status: 'added' })
+      }),
+      deps
+    )
+  }
+
+  it('adds an iPhone request to the TestFlight group straight away and emails them', async () => {
+    const res = await ask('ios')
+    expect(res.headers.get('location')).toBe(SITE + '/beta?sent=in')
+    expect(status('ios')).toBe('added')
+    expect(calls).toHaveLength(1)
+    expect(calls[0]).toMatchObject({ url: ASC + '/v1/betaTesters', method: 'POST' })
+    expect(calls[0].body).toEqual({
+      data: {
+        type: 'betaTesters',
+        attributes: { email: 'sam@example.com', firstName: 'Sam', lastName: 'Lee' },
+        relationships: { betaGroups: { data: [{ type: 'betaGroups', id: ASC_GROUP }] } }
+      }
+    })
+    // An App Store Connect API token: ES256, the key's id, the team's issuer, signed by the key.
+    const [h, p, sig] = calls[0].auth.replace(/^Bearer /, '').split('.')
+    expect(JSON.parse(Buffer.from(h, 'base64url').toString())).toEqual({
+      alg: 'ES256',
+      kid: 'KEY123',
+      typ: 'JWT'
+    })
+    const claims = JSON.parse(Buffer.from(p, 'base64url').toString())
+    expect(claims).toMatchObject({ iss: 'issuer-1', aud: 'appstoreconnect-v1' })
+    expect(claims.exp - claims.iat).toBeLessThanOrEqual(1200)
+    const ok = verify(
+      'sha256',
+      Buffer.from(`${h}.${p}`),
+      { key: createPublicKey(ascKey.privateKey), dsaEncoding: 'ieee-p1363' },
+      Buffer.from(sig, 'base64url')
+    )
+    expect(ok).toBe(true)
+    expect(sent).toHaveLength(1)
+    expect(sent[0].text).toContain('TestFlight')
+  })
+
+  it('adds someone App Store Connect already knows to the group', async () => {
+    asc['POST /v1/betaTesters'] = () =>
+      Response.json({ errors: [{ status: '409' }] }, { status: 409 })
+    asc['GET /v1/betaTesters'] = () => Response.json({ data: [{ type: 'betaTesters', id: 't9' }] })
+    asc[`POST /v1/betaGroups/${ASC_GROUP}/relationships/betaTesters`] = () =>
+      new Response(null, { status: 204 })
+    const res = await ask('ios')
+    expect(res.headers.get('location')).toBe(SITE + '/beta?sent=in')
+    expect(status('ios')).toBe('added')
+    expect(new URL(calls[1].url).searchParams.get('filter[email]')).toBe('sam@example.com')
+    expect(calls[2].body).toEqual({ data: [{ type: 'betaTesters', id: 't9' }] })
+  })
+
+  it('leaves the request waiting when App Store Connect fails', async () => {
+    asc['POST /v1/betaTesters'] = () => new Response('down', { status: 500 })
+    const res = await ask('ios')
+    expect(res.headers.get('location')).toBe(SITE + '/beta?sent=1')
+    expect(status('ios')).toBe('pending')
+    expect(sent).toEqual([])
+  })
+
+  it('leaves iPhone requests waiting while App Store Connect is not set up', async () => {
+    deps.env.ASC_KEY = undefined
+    expect((await ask('ios')).headers.get('location')).toBe(SITE + '/beta?sent=1')
+    expect(status('ios')).toBe('pending')
+    expect(calls).toEqual([])
+  })
+
+  it("the admin's Mark added adds iPhone testers in App Store Connect, and says when that fails", async () => {
+    asc['POST /v1/betaTesters'] = () => new Response('down', { status: 500 })
+    await ask('ios')
+    const failed = await decide('ios')
+    expect(failed.status).toBe(502)
+    expect(await failed.json()).toEqual({ error: 'testflight' })
+    expect(status('ios')).toBe('pending')
+    asc['POST /v1/betaTesters'] = () => Response.json({ data: { id: 't1' } }, { status: 201 })
+    const ok = await decide('ios')
+    expect(await ok.json()).toEqual({ ok: true, emailed: true })
+    expect(status('ios')).toBe('added')
+  })
+
+  it('emails Android requests the group to join, then the opt-in link', async () => {
+    const res = await ask('android')
+    expect(res.headers.get('location')).toBe(SITE + '/beta?sent=in')
+    expect(status('android')).toBe('added')
+    expect(calls).toEqual([])
+    expect(sent).toHaveLength(1)
+    const text = sent[0].text
+    expect(text.indexOf(GROUP)).toBeGreaterThan(-1)
+    expect(text.indexOf(OPT_IN)).toBeGreaterThan(text.indexOf(GROUP))
+    expect(sent[0].html).toContain(`href="${GROUP}"`)
+    expect(sent[0].html).toContain(`href="${OPT_IN}"`)
+  })
+
+  it('leaves Android requests waiting without a group', async () => {
+    deps.env.BETA_ANDROID_GROUP_URL = undefined
+    expect((await ask('android')).headers.get('location')).toBe(SITE + '/beta?sent=1')
+    expect(status('android')).toBe('pending')
+    expect(sent).toEqual([])
+  })
+
+  it('does nothing again when the same person asks twice', async () => {
+    await ask('ios')
+    await ask('ios')
+    expect(calls).toHaveLength(1)
+    expect(sent).toHaveLength(1)
   })
 })

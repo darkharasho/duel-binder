@@ -33,6 +33,7 @@ import { getFingerprintRefs, getFingerprints } from './scanFiles'
 import { phoneRoute } from './phonePage'
 import { deleteAccountRoute } from './account'
 import type { AppleSignInEnv } from './apple'
+import type { TestFlightEnv } from './testflight'
 import type { EmailSender } from './emailSend'
 import { emailAuthRoute, emailStatusRoute } from './emailAuth'
 import { emailClaimPage, emailFormRoute, emailMatchPage, emailStartPage } from './emailPages'
@@ -40,7 +41,7 @@ import { appPreflight, withAppCors } from './appCors'
 import { adminTrainingRoute, trainingRoute, type TrainingBucket } from './training'
 
 /** Vars and secrets the request handlers read. */
-export interface Env extends AppleSignInEnv {
+export interface Env extends AppleSignInEnv, TestFlightEnv {
   PUBLIC_URL: string
   /** The marketing site, e.g. https://duelbinder.com; the app host borrows its stylesheet. */
   SITE_URL: string
@@ -55,6 +56,11 @@ export interface Env extends AppleSignInEnv {
   PRICE_WORKER_URL: string
   /** The Play opt-in link the beta's "you're in" email gives Android testers. */
   BETA_ANDROID_OPTIN_URL?: string
+  /**
+   * The Google Group the closed test's testers come from (anyone can join). Set, Android beta
+   * requests are let in straight away: the email says join the group, then opt in.
+   */
+  BETA_ANDROID_GROUP_URL?: string
   /** 'on' turns email + password sign-in on (it also needs `AppDeps.email`). */
   EMAIL_SIGN_IN?: string
 }

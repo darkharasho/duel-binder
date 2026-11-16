@@ -255,6 +255,17 @@ describe('chineseListSets', () => {
     // Psyduck elsewhere is left alone.
     expect(list('CSV5C', [zh('010', '可达鸭', 'Psyduck')]).sets[0].cards[0].name).toBe('Psyduck')
   })
+  it("links Gem Pack Vol. 7's Misty's Psyduck to Destined Rivals' card, not the list's plain Psyduck", () => {
+    const listed = { ...zh('0303', '可达鸭', 'Psyduck', '◆'), setCodeEn: 'ASC', cardIndexEn: '39' }
+    const [gem] = list('CBB7C', [listed]).sets
+    expect(gem.cards[0].englishTwin).toEqual({ setCode: 'DRI', number: '45', mark: '◆' })
+    // Psyduck elsewhere keeps the list's link.
+    const plain = { ...zh('010', '可达鸭', 'Psyduck'), setCodeEn: 'ASC', cardIndexEn: '39' }
+    expect(list('CSV5C', [plain]).sets[0].cards[0].englishTwin).toMatchObject({
+      setCode: 'ASC',
+      number: '39'
+    })
+  })
   it('corrects a GX the list calls a V, and drops zero-width spaces', () => {
     const names = list('CSV5C', [
       zh('001', '冰伊布GX', 'Glaceon V'),

@@ -64,7 +64,22 @@ describe('parseSetPage', () => {
     expect(illumise[0].url).toMatch(/^https:\/\/media\.pokipair\.com\/.*-016\.png$/)
   })
 
-  it('reads a Gem Pack page, which names no number or card', () => {
+  it('reads a labelled Gem Pack page: card 01, version 03 of 07 is number 0103', () => {
+    const page = parseSetPage(fixture('gem6.html'))
+    expect(page.cards.map((c) => c.number)).toEqual([
+      '0101',
+      '0102',
+      '0103',
+      '0104',
+      '0105',
+      '0106',
+      '0107'
+    ])
+    expect(page.cards[0].name).toBe('Alolan Dugtrio')
+    expect(new Set(page.cards.map((c) => c.variant)).has('glitter-foil')).toBe(true)
+  })
+
+  it('reads a Gem Pack page that names no number or card', () => {
     const page = parseSetPage(fixture('gem7.html'))
     expect(page.cards).toHaveLength(3)
     expect(page.cards.every((c) => c.number === null && c.name === null)).toBe(true)
@@ -131,14 +146,10 @@ describe('matchCards', () => {
     ])
   })
 
-  it('takes a holo, full art or ACE picture, and never a reverse alone', () => {
+  it('takes a holo, full art or ACE picture', () => {
     const got = matchCards(
-      [
-        pp('201', 'full-art', 'Lillie'),
-        pp('100', 'ace', 'Hero Cape'),
-        pp('007', 'pokeball-reverse', 'Foongus')
-      ],
-      [zh('201', 'Lillie'), zh('100', 'Hero Cape'), zh('007', 'Foongus')]
+      [pp('201', 'full-art', 'Lillie'), pp('100', 'ace', 'Hero Cape')],
+      [zh('201', 'Lillie'), zh('100', 'Hero Cape')]
     )
     expect([...got.keys()].sort()).toEqual(['zh-hans/CSV8C-100', 'zh-hans/CSV8C-201'])
   })
@@ -149,6 +160,47 @@ describe('matchCards', () => {
       [zh('006', 'Illumise')]
     )
     expect(got.size).toBe(0)
+  })
+
+  it('takes a Gem Pack version of any finish, each its own number', () => {
+    const got = matchCards(
+      [
+        pp('0103', 'glitter-foil', 'Alolan Dugtrio'),
+        pp('0104', 'prismatic-foil', 'Alolan Dugtrio')
+      ],
+      [zh('0103', 'Alolan Dugtrio', 'CBB6C'), zh('0104', 'Alolan Dugtrio', 'CBB6C')]
+    )
+    expect(got.size).toBe(2)
+  })
+
+  it('takes a reverse pattern only when a number has no other picture', () => {
+    const got = matchCards(
+      [pp('0102', 'pokeball-reverse', 'Alolan Dugtrio')],
+      [zh('0102', 'Alolan Dugtrio', 'CBB6C')]
+    )
+    expect(got.size).toBe(1)
+  })
+
+  it('lets a name with a word more or less agree on the same number, and no other', () => {
+    const got = matchCards(
+      [
+        pp('1801', 'gem', 'Basic Grass Energy'),
+        pp('0101', 'gem', 'Pikachu'),
+        pp('1001', 'gem', 'Castform'),
+        pp('0107', 'full-art', 'Clefable')
+      ],
+      [
+        zh('1801', 'Grass Energy', 'CBB1C'),
+        zh('0101', 'Captain Pikachu', 'CBB1C'),
+        zh('1001', 'Castform Sunny Form', 'CBB1C'),
+        zh('0107', 'Blissey V ex', 'CBB1C')
+      ]
+    )
+    expect([...got.keys()].sort()).toEqual([
+      'zh-hans/CBB1C-0101',
+      'zh-hans/CBB1C-1001',
+      'zh-hans/CBB1C-1801'
+    ])
   })
 
   it('compares numbers without the set total or leading zeros', () => {

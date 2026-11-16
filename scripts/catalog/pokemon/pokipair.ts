@@ -8,7 +8,7 @@
  * "006/207 · Illumise · Common" in `data-caption`. A Gem Pack page names neither number nor card:
  * its pictures run in the set's own order.
  */
-import { sameCardName } from './match'
+import { plainName, sameCardName } from './match'
 
 export const POKIPAIR_HUB = 'https://www.pokipair.com/simplified-chinese-pokemon-set-list/'
 
@@ -63,6 +63,17 @@ export function parseHub(html: string): PpSet[] {
   return out
 }
 
+/**
+ * A picture's number as the catalog writes it: "006/207" is "006"; a Gem Pack's "01 03/07" (card
+ * 01, version 3 of 7) is "0103". Null when the page names none.
+ */
+function cardNumber(raw: string): string | null {
+  const gem = /^(\d+)\s+(\d+)\/\d+$/.exec(raw.trim())
+  if (gem) return `${gem[1].padStart(2, '0')}${gem[2].padStart(2, '0')}`
+  const plain = raw.split('/')[0].trim()
+  return plain || null
+}
+
 /** A set page's title and pictures. */
 export function parseSetPage(html: string): { title: string; cards: PpCard[] } {
   const h1 = /<h1[^>]*>([\s\S]*?)<\/h1>/.exec(html)?.[1] ?? ''
@@ -73,8 +84,7 @@ export function parseSetPage(html: string): { title: string; cards: PpCard[] } {
     const button = /<button[^>]*class="pp-card-open"[^>]*>/.exec(li)?.[0] ?? ''
     const url = attr(button, 'data-full')
     if (!url) continue
-    const rawNumber = attr(open, 'data-number') ?? ''
-    const number = rawNumber ? rawNumber.split('/')[0].trim() : null
+    const number = cardNumber(attr(open, 'data-number') ?? '')
     const caption = attr(button, 'data-caption') ?? ''
     const parts = caption.split(' · ')
     const name = number !== null && parts.length >= 2 ? parts[1].trim() || null : null
@@ -125,8 +135,37 @@ export function setIdOf(slug: string, known: ReadonlySet<string>): string | null
   return null
 }
 
-/** Which picture of a number is the card's own: the plain one first; never a reverse pattern. */
-const VARIANT_ORDER = ['normal', 'holo', 'full-art', 'ace']
+/**
+ * Which picture of a number is the card's own: the plain one first, then any other finish (a Gem
+ * Pack's versions each have a number of their own), a reverse pattern last.
+ */
+const FIRST = ['normal', 'holo', 'full-art', 'ace']
+const rank = (variant: string): number => {
+  const i = FIRST.indexOf(variant)
+  if (i >= 0) return i
+  return /reverse/.test(variant) ? FIRST.length + 1 : FIRST.length
+}
+
+/** Words of a name, "Basic" dropped ("Basic Grass Energy" is our "Grass Energy"). */
+const words = (name: string): string[] =>
+  name
+    .split(/\s+/)
+    .map(plainName)
+    .filter((w) => w !== '' && w !== 'basic')
+
+/**
+ * Whether PokiPair's name is our card's, the number already agreeing: the same name (sameCardName),
+ * or one's words all among the other's ("Pikachu" for "Captain Pikachu", "Castform" for
+ * "Castform Sunny Form").
+ */
+function nameAgrees(ours: string, theirs: string): boolean {
+  if (sameCardName(ours, theirs)) return true
+  const a = words(ours)
+  const b = words(theirs)
+  if (a.length === 0 || b.length === 0) return false
+  const [short, long] = a.length <= b.length ? [a, b] : [b, a]
+  return short.every((w) => long.includes(w))
+}
 
 const bareNumber = (n: string): string =>
   n
@@ -152,7 +191,7 @@ export function matchCards(page: PpCard[], cards: ZhCatalogCard[]): Map<string, 
   }
   const byNumber = new Map<string, PpCard[]>()
   for (const c of page) {
-    if (c.number === null || !VARIANT_ORDER.includes(c.variant)) continue
+    if (c.number === null) continue
     const k = bareNumber(c.number)
     byNumber.set(k, [...(byNumber.get(k) ?? []), c])
   }
@@ -164,10 +203,8 @@ export function matchCards(page: PpCard[], cards: ZhCatalogCard[]): Map<string, 
   for (const [k, pics] of byNumber) {
     const mine = ours.get(k) ?? []
     if (mine.length !== 1) continue
-    const pick = [...pics].sort(
-      (a, b) => VARIANT_ORDER.indexOf(a.variant) - VARIANT_ORDER.indexOf(b.variant)
-    )[0]
-    if (!pick.name || !sameCardName(mine[0].name, pick.name)) continue
+    const pick = [...pics].sort((a, b) => rank(a.variant) - rank(b.variant))[0]
+    if (!pick.name || !nameAgrees(mine[0].name, pick.name)) continue
     out.set(mine[0].sourceId, pick.url)
   }
   return out

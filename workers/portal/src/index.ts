@@ -26,6 +26,7 @@ import { onePieceDailyCalls } from './onePieceSweep'
 import { handleSite } from './site/handler'
 import { routeHost, withAssetCache } from './site/host'
 import { createReleaseSource, type Downloads } from './site/releases'
+import { cachedSupporterNames } from './site/supporterNames'
 
 export interface WorkerEnv extends Env {
   STORE: DurableObjectNamespace<Store>
@@ -151,13 +152,11 @@ export default {
         appUrl: env.PUBLIC_URL,
         assets: env.ASSETS,
         downloads,
-        supporterNames: async () => {
-          const res = await env.STORE.get(env.STORE.idFromName('main')).fetch(
-            new Request(`${env.PUBLIC_URL}/api/supporters/names`)
+        supporterNames: () => {
+          const url = `${env.PUBLIC_URL}/api/supporters/names`
+          return cachedSupporterNames(caches.default, url, () =>
+            env.STORE.get(env.STORE.idFromName('main')).fetch(new Request(url))
           )
-          if (!res.ok) return []
-          const body = (await res.json()) as { names?: unknown }
-          return Array.isArray(body.names) ? body.names.filter((n) => typeof n === 'string') : []
         }
       })
     }

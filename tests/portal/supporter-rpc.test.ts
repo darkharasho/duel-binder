@@ -191,4 +191,45 @@ describe('supporter RPC', () => {
       body: { error: "Couldn't reach the payment service. Try again." }
     })
   })
+
+  it('keeps one Stripe customer when two checkout presses race', async () => {
+    // Both presses get as far as making a customer before either is saved.
+    let waiting = 0
+    let release = (): void => {}
+    const bothIn = new Promise<void>((r) => (release = r))
+    const inner = deps.fetch
+    deps.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'POST' && new URL(String(input)).pathname === '/v1/customers') {
+        if (++waiting === 2) release()
+        await bothIn
+      }
+      return inner(input, init)
+    }) as typeof fetch
+    const [a, b] = await Promise.all([
+      rpc('supporter:checkout', ['month']),
+      rpc('supporter:checkout', ['month'])
+    ])
+    expect([a.status, b.status]).toEqual([200, 200])
+    expect(posts('/v1/customers')).toHaveLength(2)
+    expect(posts('/v1/checkout/sessions').map((c) => c.form.get('customer'))).toEqual([
+      'cus_1',
+      'cus_1'
+    ])
+    const deleted = stripe.calls.filter((c) => c.method === 'DELETE').map((c) => c.path)
+    expect(deleted).toEqual(['/v1/customers/cus_2'])
+    expect(db.prepare('SELECT stripe_customer_id FROM supporters').all()).toEqual([
+      { stripe_customer_id: 'cus_1' }
+    ])
+  })
+
+  it('refuses an eleventh checkout in an hour', async () => {
+    for (let i = 0; i < 10; i++)
+      expect((await rpc('supporter:checkout', ['month'])).status).toBe(200)
+    const res = await rpc('supporter:checkout', ['month'])
+    expect(res).toEqual({
+      status: 400,
+      body: { error: 'Too many checkout tries. Wait a little and try again.' }
+    })
+    expect(posts('/v1/checkout/sessions')).toHaveLength(10)
+  })
 })

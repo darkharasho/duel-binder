@@ -7,6 +7,7 @@ import {
 } from '../../../src/shared/supporter'
 import type { AdminSupporters } from '../../../src/shared/admin'
 import type { AppDeps } from './app'
+import { takeLimit } from './authLimits'
 import { isAdmin } from './auth'
 import { listSubscriptions, stripeCall } from './stripe'
 
@@ -31,7 +32,9 @@ export interface StripeSubscription {
 
 /** Stripe statuses that count as supporting; past_due keeps the badge through payment retries. */
 const ACTIVE = ['active', 'trialing', 'past_due']
-const ACTIVE_SQL = `status IN ('active', 'trialing', 'past_due')`
+/** The one SQL test for "supporting", matching `supporterOf`: a live status and a since date. */
+const supportingSql = (t = ''): string =>
+  `${t}status IN ('active', 'trialing', 'past_due') AND ${t}since IS NOT NULL`
 
 export const isActiveStatus = (status: string): boolean => ACTIVE.includes(status)
 
@@ -108,7 +111,7 @@ export function supporterIds(db: SqlDb, ids: number[]): Set<number> {
   if (ids.length === 0) return new Set()
   const rows = db
     .prepare(
-      `SELECT user_id FROM supporters WHERE ${ACTIVE_SQL}
+      `SELECT user_id FROM supporters WHERE ${supportingSql()}
          AND user_id IN (SELECT value FROM json_each(?))`
     )
     .all(JSON.stringify(ids)) as { user_id: number }[]
@@ -125,7 +128,7 @@ export function thanksNames(db: SqlDb): string[] {
     .prepare(
       `SELECT COALESCE(NULLIF(u.display_name, ''), u.username) AS name
          FROM supporters s JOIN users u ON u.id = s.user_id
-        WHERE s.${ACTIVE_SQL} AND s.show_on_site = 1 AND u.closed_at IS NULL
+        WHERE ${supportingSql('s.')} AND s.show_on_site = 1 AND u.closed_at IS NULL
         ORDER BY s.since, s.user_id`
     )
     .all() as { name: string }[]
@@ -173,6 +176,9 @@ export async function startCheckout(
   const price = plan === 'month' ? deps.env.STRIPE_PRICE_MONTH : deps.env.STRIPE_PRICE_YEAR
   if (!price) throw new CollectionError("Supporter subscriptions aren't open yet")
   if (supporterOf(deps.db, userId)) throw new CollectionError(ALREADY)
+  // Each press makes a Stripe session (and maybe a customer); a person needs only a few.
+  if (!takeLimit(deps.db, 'checkout-user', String(userId), deps.now()))
+    throw new CollectionError('Too many checkout tries. Wait a little and try again.')
   const base = deps.env.PUBLIC_URL
   return viaStripe(async () => {
     let customer = customerOf(deps.db, userId)
@@ -197,7 +203,10 @@ export async function startCheckout(
            ON CONFLICT (user_id) DO NOTHING`
         )
         .run(userId, customer, deps.now().toISOString())
-      customer = customerOf(deps.db, userId) ?? customer
+      const kept = customerOf(deps.db, userId) ?? customer
+      // Another press saved its customer first: use that one and remove ours.
+      if (kept !== customer) await deleteCustomer(deps, customer)
+      customer = kept
     }
     const session = await stripeCall<{ url: string }>(deps, 'POST', '/v1/checkout/sessions', {
       mode: 'subscription',
@@ -244,12 +253,16 @@ export function showOnSite(deps: AppDeps, userId: number, on: unknown): Supporte
 export async function deleteCustomers(deps: AppDeps, userIds: number[]): Promise<void> {
   for (const userId of userIds) {
     const customer = customerOf(deps.db, userId)
-    if (!customer) continue
-    try {
-      await stripeCall(deps, 'DELETE', `/v1/customers/${encodeURIComponent(customer)}`)
-    } catch (e) {
-      console.error('stripe customer delete failed', customer, e instanceof Error ? e.message : e)
-    }
+    if (customer) await deleteCustomer(deps, customer)
+  }
+}
+
+/** Deletes a Stripe customer (ending its subscriptions); a failure is logged, not thrown. */
+async function deleteCustomer(deps: AppDeps, customer: string): Promise<void> {
+  try {
+    await stripeCall(deps, 'DELETE', `/v1/customers/${encodeURIComponent(customer)}`)
+  } catch (e) {
+    console.error('stripe customer delete failed', customer, e instanceof Error ? e.message : e)
   }
 }
 

@@ -106,4 +106,13 @@ describe('supporters model', () => {
     writeSubscription(db, bob, sub({ id: 'sub_b', customer: 'cus_b', status: 'canceled' }), LATER)
     expect(thanksNames(db)).toEqual(['alice'])
   })
+
+  it('agrees everywhere that a row without a since date is not supporting', () => {
+    writeSubscription(db, alice, sub(), NOW)
+    setShowOnSite(db, alice, true)
+    db.prepare('UPDATE supporters SET since = NULL WHERE user_id = ?').run(alice)
+    expect(supporterOf(db, alice)).toBeNull()
+    expect(supporterIds(db, [alice])).toEqual(new Set())
+    expect(thanksNames(db)).toEqual([])
+  })
 })

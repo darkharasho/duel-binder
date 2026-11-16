@@ -151,7 +151,7 @@ describe('token card art', () => {
     test('any other failure stays open to signed-in callers', async () => {
       deps.imageQuota = createImageQuota(() => 0, { limit: 10, windowMs: 3_600_000 })
       upstream.mockRejectedValueOnce(new Error('timeout'))
-      expect((await signedIn(`full/${image}`)).status).toBe(404)
+      expect((await signedIn(`full/${image}`)).status).toBe(503)
       expect((await signedIn(`full/${image}`)).status).toBe(200)
       expect(upstream).toHaveBeenCalledTimes(2)
     })
@@ -303,6 +303,58 @@ describe('image route', () => {
         'INSERT INTO sets (game, language, set_name, set_code, image_url, image_key) VALUES (?, ?, ?, ?, ?, ?)'
       ).run(game, 'en', `set ${key}`, 'x', url, key)
     }
+
+    it('names itself to TCGdex', async () => {
+      const id = addPokemon(1, 'https://assets.tcgdex.net/en/sv/sv01/001')
+      expect((await get(`small/${id}`)).status).toBe(200)
+      const init = upstream.mock.calls[0][1] as RequestInit
+      expect(new Headers(init.headers).get('user-agent')).toMatch(/^DuelBinder\//)
+    })
+
+    describe('when TCGdex fails', () => {
+      beforeEach(() => {
+        deps.anonMisses = createMissCache(() => 0, { ttlMs: 3_600_000, maxKeys: 100 })
+      })
+
+      it('answers a busy or erroring upstream with a 503 and tries again next time', async () => {
+        const id = addPokemon(1, 'https://assets.tcgdex.net/en/me/me02.5/095')
+        for (const fail of [
+          async () => new Response('slow down', { status: 429 }),
+          async () => new Response('oops', { status: 502 }),
+          async () => {
+            throw new Error('timeout')
+          }
+        ]) {
+          upstream.mockImplementationOnce(fail)
+          const res = await getFrom('1.2.3.4', `small/${id}`)
+          expect(res.status).toBe(503)
+          expect(res.headers.get('retry-after')).toBe('30')
+          expect(res.headers.get('cache-control')).toBe('no-store')
+        }
+        expect((await getFrom('1.2.3.4', `small/${id}`)).status).toBe(200)
+        expect(upstream).toHaveBeenCalledTimes(4)
+      })
+
+      it('still remembers art upstream has not got', async () => {
+        const id = addPokemon(1, 'https://assets.tcgdex.net/en/me/me02.5/999')
+        upstream.mockImplementation(async () => new Response('nope', { status: 404 }))
+        expect((await getFrom('1.2.3.4', `small/${id}`)).status).toBe(404)
+        expect((await getFrom('1.2.3.4', `small/${id}`)).status).toBe(404)
+        expect(upstream).toHaveBeenCalledTimes(1)
+      })
+
+      it('logs what upstream said', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+        const id = addPokemon(1, 'https://assets.tcgdex.net/en/me/me02.5/095')
+        upstream.mockImplementationOnce(async () => new Response('slow down', { status: 429 }))
+        await get(`small/${id}`)
+        expect(warn).toHaveBeenCalledWith(
+          'img upstream failed',
+          expect.objectContaining({ host: 'assets.tcgdex.net', status: 429 })
+        )
+        warn.mockRestore()
+      })
+    })
 
     it('fetches TCGdex full and small art', async () => {
       const id = addPokemon(1, 'https://assets.tcgdex.net/en/sv/sv01/001')
@@ -480,6 +532,11 @@ describe('image route', () => {
       expect(await (await warm({ path: `small/${imageId}` })).json()).toEqual({ result: 'missing' })
       expect((await warm({})).status).toBe(400)
       expect(upstream).toHaveBeenCalledTimes(1)
+
+      addArt('bp-busy', `${BULBAGARDEN_IMAGE_PREFIX}a/ab/B.png`)
+      upstream.mockResolvedValueOnce(new Response('slow down', { status: 429 }))
+      expect(await (await warm({ path: 'set/bp-busy' })).json()).toEqual({ result: 'failed' })
+      expect(bucket.store.has('set/bp-busy')).toBe(false)
     })
 
     it('404s an unknown td- key, a foreign logo host and a non-pkm row without fetching', async () => {
@@ -730,7 +787,7 @@ describe('image route', () => {
     it('forgets a remembered failure after the TTL', async () => {
       let t = 0
       deps.anonMisses = createMissCache(() => t, { ttlMs: 3_600_000, maxKeys: 100 })
-      upstream.mockRejectedValueOnce(new Error('timeout'))
+      upstream.mockResolvedValueOnce(new Response('nope', { status: 404 }))
       expect((await getFrom(IP, `full/${imageId}`)).status).toBe(404)
       t = 3_599_999
       expect((await getFrom(IP, `full/${imageId}`)).status).toBe(404)
@@ -799,7 +856,7 @@ describe('image route', () => {
     expect(upstream).not.toHaveBeenCalled()
   })
 
-  it('upstream 404 or non-image answers 404 and stores nothing', async () => {
+  it('upstream 404 or non-image answers 404, no answer a 503, and stores nothing', async () => {
     upstream.mockResolvedValueOnce(
       new Response('nope', { status: 404, headers: { 'content-type': 'image/jpeg' } })
     )
@@ -809,7 +866,7 @@ describe('image route', () => {
     )
     expect((await get(`small/${imageId}`)).status).toBe(404)
     upstream.mockRejectedValueOnce(new Error('network'))
-    expect((await get(`small/${imageId}`)).status).toBe(404)
+    expect((await get(`small/${imageId}`)).status).toBe(503) // worth asking again
     expect(bucket.store.size).toBe(0)
   })
 

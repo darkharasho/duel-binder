@@ -524,7 +524,7 @@ function resolve(deps: AppDeps, path: string): Target | null {
       if (url === null) return null
       return {
         key: cardArtKey(kind, n),
-        source: fixed(url),
+        source: fixed(url, { 'User-Agent': USER_AGENT }),
         cache: CARD_CACHE,
         anonymous: true,
         // A LEGEND half or a BREAK card, which TCGplayer shows sideways; a portrait image is kept as is.
@@ -724,6 +724,12 @@ async function serve(req: Request, deps: AppDeps, path: string): Promise<Respons
 
   const got = await fetchAndStore(deps, target, source)
   if (got === 'oversized') deps.anonMisses?.add(oversizedKey(target.key))
+  // Busy or down upstream (a burst of first views of a new set): asked again next time, by anyone.
+  if (got === 'busy')
+    return new Response('Try again shortly', {
+      status: 503,
+      headers: { 'retry-after': '30', 'cache-control': 'no-store' }
+    })
   if (!got || got === 'oversized') {
     // A failed fetch of signed-out-servable art is remembered, so signed-out callers stop refetching it.
     if (target.anonymous) deps.anonMisses?.add(target.key)
@@ -732,15 +738,31 @@ async function serve(req: Request, deps: AppDeps, path: string): Promise<Respons
   return reply(got.bytes, got.contentType)
 }
 
+/** Logged so a run of missing art says why: upstream's status, or the error when it never answered. */
+function upstreamFailed(url: string, status: number | null, error?: unknown): void {
+  let host = ''
+  try {
+    host = new URL(url).host
+  } catch {
+    // an unparsable URL is logged without a host
+  }
+  console.warn('img upstream failed', {
+    host,
+    status,
+    ...(error !== undefined && { error: String(error) })
+  })
+}
+
 /**
  * Fetches a target's artwork from upstream and stores it in R2; null when upstream has no usable
- * image, 'oversized' when what it has is over MAX_IMAGE_BYTES.
+ * image, 'oversized' when what it has is over MAX_IMAGE_BYTES, 'busy' when it couldn't say (no
+ * answer, a rate limit or a server error), which is worth asking again.
  */
 async function fetchAndStore(
   deps: AppDeps,
   target: Target,
   source: { url: string; headers?: Record<string, string> }
-): Promise<{ bytes: ArrayBuffer; contentType: string } | 'oversized' | null> {
+): Promise<{ bytes: ArrayBuffer; contentType: string } | 'oversized' | 'busy' | null> {
   let bytes: ArrayBuffer
   let contentType: string
   try {
@@ -751,11 +773,16 @@ async function fetchAndStore(
       ...(source.headers && { headers: source.headers })
     })
     contentType = mediaType(res.headers.get('content-type') ?? '')
-    if (!res.ok || !IMAGE_TYPES.has(contentType)) return null
+    if (!res.ok) {
+      upstreamFailed(source.url, res.status)
+      return res.status === 429 || res.status >= 500 ? 'busy' : null
+    }
+    if (!IMAGE_TYPES.has(contentType)) return null
     if (Number(res.headers.get('content-length') ?? 0) > MAX_IMAGE_BYTES) return 'oversized'
     bytes = await res.arrayBuffer()
-  } catch {
-    return null
+  } catch (e) {
+    upstreamFailed(source.url, null, e)
+    return 'busy'
   }
   if (bytes.byteLength > MAX_IMAGE_BYTES) return 'oversized'
   if (bytes.byteLength === 0) return null
@@ -794,7 +821,7 @@ export async function warmImage(deps: AppDeps, path: string): Promise<WarmResult
   const source = await target.source()
   if (!source) return 'missing'
   const got = await fetchAndStore(deps, target, source)
-  return got && got !== 'oversized' ? 'stored' : 'failed'
+  return typeof got === 'object' && got !== null ? 'stored' : 'failed'
 }
 
 // ---- Magic set symbols ------------------------------------------------------------------------

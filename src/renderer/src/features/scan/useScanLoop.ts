@@ -21,6 +21,7 @@ import {
   PHOTO_GAP_MS,
   PKM_PHOTO_REPRINT_LEAD,
   RARITY_MAX_READINGS,
+  STABLE_FRAMES,
   TILT_MIN_FRAMES,
   TILT_MIN_MOTION,
   TILT_MS,
@@ -45,7 +46,7 @@ import {
 } from './resolve'
 import { createFrameTimes, type FrameTiming } from './frameTimes'
 import { sameSpot } from './sameSpot'
-import { createShowingTracker } from './tracker'
+import { createShowingTracker, showingKey } from './tracker'
 import {
   createTraceSampler,
   newTraceSession,
@@ -215,6 +216,20 @@ interface RarityRead {
   nextRead: number
   /** A reading is in flight: the worker is serial, so one at a time. */
   reading: boolean
+}
+
+/**
+ * A counted Pokémon card flagged to pick its printing (a Gem Pack card on its stand-in version,
+ * its foil's pattern not yet seen), while it stays in view: the frames that go on naming it for
+ * sure, on one printing, STABLE_FRAMES in a row, settle its row on that printing (onRarityRead).
+ */
+interface VersionRead {
+  rowId: string
+  /** The card's showingKey: a frame of it on any of its versions is the card. */
+  key: string
+  /** The printing the latest frames named it on for sure, and in how many in a row. */
+  printingId: number | null
+  frames: number
 }
 
 /**
@@ -480,6 +495,8 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     pokemonNames: { ...NO_POKEMON_NAMES, reads: [] as string[][] },
     // The counted card whose rarity is being read, if one is.
     read: null as RarityRead | null,
+    // The counted Pokémon card still in view whose printing is to pick, if one is.
+    version: null as VersionRead | null,
     status: { kind: 'idle' } as ScanStatus
   })
 
@@ -628,6 +645,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     tracker.current.reset()
     l.lastFound = false
     l.shown = null
+    l.version = null
     l.absentSince = null
     l.looks = { cardId: null, cues: [], frames: [] }
     l.language = { cardId: null, reads: 0, read: null }
@@ -701,6 +719,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
         l.absentSince ??= now
         if (now - l.absentSince >= ABSENT_MS) {
           l.shown = null
+          l.version = null
           l.unsureSince = null
           l.autoPhotos = 0
           // Time to read that a photo failed, with the card already lowered.
@@ -723,8 +742,9 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     /**
      * Counts `draft`, the one way live frames and photos both count a card: any read in progress
      * ends, the card shows as counted and goes to onDraft, and when its rarity is one a tilt may
-     * read, and onDraft gave its row's id, a read of it starts on the frames that follow. `quad`
-     * is its outline in the frame that counted it, if any. Nothing here waits.
+     * read, and onDraft gave its row's id, a read of it starts on the frames that follow; a
+     * Pokémon card's printing to pick is watched for likewise (versionFrame). `quad` is its
+     * outline in the frame that counted it, if any. Nothing here waits.
      */
     const counted = (
       draft: ScanDraft,
@@ -735,6 +755,10 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
       endRead()
       showCounted(draft)
       const rowId = latest.current.onDraft(draft)
+      l.version =
+        typeof rowId === 'string' && draft.game === 'pkm' && draft.flag === 'pick-printing'
+          ? { rowId, key: showingKey(draft), printingId: null, frames: 0 }
+          : null
       if (typeof rowId !== 'string' || !engine.tiltReading) return
       // Options that changed since the frame was taken: a read under them would be the old ones'.
       const cur = latest.current
@@ -825,6 +849,28 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
       if (other || at - (r.missSince ?? at) >= ABSENT_MS || at - r.since >= TILT_READ_MS)
         return endRead(r)
       if (!r.reading && at >= r.nextRead) askRead(r)
+    }
+
+    /**
+     * One live frame's outcome for the counted card whose printing is to pick (l.version): a sure
+     * naming of it builds a run on its printing, and STABLE_FRAMES of one settle the row on it,
+     * ending any tilt read of it; another card named ends it.
+     */
+    const versionFrame = (outcome: ScanOutcome): void => {
+      const v = l.version
+      if (!v || outcome.kind !== 'recognized') return
+      const { item } = outcome
+      if (showingKey(item) !== v.key) {
+        l.version = null
+        return
+      }
+      if (item.flag !== null || item.guess || item.printingId === null) return
+      v.frames = item.printingId === v.printingId ? v.frames + 1 : 1
+      v.printingId = item.printingId
+      if (v.frames < STABLE_FRAMES) return
+      l.version = null
+      endRead()
+      latest.current.onRarityRead?.(v.rowId, item)
     }
 
     /**
@@ -1267,6 +1313,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
             l.debugTimes = []
           }
           traceFrame(outcome, draft !== null)
+          if (!draft) versionFrame(looked)
           if (draft) {
             // A photo asked for on its own while this frame was read is no longer needed.
             if (l.photoQuiet) l.photoWanted = false

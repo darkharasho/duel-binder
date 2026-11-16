@@ -25,6 +25,8 @@ export interface PpCard {
   variant: string
   url: string
   name: string | null
+  /** The page's small copy (216 x 300), for telling a gallery's cards apart by art. */
+  thumb: string | null
 }
 
 /** One zh-hans card of the catalog: its source id, number ("006", "0101") and English name. */
@@ -32,6 +34,8 @@ export interface ZhCatalogCard {
   sourceId: string
   number: string
   name: string
+  /** For checking a gallery page lines up (pokipairGallery.ts); absent where unknown. */
+  rarity?: string | null
 }
 
 const decode = (s: string): string =>
@@ -88,7 +92,14 @@ export function parseSetPage(html: string): { title: string; cards: PpCard[] } {
     const caption = attr(button, 'data-caption') ?? ''
     const parts = caption.split(' · ')
     const name = number !== null && parts.length >= 2 ? parts[1].trim() || null : null
-    cards.push({ number, variant: attr(open, 'data-variant') ?? 'normal', url, name })
+    const thumb = /<img[^>]*\ssrc="([^"]+)"/.exec(li)?.[1] ?? null
+    cards.push({
+      number,
+      variant: attr(open, 'data-variant') ?? 'normal',
+      url,
+      name,
+      thumb: thumb === null ? null : decode(thumb)
+    })
   }
   return { title, cards }
 }

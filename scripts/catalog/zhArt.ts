@@ -2,7 +2,7 @@
  * The catalog job's step that copies Simplified Chinese card art from PokiPair into R2
  * (pokemon/pokipairMirror.ts), run before the Pokémon stage, which reads the record it keeps.
  *
- *   npm run catalog:zh-art [-- --dry-run]
+ *   npm run catalog:zh-art [-- --dry-run] [-- --budget <images>]
  *
  * Env: PORTAL_URL, PORTAL_ADMIN_TOKEN (not needed for --dry-run). Reads the zh-hans cards from
  * catalog-work/work.sqlite (last night's) and keeps catalog-work/pokipair.json.
@@ -20,6 +20,8 @@ import {
 } from './pokemon/pokipairMirror'
 
 const WORK_DB = 'catalog-work/work.sqlite'
+/** Images are started for this long; the workflow step's limit is 60 minutes. */
+const TIME_BUDGET_MS = 45 * 60 * 1000
 const ZH_ART_RECORD = `catalog-work/${ZH_ART_RECORD_FILE}`
 
 /** The catalog's zh-hans cards by set id, their number the part of the source id after the last dash. */
@@ -57,6 +59,10 @@ async function chineseSetNames(): Promise<Map<string, string>> {
 
 async function main(): Promise<void> {
   const dry = process.argv.includes('--dry-run')
+  const at = process.argv.indexOf('--budget')
+  const budget = at >= 0 ? Number(process.argv[at + 1]) : ZH_ART_BUDGET
+  if (!Number.isInteger(budget) || budget < 0)
+    throw new Error('--budget takes a whole number of images')
   const url = process.env['PORTAL_URL']
   const token = process.env['PORTAL_ADMIN_TOKEN']
   if (!dry && (!url || !token))
@@ -76,8 +82,9 @@ async function main(): Promise<void> {
     fetch,
     portal: dry ? undefined : { url: url!, token: token! },
     zhNames,
-    budget: ZH_ART_BUDGET,
+    budget,
     gapMs: ZH_ART_GAP_MS,
+    until: Date.now() + TIME_BUDGET_MS,
     sleep: (ms) => new Promise((done) => setTimeout(done, ms)),
     log: (line) => console.log(line)
   })

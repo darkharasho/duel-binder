@@ -92,8 +92,17 @@ function AboutSection(): React.JSX.Element {
         >
           Bulbagarden Archives
         </a>{' '}
-        and TCGplayer; set logos from TCGdex and the Pokémon TCG API. Pokémon images © The Pokémon
-        Company.
+        and TCGplayer; set logos from TCGdex and the Pokémon TCG API. Simplified Chinese card images
+        from{' '}
+        <a
+          href="https://www.pokipair.com/"
+          target="_blank"
+          rel="noreferrer"
+          className="underline underline-offset-2 hover:text-foreground"
+        >
+          PokiPair
+        </a>{' '}
+        and pokemon.cn. Pokémon images © The Pokémon Company.
       </p>
       {available.includes('mtg') && (
         <>

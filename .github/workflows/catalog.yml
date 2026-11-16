@@ -83,6 +83,13 @@ jobs:
           path: catalog-work/thumbs-skip.json
           key: catalog-thumbs-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: catalog-thumbs-
+      # Its own cache (see above): what the Chinese art step has copied, so it never asks twice.
+      - name: Restore Chinese art record
+        uses: actions/cache/restore@v4
+        with:
+          path: catalog-work/pokipair.json
+          key: catalog-zhart-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: catalog-zhart-
       # Its own cache: adding these files to the work database's path list would orphan every saved
       # work database (see above), so that list stays exactly as it is.
       - name: Restore One Piece sources
@@ -139,6 +146,16 @@ jobs:
           npm run catalog:job -- --stage ygo
           ${{ inputs.refresh_sets && '--refresh-sets' || '' }}
           ${{ inputs.refresh_cards && '--refresh-cards' || '' }}
+      # Copies Simplified Chinese card and pack art into R2 (PokiPair, pokemon.cn), politely and a
+      # share a night; the Pokémon stage then shows what it copied. Never blocks the rest.
+      - name: Copy Chinese art
+        id: zhart
+        timeout-minutes: 60
+        continue-on-error: true
+        run: npm run catalog:zh-art
+      - name: Flag a failed Chinese art step
+        if: steps.zhart.outcome == 'failure'
+        run: echo "CATALOG_PROBLEMS=1" >> "$GITHUB_ENV"
       - name: Refresh Pokémon
         run: npm run catalog:job -- --stage pokemon
       # Bounded and never blocks the upload: a hang or crash here still lets Yu-Gi-Oh and Pokémon
@@ -233,6 +250,12 @@ jobs:
         with:
           path: catalog-work/thumbs-skip.json
           key: catalog-thumbs-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Save Chinese art record
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: catalog-work/pokipair.json
+          key: catalog-zhart-${{ github.run_id }}-${{ github.run_attempt }}
       # Its own cache, not the work database's (see "Restore One Piece sources").
       - name: Save One Piece sources
         if: always()

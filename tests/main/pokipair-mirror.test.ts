@@ -76,7 +76,7 @@ function setup(
     ['CBB7C', gemCards],
     ['CS4aC', []]
   ])
-  const run = (o: { budget?: number; dry?: boolean } = {}) =>
+  const run = (o: { budget?: number; dry?: boolean; now?: () => number; until?: number } = {}) =>
     mirrorZhArt({
       cards,
       record,
@@ -91,6 +91,8 @@ function setup(
       ]),
       budget: o.budget ?? 100,
       gapMs: 1000,
+      now: o.now,
+      until: o.until,
       sleep,
       log: () => undefined
     })
@@ -171,6 +173,15 @@ describe('mirrorZhArt', () => {
     expect((await t.run({ budget: 2 })).uploaded).toBe(2)
     expect(Object.keys(t.record.done)).toHaveLength(2)
     expect((await t.run({ budget: 100 })).uploaded).toBe(4)
+  })
+
+  it('stops at its deadline, keeping what was done', async () => {
+    const t = setup()
+    let clock = 0
+    const r = await t.run({ now: () => clock++, until: 1 })
+    expect(r.uploaded).toBe(1)
+    expect(r.stopped).toMatch(/time/)
+    expect(Object.keys(t.record.done)).toHaveLength(1)
   })
 
   it('stops the run on a rate limit, keeping what was done', async () => {

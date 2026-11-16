@@ -61,6 +61,9 @@ export interface MirrorOptions {
   /** zh-hans set names in Chinese by set id, for pokemon.cn's products; no official packs without. */
   zhNames?: ReadonlyMap<string, string>
   gapMs: number
+  /** No image is started after this (ms since the epoch by `now`), so the step's time limit never cuts a run short unrecorded. */
+  until?: number
+  now?: () => number
   sleep: (ms: number) => Promise<void>
   log: (line: string) => void
 }
@@ -192,6 +195,8 @@ export async function mirrorZhArt(o: MirrorOptions): Promise<MirrorResult> {
       const portal = o.portal
       for (const [sourceId, url] of todo) {
         if (left <= 0) break
+        if (o.until !== undefined && (o.now ?? Date.now)() >= o.until)
+          throw new Stop('out of time for tonight')
         left--
         const ok = await copy(sourceId, url, async (bytes) => {
           const copies = handCopies(bytes)

@@ -5,7 +5,9 @@ import {
   type SupporterPlan,
   type SupporterStatus
 } from '../../../src/shared/supporter'
+import type { AdminSupporters } from '../../../src/shared/admin'
 import type { AppDeps } from './app'
+import { isAdmin } from './auth'
 import { stripeCall } from './stripe'
 
 /**
@@ -218,4 +220,89 @@ export function showOnSite(deps: AppDeps, userId: number, on: unknown): Supporte
     throw new CollectionError('Only supporters are on the thanks list')
   setShowOnSite(deps.db, userId, on)
   return supporterStatus(deps, userId)
+}
+
+/**
+ * Cancels these accounts' live subscriptions now (account delete). A failure is logged and left:
+ * the account is deleted either way, and the owner can cancel in the Stripe Dashboard.
+ */
+export async function cancelSubscriptions(deps: AppDeps, userIds: number[]): Promise<void> {
+  const get = deps.db.prepare(
+    'SELECT stripe_subscription_id AS id, status FROM supporters WHERE user_id = ?'
+  )
+  for (const userId of userIds) {
+    const row = get.get(userId) as { id: string | null; status: string } | undefined
+    if (!row?.id || ['canceled', 'incomplete_expired', 'none'].includes(row.status)) continue
+    try {
+      await stripeCall(deps, 'DELETE', `/v1/subscriptions/${encodeURIComponent(row.id)}`)
+    } catch (e) {
+      console.error(
+        'subscription cancel on delete failed',
+        row.id,
+        e instanceof Error ? e.message : e
+      )
+    }
+  }
+}
+
+const noStore = (body: unknown, status = 200): Response =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }
+  })
+
+/** GET /admin/supporters; admins only, otherwise 404. */
+export async function adminSupportersRoute(req: Request, deps: AppDeps): Promise<Response> {
+  if (req.method !== 'GET' || !(await isAdmin(req, deps)))
+    return noStore({ error: 'Not found' }, 404)
+  const rows = deps.db
+    .prepare(
+      `SELECT s.user_id, u.username, u.display_name, s.plan, s.status, s.since,
+              s.current_period_end, s.cancel_at_period_end, s.show_on_site, s.amount_cents
+         FROM supporters s JOIN users u ON u.id = s.user_id
+        ORDER BY s.since IS NULL, s.since DESC, s.user_id`
+    )
+    .all() as {
+    user_id: number
+    username: string
+    display_name: string | null
+    plan: string | null
+    status: string
+    since: string | null
+    current_period_end: string | null
+    cancel_at_period_end: number
+    show_on_site: number
+    amount_cents: number | null
+  }[]
+  const out: AdminSupporters = { active: 0, monthly: 0, yearly: 0, monthlyCents: 0, list: [] }
+  for (const r of rows) {
+    const plan = isSupporterPlan(r.plan) ? r.plan : null
+    if (isActiveStatus(r.status)) {
+      out.active++
+      if (plan === 'month') out.monthly++
+      if (plan === 'year') out.yearly++
+      const cents = r.amount_cents ?? 0
+      out.monthlyCents += plan === 'year' ? Math.round(cents / 12) : cents
+    }
+    out.list.push({
+      userId: r.user_id,
+      username: r.username,
+      displayName: r.display_name || null,
+      plan,
+      amountCents: r.amount_cents,
+      status: r.status,
+      since: r.since,
+      until: r.current_period_end,
+      cancelling: r.cancel_at_period_end === 1,
+      showOnSite: r.show_on_site === 1
+    })
+  }
+  return noStore(out)
+}
+
+/** GET /api/supporters/names: the site's thanks list; public, cached five minutes. */
+export function supporterNamesRoute(deps: AppDeps): Response {
+  return new Response(JSON.stringify({ names: thanksNames(deps.db) }), {
+    headers: { 'content-type': 'application/json', 'cache-control': 'public, max-age=300' }
+  })
 }

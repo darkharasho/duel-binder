@@ -565,6 +565,8 @@ export interface FriendUser {
   username: string
   displayName: string | null
   avatarUrl: string | null
+  /** A supporter (the heart badge); left out otherwise, and by portals before supporters. */
+  supporter?: true
 }
 
 /** A friend's copies of one printing of a card. */

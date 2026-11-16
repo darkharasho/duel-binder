@@ -14,9 +14,11 @@ export type BetaPlatform = 'android' | 'ios'
 export type BetaStatus = 'pending' | 'added' | 'declined'
 
 /** What the site's page explains when it gets one back as `?error=`. */
-export type BetaError = 'agree' | 'platform' | 'email' | 'name' | 'referred' | 'limit'
+export type BetaError = 'agree' | 'platform' | 'email' | 'name' | 'referred' | 'limit' | 'bad'
 
 const MAX_FIELD = 200
+/** The form is four short fields; anything bigger isn't from it. */
+const MAX_BODY = 8192
 
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), {
@@ -30,12 +32,15 @@ export const isBetaPlatform = (v: unknown): v is BetaPlatform => v === 'android'
 /** POST /beta: one form from the site; answers with a redirect back to the site's /beta page. */
 export async function betaSubmitRoute(req: Request, deps: AppDeps): Promise<Response> {
   const site = new URL(deps.env.SITE_URL).origin
+  // Someone who opened the form's address itself gets the page the form is on.
+  if (req.method === 'GET')
+    return new Response(null, { status: 303, headers: { location: `${site}/beta` } })
   if (req.method !== 'POST' || req.headers.get('origin') !== site)
     return new Response('Forbidden', { status: 403 })
   const back = (query: string): Response =>
     new Response(null, { status: 303, headers: { location: `${site}/beta?${query}` } })
-  const form = await req.formData().catch(() => null)
-  if (form === null) return back('error=agree')
+  const form = await readForm(req)
+  if (form === null) return back('error=bad')
   const field = (name: string): string => {
     const v = form.get(name)
     return typeof v === 'string' ? v.trim() : ''
@@ -61,8 +66,13 @@ export async function betaSubmitRoute(req: Request, deps: AppDeps): Promise<Resp
               : null
   if (error) return back(`error=${error}`)
   const now = deps.now()
+  // Asking again is fine and changes nothing: the first request (and its status) stands, and it
+  // doesn't count against the day's limit.
+  const known = deps.db
+    .prepare('SELECT 1 FROM beta_requests WHERE email = ? AND platform = ?')
+    .get(email, platform)
+  if (known) return back('sent=1')
   if (!takeLimit(deps.db, 'beta-ip', clientIp(req), now)) return back('error=limit')
-  // Asking again is fine and changes nothing: the first request (and its status) stands.
   const inserted = deps.db
     .prepare(
       `INSERT OR IGNORE INTO beta_requests (email, platform, name, referred_by, created_at)
@@ -84,6 +94,36 @@ export async function betaSubmitRoute(req: Request, deps: AppDeps): Promise<Resp
     .run(now.toISOString(), email, platform)
   await sendAdded(request, deps)
   return back('sent=in')
+}
+
+/**
+ * The form's fields, or null when the body is too big or isn't a urlencoded form. The size is
+ * checked a chunk at a time, so a huge body is never held whole.
+ */
+async function readForm(req: Request): Promise<URLSearchParams | null> {
+  if (!(req.headers.get('content-type') ?? '').startsWith('application/x-www-form-urlencoded'))
+    return null
+  if (!req.body) return new URLSearchParams()
+  const reader = req.body.getReader()
+  const chunks: Uint8Array[] = []
+  let size = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    size += value.byteLength
+    if (size > MAX_BODY) {
+      await reader.cancel().catch(() => {})
+      return null
+    }
+    chunks.push(value)
+  }
+  const bytes = new Uint8Array(size)
+  let at = 0
+  for (const c of chunks) {
+    bytes.set(c, at)
+    at += c.byteLength
+  }
+  return new URLSearchParams(new TextDecoder().decode(bytes))
 }
 
 /** Emails the "you're in" message; false when there's no sender or it fails. */
@@ -161,14 +201,22 @@ export function betaAddedMessage(
     to: r.email,
     subject: "You're in the Duel Binder beta",
     text: [hi, ...steps, note].join('\n\n') + '\n',
-    html: brandedHtml("You're in the beta", html.join(''), hi)
+    html: brandedHtml(
+      "You're in the beta",
+      html.join(''),
+      hi,
+      'asked to join the beta on duelbinder.com'
+    )
   }
 }
 
 const SELECT_REQUESTS = `SELECT id, email, platform, name, referred_by AS referredBy, status,
        created_at AS createdAt, decided_at AS decidedAt FROM beta_requests`
 
-/** GET /admin/beta and POST /admin/beta/decide; owner-only, otherwise 404. */
+/**
+ * GET /admin/beta, POST /admin/beta/decide and POST /admin/beta/delete (removes a request for
+ * good, e.g. when someone asks to be forgotten); owner-only, otherwise 404.
+ */
 export async function adminBetaRoute(req: Request, deps: AppDeps): Promise<Response> {
   const { db } = deps
   const path = new URL(req.url).pathname
@@ -183,11 +231,17 @@ export async function adminBetaRoute(req: Request, deps: AppDeps): Promise<Respo
     ).length
     return json({ requests, androidAdded })
   }
-  if (req.method !== 'POST' || path !== '/admin/beta/decide') return notFound
+  if (req.method !== 'POST' || (path !== '/admin/beta/decide' && path !== '/admin/beta/delete'))
+    return notFound
   if (!adminWriteAllowed(req, deps)) return notFound
   if (!isJson(req)) return json({ error: 'unsupported-media-type' }, 415)
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null
   const id = body?.id
+  if (path === '/admin/beta/delete') {
+    if (typeof id !== 'number' || !Number.isInteger(id)) return json({ error: 'Bad request' }, 400)
+    const gone = db.prepare('DELETE FROM beta_requests WHERE id = ?').run(id)
+    return gone.changes === 1 ? json({ ok: true }) : notFound
+  }
   const status = body?.status
   if (
     typeof id !== 'number' ||

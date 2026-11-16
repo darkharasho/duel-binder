@@ -159,6 +159,39 @@ describe('phone beta requests', () => {
     expect(other.headers.get('location')).toBe(SITE + '/beta?sent=1')
   })
 
+  it("asking again for a stored email doesn't use up the day's limit", async () => {
+    for (let i = 0; i < 6; i++) await post(sam)
+    for (let i = 0; i < 4; i++) {
+      const res = await post({ ...sam, email: `p${i}@example.com` })
+      expect(res.headers.get('location')).toBe(SITE + '/beta?sent=1')
+    }
+    expect(rows()).toHaveLength(5)
+  })
+
+  it('sends a GET of the form address to the site page', async () => {
+    const res = await handle(new Request(BASE + '/beta'), deps)
+    expect(res.status).toBe(303)
+    expect(res.headers.get('location')).toBe(SITE + '/beta')
+  })
+
+  it('answers an unreadable or oversized form with a general error', async () => {
+    const send = (body: string, type = 'application/x-www-form-urlencoded'): Promise<Response> =>
+      handle(
+        new Request(BASE + '/beta', {
+          method: 'POST',
+          headers: { origin: SITE, 'content-type': type, 'cf-connecting-ip': '1.2.3.4' },
+          body
+        }),
+        deps
+      )
+    expect((await send('x', 'multipart/form-data; boundary=zz')).headers.get('location')).toBe(
+      SITE + '/beta?error=bad'
+    )
+    const big = new URLSearchParams({ ...sam, referred: 'x'.repeat(20_000) }).toString()
+    expect((await send(big)).headers.get('location')).toBe(SITE + '/beta?error=bad')
+    expect(rows()).toEqual([])
+  })
+
   const admin = (path: string, body?: unknown, auth = true): Promise<Response> =>
     handle(
       new Request(BASE + path, {
@@ -235,6 +268,25 @@ describe('phone beta requests', () => {
     expect((await decide(9999, 'added')).status).toBe(404)
     expect((await decide(id, 'pending')).status).toBe(400)
     expect((await admin('/admin/beta/decide', { id, status: 'added' }, false)).status).toBe(404)
+  })
+
+  it('deletes a request for the admin only', async () => {
+    await post(sam)
+    const id = idOf('sam@example.com')
+    expect((await admin('/admin/beta/delete', { id }, false)).status).toBe(404)
+    expect(rows()).toHaveLength(1)
+    const res = await admin('/admin/beta/delete', { id })
+    expect(res.status).toBe(200)
+    expect(rows()).toEqual([])
+    expect((await admin('/admin/beta/delete', { id })).status).toBe(404)
+    expect((await admin('/admin/beta/delete', { id: 'x' })).status).toBe(400)
+  })
+
+  it("says in the email's footer that the address asked to join the beta", async () => {
+    await post(sam)
+    await decide(idOf('sam@example.com'), 'added')
+    expect(sent[0].html).toContain('asked to join the beta')
+    expect(sent[0].html).not.toContain('entered in the app')
   })
 
   it('still marks added without an email binding', async () => {

@@ -167,7 +167,7 @@ async function route(req: Request, deps: AppDeps): Promise<Response> {
     return adminAdminsRoute(req, deps)
   if (url.pathname === '/admin/testers' || url.pathname === '/admin/testers/remove')
     return adminTestersRoute(req, deps)
-  if (url.pathname === '/admin/beta' || url.pathname === '/admin/beta/decide')
+  if (url.pathname === '/admin/beta' || url.pathname.startsWith('/admin/beta/'))
     return adminBetaRoute(req, deps)
   if (url.pathname === '/admin/training' || url.pathname.startsWith('/admin/training/'))
     return adminTrainingRoute(req, deps)

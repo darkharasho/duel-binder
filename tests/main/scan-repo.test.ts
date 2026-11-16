@@ -440,6 +440,63 @@ describe('a Pokémon art twin with no artwork', () => {
     db.exec('ALTER TABLE sets DROP COLUMN series')
     expect(twinned()).toBe(true)
   })
+
+  describe('with no illustrator on record', () => {
+    async function artless(): Promise<{
+      db: Database.Database
+      pikachu: number
+      add: (id: number, name: string, local: string | null) => void
+      twinned: () => boolean
+    }> {
+      const db = await seededDb()
+      const { cardIds } = seedPokemon(db)
+      const [pikachu] = cardIds
+      db.prepare(
+        "UPDATE pokemon_cards SET image_url = 'https://assets/x', illustrator = NULL, local_name = 'ピカチュウ' WHERE card_id = ?"
+      ).run(pikachu)
+      const add = (id: number, name: string, local: string | null): void => {
+        db.prepare(
+          `INSERT INTO cards (id, game, name, type, frame_type, race, "desc", updated_at)
+           VALUES (?, 'pkm', ?, 'Pokémon', 'pokemon', 'Basic', '', '2026-10-29')`
+        ).run(id, name)
+        db.prepare(
+          `INSERT INTO pokemon_cards (card_id, category, hp, types, stage, rarity, illustrator, source_id, image_url, local_name)
+           VALUES (?, 'Pokémon', 60, '[]', 'Basic', 'Common', NULL, ?, NULL, ?)`
+        ).run(id, `en/tk-${id}`, local)
+        db.prepare(
+          `INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity)
+           VALUES ('pkm', ?, 'en', 'Old Kit', 'TK 9/30', 'Normal')`
+        ).run(id)
+      }
+      const twinned = (): boolean =>
+        printingsForCards(db, [pikachu], PKM).some(
+          (p) => p.language === 'en' && p.unseenTwin === true
+        )
+      return { db, pikachu, add, twinned }
+    }
+
+    it('a twin of the same name counts, whatever its case', async () => {
+      const { add, twinned } = await artless()
+      add(9020, 'PIKACHU', null)
+      expect(twinned()).toBe(true)
+    })
+
+    it('a twin of the same local name counts', async () => {
+      const { add, twinned } = await artless()
+      add(9021, 'Pikachu Reprint', 'ピカチュウ')
+      expect(twinned()).toBe(true)
+    })
+
+    // Asked of every artless card, a name compared by its letters alone took a δ species for its
+    // plain card, and every Japanese name for any other with the same digits; and read all ~15,000
+    // of them each time, ~40 ms a card on the scan's main process.
+    it('a card whose name differs past its letters is not a twin', async () => {
+      const { add, twinned } = await artless()
+      add(9022, 'Pikachu δ', null)
+      add(9023, 'Pika-chu', null)
+      expect(twinned()).toBe(false)
+    })
+  })
 })
 
 describe('chineseOfArt', () => {

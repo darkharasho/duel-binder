@@ -17,6 +17,16 @@ describe('admin page', () => {
     expect(html).not.toMatch(/ on(click|submit)=/)
   })
 
+  it('has a Beta tab', async () => {
+    const html = await adminPage().text()
+    expect(html).toContain('href="#beta"')
+    expect(html).toContain('id="beta"')
+    expect(html).toContain("'beta'")
+    expect(html).toContain("fetch('/admin/beta'")
+    expect(html).toContain("fetch('/admin/beta/decide'")
+    expect(html).toContain('of 12')
+  })
+
   it('has a Photos tab', async () => {
     const html = await adminPage().text()
     expect(html).toContain('href="#photos"')

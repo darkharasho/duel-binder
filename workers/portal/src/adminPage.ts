@@ -550,7 +550,7 @@ async function loadMerges() {
   $('merges').replaceChildren(p)
 }
 
-/** Phone beta requests from duelbinder.com/beta: copy emails into Play Console or TestFlight, then mark them. */
+/** Phone beta requests from duelbinder.com/beta. Most are let in on their own; the rest wait here to be added in Play Console or TestFlight and marked. */
 async function loadBeta() {
   const p = el('section', null, 'panel')
   p.append(el('h2', 'Beta'))
@@ -569,7 +569,9 @@ async function loadBeta() {
           body: JSON.stringify({ id: r.id, status })
         })
         const body = await res.json().catch(() => ({}))
-        if (!res.ok) alert('Failed: ' + (body.error ?? 'HTTP ' + res.status))
+        if (!res.ok) alert(body.error === 'testflight'
+          ? "App Store Connect wouldn't add " + r.email + ' to the TestFlight group. Try again, or add them in TestFlight yourself.'
+          : 'Failed: ' + (body.error ?? 'HTTP ' + res.status))
         else {
           if (status === 'added' && !body.emailed) alert('Marked added, but the email to ' + r.email + " didn't go out. Let them know yourself.")
           loadBeta()

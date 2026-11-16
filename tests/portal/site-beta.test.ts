@@ -33,6 +33,12 @@ describe('beta page', () => {
     expect(body).toContain('only to invite you through Google or Apple')
   })
 
+  it('says they are in when the request was let in straight away', async () => {
+    const { body } = await get('/beta?sent=in')
+    expect(body).toContain('You’re in.')
+    expect(body).not.toContain('<form')
+  })
+
   it('thanks the person after sending, without the form', async () => {
     const { body } = await get('/beta?sent=1')
     expect(body).toContain("you'll get an email when you're in")

@@ -48,6 +48,15 @@ DISCORD_CLIENT_ID = "1563797080420655266"
 PRICE_WORKER_URL = "https://ygo-ebay-prices.project96.workers.dev"
 # The Play opt-in link the beta's "you're in" email sends Android testers (internal test for now).
 BETA_ANDROID_OPTIN_URL = "https://play.google.com/apps/internaltest/4699025211362629714"
+# iPhone beta signups go straight into this TestFlight group through the App Store Connect API
+# (src/testflight.ts). The key is the "Portal beta invites" App Manager key; its .p8 is the ASC_KEY
+# secret (1Password: "Duel Binder – App Store Connect API key (Portal beta invites)").
+ASC_ISSUER_ID = "31d02fe9-fe2e-4b7e-acf1-4b3e8929af44"
+ASC_KEY_ID = "5LKHU2NU23"
+ASC_BETA_GROUP_ID = "b632be18-40e9-4ec3-8666-0b88408fe581"
+# Set with the closed test's opt-in link once Play approves it: Android signups are then emailed
+# this group's join link straight away (anyone can join; it is the closed test's tester list).
+# BETA_ANDROID_GROUP_URL = ""
 # The Chinese Pokémon eBay sweep's Browse calls a day; "0" is off (see src/pokemonSweep.ts).
 POKEMON_SWEEP_DAILY_CALLS = "100"
 # The Japanese One Piece eBay sweep's Browse calls a day; "0" is off (see src/onePieceSweep.ts). It shares

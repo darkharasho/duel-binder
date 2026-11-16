@@ -8,6 +8,7 @@ export type LimitKind =
   | 'password-ip'
   | 'check-ip'
   | 'beta-ip'
+  | 'checkout-user'
 
 const MIN = 60 * 1000
 const HOUR = 60 * MIN
@@ -20,7 +21,9 @@ export const LIMITS: Record<LimitKind, { max: number; windowMs: number }> = {
   'password-ip': { max: 50, windowMs: 15 * MIN },
   'check-ip': { max: 100, windowMs: HOUR },
   // The site's beta form: a household asking for a few phones, not a script.
-  'beta-ip': { max: 5, windowMs: 24 * HOUR }
+  'beta-ip': { max: 5, windowMs: 24 * HOUR },
+  // Supporter checkout starts per account: each makes a Stripe session.
+  'checkout-user': { max: 10, windowMs: HOUR }
 }
 
 export function isLimited(db: SqlDb, kind: LimitKind, key: string, now: Date): boolean {

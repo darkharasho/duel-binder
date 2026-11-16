@@ -241,7 +241,7 @@ const EN_NAME_ALIASES: Record<string, string> = { championpath: "Champion's Path
 
 /**
  * Japanese pack files whose Bulbapedia code isn't the set's TCGdex code: sets released as a pair
- * under one code (XY1 Collection X and Y), and the ADV packs, which TCGdex numbers from the
+ * under one code (XY1 Collection X and Y, BW1 Black and White Collection), and the ADV packs, which TCGdex numbers from the
  * Magma vs Aqua pack (Bulbapedia's "Ex1"). File name (before " pack") → set code.
  */
 const JA_FILE_SETS: Record<string, string> = {
@@ -254,7 +254,20 @@ const JA_FILE_SETS: Record<string, string> = {
   'XY11 Fever-Burst Fighter': 'XY11A',
   'XY11 Cruel Traitor': 'XY11B',
   'Ex1 Magma VS Aqua Two Ambitions': 'ADV4',
-  'ADV4 Undone Seal': 'ADV5'
+  'ADV4 Undone Seal': 'ADV5',
+  // Black & White's paired sets, filed under the pair's code.
+  'BW1 Black Collection': 'BW1A',
+  'BW1 White Collection': 'BW1B',
+  'BW3 Psycho Drive': 'BW3A',
+  'BW3 Hail Blizzard': 'BW3B',
+  'BW5 Dragon Blast': 'BW5A',
+  'BW5 Dragon Blade': 'BW5B',
+  'BW6 Freeze Bolt': 'BW6A',
+  'BW6 Cold Flare': 'BW6B',
+  'BW8 Thunder Knuckle': 'BW8B',
+  // Pokémon Card ★VS came in three designs.
+  'Pokémon VS Fighting Psychic': 'VS1',
+  'Pokémon VS Water Fire': 'VS1'
 }
 
 /** Not a pack front: its back ("… reverse"), a promo or campaign pack, or another language's print. */

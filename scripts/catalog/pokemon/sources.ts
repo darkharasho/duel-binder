@@ -1,5 +1,13 @@
 import { openCardCache, cardIsUsable, europeanCardIsUsable, traditionalCardIsUsable } from './cache'
-import { chineseCards, chineseFiles, chineseIndex, chineseListSets, chineseSet, type ZhCard } from './chinese'
+import {
+  chineseCards,
+  chineseFiles,
+  chineseIndex,
+  chineseListSets,
+  chineseSet,
+  type ZhCard
+} from './chinese'
+import { chineseSetDates } from './chineseDates'
 import { chinesePromoSets } from './chinesePromos'
 import { dexSets } from './dexSets'
 import { europeanCards, isEuropean } from './european'
@@ -74,7 +82,11 @@ export function createPokemonSources(opts: PokemonSourcesOpts): PokemonSources &
         )
         const built = [chineseSet(rows.get('30thC')!), ...list.sets, ...chinesePromoSets()]
         for (const b of built) for (const c of b.cards) chinese.set(c.id, c)
-        return built.map((b) => b.set)
+        const dates = chineseSetDates(index)
+        return built.map((b) => ({
+          ...b.set,
+          releaseDate: b.set.releaseDate ?? dates.get(b.set.id)
+        }))
       }
       if (lang === 'zh-hant') {
         const list = await tcgdexSetList('zh-tw', o)

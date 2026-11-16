@@ -1,8 +1,15 @@
-import { readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PNG } from 'pngjs'
 import { describe, expect, it, vi } from 'vitest'
-import { mirrorZhArt, type MirrorRecord } from '../../scripts/catalog/pokemon/pokipairMirror'
+import {
+  handCopies,
+  mirrorZhArt,
+  readZhArtRecord,
+  trimClear,
+  type MirrorRecord
+} from '../../scripts/catalog/pokemon/pokipairMirror'
 import { POKIPAIR_HUB, type ZhCatalogCard } from '../../scripts/catalog/pokemon/pokipair'
 import { OFFICIAL_PRODUCTS } from '../../scripts/catalog/pokemon/zhPacks'
 
@@ -307,5 +314,61 @@ describe('mirrorZhArt', () => {
     expect(t.urls.some((u) => u.startsWith('https://media.pokipair.com/'))).toBe(false)
     expect(t.record.done).toEqual({})
     expect(t.record.packs).toEqual({})
+  })
+
+  it('copies again each card copied before the clear margin was trimmed, then leaves it be', async () => {
+    const t = setup()
+    await t.run()
+    const before = { ...t.record.done }
+    const dir = mkdtempSync(join(tmpdir(), 'zh-art-'))
+    writeFileSync(join(dir, 'old.json'), JSON.stringify({ done: before, packs: t.record.packs }))
+    const old = readZhArtRecord(join(dir, 'old.json'))
+    expect(Object.keys(old.redo!).sort()).toEqual(Object.keys(before).sort())
+    const later = setup()
+    Object.assign(later.record, old)
+    const r = await later.run()
+    expect(r.uploaded).toBe(6)
+    expect(later.record.redo).toEqual({})
+    expect(later.record.done).toEqual(before)
+    // Saved and read again: nothing left to redo, nothing copied twice.
+    writeFileSync(join(dir, 'new.json'), JSON.stringify(later.record))
+    const again = setup()
+    Object.assign(again.record, readZhArtRecord(join(dir, 'new.json')))
+    expect((await again.run()).uploaded).toBe(0)
+  })
+})
+
+describe('trimClear', () => {
+  /** A 10x8 solid block in a 14x12 clear canvas, as PokiPair's card pictures sit. */
+  const padded = () => {
+    const width = 14
+    const height = 12
+    const data = new Uint8Array(width * height * 4)
+    for (let y = 0; y < 8; y++)
+      for (let x = 0; x < 10; x++) data.set([200, 100, 50, 255], (y * width + x) * 4)
+    data[3] = 0 // a see-through corner stays inside the card
+    return { width, height, data }
+  }
+
+  it('cuts the clear strip off the right and bottom', () => {
+    const t = trimClear(padded())
+    expect([t.width, t.height]).toEqual([10, 8])
+    expect([...t.data.subarray(4, 8)]).toEqual([200, 100, 50, 255])
+  })
+
+  it('keeps an image with nothing solid as it is', () => {
+    const img = { width: 3, height: 2, data: new Uint8Array(24) }
+    expect(trimClear(img)).toBe(img)
+  })
+
+  it("makes the kept copies the card's own size", () => {
+    const img = padded()
+    const p = new PNG({ width: img.width, height: img.height })
+    p.data = Buffer.from(img.data)
+    const copies = handCopies(new Uint8Array(PNG.sync.write(p)))!
+    // A baseline JPEG's SOF0 frame holds the height then the width.
+    const jpeg = Buffer.from(copies.high)
+    const sof = jpeg.indexOf(Buffer.from([0xff, 0xc0]))
+    expect([jpeg.readUInt16BE(sof + 7), jpeg.readUInt16BE(sof + 5)]).toEqual([10, 8])
   })
 })

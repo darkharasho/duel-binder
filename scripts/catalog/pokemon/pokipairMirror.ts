@@ -7,6 +7,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { encode as encodeJpeg } from 'jpeg-js'
 import { fillCorners } from '../onepiece/art'
+import type { RgbaImage } from '../../../src/shared/scan/types'
 import { decodeImage } from '../references'
 import { shrink, smallJpeg } from '../thumbs'
 import { HttpError, withRetry } from '../upload'
@@ -52,6 +53,13 @@ export interface MirrorRecord {
    * (`galleryKey`). Its thumbnails aren't fetched again until the page changes.
    */
   galleries?: Record<string, string>
+  /**
+   * Copies made before the clear margin was trimmed (`trimClear`): PokiPair's pictures have a
+   * see-through strip right and bottom that the copy filled with a band of colour. Each is copied
+   * again, and leaves this list when it is. `trimmed` marks a record that has made its list.
+   */
+  redo?: Record<string, true>
+  trimmed?: true
 }
 
 export interface MirrorPortal {
@@ -100,7 +108,11 @@ export function readZhArtRecord(path: string): MirrorRecord {
   if (!existsSync(path)) return { done: {} }
   try {
     const r = JSON.parse(readFileSync(path, 'utf8')) as Partial<MirrorRecord>
-    return { done: r.done ?? {}, packs: r.packs ?? {}, galleries: r.galleries ?? {} }
+    const done = r.done ?? {}
+    const redo = r.trimmed
+      ? (r.redo ?? {})
+      : Object.fromEntries(Object.keys(done).map((id) => [id, true as const]))
+    return { done, packs: r.packs ?? {}, galleries: r.galleries ?? {}, redo, trimmed: true }
   } catch {
     return { done: {} } // a broken file is a lost record: copied again, nothing worse
   }
@@ -116,11 +128,42 @@ const isOfficial = (url: string): boolean => url.startsWith('https://image.pokem
 /** A refusal that means "stop asking for now". */
 class Stop extends Error {}
 
+/**
+ * The image cut to its solid part: PokiPair's card pictures sit in a bigger canvas with a clear strip
+ * on the right and bottom (350x482 around a 341x471 card). A pixel counts when it's at least half
+ * opaque, so a card's rounded corners stay in. An image with nothing solid is kept as it is.
+ */
+export function trimClear(img: RgbaImage): RgbaImage {
+  let left = img.width
+  let top = img.height
+  let right = -1
+  let bottom = -1
+  for (let y = 0; y < img.height; y++) {
+    for (let x = 0; x < img.width; x++) {
+      if (img.data[(y * img.width + x) * 4 + 3] < 128) continue
+      if (x < left) left = x
+      if (x > right) right = x
+      if (y < top) top = y
+      bottom = y
+    }
+  }
+  if (right < 0) return img
+  const width = right - left + 1
+  const height = bottom - top + 1
+  if (width === img.width && height === img.height) return img
+  const data = new Uint8Array(width * height * 4)
+  for (let y = 0; y < height; y++) {
+    const from = ((top + y) * img.width + left) * 4
+    data.set(img.data.subarray(from, from + width * 4), y * width * 4)
+  }
+  return { width, height, data }
+}
+
 /** The kept pair of copies of a PNG: null when it can't be decoded or a copy is too big. */
 export function handCopies(bytes: Uint8Array): { high: Uint8Array; low: Uint8Array } | null {
   const img = decodeImage(bytes)
   if (!img || img.width <= 0 || img.height <= 0) return null
-  const opaque = fillCorners(img)
+  const opaque = fillCorners(trimClear(img))
   const big = shrink(opaque, HIGH_WIDTH)
   const high = new Uint8Array(
     encodeJpeg({ ...big, data: Buffer.from(big.data) }, HIGH_QUALITY).data
@@ -159,6 +202,10 @@ export async function mirrorZhArt(o: MirrorOptions): Promise<MirrorResult> {
   const result: MirrorResult = { matched: 0, uploaded: 0, failed: 0, packs: 0, stopped: null }
   o.record.packs ??= {}
   o.record.galleries ??= {}
+  const redo = (o.record.redo ??= {})
+  /** A card whose copy is in R2 and needs no fixing. */
+  const copied = (sourceId: string): boolean =>
+    o.record.done[sourceId] !== undefined && !redo[sourceId]
   const get = async (url: string): Promise<Response> => {
     await o.sleep(o.gapMs)
     const res = await o.fetch(url, {
@@ -246,7 +293,7 @@ export async function mirrorZhArt(o: MirrorOptions): Promise<MirrorResult> {
       if (set.pack && !packs.has(id)) packs.set(id, set.pack)
       const cards = o.cards.get(id) ?? []
       // A set whose cards all have their copy is not asked for again.
-      if (cards.length > 0 && cards.every((c) => o.record.done[c.sourceId] !== undefined)) continue
+      if (cards.length > 0 && cards.every((c) => copied(c.sourceId))) continue
       if ((left <= 0 || outOfTime) && o.portal) continue
       const html = await text(set.url)
       if (html === null) continue
@@ -265,7 +312,7 @@ export async function mirrorZhArt(o: MirrorOptions): Promise<MirrorResult> {
       } else {
         matches = matchCards(page, cards)
       }
-      const todo = [...matches].filter(([sourceId]) => o.record.done[sourceId] === undefined)
+      const todo = [...matches].filter(([sourceId]) => !copied(sourceId))
       o.log(`zh art: ${id} ${matches.size}/${cards.length} matched, ${todo.length} to copy`)
       result.matched += todo.length
       if (!o.portal) continue
@@ -288,6 +335,7 @@ export async function mirrorZhArt(o: MirrorOptions): Promise<MirrorResult> {
         })
         if (ok) {
           o.record.done[sourceId] = url
+          delete redo[sourceId]
           result.uploaded++
         }
       }

@@ -13,10 +13,11 @@ import { GAME_IDS } from '../../../src/shared/games/types'
 import { HOLDER_LABELS } from '../../../src/shared/training'
 
 /** The games only listed testers see: the panel's tables and its add form. */
-const testerGames = (): { id: string; name: string }[] => GAME_IDS.filter((id) => GAMES[id].access === 'testers').map((id) => ({
-  id,
-  name: GAMES[id].name
-}))
+const testerGames = (): { id: string; name: string }[] =>
+  GAME_IDS.filter((id) => GAMES[id].access === 'testers').map((id) => ({
+    id,
+    name: GAMES[id].name
+  }))
 
 /** Free-plan SQLite storage for the whole account (Durable Objects pricing, Workers Free). */
 const FREE_STORAGE_BYTES = 5 * 1000 ** 3

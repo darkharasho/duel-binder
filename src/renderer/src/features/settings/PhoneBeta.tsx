@@ -6,8 +6,8 @@ export function PhoneBetaSection(): React.JSX.Element {
   return (
     <div className="space-y-2">
       <p className="text-sm text-muted-foreground">
-        Duel Binder for Android and iPhone is in beta. Ask to join, and you'll get an email when
-        you're in.
+        Duel Binder for Android and iPhone is in beta. Ask to join, and you’ll get an email when
+        you’re in.
       </p>
       <a
         href={PHONE_BETA_URL}

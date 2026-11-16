@@ -98,7 +98,8 @@ export function adminHandlers(
         // The portal answers 502 only when App Store Connect refused an iPhone tester.
         if (e instanceof CloudOfflineError && e.message.includes('(502)'))
           throw new Error(
-            "App Store Connect wouldn't add them to the TestFlight group. Try again, or add them in TestFlight yourself."
+            "App Store Connect wouldn't add them to the TestFlight group. Try again, or add them in TestFlight yourself.",
+            { cause: e }
           )
         throw e
       }

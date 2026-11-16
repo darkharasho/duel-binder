@@ -21,6 +21,17 @@ const synced = {
 } as const
 
 describe('SettingsPage', () => {
+  it('links the phone beta form, on the desktop and the web', async () => {
+    for (const api of [createMockApi(), createMockApi({ window: { platform: 'web' } })]) {
+      const { unmount } = renderWithProviders(<SettingsPage />, { api })
+      expect(await screen.findByRole('link', { name: 'Join the phone beta' })).toHaveAttribute(
+        'href',
+        'https://duelbinder.com/beta'
+      )
+      unmount()
+    }
+  })
+
   it('titles the page with the shared display-font header', async () => {
     renderWithProviders(<SettingsPage />, { api: createMockApi() })
     const h1 = await screen.findByRole('heading', { level: 1, name: 'Settings' })

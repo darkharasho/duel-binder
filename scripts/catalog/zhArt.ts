@@ -2,7 +2,10 @@
  * The catalog job's step that copies Simplified Chinese card art from PokiPair into R2
  * (pokemon/pokipairMirror.ts), run before the Pokémon stage, which reads the record it keeps.
  *
- *   npm run catalog:zh-art [-- --dry-run] [-- --budget <images>]
+ *   npm run catalog:zh-art [-- --dry-run] [-- --budget <images>] [-- --minutes <minutes>]
+ *
+ * --minutes is how long images are started for (default 45, inside the nightly step's 60); the
+ * hand-started bulk run (zh-art.yml) gives it hours.
  *
  * Env: PORTAL_URL, PORTAL_ADMIN_TOKEN (not needed for --dry-run). Reads the zh-hans cards from
  * catalog-work/work.sqlite (last night's) and keeps catalog-work/pokipair.json.
@@ -20,23 +23,23 @@ import {
 } from './pokemon/pokipairMirror'
 
 const WORK_DB = 'catalog-work/work.sqlite'
-/** Images are started for this long; the workflow step's limit is 60 minutes. */
-const TIME_BUDGET_MS = 45 * 60 * 1000
+/** Images are started for this long by default; the nightly step's limit is 60 minutes. */
+const DEFAULT_MINUTES = 45
 const ZH_ART_RECORD = `catalog-work/${ZH_ART_RECORD_FILE}`
 
 /** The catalog's zh-hans cards by set id, their number the part of the source id after the last dash. */
 export function zhCards(db: Database.Database): Map<string, ZhCatalogCard[]> {
   const rows = db
     .prepare(
-      "SELECT pc.source_id AS sourceId, c.name FROM pokemon_cards pc JOIN cards c ON c.id = pc.card_id WHERE pc.source_id LIKE 'zh-hans/%'"
+      "SELECT pc.source_id AS sourceId, c.name, pc.rarity FROM pokemon_cards pc JOIN cards c ON c.id = pc.card_id WHERE pc.source_id LIKE 'zh-hans/%'"
     )
-    .all() as { sourceId: string; name: string }[]
+    .all() as { sourceId: string; name: string; rarity: string | null }[]
   const out = new Map<string, ZhCatalogCard[]>()
   for (const r of rows) {
     const m = /^zh-hans\/(.+)-([^-]+)$/.exec(r.sourceId)
     if (!m) continue
     const list = out.get(m[1]) ?? []
-    list.push({ sourceId: r.sourceId, number: m[2], name: r.name })
+    list.push({ sourceId: r.sourceId, number: m[2], name: r.name, rarity: r.rarity })
     out.set(m[1], list)
   }
   return out
@@ -63,6 +66,9 @@ async function main(): Promise<void> {
   const budget = at >= 0 ? Number(process.argv[at + 1]) : ZH_ART_BUDGET
   if (!Number.isInteger(budget) || budget < 0)
     throw new Error('--budget takes a whole number of images')
+  const mi = process.argv.indexOf('--minutes')
+  const minutes = mi >= 0 ? Number(process.argv[mi + 1]) : DEFAULT_MINUTES
+  if (!Number.isFinite(minutes) || minutes <= 0) throw new Error('--minutes takes a number above 0')
   const url = process.env['PORTAL_URL']
   const token = process.env['PORTAL_ADMIN_TOKEN']
   if (!dry && (!url || !token))
@@ -84,7 +90,7 @@ async function main(): Promise<void> {
     zhNames,
     budget,
     gapMs: ZH_ART_GAP_MS,
-    until: Date.now() + TIME_BUDGET_MS,
+    until: Date.now() + minutes * 60 * 1000,
     sleep: (ms) => new Promise((done) => setTimeout(done, ms)),
     save: dry ? undefined : () => writeFileSync(ZH_ART_RECORD, JSON.stringify(record)),
     log: (line) => console.log(line)

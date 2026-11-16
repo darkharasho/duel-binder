@@ -24,8 +24,10 @@ import {
   parseSetPage,
   POKIPAIR_HUB,
   setIdOf,
+  type PpCard,
   type ZhCatalogCard
 } from './pokipair'
+import { galleryHash, isGallery, matchGallery } from './pokipairGallery'
 
 export const CATALOG_USER_AGENT = 'DuelBinder/catalog (https://github.com/darkharasho/duel-binder)'
 /** Images copied per night. */
@@ -41,6 +43,12 @@ export interface MirrorRecord {
   done: Record<string, string>
   /** Each set's pack copy: the picture it was made from (an official one without its auth key). */
   packs?: Record<string, string>
+  /**
+   * Gallery pages (pokipairGallery.ts) that would not line up, by page slug (151's four waves are
+   * one set): the page as it was
+   * (`galleryKey`). Its thumbnails aren't fetched again until the page changes.
+   */
+  galleries?: Record<string, string>
 }
 
 export interface MirrorPortal {
@@ -89,11 +97,15 @@ export function readZhArtRecord(path: string): MirrorRecord {
   if (!existsSync(path)) return { done: {} }
   try {
     const r = JSON.parse(readFileSync(path, 'utf8')) as Partial<MirrorRecord>
-    return { done: r.done ?? {}, packs: r.packs ?? {} }
+    return { done: r.done ?? {}, packs: r.packs ?? {}, galleries: r.galleries ?? {} }
   } catch {
     return { done: {} } // a broken file is a lost record: copied again, nothing worse
   }
 }
+
+/** A gallery page as it is: a page that gains, loses or swaps a picture is tried again. */
+const galleryKey = (page: readonly PpCard[]): string =>
+  `${page.length} ${page[0]?.url ?? ''} ${page[page.length - 1]?.url ?? ''}`
 
 /** A picture from pokemon.cn, the official site. */
 const isOfficial = (url: string): boolean => url.startsWith('https://image.pokemon.com.cn/')
@@ -143,6 +155,7 @@ async function upload(
 export async function mirrorZhArt(o: MirrorOptions): Promise<MirrorResult> {
   const result: MirrorResult = { matched: 0, uploaded: 0, failed: 0, packs: 0, stopped: null }
   o.record.packs ??= {}
+  o.record.galleries ??= {}
   const get = async (url: string): Promise<Response> => {
     await o.sleep(o.gapMs)
     const res = await o.fetch(url, {
@@ -189,6 +202,35 @@ export async function mirrorZhArt(o: MirrorOptions): Promise<MirrorResult> {
 
   let left = o.budget
   let outOfTime = false
+  const late = (): boolean => o.until !== undefined && (o.now ?? Date.now)() >= o.until
+  /** A gallery's thumbnails' art hashes, in page order; null when one is missing or time is up. */
+  const galleryHashes = async (page: readonly PpCard[]): Promise<Uint32Array[] | null> => {
+    const out: Uint32Array[] = []
+    for (const c of page) {
+      if (late()) {
+        outOfTime = true
+        result.stopped = 'out of time for tonight'
+        return null
+      }
+      let bytes: Uint8Array
+      try {
+        const res = await get(c.thumb!)
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        bytes = new Uint8Array(await res.arrayBuffer())
+      } catch (e) {
+        if (e instanceof Stop) throw e
+        o.log(`zh art: ${c.thumb} failed: ${e instanceof Error ? e.message : String(e)}`)
+        return null
+      }
+      const h = galleryHash(bytes)
+      if (h === null) {
+        o.log(`zh art: ${c.thumb} is not a usable image`)
+        return null
+      }
+      out.push(h)
+    }
+    return out
+  }
   /** Each set's pack picture: the official one where there is one, else PokiPair's. */
   const packs = new Map<string, string>()
   try {
@@ -205,7 +247,21 @@ export async function mirrorZhArt(o: MirrorOptions): Promise<MirrorResult> {
       if ((left <= 0 || outOfTime) && o.portal) continue
       const html = await text(set.url)
       if (html === null) continue
-      const matches = matchCards(parseSetPage(html).cards, cards)
+      const page = parseSetPage(html).cards
+      let matches: Map<string, string>
+      if (isGallery(page, cards)) {
+        const key = galleryKey(page)
+        if (o.record.galleries[set.slug] === key) continue
+        const hashes = await galleryHashes(page)
+        if (hashes === null) continue
+        matches = matchGallery(page, hashes, cards)
+        o.log(
+          `zh art: ${id} gallery of ${page.length} pictures${matches.size ? '' : " doesn't line up"}`
+        )
+        if (matches.size === 0 && o.portal) o.record.galleries[set.slug] = key
+      } else {
+        matches = matchCards(page, cards)
+      }
       const todo = [...matches].filter(([sourceId]) => o.record.done[sourceId] === undefined)
       o.log(`zh art: ${id} ${matches.size}/${cards.length} matched, ${todo.length} to copy`)
       result.matched += todo.length
@@ -213,7 +269,7 @@ export async function mirrorZhArt(o: MirrorOptions): Promise<MirrorResult> {
       const portal = o.portal
       for (const [sourceId, url] of todo) {
         if (left <= 0) break
-        if (o.until !== undefined && (o.now ?? Date.now)() >= o.until) {
+        if (late()) {
           // Cards wait for tomorrow; the few packs below still go.
           outOfTime = true
           result.stopped = 'out of time for tonight'

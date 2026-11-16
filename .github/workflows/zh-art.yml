@@ -1,0 +1,82 @@
+name: Chinese art bulk copy
+
+# The nightly catalog run copies Simplified Chinese art from PokiPair a share a night, inside a
+# 60-minute step. This runs that same step on its own for hours, for a big catch-up (the gallery
+# pages, pokipairGallery.ts, need every thumbnail read once). Start it by hand from the Actions tab;
+# a dry run says what it would copy and copies nothing.
+#
+# It shares the catalog's concurrency group: both keep the record of what was copied
+# (pokipair.json), so they never run at once. It reads last night's work database and never saves
+# it, and saves the record where the nightly run picks it up.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Only read the pages and thumbnails and say what would be copied
+        type: boolean
+        default: true
+      minutes:
+        description: How long to keep starting images (the job stops at 330)
+        type: string
+        default: '300'
+      budget:
+        description: Most card images to copy
+        type: string
+        default: '20000'
+
+concurrency:
+  group: catalog
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  zh-art:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    env:
+      PORTAL_URL: ${{ vars.PORTAL_URL }}
+      PORTAL_ADMIN_TOKEN: ${{ secrets.PORTAL_ADMIN_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # postinstall rebuilds better-sqlite3 for Electron, which the job runs under.
+      - name: Install
+        run: npm ci
+      # Exactly catalog.yml's path list: a cache is matched on it.
+      - name: Restore work database
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            catalog-work/work.sqlite
+            catalog-work/work.sqlite-wal
+            catalog-work/fingerprints.sqlite
+            catalog-work/fingerprints-pkm.sqlite
+            catalog-work/pokemon-src.sqlite
+            catalog-work/pokemon-src.sqlite-wal
+          key: catalog-work-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: catalog-work-
+      - name: Restore Chinese art record
+        uses: actions/cache/restore@v4
+        with:
+          path: catalog-work/pokipair.json
+          key: catalog-zhart-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: catalog-zhart-
+      - name: Copy Chinese art
+        timeout-minutes: 320
+        run: >-
+          npm run catalog:zh-art --
+          --minutes "${{ inputs.minutes }}"
+          --budget "${{ inputs.budget }}"
+          ${{ inputs.dry_run && '--dry-run' || '' }}
+      - name: Save Chinese art record
+        if: always() && !inputs.dry_run
+        uses: actions/cache/save@v4
+        with:
+          path: catalog-work/pokipair.json
+          key: catalog-zhart-${{ github.run_id }}-${{ github.run_attempt }}

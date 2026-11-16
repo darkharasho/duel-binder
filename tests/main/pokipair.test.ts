@@ -124,7 +124,8 @@ describe('matchCards', () => {
     number,
     variant,
     name,
-    url: `https://media.pokipair.com/x/${number ?? 'g'}-${variant}-${n}.png`
+    url: `https://media.pokipair.com/x/${number ?? 'g'}-${variant}-${n}.png`,
+    thumb: null
   })
   const zh = (n: string, name: string, set = 'CSV8C'): ZhCatalogCard => ({
     sourceId: `zh-hans/${set}-${n}`,

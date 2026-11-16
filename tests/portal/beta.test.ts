@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type Database from 'better-sqlite3'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
+import { pruneExpired } from '../../workers/portal/src/auth'
 import type { EmailMessage } from '../../workers/portal/src/emailSend'
 import { addUser, memoryBucket, noPrintingArt, noPrices, seededServerDb } from './helpers'
 
@@ -246,5 +247,29 @@ describe('phone beta requests', () => {
       status: 200,
       body: { ok: true, emailed: false }
     })
+  })
+
+  it("keeps the day's limit when sign-ins prune old attempts", async () => {
+    let now = new Date('2026-11-16T12:00:00.000Z')
+    deps.now = () => now
+    for (let i = 0; i < 5; i++) await post({ ...sam, email: `p${i}@example.com` })
+    now = new Date('2026-11-16T14:00:00.000Z')
+    // Every sign-in prunes; the hour-long sign-in limits go, the beta form's day stays.
+    pruneExpired(deps, now.toISOString())
+    expect((await post({ ...sam, email: 'late@example.com' })).headers.get('location')).toBe(
+      SITE + '/beta?error=limit'
+    )
+    now = new Date('2026-11-17T12:30:00.000Z')
+    pruneExpired(deps, now.toISOString())
+    expect((await post({ ...sam, email: 'late@example.com' })).headers.get('location')).toBe(
+      SITE + '/beta?sent=1'
+    )
+    expect(
+      (
+        db.prepare("SELECT COUNT(*) AS n FROM auth_limits WHERE kind = 'beta-ip'").get() as {
+          n: number
+        }
+      ).n
+    ).toBe(1)
   })
 })

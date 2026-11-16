@@ -32,6 +32,13 @@ export function isLimited(db: SqlDb, kind: LimitKind, key: string, now: Date): b
   return row.n >= max
 }
 
+/** Drops attempts older than their own kind's window (the beta form's is a day, the rest an hour or less). */
+export function pruneLimits(db: SqlDb, now: Date): void {
+  const del = db.prepare('DELETE FROM auth_limits WHERE kind = ? AND created_at <= ?')
+  for (const [kind, { windowMs }] of Object.entries(LIMITS))
+    del.run(kind, new Date(now.getTime() - windowMs).toISOString())
+}
+
 /** Records one attempt and returns its row id, for `forgetAttempt`. */
 export function recordAttempt(db: SqlDb, kind: LimitKind, key: string, now: Date): number {
   return Number(

@@ -94,6 +94,7 @@ import { getPrefs, setPrefs } from './prefs'
 import { friendBinder, friendBinders } from './friendBinders'
 import { friendSessions } from './scanSessions'
 import { userScope } from './scope'
+import { openManage, showOnSite, startCheckout, supporterStatus } from './supporters'
 import { dismissLinkHint, listSignIns, removeSignIn, setUsername } from './accountRpc'
 import { linkApple, linkCode } from './link'
 import { mergeWithTicket } from './merge'
@@ -335,7 +336,11 @@ const HANDLERS: { [C in Exclude<PortalChannel, AccountLinkChannel>]: Handler<C> 
   'account:changeEmail': (deps, _s, current, newEmail) => changeEmail(deps, current, newEmail),
   'account:linkCode': (deps, _s, code, verifier) => linkCode(deps, deps.userId, code, verifier),
   'account:linkApple': (deps, _s, input) => linkApple(deps, deps.userId, input),
-  'account:merge': (deps, _s, ticket, choice) => mergeWithTicket(deps, deps.userId, ticket, choice)
+  'account:merge': (deps, _s, ticket, choice) => mergeWithTicket(deps, deps.userId, ticket, choice),
+  'supporter:status': (deps) => supporterStatus(deps, deps.userId),
+  'supporter:checkout': (deps, _s, plan) => startCheckout(deps, deps.userId, plan),
+  'supporter:manage': (deps) => openManage(deps, deps.userId),
+  'supporter:setShowOnSite': (deps, _s, on) => showOnSite(deps, deps.userId, on)
 }
 
 /** Writes that can leave a printing owned with no fresh price. */

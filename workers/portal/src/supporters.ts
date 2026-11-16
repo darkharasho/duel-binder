@@ -1,5 +1,12 @@
 import type { SqlDb } from '../../../src/main/db/sql'
-import type { SupporterPlan, SupporterStatus } from '../../../src/shared/supporter'
+import { CollectionError } from '../../../src/main/repo/collection'
+import {
+  isSupporterPlan,
+  type SupporterPlan,
+  type SupporterStatus
+} from '../../../src/shared/supporter'
+import type { AppDeps } from './app'
+import { stripeCall } from './stripe'
 
 /**
  * Supporter subscriptions. Stripe owns the truth: the webhook (stripe.ts) re-reads a customer's
@@ -117,4 +124,98 @@ export function thanksNames(db: SqlDb): string[] {
     )
     .all() as { name: string }[]
   return rows.map((r) => r.name)
+}
+
+const CHECKOUT_ID = 'duelbinder-supporter-kqzmwhrt'
+
+const customerOf = (db: SqlDb, userId: number): string | null =>
+  (
+    db.prepare('SELECT stripe_customer_id AS id FROM supporters WHERE user_id = ?').get(userId) as
+      { id: string } | undefined
+  )?.id ?? null
+
+/** Runs a Stripe call, turning its failure into a message the app shows. */
+async function viaStripe<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run()
+  } catch (e) {
+    console.error('stripe call failed', e instanceof Error ? e.message : e)
+    throw new CollectionError("Couldn't reach the payment service. Try again.")
+  }
+}
+
+/** `supporter:status` */
+export function supporterStatus(deps: AppDeps, userId: number): SupporterStatus {
+  return {
+    enabled: deps.env.SUPPORTER_ENABLED === 'on',
+    hasCustomer: customerOf(deps.db, userId) !== null,
+    supporter: supporterOf(deps.db, userId)
+  }
+}
+
+/** `supporter:checkout(plan)`: a Checkout Session for the account's Stripe customer (made once). */
+export async function startCheckout(
+  deps: AppDeps,
+  userId: number,
+  plan: unknown
+): Promise<{ url: string }> {
+  if (deps.env.SUPPORTER_ENABLED !== 'on')
+    throw new CollectionError("Supporter subscriptions aren't open yet")
+  if (!isSupporterPlan(plan)) throw new CollectionError('plan must be month or year')
+  const price = plan === 'month' ? deps.env.STRIPE_PRICE_MONTH : deps.env.STRIPE_PRICE_YEAR
+  if (!price) throw new CollectionError("Supporter subscriptions aren't open yet")
+  if (supporterOf(deps.db, userId))
+    throw new CollectionError('You already support Duel Binder. Use Manage to change your plan.')
+  const base = deps.env.PUBLIC_URL
+  return viaStripe(async () => {
+    let customer = customerOf(deps.db, userId)
+    if (!customer) {
+      customer = (
+        await stripeCall<{ id: string }>(deps, 'POST', '/v1/customers', {
+          'metadata[user_id]': String(userId)
+        })
+      ).id
+      // Kept straight away, so a second press reuses this customer.
+      deps.db
+        .prepare(
+          `INSERT INTO supporters (user_id, stripe_customer_id, updated_at) VALUES (?, ?, ?)
+           ON CONFLICT (user_id) DO NOTHING`
+        )
+        .run(userId, customer, deps.now().toISOString())
+      customer = customerOf(deps.db, userId) ?? customer
+    }
+    const session = await stripeCall<{ url: string }>(deps, 'POST', '/v1/checkout/sessions', {
+      mode: 'subscription',
+      customer,
+      client_reference_id: String(userId),
+      'line_items[0][price]': price,
+      'line_items[0][quantity]': '1',
+      success_url: `${base}/supporter/thanks`,
+      cancel_url: `${base}/supporter/thanks?cancelled=1`,
+      integration_identifier: CHECKOUT_ID
+    })
+    return { url: session.url }
+  })
+}
+
+/** `supporter:manage`: a Customer Portal session; works whether or not checkout is open. */
+export async function openManage(deps: AppDeps, userId: number): Promise<{ url: string }> {
+  const customer = customerOf(deps.db, userId)
+  if (!customer) throw new CollectionError('No subscription to manage')
+  return viaStripe(async () => {
+    const session = await stripeCall<{ url: string }>(deps, 'POST', '/v1/billing_portal/sessions', {
+      customer,
+      return_url: `${deps.env.PUBLIC_URL}/supporter/thanks?managed=1`
+    })
+    return { url: session.url }
+  })
+}
+
+/** `supporter:setShowOnSite(on)` */
+export function showOnSite(deps: AppDeps, userId: number, on: unknown): SupporterStatus {
+  if (typeof on !== 'boolean') throw new CollectionError('on must be true or false')
+  if (!supporterOf(deps.db, userId))
+    throw new CollectionError('Only supporters are on the thanks list')
+  setShowOnSite(deps.db, userId, on)
+  return supporterStatus(deps, userId)
 }

@@ -265,6 +265,11 @@ export function createHandlers({
       account.portal('friends:setWishlistVisible', [visible]),
     'prefs:get': async () => account.portal('prefs:get', []),
     'prefs:set': async (patch: unknown) => account.portal('prefs:set', [patch]),
+    'supporter:status': async () => account.portal('supporter:status', []),
+    'supporter:checkout': async (plan: unknown) => account.portal('supporter:checkout', [plan]),
+    'supporter:manage': async () => account.portal('supporter:manage', []),
+    'supporter:setShowOnSite': async (on: unknown) =>
+      account.portal('supporter:setShowOnSite', [on]),
     'scan:fingerprints': (game: GameId) => fingerprints[game].read(),
     'scan:fingerprintRefs': async () => {
       const file = await fingerprints.ygo.readRefs()

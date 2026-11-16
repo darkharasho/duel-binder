@@ -66,6 +66,13 @@ ONEPIECE_SWEEP_DAILY_CALLS = "60"
 ADMIN_DISCORD_ID = "201537071804973056"
 # Email + password sign-in: "off" hides it; "on" turns it on once Email Sending works (see README, Email sign-in).
 EMAIL_SIGN_IN = "on"
+# Supporter subscriptions (src/supporters.ts, src/stripe.ts). "on" opens checkout; anything else hides it, and
+# existing supporters keep their badge. The Price ids are the $3/month and $25/year Prices in Stripe. The secrets
+# STRIPE_SECRET_KEY (a restricted rk_ key: Customers, Checkout Sessions, Subscriptions, Customer portal) and
+# STRIPE_WEBHOOK_SECRET are set with `wrangler secret put` and kept in 1Password Private. Sandbox keys first.
+SUPPORTER_ENABLED = "off"
+# STRIPE_PRICE_MONTH = ""
+# STRIPE_PRICE_YEAR = ""
 
 # Workers Logs: request logs and console output, searchable in the dashboard for a few days.
 [observability]

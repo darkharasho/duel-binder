@@ -63,6 +63,32 @@ describe('affiliate buy links', () => {
     expect(url!.startsWith('https://www.ebay.com/sch/i.html?')).toBe(true)
   })
 
+  it('eBay query keeps rarity words sellers use, per game', () => {
+    const q = (t: Partial<BuyTarget>): string => query(ebayUrl(target(t), ids))
+    // Pokémon: the "rarity" is a finish; only Reverse Holo and 1st Edition are seller words.
+    expect(q({ game: 'pkm', name: 'Pikachu', setCode: 'SVE 008/24', setRarity: 'Normal' })).toBe(
+      'Pikachu SVE 008/24'
+    )
+    expect(q({ game: 'pkm', name: 'Pikachu', setCode: 'SV1-025', setRarity: 'Holofoil' })).toBe(
+      'Pikachu SV1-025'
+    )
+    expect(
+      q({ game: 'pkm', name: 'Pikachu', setCode: 'SV1-025', setRarity: 'Reverse Holofoil' })
+    ).toBe('Pikachu SV1-025 Reverse Holo')
+    expect(
+      q({ game: 'pkm', name: 'Charizard', setCode: 'BS-4', setRarity: '1st Edition Holofoil' })
+    ).toBe('Charizard BS-4 1st Edition')
+    // One Piece and Magic: codes like "SR (Alternate Art)" or "Rare (Foil)" stay out.
+    expect(
+      q({ game: 'op', name: 'Luffy', setCode: 'OP01-024', setRarity: 'SR (Alternate Art)' })
+    ).toBe('Luffy OP01-024')
+    expect(
+      q({ game: 'mtg', name: 'Lightning Bolt', setCode: 'M10 146', setRarity: 'Rare (Foil)' })
+    ).toBe('Lightning Bolt M10 146')
+    // Yu-Gi-Oh! rarities are the sellers' own words.
+    expect(q({ setRarity: 'Secret Rare' })).toBe('Dark Magician LOB-005 Secret Rare')
+  })
+
   it('eBay query with no set code is just the name', () => {
     expect(query(ebayUrl(target({ name: 'Pikachu', setCode: '', setRarity: '' }), ids))).toBe(
       'Pikachu'

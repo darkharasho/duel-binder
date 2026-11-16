@@ -61,10 +61,24 @@ export function tcgplayerUrl(t: BuyTarget, ids: AffiliateIds = AFFILIATE): strin
 // Sellers spell tones too many ways to search by (as in the eBay price worker's buildQuery).
 const TONED_RARITY = /^(.*?)\s*\([^()]*,\s*(color|monochrome)\)\s*$/i
 
-/** eBay search for the printing: name, set code, rarity and, off English, the language. */
+/**
+ * The rarity words sellers write. Yu-Gi-Oh! rarities are theirs already. A Pokémon "rarity" is a
+ * finish ("Normal", "Holofoil"), of which only Reverse Holo and 1st Edition appear in titles.
+ * One Piece and Magic codes ("SR (Alternate Art)", "Rare (Foil)") only narrow a search.
+ */
+function sellerRarity(t: BuyTarget): string {
+  if (t.game === 'ygo') return TONED_RARITY.exec(t.setRarity)?.[1] ?? t.setRarity
+  if (t.game !== 'pkm') return ''
+  return words(
+    /1st edition/i.test(t.setRarity) ? '1st Edition' : '',
+    /reverse/i.test(t.setRarity) ? 'Reverse Holo' : ''
+  )
+}
+
+/** eBay search for the printing: name, set code, seller rarity words and, off English, the language. */
 export function ebayUrl(t: BuyTarget, ids: AffiliateIds = AFFILIATE): string | null {
   if (!ids.ebayCampaignId) return null
-  const rarity = TONED_RARITY.exec(t.setRarity)?.[1] ?? t.setRarity
+  const rarity = sellerRarity(t)
   const language = t.language === 'en' ? '' : languageInfo(t.language).ebayWord
   const q = words(t.name, t.setCode, rarity, language)
   return (

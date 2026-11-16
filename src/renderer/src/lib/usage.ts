@@ -63,14 +63,21 @@ export function flushUsage(): void {
     'page:binders': binders,
     'page:sessions': sessions,
     'page:pokedex': pokedex,
+    'buy:tcgplayer': buyTcgplayer,
+    'buy:ebay': buyEbay,
     ...rest
   } = events
+  const buy = {
+    ...(buyTcgplayer ? { 'buy:tcgplayer': buyTcgplayer } : {}),
+    ...(buyEbay ? { 'buy:ebay': buyEbay } : {})
+  }
   for (const batch of [
     rest,
     wishlist ? { 'page:wishlist': wishlist } : {},
     binders ? { 'page:binders': binders } : {},
     sessions ? { 'page:sessions': sessions } : {},
-    pokedex ? { 'page:pokedex': pokedex } : {}
+    pokedex ? { 'page:pokedex': pokedex } : {},
+    buy
   ]) {
     if (Object.keys(batch).length === 0) continue
     try {

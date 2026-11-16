@@ -82,6 +82,19 @@ describe('usage counts', () => {
     expect(report()).toHaveBeenCalledWith({ 'page:pokedex': 1 })
   })
 
+  it('sends buy-link clicks on their own, so a portal without them keeps the rest', async () => {
+    report().mockImplementation(async (batch: Record<string, number>) => {
+      if ('buy:ebay' in batch) throw new Error('400')
+    })
+    track('open')
+    track('buy:ebay')
+    track('buy:tcgplayer')
+    flushUsage()
+    expect(report()).toHaveBeenCalledTimes(2)
+    expect(report()).toHaveBeenCalledWith({ open: 1 })
+    expect(report()).toHaveBeenCalledWith({ 'buy:ebay': 1, 'buy:tcgplayer': 1 })
+  })
+
   it('counts and sends nothing once turned off, and drops what was waiting', () => {
     track('open')
     setUsageEnabled(false)

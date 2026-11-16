@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { openDatabase } from '../../src/main/db/database'
 import { HAND_ART_PREFIX } from '../../src/shared/imageSources'
 import {
+  archivePacks,
   officialSetOf,
   packCopy,
   packKey,
@@ -136,5 +137,47 @@ describe('writeZhPackArt', () => {
       }
     ])
     db.close()
+  })
+})
+
+describe('archivePacks', () => {
+  const file = (title: string, width = 300, height = 520) => ({
+    title,
+    url: `https://archives.bulbagarden.net/media/upload/x/${title}`,
+    width,
+    height
+  })
+  const ids = ['CSVH1aC', 'CS4aC', 'CSM2.1C', 'CSV9.5C', 'SVPC']
+
+  it("names each set's pack by its code, the biggest of its packs", () => {
+    const m = archivePacks(
+      [
+        file('CSVH1a Pack.png'),
+        file('CS4a Booster 5 Pack.png', 200, 350),
+        file('CS4a Booster 25 Pack.png', 400, 700),
+        file('CSM2.1 Pack.png'),
+        file('CSV9.5 Pack.png')
+      ],
+      ids
+    )
+    expect(Object.fromEntries(m)).toEqual({
+      CSVH1aC: expect.stringMatching(/CSVH1a Pack/),
+      CS4aC: expect.stringMatching(/CS4a Booster 25 Pack/),
+      'CSM2.1C': expect.stringMatching(/CSM2\.1 Pack/),
+      'CSV9.5C': expect.stringMatching(/CSV9\.5 Pack/)
+    })
+  })
+
+  it('takes no promo or event pack, no box, and nothing from another site', () => {
+    const m = archivePacks(
+      [
+        file('SVP Mission Pack 1 SC.png'),
+        file('151 Booster Gather 20 Pack.png'),
+        file('CSVH1a Pack.png', 600, 400),
+        { ...file('CS4a Pack.png'), url: 'https://example.com/CS4a.png' }
+      ],
+      ids
+    )
+    expect(m.size).toBe(0)
   })
 })

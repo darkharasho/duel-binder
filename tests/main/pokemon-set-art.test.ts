@@ -105,7 +105,9 @@ describe('matching Bulbagarden pack files to sets', () => {
       set('とかれた封印', 'ADV5', 'td-ja-ADV5'),
       set('Pokemon Jungle', 'PMCG2', 'td-ja-PMCG2'),
       set('Expansion Pack', 'PMCG1', 'td-ja-PMCG1'),
-      set('ロケット団の逆襲', 'PCG3', 'td-ja-PCG3')
+      set('ロケット団の逆襲', 'PCG3', 'td-ja-PCG3'),
+      set('コールドフレア', 'BW6B', 'td-ja-BW6b'),
+      set('ポケモンカード★VS', 'VS1', 'td-ja-VS1')
     ]
     const { art } = matchPacks(
       'ja',
@@ -122,6 +124,8 @@ describe('matching Bulbagarden pack files to sets', () => {
         file('Pokémon Jungle pack.jpg'),
         file('Expansion Pack pack.jpg'),
         file('PCG3 Rocket Gang Strikes Back pack.jpg'),
+        file('BW6 Cold Flare pack.jpg'),
+        file('Pokémon VS Fighting Psychic pack.jpg'),
         file('Base Set Booster Charizard DE.jpg'),
         file('AS1a First Impact Booster Thai.jpg')
       ],
@@ -142,6 +146,8 @@ describe('matching Bulbagarden pack files to sets', () => {
     expect(titles('Pokemon Jungle')).toEqual(['Pokémon Jungle pack.jpg'])
     expect(titles('Expansion Pack')).toEqual(['Expansion Pack pack.jpg'])
     expect(titles('ロケット団の逆襲')).toEqual(['PCG3 Rocket Gang Strikes Back pack.jpg'])
+    expect(titles('コールドフレア')).toEqual(['BW6 Cold Flare pack.jpg'])
+    expect(titles('ポケモンカード★VS')).toEqual(['Pokémon VS Fighting Psychic pack.jpg'])
   })
 
   it('takes Pokémon TCG API logos only for sets TCGdex has none for', () => {

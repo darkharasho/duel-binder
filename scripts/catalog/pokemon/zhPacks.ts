@@ -1,20 +1,52 @@
 /**
  * Simplified Chinese pack pictures: the official product list on pokemon.cn first (its newest
- * products), else PokiPair's set picture. Copied once into R2 by the zh art step
+ * products), else PokiPair's set picture, else the Bulbagarden Archives' (by set code: Battle Party
+ * and Happy Set packs, older boosters). Copied once into R2 by the zh art step
  * (pokipairMirror.ts) as `hand/zh-hans-pack-<set>/pack.png`, see-through, and written to
  * `pokemon_set_art` by the Pokémon stage with an `hp-` key.
  */
 import { createHash } from 'node:crypto'
 import type Database from 'better-sqlite3'
 import { PNG } from 'pngjs'
-import { HAND_ART_PREFIX } from '../../../src/shared/imageSources'
+import { BULBAGARDEN_IMAGE_PREFIX, HAND_ART_PREFIX } from '../../../src/shared/imageSources'
 import { decodeImage } from '../references'
 import { shrink } from '../thumbs'
+import type { ArchiveFile } from './setArt'
 
 export const OFFICIAL_PRODUCTS = 'https://www.pokemon.cn/products_category/products/'
 /** The zsjy947 list's set index, which has each set's Chinese name (chinese.ts pins the same commit). */
 export const ZH_SET_INDEX =
   'https://raw.githubusercontent.com/zsjy947/PTCG-card-data/7f03f38f4538f01d8ee03121aa91aad3b0ae1149/data/sets_index.json'
+
+/** The Bulbagarden Archives' category tree of Simplified Chinese packs. */
+export const ZH_ARCHIVE_PACKS = 'Category:Simplified Chinese TCG packs'
+
+/**
+ * Archive files that are a set's pack front, named by its code and nothing else: "CSVH1a Pack",
+ * "CS4a Booster 25 Pack". Promo and event packs ("SVP Mission Pack 1 SC") and the 151 waves name
+ * no set code of ours.
+ */
+const ARCHIVE_PACK = /^(\S+) (?:Booster \d+ )?Pack$/
+/** A wrapper is tall; anything wider than this share of its height is a box (as setArt.ts). */
+const MAX_ASPECT = 0.8
+
+/** Each set's pack picture on the archive, by set id ("CSVH1aC"): the biggest of its files. */
+export function archivePacks(
+  files: readonly ArchiveFile[],
+  ids: Iterable<string>
+): Map<string, string> {
+  const known = new Set(ids)
+  const best = new Map<string, ArchiveFile>()
+  for (const f of files) {
+    if (!f.url.startsWith(BULBAGARDEN_IMAGE_PREFIX) || f.width > f.height * MAX_ASPECT) continue
+    const code = ARCHIVE_PACK.exec(f.title.replace(/\.[A-Za-z0-9]+$/, ''))?.[1]
+    const id = code === undefined ? null : `${code}C`
+    if (id === null || !known.has(id)) continue
+    const had = best.get(id)
+    if (!had || f.width * f.height > had.width * had.height) best.set(id, f)
+  }
+  return new Map([...best].map(([id, f]) => [id, f.url]))
+}
 
 /** A pack copy is no wider than this: a set tile shows it small. */
 const PACK_WIDTH = 480

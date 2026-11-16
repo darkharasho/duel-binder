@@ -34,6 +34,7 @@ export function renderPrivacy(view: PrivacyView): string {
           'Anonymous usage counts',
           p(
             'The apps count a short, fixed list of things, such as how often each page is opened and how many cards are added, scanned or ripped, and send only the totals every few minutes. The portal adds them to counts per day and per platform (desktop, web, phone). Nothing in them names you, your account, your device, your cards or your IP address, so they can’t be traced back to you.',
+            'The app counts how often its buy links are opened, with no account, card or device attached.',
             'You can turn them off in Settings, on each device.'
           )
         ],

@@ -12,7 +12,7 @@ export function renderTerms(view: LegalView): string {
       description: 'The terms for using Duel Binder, its apps and its web portal.',
       heading: 'Terms of Service',
       lead: 'The rules for using Duel Binder: the desktop app, the phone app and the web portal.',
-      updated: 'Last updated November 9, 2026',
+      updated: 'Last updated November 16, 2026',
       sections: [
         [
           'Agreeing to these terms',
@@ -24,6 +24,12 @@ export function renderTerms(view: LegalView): string {
           'The service',
           p(
             'Duel Binder is a free, personal project for keeping track of a Yu-Gi-Oh! or Pokémon card collection. It may change, gain or lose features, or stop running, at any time and without notice.'
+          )
+        ],
+        [
+          'Affiliate links',
+          p(
+            'Some links to TCGplayer and eBay are affiliate links. If you buy something after following one, we may earn a commission, at no extra cost to you. Duel Binder doesn’t sell cards or see what you buy.'
           )
         ],
         [

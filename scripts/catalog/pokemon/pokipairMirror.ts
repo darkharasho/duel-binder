@@ -44,7 +44,8 @@ export interface MirrorRecord {
   /** Each set's pack copy: the picture it was made from (an official one without its auth key). */
   packs?: Record<string, string>
   /**
-   * Gallery pages (pokipairGallery.ts) that would not line up, by set id: the page as it was
+   * Gallery pages (pokipairGallery.ts) that would not line up, by page slug (151's four waves are
+   * one set): the page as it was
    * (`galleryKey`). Its thumbnails aren't fetched again until the page changes.
    */
   galleries?: Record<string, string>
@@ -250,14 +251,14 @@ export async function mirrorZhArt(o: MirrorOptions): Promise<MirrorResult> {
       let matches: Map<string, string>
       if (isGallery(page, cards)) {
         const key = galleryKey(page)
-        if (o.record.galleries[id] === key) continue
+        if (o.record.galleries[set.slug] === key) continue
         const hashes = await galleryHashes(page)
         if (hashes === null) continue
         matches = matchGallery(page, hashes, cards)
         o.log(
           `zh art: ${id} gallery of ${page.length} pictures${matches.size ? '' : " doesn't line up"}`
         )
-        if (matches.size === 0 && o.portal) o.record.galleries[id] = key
+        if (matches.size === 0 && o.portal) o.record.galleries[set.slug] = key
       } else {
         matches = matchCards(page, cards)
       }

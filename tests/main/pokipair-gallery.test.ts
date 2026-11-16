@@ -222,7 +222,7 @@ describe('mirrorZhArt on a gallery page', () => {
     const four = [...cs4a, card('009', 'Sprigatito', 'Common', 'CS4aC')]
     await t.run(four)
     expect(t.record.done).toEqual({})
-    expect(Object.keys(t.record.galleries ?? {})).toEqual(['CS4aC'])
+    expect(Object.keys(t.record.galleries ?? {})).toEqual(['nine-colors-gathering-set-list-cs4a'])
     const thumbsBefore = t.urls.filter((u) => u.endsWith('-216x300.png')).length
     expect(thumbsBefore).toBe(7)
     await t.run(four)

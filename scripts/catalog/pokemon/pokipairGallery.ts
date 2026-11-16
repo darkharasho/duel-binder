@@ -70,24 +70,68 @@ export function matchGallery(
 ): Map<string, string> {
   const out = new Map<string, string>()
   if (hashes.length !== page.length) return out
-  const groups = galleryGroups(hashes)
-  if (groups.length !== cards.length) return out
   const ordered = [...cards].sort((a, b) =>
     a.number.localeCompare(b.number, 'en', { numeric: true })
   )
-  // Which cards have reverses follows rarity: each rarity mostly one way or the other.
-  const byRarity = new Map<string, { many: number; all: number }>()
-  ordered.forEach((c, i) => {
+  const groups = galleryGroups(hashes)
+  const fits = (g: number[][]): boolean => g.length === ordered.length && agrees(ordered, g)
+  const found = fits(groups) ? groups : rarityWalk(hashes, ordered, groups)
+  if (!found || !fits(found)) return out
+  ordered.forEach((c, i) => out.set(c.sourceId, page[found[i][0]].url))
+  return out
+}
+
+/** Each rarity's cards, by whether they have reverses (their run is longer than one picture). */
+function byRarity(
+  cards: readonly ZhCatalogCard[],
+  groups: number[][]
+): Map<string, { many: number; all: number }> {
+  const out = new Map<string, { many: number; all: number }>()
+  cards.forEach((c, i) => {
+    if (!groups[i]) return
     const k = c.rarity ?? ''
-    const r = byRarity.get(k) ?? { many: 0, all: 0 }
+    const r = out.get(k) ?? { many: 0, all: 0 }
     r.all++
     if (groups[i].length > 1) r.many++
-    byRarity.set(k, r)
+    out.set(k, r)
   })
-  for (const { many, all } of byRarity.values()) {
-    const share = many / all
-    if (share > 1 - RARITY_AGREEMENT && share < RARITY_AGREEMENT) return out
-  }
-  ordered.forEach((c, i) => out.set(c.sourceId, page[groups[i][0]].url))
   return out
+}
+
+/** Which cards have reverses follows rarity: each rarity mostly one way or the other. */
+function agrees(cards: readonly ZhCatalogCard[], groups: number[][]): boolean {
+  for (const { many, all } of byRarity(cards, groups).values()) {
+    const share = many / all
+    if (share > 1 - RARITY_AGREEMENT && share < RARITY_AGREEMENT) return false
+  }
+  return true
+}
+
+/**
+ * The runs again, led by rarity, for a page whose plain runs don't line up: two single-print
+ * cards with near-same art (CS4a's gold Fire and Darkness Energy, 36 bits apart) run together.
+ * Each rarity is taken as its cards mostly are in the plain runs; a single-print card then takes
+ * one picture, a card with reverses its whole run. Null when a rarity is evenly split or the
+ * pictures don't come out even.
+ */
+function rarityWalk(
+  hashes: readonly Uint32Array[],
+  cards: readonly ZhCatalogCard[],
+  groups: number[][]
+): number[][] | null {
+  const many = new Map<string, boolean>()
+  for (const [k, r] of byRarity(cards, groups)) {
+    if (r.many * 2 === r.all) return null
+    many.set(k, r.many * 2 > r.all)
+  }
+  const out: number[][] = []
+  let i = 0
+  for (const c of cards) {
+    if (i >= hashes.length) return null
+    const run = [i++]
+    if (many.get(c.rarity ?? ''))
+      while (i < hashes.length && hamming(hashes[i - 1], 0, hashes[i], 0) <= SAME_ART) run.push(i++)
+    out.push(run)
+  }
+  return i === hashes.length ? out : null
 }

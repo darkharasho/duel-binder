@@ -125,6 +125,33 @@ describe('matchGallery', () => {
     expect(matchGallery(page.slice(0, 5), [A, A, A, B, C], cards).size).toBe(0)
   })
 
+  it('splits single-print cards with near-same art by rarity (two gold basic Energies)', () => {
+    // CS4a ends on gold Fire and Darkness Energy, 36 bits apart: one run of two.
+    const cards = [
+      card('001', 'A', 'Common'),
+      card('002', 'B', 'Common'),
+      card('003', 'C', 'Ultra Rare'),
+      card('004', 'E', 'Ultra Rare'),
+      card('005', 'Fire Energy', 'Ultra Rare'),
+      card('006', 'Darkness Energy', 'Ultra Rare')
+    ]
+    const p = [...page, pic(8)]
+    const m = matchGallery(p, [A, A, B, B, C, near(C, 200), D, near(D, 36)], cards)
+    expect([...m.values()]).toEqual([p[0].url, p[2].url, p[4].url, p[5].url, p[6].url, p[7].url])
+  })
+
+  it('still matches nothing when the rarity walk leaves pictures over', () => {
+    // Ultra Rares mostly single, so the walk splits D from its near twin, and E is one too many.
+    const cards = [
+      card('001', 'A', 'Common'),
+      card('002', 'B', 'Ultra Rare'),
+      card('003', 'C', 'Ultra Rare'),
+      card('004', 'D', 'Ultra Rare')
+    ]
+    const E = near(D, 200)
+    expect(matchGallery(page.slice(0, 6), [A, A, C, D, near(D, 36), E], cards).size).toBe(0)
+  })
+
   it('matches nothing when a thumbnail is missing', () => {
     expect(matchGallery(page, [A, A, A, B, B, B], csv1).size).toBe(0)
   })

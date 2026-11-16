@@ -37,6 +37,7 @@ h2{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;le
 .at{color:var(--muted);font-size:12px}
 button{height:30px;padding:0 14px;border-radius:6px;border:1px solid rgb(255 255 255 / 14%);background:none;color:var(--fg);font:inherit;font-size:13px;cursor:pointer}
 button:hover{background:rgb(255 255 255 / 5%)}
+button[aria-pressed=true]{border-color:var(--accent);color:var(--accent)}
 .top a{font-size:13px;color:var(--muted);text-decoration:none}
 .top a:hover{color:var(--fg)}
 nav{display:flex;gap:4px;overflow-x:auto}
@@ -770,7 +771,102 @@ async function loadPhotos() {
   $('photos').replaceChildren(p)
 }
 
-const TABS = ['overview', 'runs', 'people', 'activity', 'errors', 'scanner', 'storage', 'merges', 'testers', 'admins', 'photos']
+/** 1,234 → 1.2K, 3,400,000,000 → 3.4B. */
+function big(v) {
+  const a = Math.abs(v ?? 0)
+  if (a >= 1e9) return (v / 1e9).toFixed(1) + 'B'
+  if (a >= 1e6) return (v / 1e6).toFixed(1) + 'M'
+  if (a >= 1e4) return (v / 1e3).toFixed(1) + 'K'
+  return Math.round(v ?? 0).toLocaleString()
+}
+const dollars = (v) => '$' + (v < 10 ? v.toFixed(2) : Math.round(v).toLocaleString())
+let costDays = 30
+
+function costTable(heads, rows) {
+  const table = el('table', null, 'history')
+  const head = el('tr')
+  heads.forEach((h, i) => head.append(el('th', h, i ? undefined : 'l')))
+  table.append(head)
+  for (const r of rows) {
+    const tr = el('tr')
+    r.forEach((c, i) => tr.append(el('td', String(c), i ? 'v' : undefined)))
+    table.append(tr)
+  }
+  return table
+}
+
+/** What each request costs the Durable Object, per user and area, and the monthly bill it projects. */
+function renderCosts(c) {
+  const box = $('costs')
+  const pick = el('div', null, 'adder')
+  for (const d of [7, 30]) {
+    const b = el('button', 'Last ' + d + ' days')
+    if (d === costDays) b.setAttribute('aria-pressed', 'true')
+    b.addEventListener('click', () => { costDays = d; loadCosts() })
+    pick.append(b)
+  }
+  pick.append(el('span', 'Since ' + c.since + ' · ' + c.days + ' day' + (c.days === 1 ? '' : 's') + ' measured', 'at'))
+  const u = c.perUserMonth
+  const tiles = el('div', null, 'tiles')
+  tiles.append(
+    tile(n(c.activeUsers), 'signed-in users measured'),
+    tile(u ? big(u.requests) : '–', 'requests per user a month'),
+    tile(u ? big(u.rowsRead) : '–', 'rows read per user a month'),
+    tile(u ? big(u.rowsWritten) : '–', 'rows written per user a month'),
+    tile(big(c.systemMonth.rowsRead), 'system rows read a month')
+  )
+
+  const proj = el('section', null, 'panel')
+  proj.append(el('h2', 'Projected monthly bill (Cloudflare)'))
+  const heads = ['Users', ...c.projections.map((p) => n(p.users) + (p.users === c.activeUsers ? ' (now)' : ''))]
+  const rows = c.projections[0].lines.map((l, i) => [l.item, ...c.projections.map((p) => dollars(p.lines[i].dollars))])
+  rows.push(['Total', ...c.projections.map((p) => dollars(p.dollars))])
+  proj.append(costTable(heads, rows))
+  proj.append(el('p', 'Each user is today’s average signed-in user; system work (catalog uploads, the price alarm, signed-out images) stays as measured. Worker requests that never reach the database (edge-cached art, the site) and fixed fees (Apple, signing) aren’t included. Storage is today’s ' + bytes(c.storageBytes) + '.', 'note'))
+
+  const area = el('section', null, 'panel')
+  area.append(el('h2', 'By area'))
+  area.append(c.byArea.length
+    ? costTable(['Area', 'Requests', 'Rows read', 'Rows written', 'Time'],
+        c.byArea.map((a) => [a.area, big(a.requests), big(a.rowsRead), big(a.rowsWritten), big(a.ms / 1000) + ' s']))
+    : el('p', 'Nothing measured yet.', 'note'))
+
+  const people = el('section', null, 'panel')
+  people.append(el('h2', 'By user'))
+  const sys = c.system
+  people.append(costTable(['User', 'Requests', 'Rows read', 'Rows written'], [
+    ...c.byUser.map((x) => [x.username, big(x.requests), big(x.rowsRead), big(x.rowsWritten)]),
+    ['(no user: system)', big(sys.requests), big(sys.rowsRead), big(sys.rowsWritten)]
+  ]))
+
+  const daily = el('section', null, 'panel')
+  daily.append(el('h2', 'Rows read per day'))
+  const max = Math.max(1, ...c.byDay.map((d) => d.rowsRead))
+  const chart = el('div', null, 'chart')
+  for (const d of c.byDay) {
+    const bar = el('div')
+    bar.style.height = Math.max(2, (d.rowsRead / max) * 100) + '%'
+    bar.title = d.day + ': ' + big(d.rowsRead) + ' read, ' + big(d.rowsWritten) + ' written, ' + big(d.requests) + ' requests'
+    chart.append(bar)
+  }
+  daily.append(c.byDay.length ? chart : el('p', 'Nothing measured yet.', 'note'))
+
+  const grid = el('div', null, 'stack')
+  grid.append(proj, area, people, daily)
+  box.replaceChildren(pick, tiles, grid)
+}
+
+async function loadCosts() {
+  try {
+    const res = await fetch('/admin/costs?days=' + costDays, { credentials: 'same-origin' })
+    if (!res.ok) throw new Error('The portal answered ' + res.status)
+    renderCosts(await res.json())
+  } catch (e) {
+    $('costs').replaceChildren(el('p', 'Could not load costs: ' + (e.message || e), 'note'))
+  }
+}
+
+const TABS = ['overview', 'runs', 'people', 'activity', 'costs', 'errors', 'scanner', 'storage', 'merges', 'testers', 'admins', 'photos']
 
 function showTab() {
   const wanted = location.hash.slice(1)
@@ -784,7 +880,7 @@ function showTab() {
 
 window.addEventListener('hashchange', showTab)
 showTab()
-$('refresh').addEventListener('click', () => { load(); loadErrors(); loadRuns(); loadMerges(); loadTesters(); loadAdmins(); loadPhotos() })
+$('refresh').addEventListener('click', () => { load(); loadErrors(); loadRuns(); loadMerges(); loadTesters(); loadAdmins(); loadPhotos(); loadCosts() })
 load()
 loadErrors()
 loadRuns()
@@ -792,6 +888,7 @@ loadMerges()
 loadTesters()
 loadAdmins()
 loadPhotos()
+loadCosts()
 `
 
 function csp(nonce: string): string {
@@ -823,7 +920,7 @@ export function adminPage(): Response {
 <header><div class="wrap">
 <div class="top"><h1>Duel Binder</h1><span class="badge">Admin</span><span class="pulse" id="pulse"></span>
 <span class="grow"></span><span class="at" id="at"></span><a href="/">Back to the app</a><button id="refresh" type="button">Refresh</button></div>
-<nav aria-label="Admin sections"><a href="#overview">Overview</a><a href="#runs">Runs</a><a href="#people">Users</a><a href="#activity">Usage</a><a href="#errors">Errors</a><a href="#scanner">Scanner &amp; prices</a><a href="#storage">Storage</a><a href="#merges">Merges</a><a href="#testers">Testers</a><a href="#admins">Admins</a><a href="#photos">Photos</a></nav>
+<nav aria-label="Admin sections"><a href="#overview">Overview</a><a href="#runs">Runs</a><a href="#people">Users</a><a href="#activity">Usage</a><a href="#costs">Costs</a><a href="#errors">Errors</a><a href="#scanner">Scanner &amp; prices</a><a href="#storage">Storage</a><a href="#merges">Merges</a><a href="#testers">Testers</a><a href="#admins">Admins</a><a href="#photos">Photos</a></nav>
 </div></header>
 <main class="wrap">
 <section data-tab id="overview">
@@ -833,6 +930,7 @@ export function adminPage(): Response {
 <section data-tab id="runs" hidden></section>
 <section data-tab class="grid" id="people" hidden></section>
 <section data-tab id="activity" hidden></section>
+<section data-tab id="costs" hidden></section>
 <section data-tab id="errors" hidden></section>
 <section data-tab class="grid" id="scanner" hidden></section>
 <section data-tab class="stack" id="storage" hidden></section>

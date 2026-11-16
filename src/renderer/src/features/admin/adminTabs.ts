@@ -4,6 +4,7 @@ export const ADMIN_PAGE_TABS = [
   { value: 'runs', label: 'Runs' },
   { value: 'people', label: 'Users' },
   { value: 'activity', label: 'Usage' },
+  { value: 'costs', label: 'Costs' },
   { value: 'errors', label: 'Errors' },
   { value: 'scanner', label: 'Scanner & prices' },
   { value: 'storage', label: 'Storage' },
@@ -26,7 +27,8 @@ export const adminKeys = {
   merges: ['admin', 'merges'] as const,
   testers: ['admin', 'testers'] as const,
   admins: ['admin', 'admins'] as const,
-  photos: ['admin', 'photos'] as const
+  photos: ['admin', 'photos'] as const,
+  costs: (days: 7 | 30) => ['admin', 'costs', days] as const
 }
 
 /** Admin reads cost portal row reads, so they're read once and kept until a Refresh. */

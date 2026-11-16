@@ -4,6 +4,7 @@ import { adminPage } from './adminPage'
 import { reportUsage } from './usage'
 import { reportError } from './errors'
 import { adminRoute } from './catalogLoad'
+import type { CostMeter } from './meter'
 import { adminMergeRoute } from './merge'
 import { adminTestersRoute } from './testers'
 import { adminAdminsRoute } from './admins'
@@ -76,6 +77,8 @@ export interface AppDeps {
   env: Env
   /** Sends sign-in code emails; absent means email sign-in is off. */
   email?: EmailSender
+  /** Counts each request's rows and time (meter.ts); absent outside a Durable Object. */
+  meter?: CostMeter
   /** Bytes the database takes on disk; absent outside a Durable Object. */
   storageBytes?: () => number
   now: () => Date

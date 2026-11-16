@@ -880,7 +880,16 @@ CREATE TABLE admin_handoffs (code_hash TEXT PRIMARY KEY,
   magicLanguagesStep(),
   rollupStep(),
   // Synced account preferences (JSON text; NULL means the defaults).
-  { name: 'server-45', sql: 'ALTER TABLE users ADD COLUMN prefs TEXT;' }
+  { name: 'server-45', sql: 'ALTER TABLE users ADD COLUMN prefs TEXT;' },
+  // What each day's requests cost, per user (0 = none signed in) and area (meter.ts, costs.ts).
+  {
+    name: 'server-46',
+    sql: `
+CREATE TABLE request_costs (day TEXT NOT NULL, user_id INTEGER NOT NULL, area TEXT NOT NULL,
+  requests INTEGER NOT NULL, rows_read INTEGER NOT NULL, rows_written INTEGER NOT NULL,
+  ms INTEGER NOT NULL, PRIMARY KEY (day, user_id, area));
+`
+  }
 ]
 
 /**

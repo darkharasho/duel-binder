@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import App from '@/App'
 import { adminTabUrl } from '@shared/ipc'
 import type { AdminStats } from '@shared/admin'
+import { projectMonthly, type AdminCosts } from '@shared/costs'
 import type { Api } from '@shared/ipc'
 import type { AccountStatus } from '@shared/types'
 import { createMockApi, renderWithProviders } from './mockApi'
@@ -41,6 +42,26 @@ const STATS: AdminStats = {
   storage: { databaseBytes: 50_000_000, rows: { cards: 10 } }
 }
 
+const PER_USER = { requests: 3000, rowsRead: 20e6, rowsWritten: 20_000, ms: 60_000 }
+const SYSTEM = { requests: 500, rowsRead: 1e9, rowsWritten: 5e6, ms: 9000 }
+const COSTS: AdminCosts = {
+  at: '2026-11-16T10:00:00.000Z',
+  since: '2026-10-18',
+  days: 3,
+  activeUsers: 5,
+  people: PER_USER,
+  system: SYSTEM,
+  perUserMonth: PER_USER,
+  systemMonth: SYSTEM,
+  byUser: [{ userId: 1, username: 'seto', ...PER_USER }],
+  byArea: [{ area: 'rpc sets:list', ...PER_USER }],
+  byDay: [{ day: '2026-11-16', ...PER_USER }],
+  projections: [5, 100, 500, 5000].map((n) =>
+    projectMonthly({ perUser: PER_USER, system: SYSTEM, storageBytes: 1.2e9 }, n)
+  ),
+  storageBytes: 1.2e9
+}
+
 function adminApi(): NonNullable<Api['admin']> {
   return {
     stats: vi.fn(async () => STATS),
@@ -58,6 +79,7 @@ function adminApi(): NonNullable<Api['admin']> {
     addAdmin: vi.fn(async () => {}),
     removeAdmin: vi.fn(async () => {}),
     photos: vi.fn(async () => ({ games: [], testers: [], holders: [] })),
+    costs: vi.fn(async () => COSTS),
     captureSave: vi.fn(async () => '/data/rip-capture/x/k00001.jpg'),
     captureRemove: vi.fn(async () => undefined),
     captureNote: vi.fn(async () => undefined),
@@ -89,6 +111,26 @@ describe('desktop admin pages', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Refresh' }))
     await waitFor(() => expect(admin.stats).toHaveBeenCalledTimes(2))
+  })
+
+  it('shows what requests cost and the projected bill, for 30 or 7 days', async () => {
+    const admin = adminApi()
+    const api = createMockApi({
+      window: { platform: 'linux' },
+      account: { status: vi.fn(async () => status(true)) }
+    })
+    api.admin = admin
+    renderWithProviders(<App />, { api })
+    const group = await screen.findByRole('group', { name: 'Admin' })
+    await userEvent.click(within(group).getByRole('button', { name: 'Admin' }))
+    await userEvent.click(await screen.findByRole('radio', { name: 'Costs' }))
+    expect(await screen.findByText('rows read per user a month')).toBeInTheDocument()
+    expect(screen.getAllByText('20.0M').length).toBeGreaterThan(0)
+    expect(screen.getByText('rpc sets:list')).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: '5 (now)' })).toBeInTheDocument()
+    expect(admin.costs).toHaveBeenLastCalledWith(30)
+    await userEvent.click(screen.getByRole('button', { name: 'Last 7 days' }))
+    await waitFor(() => expect(admin.costs).toHaveBeenLastCalledWith(7))
   })
 
   it('adds a tester for Magic', async () => {

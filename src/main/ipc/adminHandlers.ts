@@ -10,6 +10,7 @@ import {
   type AdminWorkflow,
   type RipFrameInfo
 } from '@shared/admin'
+import type { AdminCosts } from '@shared/costs'
 import { isGameId } from '@shared/games'
 import type { InvokeChannel } from '@shared/ipc'
 import type { AdminRuns } from '../adminRuns'
@@ -80,6 +81,10 @@ export function adminHandlers(
       await account.admin('/admin/admins/remove', { userId: id(userId) })
     },
     'admin:photos': () => account.admin<AdminPhotos>('/admin/training'),
+    'admin:costs': async (days: unknown) => {
+      if (days !== 7 && days !== 30) throw new Error('Bad days')
+      return account.admin<AdminCosts>(`/admin/costs?days=${days}`)
+    },
     // Rip capture writes on this computer only, but only for a signed-in admin.
     'admin:captureSave': async (session: unknown, file: unknown, jpeg: unknown, info: unknown) => {
       mustBeAdmin()

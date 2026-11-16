@@ -290,6 +290,12 @@ export function createPhoneApi(deps: {
       setWishlistVisible: portal('friends:setWishlistVisible')
     },
     prefs: { get: portal('prefs:get'), set: portal('prefs:set') },
+    supporter: {
+      status: portal('supporter:status'),
+      checkout: portal('supporter:checkout'),
+      manage: portal('supporter:manage'),
+      setShowOnSite: portal('supporter:setShowOnSite')
+    },
     wishlist: dataPart('wishlist'),
     sessions: dataPart('sessions'),
     favourites: dataPart('favourites'),

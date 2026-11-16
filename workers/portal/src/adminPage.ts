@@ -977,7 +977,44 @@ async function loadCosts() {
   }
 }
 
-const TABS = ['overview', 'runs', 'people', 'activity', 'costs', 'errors', 'scanner', 'storage', 'merges', 'testers', 'beta', 'admins', 'photos']
+/** Supporter subscriptions: how many, monthly income, and who. */
+function renderSupporters(s) {
+  const cents = (v) => '$' + (v / 100).toFixed(2)
+  // Stripe keeps 2.9% + 30¢ of each charge; a yearly charge's fee is spread over 12 months.
+  const net = s.list
+    .filter((x) => ['active', 'trialing', 'past_due'].includes(x.status) && x.plan && x.amountCents)
+    .reduce((sum, x) => sum + (x.amountCents * 0.971 - 30) / (x.plan === 'year' ? 12 : 1), 0)
+  const tiles = el('div', null, 'tiles')
+  tiles.append(
+    tile(n(s.active), 'supporters'),
+    tile(n(s.monthly), 'monthly'),
+    tile(n(s.yearly), 'yearly'),
+    tile(cents(s.monthlyCents), 'a month, before Stripe fees'),
+    tile(cents(Math.round(net)), 'a month, after Stripe fees (about)')
+  )
+  const panel = el('section', null, 'panel')
+  panel.append(el('h2', 'Supporters'))
+  panel.append(s.list.length
+    ? costTable(['User', 'Plan', 'Status', 'Since', 'Paid until', 'Thanks list'],
+        s.list.map((x) => [x.displayName ? x.displayName + ' (' + x.username + ')' : x.username,
+          x.plan || '–', x.status + (x.cancelling ? ' (cancelling)' : ''), x.since ? x.since.slice(0, 10) : '–',
+          x.until ? x.until.slice(0, 10) : '–', x.showOnSite ? 'yes' : 'no']))
+    : el('p', 'No supporters yet.', 'note'))
+  panel.append(el('p', 'Early access: add a supporter to the Testers tab for the game in preview.', 'note'))
+  $('supporters').replaceChildren(tiles, panel)
+}
+
+async function loadSupporters() {
+  try {
+    const res = await fetch('/admin/supporters', { credentials: 'same-origin' })
+    if (!res.ok) throw new Error('The portal answered ' + res.status)
+    renderSupporters(await res.json())
+  } catch (e) {
+    $('supporters').replaceChildren(el('p', 'Could not load supporters: ' + (e.message || e), 'note'))
+  }
+}
+
+const TABS = ['overview', 'runs', 'people', 'activity', 'costs', 'supporters', 'errors', 'scanner', 'storage', 'merges', 'testers', 'beta', 'admins', 'photos']
 
 function showTab() {
   const wanted = location.hash.slice(1)
@@ -991,7 +1028,7 @@ function showTab() {
 
 window.addEventListener('hashchange', showTab)
 showTab()
-$('refresh').addEventListener('click', () => { load(); loadErrors(); loadRuns(); loadMerges(); loadTesters(); loadBeta(); loadAdmins(); loadPhotos(); loadCosts() })
+$('refresh').addEventListener('click', () => { load(); loadErrors(); loadRuns(); loadMerges(); loadTesters(); loadBeta(); loadAdmins(); loadPhotos(); loadCosts(); loadSupporters() })
 load()
 loadErrors()
 loadRuns()
@@ -1000,6 +1037,7 @@ loadTesters()
 loadAdmins()
 loadPhotos()
 loadCosts()
+loadSupporters()
 loadBeta()
 `
 
@@ -1032,7 +1070,7 @@ export function adminPage(): Response {
 <header><div class="wrap">
 <div class="top"><h1>Duel Binder</h1><span class="badge">Admin</span><span class="pulse" id="pulse"></span>
 <span class="grow"></span><span class="at" id="at"></span><a href="/">Back to the app</a><button id="refresh" type="button">Refresh</button></div>
-<nav aria-label="Admin sections"><a href="#overview">Overview</a><a href="#runs">Runs</a><a href="#people">Users</a><a href="#activity">Usage</a><a href="#costs">Costs</a><a href="#errors">Errors</a><a href="#scanner">Scanner &amp; prices</a><a href="#storage">Storage</a><a href="#merges">Merges</a><a href="#testers">Testers</a><a href="#beta">Beta</a><a href="#admins">Admins</a><a href="#photos">Photos</a></nav>
+<nav aria-label="Admin sections"><a href="#overview">Overview</a><a href="#runs">Runs</a><a href="#people">Users</a><a href="#activity">Usage</a><a href="#costs">Costs</a><a href="#supporters">Supporters</a><a href="#errors">Errors</a><a href="#scanner">Scanner &amp; prices</a><a href="#storage">Storage</a><a href="#merges">Merges</a><a href="#testers">Testers</a><a href="#beta">Beta</a><a href="#admins">Admins</a><a href="#photos">Photos</a></nav>
 </div></header>
 <main class="wrap">
 <section data-tab id="overview">
@@ -1043,6 +1081,7 @@ export function adminPage(): Response {
 <section data-tab class="grid" id="people" hidden></section>
 <section data-tab id="activity" hidden></section>
 <section data-tab id="costs" hidden></section>
+<section data-tab id="supporters" hidden></section>
 <section data-tab id="errors" hidden></section>
 <section data-tab class="grid" id="scanner" hidden></section>
 <section data-tab class="stack" id="storage" hidden></section>

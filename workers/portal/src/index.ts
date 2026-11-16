@@ -147,7 +147,19 @@ export default {
         now: () => new Date(),
         token: env.GITHUB_TOKEN
       })
-      return handleSite(req, { appUrl: env.PUBLIC_URL, assets: env.ASSETS, downloads })
+      return handleSite(req, {
+        appUrl: env.PUBLIC_URL,
+        assets: env.ASSETS,
+        downloads,
+        supporterNames: async () => {
+          const res = await env.STORE.get(env.STORE.idFromName('main')).fetch(
+            new Request(`${env.PUBLIC_URL}/api/supporters/names`)
+          )
+          if (!res.ok) return []
+          const body = (await res.json()) as { names?: unknown }
+          return Array.isArray(body.names) ? body.names.filter((n) => typeof n === 'string') : []
+        }
+      })
     }
     if (route.kind === 'redirect') return Response.redirect(route.location, 301)
     const path = new URL(req.url).pathname

@@ -38,6 +38,9 @@ import type { EmailSender } from './emailSend'
 import { emailAuthRoute, emailStatusRoute } from './emailAuth'
 import { emailClaimPage, emailFormRoute, emailMatchPage, emailStartPage } from './emailPages'
 import { appPreflight, withAppCors } from './appCors'
+import { stripeWebhookRoute } from './stripe'
+import { supporterThanksPage } from './supporterThanks'
+import { adminSupportersRoute, supporterNamesRoute } from './supporters'
 import { adminTrainingRoute, trainingRoute, type TrainingBucket } from './training'
 
 /** Vars and secrets the request handlers read. */
@@ -63,6 +66,15 @@ export interface Env extends AppleSignInEnv, TestFlightEnv {
   BETA_ANDROID_GROUP_URL?: string
   /** 'on' turns email + password sign-in on (it also needs `AppDeps.email`). */
   EMAIL_SIGN_IN?: string
+  /** Stripe restricted key (secret); unset means supporter checkout can't start. */
+  STRIPE_SECRET_KEY?: string
+  /** Stripe webhook signing secret (secret); unset means /stripe/webhook answers 404. */
+  STRIPE_WEBHOOK_SECRET?: string
+  /** The supporter Prices' ids ($3 a month, $25 a year). */
+  STRIPE_PRICE_MONTH?: string
+  STRIPE_PRICE_YEAR?: string
+  /** 'on' opens supporter checkout; anything else hides it (existing supporters keep their badge). */
+  SUPPORTER_ENABLED?: string
 }
 
 export interface AppDeps {
@@ -136,6 +148,11 @@ async function route(req: Request, deps: AppDeps): Promise<Response> {
   if (url.pathname === '/api/admin/handoff') return adminHandoffRoute(req, deps)
   if (url.pathname === '/api/usage') return reportUsage(req, deps)
   if (url.pathname === '/api/errors') return reportError(req, deps)
+  if (url.pathname === '/stripe/webhook') return stripeWebhookRoute(req, deps)
+  if (req.method === 'GET' && url.pathname === '/supporter/thanks')
+    return supporterThanksPage(req, deps.env.SITE_URL, deps.env.PUBLIC_URL)
+  if (req.method === 'GET' && url.pathname === '/api/supporters/names')
+    return supporterNamesRoute(deps)
   if (url.pathname.startsWith('/api/training/'))
     return trainingRoute(req, deps, url.pathname.slice('/api/training/'.length))
   if (url.pathname.startsWith('/api/rpc/')) {
@@ -171,6 +188,7 @@ async function route(req: Request, deps: AppDeps): Promise<Response> {
     return adminBetaRoute(req, deps)
   if (url.pathname === '/admin/training' || url.pathname.startsWith('/admin/training/'))
     return adminTrainingRoute(req, deps)
+  if (url.pathname === '/admin/supporters') return adminSupportersRoute(req, deps)
   if (url.pathname.startsWith('/admin/')) return adminRoute(req, deps)
   return json({ error: 'Not found' }, 404)
 }

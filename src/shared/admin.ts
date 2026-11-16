@@ -1,3 +1,4 @@
+import type { SupporterPlan } from './supporter'
 /**
  * What the portal's /admin/* JSON answers, as the desktop's in-app admin pages read them
  * (workers/portal/src: stats.ts, errors.ts, merge.ts, testers.ts, admins.ts, training.ts).
@@ -139,4 +140,28 @@ export interface RipFrameInfo {
   sharp: number
   width: number
   height: number
+}
+
+/** GET /admin/supporters: the supporter subscriptions (the Supporters tab). */
+export interface AdminSupporters {
+  /** Supporting now (active, trialing or retrying a payment). */
+  active: number
+  monthly: number
+  yearly: number
+  /** Gross monthly-equivalent income in cents: monthly amounts plus yearly amounts / 12. */
+  monthlyCents: number
+  /** Every account with a Stripe customer, newest supporter first. */
+  list: {
+    userId: number
+    username: string
+    displayName: string | null
+    plan: SupporterPlan | null
+    /** What each charge is, in cents; null before the first subscription. */
+    amountCents: number | null
+    status: string
+    since: string | null
+    until: string | null
+    cancelling: boolean
+    showOnSite: boolean
+  }[]
 }

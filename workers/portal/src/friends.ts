@@ -9,6 +9,7 @@ import type {
 } from '../../../src/shared/types'
 import type { GameId } from '../../../src/shared/games'
 import { avatarUrl } from './auth'
+import { supporterIds } from './supporters'
 
 /** A friend-request problem the caller can fix; rpc.ts answers it as a 400. */
 export class FriendError extends CollectionError {}
@@ -56,6 +57,11 @@ export function friendsOverview(db: SqlDb, me: number, game: GameId): FriendsOve
       )
       .all(me, game, me, me, me) as (UserRow & { cards: number; updated: string | null })[]
   ).map((r): Friend => ({ ...toUser(r), cardCount: r.cards, updatedAt: r.updated }))
+  const supporting = supporterIds(
+    db,
+    friends.map((f) => f.id)
+  )
+  for (const f of friends) if (supporting.has(f.id)) f.supporter = true
   const incoming = (
     db
       .prepare(

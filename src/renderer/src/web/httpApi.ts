@@ -220,6 +220,12 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       setWishlistVisible: call('friends:setWishlistVisible')
     },
     prefs: { get: call('prefs:get'), set: call('prefs:set') },
+    supporter: {
+      status: call('supporter:status'),
+      checkout: call('supporter:checkout'),
+      manage: call('supporter:manage'),
+      setShowOnSite: call('supporter:setShowOnSite')
+    },
     wishlist: {
       list: call('wishlist:list'),
       forCard: call('wishlist:forCard'),

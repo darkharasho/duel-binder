@@ -63,9 +63,15 @@ export function renderPrivacy(view: PrivacyView): string {
           )
         ],
         [
+          'Supporter subscriptions',
+          p(
+            'If you become a supporter, Stripe takes the payment and keeps your card details; Duel Binder never sees them. The portal stores your Stripe customer and subscription ids, your plan, its status and dates, and whether you chose to show your name on the thanks page. Deleting your account cancels the subscription and deletes these.'
+          )
+        ],
+        [
           'Who else handles it',
           p(
-            'The portal runs on Cloudflare, which stores its data, sends its emails and keeps request logs, which can include IP addresses, for a few days for troubleshooting. Discord and Apple handle signing in with them. For the phone betas, Apple (TestFlight) and Google (Google Groups and Google Play) get what the beta request section says. Nothing is shared with anyone else.'
+            'The portal runs on Cloudflare, which stores its data, sends its emails and keeps request logs, which can include IP addresses, for a few days for troubleshooting. Discord and Apple handle signing in with them. Stripe handles supporter payments. For the phone betas, Apple (TestFlight) and Google (Google Groups and Google Play) get what the beta request section says. Nothing is shared with anyone else.'
           )
         ],
         [

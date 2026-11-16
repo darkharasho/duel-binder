@@ -33,6 +33,12 @@ export function renderTerms(view: LegalView): string {
           )
         ],
         [
+          'Supporter subscriptions',
+          p(
+            'You can choose to support Duel Binder for $3 a month or $25 a year. A subscription renews until you cancel it, which you can do any time in Settings → Support Duel Binder → Manage; it then runs to the end of the period you paid for. Supporting gives a supporter badge, an optional place on the thanks page and early access to preview features. No feature is withheld from anyone who doesn’t support. Payments are handled by Stripe. Refunds are at our discretion; email support@duelbinder.com.'
+          )
+        ],
+        [
           'Your account',
           p(
             'You sign in with Discord or Apple, and their terms also apply to that account. You’re responsible for what happens while you’re signed in. You can delete your Duel Binder account at any time in Settings → Delete account.'

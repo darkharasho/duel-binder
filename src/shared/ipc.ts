@@ -1,4 +1,5 @@
 import type {
+  AdminSupporters,
   AdminErrorGroup,
   AdminList,
   AdminMerge,
@@ -76,6 +77,7 @@ import type { CardLanguage } from './scan/language'
 import type { OcrKind, TextModel } from './scan/ocr'
 import type { GameId } from './games'
 import type { Prefs } from './prefs'
+import type { SupporterPlan, SupporterStatus } from './supporter'
 import type { BinderDraft, BinderEditAction, BinderTarget, RuleField } from './binders'
 
 /** The API exposed to the renderer as `window.api`. */
@@ -152,6 +154,15 @@ export interface Api {
   prefs: {
     get(): Promise<Prefs>
     set(patch: Partial<Prefs>): Promise<Prefs>
+  }
+  /** The optional supporter subscription (portal supporters.ts). Needs a signed-in account. */
+  supporter: {
+    status(): Promise<SupporterStatus>
+    /** A Stripe Checkout page for the plan; rejects while checkout is closed or already supporting. */
+    checkout(plan: SupporterPlan): Promise<{ url: string }>
+    /** The Stripe Customer Portal (cancel, card, plan); rejects without a Stripe customer. */
+    manage(): Promise<{ url: string }>
+    setShowOnSite(on: boolean): Promise<SupporterStatus>
   }
   /** The cards this account wants, in the game shown. Local first, like the collection. */
   wishlist: {
@@ -348,6 +359,7 @@ export interface Api {
     merges(): Promise<AdminMerge[]>
     /** Undoes a merge; the sign-ins it couldn't give back. */
     undoMerge(closedId: number): Promise<AdminSkippedSignIn[]>
+    supporters(): Promise<AdminSupporters>
     testers(): Promise<AdminTester[]>
     addTester(game: GameId, by: AdminTesterBy, name: string): Promise<void>
     removeTester(id: number): Promise<void>
@@ -510,6 +522,10 @@ export const INVOKE_CHANNELS = [
   'friends:setWishlistVisible',
   'prefs:get',
   'prefs:set',
+  'supporter:status',
+  'supporter:checkout',
+  'supporter:manage',
+  'supporter:setShowOnSite',
   'wishlist:list',
   'wishlist:forCard',
   'wishlist:set',
@@ -627,6 +643,7 @@ export const INVOKE_CHANNELS = [
   'admin:removeAdmin',
   'admin:photos',
   'admin:costs',
+  'admin:supporters',
   'admin:beta',
   'admin:decideBeta',
   'admin:deleteBeta',

@@ -65,6 +65,8 @@ export function flushUsage(): void {
     'page:pokedex': pokedex,
     'buy:tcgplayer': buyTcgplayer,
     'buy:ebay': buyEbay,
+    'supporter:checkout': supporterCheckout,
+    'supporter:manage': supporterManage,
     ...rest
   } = events
   const buy = {
@@ -77,7 +79,11 @@ export function flushUsage(): void {
     binders ? { 'page:binders': binders } : {},
     sessions ? { 'page:sessions': sessions } : {},
     pokedex ? { 'page:pokedex': pokedex } : {},
-    buy
+    buy,
+    {
+      ...(supporterCheckout ? { 'supporter:checkout': supporterCheckout } : {}),
+      ...(supporterManage ? { 'supporter:manage': supporterManage } : {})
+    }
   ]) {
     if (Object.keys(batch).length === 0) continue
     try {

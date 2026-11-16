@@ -1,3 +1,4 @@
+import { mergeSupporter } from './supporters'
 import type { SqlDb } from '../../../src/main/db/sql'
 import { CollectionError } from '../../../src/main/repo/collection'
 import { recordSnapshot } from '../../../src/main/repo/stats'
@@ -339,6 +340,7 @@ function applyMerge(db: SqlDb, a: MergeArgs): void {
   mergeSessions(db, a, nowIso)
   mergeFriends(db, a, nowIso)
   const { moved, appleToken } = moveSignIns(db, a, nowIso)
+  mergeSupporter(db, a.survivor, a.closed)
 
   const { username: closedUsername } = db
     .prepare('SELECT username FROM users WHERE id = ?')

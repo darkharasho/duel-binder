@@ -300,7 +300,7 @@ ${d.android ? downloadRow('Android', d.android, ` · ${ANDROID_NOTE}`) : ''}
 }
 
 export function footer(): string {
-  return `<footer><div class="legal"><p>Duel Binder is not affiliated with Konami, The Pokémon Company, Wizards of the Coast or Bandai. Card data and images from YGOPRODeck, Yugipedia, TCGdex, Scryfall and Bandai; prices from TCGplayer and eBay.</p><p>${MAGIC_FAN_CONTENT}</p></div><span class="links"><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="${REPO_URL}">GitHub</a></span></footer>`
+  return `<footer><div class="legal"><p>Duel Binder is not affiliated with Konami, The Pokémon Company, Wizards of the Coast or Bandai. Card data and images from YGOPRODeck, Yugipedia, TCGdex, Scryfall and Bandai; prices from TCGplayer and eBay.</p><p>${MAGIC_FAN_CONTENT}</p></div><span class="links"><a href="/support">Support</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="${REPO_URL}">GitHub</a></span></footer>`
 }
 
 /** Every wash by card name, for /home.js to cross-fade to as sections come into view. */

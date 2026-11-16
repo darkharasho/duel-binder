@@ -129,6 +129,12 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
       get: vi.fn(async () => DEFAULT_PREFS),
       set: vi.fn(async (p) => ({ ...DEFAULT_PREFS, ...p }))
     },
+    supporter: {
+      status: vi.fn(async () => ({ enabled: false, hasCustomer: false, supporter: null })),
+      checkout: vi.fn(async () => ({ url: 'https://checkout.stripe.test/cs_1' })),
+      manage: vi.fn(async () => ({ url: 'https://billing.stripe.test/bps_1' })),
+      setShowOnSite: vi.fn(async () => ({ enabled: true, hasCustomer: true, supporter: null }))
+    },
     wishlist: {
       list: vi.fn(async () => []),
       forCard: vi.fn(async () => []),

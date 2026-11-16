@@ -179,6 +179,23 @@ describe('friends page', () => {
     expect(await screen.findByText('No Duel Binder user called "bob"')).toBeInTheDocument()
   })
 
+  it('puts a heart beside supporting friends only', async () => {
+    const api = make({
+      friends: [
+        { ...bob, supporter: true },
+        { ...bob, id: 5, username: 'joey', displayName: 'Joey' }
+      ],
+      incoming: [],
+      blocked: []
+    })
+    renderWithProviders(<FriendsPage />, { api })
+    await screen.findByText('Joey')
+    expect(screen.getAllByLabelText('Supporter')).toHaveLength(1)
+    expect(screen.getByText('Bob').parentElement).toContainElement(
+      screen.getByLabelText('Supporter')
+    )
+  })
+
   it('accepts and ignores incoming requests, then refetches', async () => {
     const user = userEvent.setup()
     const api = make({

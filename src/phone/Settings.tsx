@@ -12,6 +12,10 @@ import {
 import { HitPriceInput } from '@/features/scan/HitPriceInput'
 import { useScanHub } from '@/features/scan/ScanHub'
 import { DeleteAccount } from '@/features/settings/AccountSection'
+import { SupporterSection } from '@/features/settings/SupporterSection'
+import { openAdminSheet } from './nativeSignIn'
+import { useOwnSupporter } from '@/lib/supporter'
+import { SupporterHeart } from '@/components/SupporterHeart'
 import { PHONE_BETA_URL } from '@/features/settings/PhoneBeta'
 import { SignInMethods } from '@/features/settings/SignInMethods'
 import { EbayPricesToggle } from '@/features/settings/EbayPricesToggle'
@@ -90,6 +94,7 @@ export function Settings({
   const { settings, setSettings } = useScanHub()
   const qc = useQueryClient()
   const name = displayName(user)
+  const supporter = useOwnSupporter(true)
   const [warnWaiting, setWarnWaiting] = useState<number | null>(null)
   const [signingOut, setSigningOut] = useState(false)
   const methods = useQuery({
@@ -212,7 +217,10 @@ export function Settings({
         <Group>
           <Row>
             {user.avatarUrl && <img src={user.avatarUrl} alt="" className="size-8 rounded-full" />}
-            <span>Signed in as {name}</span>
+            <span className="flex items-center gap-1">
+              Signed in as {name}
+              {supporter && <SupporterHeart />}
+            </span>
             <span className="text-muted-foreground">@{user.username}</span>
           </Row>
           <button
@@ -248,6 +256,19 @@ export function Settings({
           </p>
         )}
       </section>
+
+      <SupporterSection
+        signedIn
+        openUrl={isNativeApp() ? (url) => void openAdminSheet(url).catch(() => {}) : undefined}
+        frame={(body) => (
+          <section aria-label="Support Duel Binder" className="space-y-2 px-4">
+            <h2 className="text-[13px] font-medium uppercase tracking-wide text-muted-foreground">
+              Support Duel Binder
+            </h2>
+            {body}
+          </section>
+        )}
+      />
 
       <section aria-label="Card data" className="space-y-2">
         <Group>

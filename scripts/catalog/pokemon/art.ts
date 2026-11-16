@@ -1,12 +1,20 @@
 import { HAND_ART_PREFIX } from '../../../src/shared/imageSources'
 import { isSameNumber, OWN_NUMBERS, plainName, sameCardName } from './match'
+import { handId } from './pokipair'
 import type { PkmLang, TcProduct, TdCard, TdSet } from './types'
 
 /** Sets the owner supplied art for, in R2 (HAND_ART_PREFIX), and how many cards each has. */
 const HAND_ART_SETS: Record<string, number> = { 'en/me06': 141 }
 
+/**
+ * Single cards whose art we copied into R2 by hand (`hand/<handId>/high|low.jpg`): SM Black Star
+ * Promos TCGdex has no picture of, from pokemon.com's card database (2026-11-16).
+ */
+const HAND_ART_CARDS = new Set(['en/smp-SM231', 'en/smp-SM238', 'en/smp-SM243'])
+
 /** The owner-supplied art of a card ("en/me06-011"), kept over any other source; null if it has none. */
 export function handArtUrl(sourceId: string): string | null {
+  if (HAND_ART_CARDS.has(sourceId)) return `${HAND_ART_PREFIX}${handId(sourceId)}`
   const [, set, number] = /^(.+)-(\d{3})$/.exec(sourceId) ?? []
   if (set === undefined || !(Number(number) <= (HAND_ART_SETS[set] ?? 0))) return null
   return `${HAND_ART_PREFIX}${sourceId.replace('/', '-')}`

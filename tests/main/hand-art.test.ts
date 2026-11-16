@@ -10,4 +10,10 @@ describe('owner-supplied card art', () => {
     expect(handArtUrl('en/me05-001')).toBeNull()
     expect(handArtUrl('ja/me06-001')).toBeNull()
   })
+
+  it('names official promo art we copied, by its lowercase id', () => {
+    expect(handArtUrl('en/smp-SM231')).toBe(`${HAND_ART_PREFIX}en-smp-sm231`)
+    expect(handArtUrl('en/smp-SM243')).toBe(`${HAND_ART_PREFIX}en-smp-sm243`)
+    expect(handArtUrl('en/smp-SM230')).toBeNull()
+  })
 })

@@ -273,7 +273,7 @@ function devices(v: PageView): string {
   )
     .map((c) => phoneRow(appUrl, c))
     .join('')}</div></div><span class="tick">Added</span></div>
-<h3>Phone</h3><p>Scan with your phone's camera and carry your collection with you. ${android} On iPhone, open <a href="${esc(scan)}">${esc(scan.replace(/^https?:\/\//, ''))}</a> in Safari and add it to your home screen.</p></div>
+<h3>Phone</h3><p>Scan with your phone's camera and carry your collection with you. ${android} On iPhone, open <a href="${esc(scan)}">${esc(scan.replace(/^https?:\/\//, ''))}</a> in Safari and add it to your home screen. Want the store app? <a href="/beta">Join the beta</a>.</p></div>
 <div class="dev browser" style="--i:3"><div class="scr" aria-hidden="true"><div class="url"><span class="mono">${esc(appUrl.replace(/^https?:\/\//, ''))}/u/sam/binders/main</span></div><div class="wbody"><div class="ah"><b>Sam's main binder</b><span>page 3 of 12</span></div><div class="spread">${WEB_BINDER.map(webPage).join('')}</div></div><span class="tick">Synced</span></div>
 <h3>Web</h3><p>Your collection, binders and friends in any browser at <a href="${esc(appUrl)}">${esc(appUrl.replace(/^https?:\/\//, ''))}</a>.</p></div>
 </div>

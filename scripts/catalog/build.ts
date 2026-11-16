@@ -47,6 +47,7 @@ import { logOnePieceJapanese, runOnePieceJapaneseStep, type JapaneseReport } fro
 import { logMagic, logMagicSymbols, runMagicStep, type MagicStepResult } from './magic'
 import { runPokemonStep, type PokemonReport } from './pokemon'
 import { readZhArtRecord, ZH_ART_RECORD_FILE } from './pokemon/pokipairMirror'
+import { writeZhPackArt } from './pokemon/zhPacks'
 import { refreshPokemonSetArt, shouldRefreshSetArt, warmSetArt } from './pokemon/setArt'
 import { buildFingerprints, uploadFingerprintRefs, uploadFingerprints } from './fingerprints'
 import { uploadCatalog, type UploadPace } from './upload'
@@ -418,6 +419,8 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
           if (out.error === null && shouldRefreshSetArt(w, new Date())) {
             await refreshPokemonSetArt(w, { version, log })
           }
+          // Nightly, after the weekly refresh (which replaces every pack row).
+          if (out.error === null) writeZhPackArt(w, copied.packs ?? {})
           return out
         })
       const out = await step(work)

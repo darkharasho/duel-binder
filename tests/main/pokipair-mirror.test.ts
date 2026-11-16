@@ -4,6 +4,7 @@ import { PNG } from 'pngjs'
 import { describe, expect, it, vi } from 'vitest'
 import { mirrorZhArt, type MirrorRecord } from '../../scripts/catalog/pokemon/pokipairMirror'
 import { POKIPAIR_HUB, type ZhCatalogCard } from '../../scripts/catalog/pokemon/pokipair'
+import { OFFICIAL_PRODUCTS } from '../../scripts/catalog/pokemon/zhPacks'
 
 const fixture = (name: string): string =>
   readFileSync(join(__dirname, '../fixtures/pokipair', name), 'utf8')
@@ -32,13 +33,25 @@ const gemCards: ZhCatalogCard[] = ['0101', '0102', '0103'].map((n) => ({
   name: "Team Rocket's Raticate"
 }))
 
-function setup(over: { image?: (url: string) => Response; page?: (url: string) => Response } = {}) {
+function setup(
+  over: {
+    image?: (url: string) => Response
+    page?: (url: string) => Response
+    official?: () => Response
+  } = {}
+) {
   const urls: string[] = []
   const fetchFn = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
     urls.push(url)
     expect(new Headers(init?.headers).get('user-agent')).toMatch(/^DuelBinder\/catalog/)
     if (url === POKIPAIR_HUB) return new Response(fixture('hub.html'))
+    if (url === OFFICIAL_PRODUCTS)
+      return over.official?.() ?? new Response(fixture('cn-products.html'))
+    if (url.startsWith('https://image.pokemon.com.cn/'))
+      return new Response(png() as unknown as BodyInit, {
+        headers: { 'content-type': 'image/png' }
+      })
     if (url.includes('bright-fantasy-csv8'))
       return over.page?.(url) ?? new Response(fixture('csv8.html'))
     if (url.includes('gem-pack-vol-7')) return new Response(fixture('gem7.html'))
@@ -52,12 +65,12 @@ function setup(over: { image?: (url: string) => Response; page?: (url: string) =
   })
   const uploads: { id: string; size: string; type: string | null }[] = []
   const portalFetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-    const m = /\/api\/admin\/hand-art\/([^/]+)\/(high|low)$/.exec(String(input))!
+    const m = /\/api\/admin\/hand-art\/([^/]+)\/(high|low|pack)$/.exec(String(input))!
     uploads.push({ id: m[1], size: m[2], type: new Headers(init?.headers).get('content-type') })
     return new Response('{"ok":true}')
   })
   const sleep = vi.fn(async () => undefined)
-  const record: MirrorRecord = { done: {} }
+  const record: MirrorRecord = { done: {}, packs: {} }
   const cards = new Map([
     ['CSV8C', csv8Cards],
     ['CBB7C', gemCards],
@@ -71,6 +84,11 @@ function setup(over: { image?: (url: string) => Response; page?: (url: string) =
       portal: o.dry
         ? undefined
         : { url: 'https://portal.test', token: 't', fetch: portalFetch as unknown as typeof fetch },
+      zhNames: new Map([
+        ['CSV8C', '璀璨诡幻'],
+        ['CBB7C', '宝石包 VOL.7'],
+        ['CS4aC', '九彩汇聚']
+      ]),
       budget: o.budget ?? 100,
       gapMs: 1000,
       sleep,
@@ -84,6 +102,7 @@ describe('mirrorZhArt', () => {
     const t = setup()
     const r = await t.run()
     expect(r.uploaded).toBe(6) // 3 CSV8C + 3 CBB7C
+    expect(r.packs).toBe(3)
     expect(
       t.uploads
         .filter((u) => u.size === 'high')
@@ -97,9 +116,36 @@ describe('mirrorZhArt', () => {
       'zh-hans-csv8c-006',
       'zh-hans-csv8c-007'
     ])
-    expect(t.uploads.every((u) => u.type === 'image/jpeg')).toBe(true)
+    expect(t.uploads.filter((u) => u.size !== 'pack').every((u) => u.type === 'image/jpeg')).toBe(
+      true
+    )
     expect(Object.keys(t.record.done)).toHaveLength(6)
     expect(t.record.done['zh-hans/CSV8C-006']).toMatch(/-016\.png$/)
+  })
+
+  it("copies each set's pack: the official picture where pokemon.cn has one, else PokiPair's", async () => {
+    const t = setup()
+    await t.run()
+    const packs = t.uploads.filter((u) => u.size === 'pack')
+    expect(packs.map((u) => u.id).sort()).toEqual([
+      'zh-hans-pack-cbb7c',
+      'zh-hans-pack-cs4ac',
+      'zh-hans-pack-csv8c'
+    ])
+    expect(packs.every((u) => u.type === 'image/png')).toBe(true)
+    expect(t.record.packs!['CSV8C']).toMatch(/^https:\/\/image\.pokemon\.com\.cn\//)
+    expect(t.record.packs!['CS4aC']).toMatch(/^https:\/\/media\.pokipair\.com\/.*Nine-Colors/)
+    // Kept: not copied again, though the official link's auth key changes every night.
+    t.uploads.length = 0
+    await t.run()
+    expect(t.uploads.filter((u) => u.size === 'pack')).toEqual([])
+  })
+
+  it('keeps going with PokiPair packs when pokemon.cn is down', async () => {
+    const t = setup({ official: () => new Response('down', { status: 500 }) })
+    const r = await t.run()
+    expect(r.packs).toBe(3)
+    expect(t.record.packs!['CSV8C']).toMatch(/^https:\/\/media\.pokipair\.com\//)
   })
 
   it('waits between every request to PokiPair', async () => {
@@ -116,6 +162,7 @@ describe('mirrorZhArt', () => {
     t.uploads.length = 0
     const r = await t.run()
     expect(r.uploaded).toBe(0)
+    expect(r.packs).toBe(0)
     expect(t.urls.some((u) => u.includes('bright-fantasy') || u.includes('gem-pack'))).toBe(false)
   })
 
@@ -160,5 +207,6 @@ describe('mirrorZhArt', () => {
     expect(r.uploaded).toBe(0)
     expect(t.urls.some((u) => u.startsWith('https://media.pokipair.com/'))).toBe(false)
     expect(t.record.done).toEqual({})
+    expect(t.record.packs).toEqual({})
   })
 })

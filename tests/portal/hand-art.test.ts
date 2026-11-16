@@ -65,6 +65,17 @@ describe('hand art upload (admin)', () => {
     expect((await handArtRoute(put('ZH/high', JPEG), memoryBucket(), TOKEN))!.status).toBe(400)
   })
 
+  it('stores a pack as a PNG, kept see-through', async () => {
+    const bucket = memoryBucket()
+    const res = await handArtRoute(put('zh-hans-pack-csv8c/pack', PNG, 'image/png'), bucket, TOKEN)
+    expect(res!.status).toBe(200)
+    expect(bucket.store.get('hand/zh-hans-pack-csv8c/pack.png')?.contentType).toBe('image/png')
+    expect(
+      (await handArtRoute(put('zh-hans-pack-csv8c/pack', JPEG, 'image/jpeg'), bucket, TOKEN))!
+        .status
+    ).toBe(415)
+  })
+
   it('415 for anything but a JPEG', async () => {
     const bucket = memoryBucket()
     expect((await handArtRoute(put('a-b/high', PNG, 'image/png'), bucket, TOKEN))!.status).toBe(415)

@@ -11,6 +11,13 @@ import { decodeImage } from '../references'
 import { shrink, smallJpeg } from '../thumbs'
 import { HttpError, withRetry } from '../upload'
 import {
+  OFFICIAL_PRODUCTS,
+  officialSetOf,
+  packCopy,
+  packHandId,
+  parseOfficialProducts
+} from './zhPacks'
+import {
   handId,
   matchCards,
   parseHub,
@@ -32,6 +39,8 @@ const HIGH_QUALITY = 85
 /** What the job has copied: the PokiPair picture each source id's hand art was made from. */
 export interface MirrorRecord {
   done: Record<string, string>
+  /** Each set's pack copy: the picture it was made from (an official one without its auth key). */
+  packs?: Record<string, string>
 }
 
 export interface MirrorPortal {
@@ -47,7 +56,10 @@ export interface MirrorOptions {
   fetch: typeof fetch
   /** Absent on a dry run: nothing is downloaded, uploaded or recorded. */
   portal?: MirrorPortal
+  /** Card images per run; packs are few and copied once, outside it. */
   budget: number
+  /** zh-hans set names in Chinese by set id, for pokemon.cn's products; no official packs without. */
+  zhNames?: ReadonlyMap<string, string>
   gapMs: number
   sleep: (ms: number) => Promise<void>
   log: (line: string) => void
@@ -58,6 +70,8 @@ export interface MirrorResult {
   matched: number
   uploaded: number
   failed: number
+  /** Pack pictures copied. */
+  packs: number
   /** Why the run stopped early (a rate limit), or null. */
   stopped: string | null
 }
@@ -69,7 +83,7 @@ export const ZH_ART_RECORD_FILE = 'pokipair.json'
 export function readZhArtRecord(path: string): MirrorRecord {
   if (!existsSync(path)) return { done: {} }
   const r = JSON.parse(readFileSync(path, 'utf8')) as Partial<MirrorRecord>
-  return { done: r.done ?? {} }
+  return { done: r.done ?? {}, packs: r.packs ?? {} }
 }
 
 /** A refusal that means "stop asking for now". */
@@ -91,14 +105,17 @@ export function handCopies(bytes: Uint8Array): { high: Uint8Array; low: Uint8Arr
 async function upload(
   p: MirrorPortal,
   id: string,
-  size: 'high' | 'low',
+  size: 'high' | 'low' | 'pack',
   bytes: Uint8Array
 ): Promise<void> {
   const path = `/api/admin/hand-art/${id}/${size}`
   await withRetry(path, async () => {
     const res = await (p.fetch ?? fetch)(`${p.url.replace(/\/+$/, '')}${path}`, {
       method: 'PUT',
-      headers: { authorization: `Bearer ${p.token}`, 'content-type': 'image/jpeg' },
+      headers: {
+        authorization: `Bearer ${p.token}`,
+        'content-type': size === 'pack' ? 'image/png' : 'image/jpeg'
+      },
       body: bytes as Uint8Array<ArrayBuffer>,
       signal: AbortSignal.timeout(60_000)
     })
@@ -112,7 +129,8 @@ async function upload(
 
 /** Copies tonight's share of PokiPair's art; see the file comment. */
 export async function mirrorZhArt(o: MirrorOptions): Promise<MirrorResult> {
-  const result: MirrorResult = { matched: 0, uploaded: 0, failed: 0, stopped: null }
+  const result: MirrorResult = { matched: 0, uploaded: 0, failed: 0, packs: 0, stopped: null }
+  o.record.packs ??= {}
   const get = async (url: string): Promise<Response> => {
     await o.sleep(o.gapMs)
     const res = await o.fetch(url, {
@@ -120,7 +138,7 @@ export async function mirrorZhArt(o: MirrorOptions): Promise<MirrorResult> {
       signal: AbortSignal.timeout(60_000)
     })
     if (res.status === 429 || res.status === 403)
-      throw new Stop(`PokiPair answered ${res.status} for ${url}`)
+      throw new Stop(`${new URL(url).host} answered ${res.status} for ${url}`)
     return res
   }
   const text = async (url: string): Promise<string | null> => {
@@ -131,8 +149,27 @@ export async function mirrorZhArt(o: MirrorOptions): Promise<MirrorResult> {
     }
     return res.text()
   }
+  const copy = async (
+    what: string,
+    url: string,
+    keep: (bytes: Uint8Array) => Promise<void>
+  ): Promise<boolean> => {
+    try {
+      const res = await get(url)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      await keep(new Uint8Array(await res.arrayBuffer()))
+      return true
+    } catch (e) {
+      if (e instanceof Stop) throw e
+      result.failed++
+      o.log(`zh art: ${what} failed: ${e instanceof Error ? e.message : String(e)}`)
+      return false
+    }
+  }
 
   let left = o.budget
+  /** Each set's pack picture: the official one where there is one, else PokiPair's. */
+  const packs = new Map<string, string>()
   try {
     const hub = await text(POKIPAIR_HUB)
     if (hub === null) return result
@@ -140,9 +177,11 @@ export async function mirrorZhArt(o: MirrorOptions): Promise<MirrorResult> {
     for (const set of parseHub(hub)) {
       const id = setIdOf(set.slug, known)
       if (id === null) continue
+      if (set.pack && !packs.has(id)) packs.set(id, set.pack)
       const cards = o.cards.get(id) ?? []
       // A set whose cards all have their copy is not asked for again.
       if (cards.length > 0 && cards.every((c) => o.record.done[c.sourceId] !== undefined)) continue
+      if (left <= 0 && o.portal) continue
       const html = await text(set.url)
       if (html === null) continue
       const matches = matchCards(parseSetPage(html).cards, cards)
@@ -150,24 +189,44 @@ export async function mirrorZhArt(o: MirrorOptions): Promise<MirrorResult> {
       o.log(`zh art: ${id} ${matches.size}/${cards.length} matched, ${todo.length} to copy`)
       result.matched += todo.length
       if (!o.portal) continue
+      const portal = o.portal
       for (const [sourceId, url] of todo) {
-        if (left <= 0) return result
+        if (left <= 0) break
         left--
-        try {
-          const res = await get(url)
-          if (!res.ok) throw new Error(`HTTP ${res.status}`)
-          const copies = handCopies(new Uint8Array(await res.arrayBuffer()))
+        const ok = await copy(sourceId, url, async (bytes) => {
+          const copies = handCopies(bytes)
           if (!copies) throw new Error('not a usable image')
           const hid = handId(sourceId)
-          await upload(o.portal, hid, 'high', copies.high)
-          await upload(o.portal, hid, 'low', copies.low)
+          await upload(portal, hid, 'high', copies.high)
+          await upload(portal, hid, 'low', copies.low)
+        })
+        if (ok) {
           o.record.done[sourceId] = url
           result.uploaded++
-        } catch (e) {
-          if (e instanceof Stop) throw e
-          result.failed++
-          o.log(`zh art: ${sourceId} failed: ${e instanceof Error ? e.message : String(e)}`)
         }
+      }
+    }
+
+    if (o.zhNames) {
+      const list = await text(OFFICIAL_PRODUCTS)
+      for (const p of list === null ? [] : parseOfficialProducts(list)) {
+        const id = officialSetOf(p.name, o.zhNames)
+        if (id !== null && o.cards.has(id)) packs.set(id, p.image)
+      }
+    }
+    if (!o.portal) return result
+    const portal = o.portal
+    for (const [id, source] of packs) {
+      // The official link's auth key changes every night; the picture is the same.
+      if (o.record.packs[id]?.split('?')[0] === source.split('?')[0]) continue
+      const ok = await copy(`${id} pack`, source, async (bytes) => {
+        const png = packCopy(bytes)
+        if (!png) throw new Error('not a usable image')
+        await upload(portal, packHandId(id), 'pack', png)
+      })
+      if (ok) {
+        o.record.packs[id] = source.split('?')[0]
+        result.packs++
       }
     }
   } catch (e) {

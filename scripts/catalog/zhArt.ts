@@ -10,6 +10,7 @@
 import { existsSync, writeFileSync } from 'node:fs'
 import Database from 'better-sqlite3'
 import type { ZhCatalogCard } from './pokemon/pokipair'
+import { ZH_SET_INDEX } from './pokemon/zhPacks'
 import {
   mirrorZhArt,
   readZhArtRecord,
@@ -39,6 +40,21 @@ export function zhCards(db: Database.Database): Map<string, ZhCatalogCard[]> {
   return out
 }
 
+/** Each zh-hans set's Chinese name, for matching pokemon.cn's products; empty when the list is down. */
+async function chineseSetNames(): Promise<Map<string, string>> {
+  try {
+    const res = await fetch(ZH_SET_INDEX, { signal: AbortSignal.timeout(60_000) })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const rows = (await res.json()) as { id: string; name: string }[]
+    return new Map(rows.map((r) => [r.id, r.name]))
+  } catch (e) {
+    console.log(
+      `zh art: no Chinese set names (${e instanceof Error ? e.message : String(e)}); PokiPair packs only`
+    )
+    return new Map()
+  }
+}
+
 async function main(): Promise<void> {
   const dry = process.argv.includes('--dry-run')
   const url = process.env['PORTAL_URL']
@@ -53,11 +69,13 @@ async function main(): Promise<void> {
   const cards = zhCards(db)
   db.close()
   const record = readZhArtRecord(ZH_ART_RECORD)
+  const zhNames = await chineseSetNames()
   const r = await mirrorZhArt({
     cards,
     record,
     fetch,
     portal: dry ? undefined : { url: url!, token: token! },
+    zhNames,
     budget: ZH_ART_BUDGET,
     gapMs: ZH_ART_GAP_MS,
     sleep: (ms) => new Promise((done) => setTimeout(done, ms)),
@@ -65,7 +83,7 @@ async function main(): Promise<void> {
   })
   if (!dry) writeFileSync(ZH_ART_RECORD, JSON.stringify(record))
   console.log(
-    `zh art: ${r.matched} to copy, ${r.uploaded} copied, ${r.failed} failed, ${Object.keys(record.done).length} kept in all` +
+    `zh art: ${r.matched} to copy, ${r.uploaded} copied, ${r.packs} packs, ${r.failed} failed, ${Object.keys(record.done).length} kept in all` +
       (r.stopped ? `; stopped: ${r.stopped}` : '')
   )
 }

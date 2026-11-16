@@ -1,3 +1,4 @@
+import type { AdminBetaRequest } from '../../../src/shared/admin'
 import type { AppDeps } from './app'
 import { adminWriteAllowed, isAdmin, isJson } from './auth'
 import { clientIp, takeLimit } from './authLimits'
@@ -144,16 +145,8 @@ async function sendAdded(
   }
 }
 
-export interface BetaRequest {
-  id: number
-  email: string
-  platform: BetaPlatform
-  name: string
-  referredBy: string
-  status: BetaStatus
-  createdAt: string
-  decidedAt: string | null
-}
+/** One request as the admin tabs list it (the desktop's types are the same ones). */
+export type BetaRequest = AdminBetaRequest
 
 /** The "you're in" email, sent when the owner marks a request added. */
 export function betaAddedMessage(

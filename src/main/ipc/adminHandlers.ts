@@ -1,5 +1,6 @@
 import {
   ADMIN_WORKFLOWS,
+  type AdminBeta,
   type AdminErrorGroup,
   type AdminList,
   type AdminMerge,
@@ -15,6 +16,7 @@ import { isGameId } from '@shared/games'
 import type { InvokeChannel } from '@shared/ipc'
 import type { AdminRuns } from '../adminRuns'
 import type { AccountService } from '../cloud/account'
+import { CloudOfflineError } from '../cloud/client'
 import type { RipCapture } from '../ripCapture'
 
 const isId = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v > 0
@@ -84,6 +86,25 @@ export function adminHandlers(
     'admin:costs': async (days: unknown) => {
       if (days !== 7 && days !== 30) throw new Error('Bad days')
       return account.admin<AdminCosts>(`/admin/costs?days=${days}`)
+    },
+    'admin:beta': () => account.admin<AdminBeta>('/admin/beta'),
+    'admin:decideBeta': async (requestId: unknown, status: unknown) => {
+      if (status !== 'added' && status !== 'declined') throw new Error('Bad status')
+      const body = { id: id(requestId), status }
+      try {
+        const res = await account.admin<{ emailed: boolean }>('/admin/beta/decide', body)
+        return { emailed: res.emailed }
+      } catch (e) {
+        // The portal answers 502 only when App Store Connect refused an iPhone tester.
+        if (e instanceof CloudOfflineError && e.message.includes('(502)'))
+          throw new Error(
+            "App Store Connect wouldn't add them to the TestFlight group. Try again, or add them in TestFlight yourself."
+          )
+        throw e
+      }
+    },
+    'admin:deleteBeta': async (requestId: unknown) => {
+      await account.admin('/admin/beta/delete', { id: id(requestId) })
     },
     // Rip capture writes on this computer only, but only for a signed-in admin.
     'admin:captureSave': async (session: unknown, file: unknown, jpeg: unknown, info: unknown) => {

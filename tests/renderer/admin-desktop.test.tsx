@@ -80,6 +80,33 @@ function adminApi(): NonNullable<Api['admin']> {
     removeAdmin: vi.fn(async () => {}),
     photos: vi.fn(async () => ({ games: [], testers: [], holders: [] })),
     costs: vi.fn(async () => COSTS),
+    beta: vi.fn(async () => ({
+      requests: [
+        {
+          id: 1,
+          email: 'sam@example.com',
+          platform: 'android' as const,
+          name: 'Sam',
+          referredBy: 'Dub',
+          status: 'pending' as const,
+          createdAt: '2026-11-16T12:00:00.000Z',
+          decidedAt: null
+        },
+        {
+          id: 2,
+          email: 'kai@example.com',
+          platform: 'ios' as const,
+          name: 'Kai',
+          referredBy: '',
+          status: 'added' as const,
+          createdAt: '2026-11-15T12:00:00.000Z',
+          decidedAt: '2026-11-15T13:00:00.000Z'
+        }
+      ],
+      androidAdded: 3
+    })),
+    decideBeta: vi.fn(async () => ({ emailed: true })),
+    deleteBeta: vi.fn(async () => {}),
     captureSave: vi.fn(async () => '/data/rip-capture/x/k00001.jpg'),
     captureRemove: vi.fn(async () => undefined),
     captureNote: vi.fn(async () => undefined),
@@ -175,6 +202,37 @@ describe('desktop admin pages', () => {
     const dialog = await screen.findByRole('dialog')
     await userEvent.click(within(dialog).getByRole('button', { name: 'Remove' }))
     await waitFor(() => expect(admin.removeTester).toHaveBeenCalledExactlyOnceWith(4))
+  })
+
+  it('works through phone beta requests', async () => {
+    const admin = adminApi()
+    const api = createMockApi({
+      window: { platform: 'linux' },
+      account: { status: vi.fn(async () => status(true)) }
+    })
+    api.admin = admin
+    renderWithProviders(<App />, { api })
+    const group = await screen.findByRole('group', { name: 'Admin' })
+    await userEvent.click(within(group).getByRole('button', { name: 'Admin' }))
+    await userEvent.click(await screen.findByRole('radio', { name: 'Beta' }))
+    expect(await screen.findByText('sam@example.com')).toBeInTheDocument()
+    expect(screen.getByText(/Android added: 3 of 12/)).toBeInTheDocument()
+    expect(screen.getByText('Android (1 waiting)')).toBeInTheDocument()
+    expect(screen.getByText('iPhone (0 waiting)')).toBeInTheDocument()
+    expect(screen.getByText('kai@example.com')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Mark added' }))
+    await waitFor(() => expect(admin.decideBeta).toHaveBeenCalledExactlyOnceWith(1, 'added'))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Decline' }))
+    const decline = await screen.findByRole('dialog')
+    await userEvent.click(within(decline).getByRole('button', { name: 'Decline' }))
+    await waitFor(() => expect(admin.decideBeta).toHaveBeenLastCalledWith(1, 'declined'))
+
+    await userEvent.click(screen.getAllByRole('button', { name: 'Delete' })[1])
+    const del = await screen.findByRole('dialog')
+    await userEvent.click(within(del).getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(admin.deleteBeta).toHaveBeenCalledExactlyOnceWith(2))
   })
 
   it("says so when the portal doesn't take the account as an admin", async () => {

@@ -249,12 +249,20 @@ const RARITY_FIXES: Record<string, Record<string, string>> = {
 const LETTER_INDEX = new Set([...LETTER_CARDS, 'FAI'])
 
 /**
- * Chinese names the list has wrong, by set and number: Gem Pack Vol. 7's 03 is Misty's Psyduck
- * (小霞的可达鸭, as the owner's cards print it), which the list has as plain Psyduck.
+ * Chinese names the list has wrong, by set and number, with the English card of the right name:
+ * Gem Pack Vol. 7's 03 is Misty's Psyduck (小霞的可达鸭, as the owner's cards print it, its art
+ * Destined Rivals 045's), which the list has as plain Psyduck linked to Ascended Heroes' 039. Kept
+ * with the list's link, the name no longer agrees with the English card's and the card gets no art.
  */
-const CARD_NAME_FIXES: Record<string, Record<string, string>> = {
+const CARD_NAME_FIXES: Record<
+  string,
+  Record<string, Pick<ZhCard, 'cardName' | 'setCodeEn' | 'cardIndexEn'>>
+> = {
   CBB7C: Object.fromEntries(
-    ['01', '02', '03', '04', '05', '06', '07'].map((v) => [`03${v}`, '小霞的可达鸭'])
+    ['01', '02', '03', '04', '05', '06', '07'].map((v) => [
+      `03${v}`,
+      { cardName: '小霞的可达鸭', setCodeEn: 'DRI', cardIndexEn: '45' }
+    ])
   )
 }
 
@@ -311,8 +319,8 @@ export function chineseListSets(
     const cards: TdCard[] = []
     list.forEach((listed, i) => {
       const number = listed.cardIndex.replace(/[^A-Za-z0-9]/g, '')
-      const fixedName = CARD_NAME_FIXES[id]?.[number]
-      const row = fixedName ? { ...listed, cardName: fixedName, nameEn: '' } : listed
+      const fix = CARD_NAME_FIXES[id]?.[number]
+      const row = fix ? { ...listed, ...fix, nameEn: '' } : listed
       const rarity = RARITY_FIXES[id]?.[number] ?? row.rarity
       if (!/^\d+$/.test(number) && !LETTER_INDEX.has(number)) out.oddNumbers++
       const localId = number || `X${i + 1}`

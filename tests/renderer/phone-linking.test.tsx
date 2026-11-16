@@ -222,6 +222,16 @@ describe('phone Settings linking', () => {
     await screen.findByRole('heading', { name: 'Settings' })
   }
 
+  it("the home-screen web app links the store apps' beta from Settings", async () => {
+    const user = userEvent.setup()
+    setup({ status: 'linked' })
+    await openSettings(user)
+    expect(await screen.findByRole('link', { name: 'Join the phone beta' })).toHaveAttribute(
+      'href',
+      'https://duelbinder.com/beta'
+    )
+  })
+
   it('linking a free Discord shows Discord linked and refreshes the list', async () => {
     const user = userEvent.setup()
     vi.mocked(nativeSignIn).mockResolvedValue({ code: 'c', verifier: 'v' } as never)

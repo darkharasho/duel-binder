@@ -69,6 +69,24 @@ export interface AdminTester {
   username: string | null
 }
 
+/** One phone beta request from duelbinder.com/beta, as GET /admin/beta lists it. */
+export interface AdminBetaRequest {
+  id: number
+  email: string
+  platform: 'android' | 'ios'
+  name: string
+  referredBy: string
+  status: 'pending' | 'added' | 'declined'
+  createdAt: string
+  decidedAt: string | null
+}
+
+/** GET /admin/beta: every request, waiting ones first, and how many Android testers are in. */
+export interface AdminBeta {
+  requests: AdminBetaRequest[]
+  androidAdded: number
+}
+
 /** How a tester is added: by app username, or by a Discord username not yet signed in. */
 export type AdminTesterBy = 'username' | 'discordUsername'
 

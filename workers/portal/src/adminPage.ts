@@ -13,10 +13,11 @@ import { GAME_IDS } from '../../../src/shared/games/types'
 import { HOLDER_LABELS } from '../../../src/shared/training'
 
 /** The games only listed testers see: the panel's tables and its add form. */
-const testerGames = (): { id: string; name: string }[] => GAME_IDS.filter((id) => GAMES[id].access === 'testers').map((id) => ({
-  id,
-  name: GAMES[id].name
-}))
+const testerGames = (): { id: string; name: string }[] =>
+  GAME_IDS.filter((id) => GAMES[id].access === 'testers').map((id) => ({
+    id,
+    name: GAMES[id].name
+  }))
 
 /** Free-plan SQLite storage for the whole account (Durable Objects pricing, Workers Free). */
 const FREE_STORAGE_BYTES = 5 * 1000 ** 3
@@ -591,8 +592,14 @@ async function loadBeta() {
         const copy = el('button', 'Copy emails')
         copy.type = 'button'
         copy.addEventListener('click', async () => {
-          await navigator.clipboard.writeText(pending.map((r) => r.email).join(', '))
-          copy.textContent = 'Copied ' + pending.length
+          const emails = pending.map((r) => r.email).join(', ')
+          try {
+            await navigator.clipboard.writeText(emails)
+            copy.textContent = 'Copied ' + pending.length
+          } catch {
+            // The browser said no (no permission, or the page isn't focused): show them to copy by hand.
+            prompt('Copy these emails:', emails)
+          }
         })
         head.append(copy)
       }
@@ -620,6 +627,27 @@ async function loadBeta() {
           })
           cell.append(add, no)
         }
+        const del = el('button', 'Delete')
+        del.type = 'button'
+        del.addEventListener('click', async () => {
+          if (!confirm('Delete ' + r.email + "'s request for good? It won't remove them from Play or TestFlight.")) return
+          del.disabled = true
+          try {
+            const res = await fetch('/admin/beta/delete', {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ id: r.id })
+            })
+            if (!res.ok) alert('Failed: HTTP ' + res.status)
+            else loadBeta()
+          } catch (e) {
+            alert('Failed: ' + e.message)
+          } finally {
+            del.disabled = false
+          }
+        })
+        cell.append(del)
         tr.append(el('td', r.name), el('td', r.email), el('td', r.referredBy || '-'),
           el('td', new Date(r.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }), 'v'),
           el('td', r.status === 'pending' ? 'Waiting' : r.status === 'added' ? 'Added' : 'Declined'), cell)

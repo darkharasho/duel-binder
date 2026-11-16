@@ -12,6 +12,7 @@ import {
 import { HitPriceInput } from '@/features/scan/HitPriceInput'
 import { useScanHub } from '@/features/scan/ScanHub'
 import { DeleteAccount } from '@/features/settings/AccountSection'
+import { PHONE_BETA_URL } from '@/features/settings/PhoneBeta'
 import { SignInMethods } from '@/features/settings/SignInMethods'
 import { EbayPricesToggle } from '@/features/settings/EbayPricesToggle'
 import { ScanPingToggle } from '@/features/settings/ScanPingToggle'
@@ -310,6 +311,12 @@ export function Settings({
           <a href={PRIVACY_URL} target="_blank" rel="noreferrer" className={rowButton}>
             Privacy
           </a>
+          {/* The home-screen web app only: in the store apps they already have it. */}
+          {!isNativeApp() && (
+            <a href={PHONE_BETA_URL} target="_blank" rel="noreferrer" className={rowButton}>
+              Join the phone beta
+            </a>
+          )}
           <ScanPingToggle className="flex min-h-12 items-start gap-3 px-4 py-3 text-[15px]" />
           <ScanTimingsToggle className="flex min-h-12 items-start gap-3 px-4 py-3 text-[15px]" />
           <Row>

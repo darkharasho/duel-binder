@@ -27,6 +27,8 @@ describe('beta page', () => {
     expect(body).toMatch(/<input[^>]*name="email"[^>]*type="email"[^>]*required/)
     expect(body).toMatch(/<input[^>]*name="name"[^>]*required/)
     expect(body).toContain('name="referred"')
+    // The browser checks the same shape the app does, so a bad email never clears the form.
+    expect(body).toContain('pattern="[^\\s@]+@[^\\s@]+\\.[^\\s@]+"')
     expect(body).toMatch(/<input[^>]*name="website"[^>]*tabindex="-1"/)
     expect(body).toContain('may crash')
     expect(body).toContain('not synced yet')

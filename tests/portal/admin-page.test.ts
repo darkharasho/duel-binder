@@ -24,6 +24,9 @@ describe('admin page', () => {
     expect(html).toContain("'beta'")
     expect(html).toContain("fetch('/admin/beta'")
     expect(html).toContain("fetch('/admin/beta/decide'")
+    expect(html).toContain("fetch('/admin/beta/delete'")
+    // A refused clipboard write falls back to showing the emails to copy by hand.
+    expect(html).toContain("prompt('Copy these emails:'")
     expect(html).toContain('of 12')
   })
 

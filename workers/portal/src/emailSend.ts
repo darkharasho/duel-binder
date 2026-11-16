@@ -40,8 +40,16 @@ const GLOW =
   'radial-gradient(ellipse 60% 45% at 92% 0%,rgba(245,158,11,0.26),rgba(245,158,11,0) 75%),' +
   'radial-gradient(ellipse 55% 40% at 50% 60%,rgba(217,70,239,0.1),rgba(217,70,239,0) 75%)'
 
-/** The frame every email shares: the app's glow behind a frosted card with the mark on top. */
-export function brandedHtml(title: string, body: string, preheader: string): string {
+/**
+ * The frame every email shares: the app's glow behind a frosted card with the mark on top. `why`
+ * ends the footer's "Sent by Duel Binder because this address …".
+ */
+export function brandedHtml(
+  title: string,
+  body: string,
+  preheader: string,
+  why = 'was entered in the app'
+): string {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="dark"><meta name="supported-color-schemes" content="dark">
@@ -65,7 +73,7 @@ ${body}
 </div>
 </td></tr>
 <tr><td style="padding:22px 8px 0;text-align:center;font-size:12px;line-height:1.6;color:${MUTED}">
-Sent by Duel Binder because this address was entered in the app.<br>
+Sent by Duel Binder because this address ${escapeHtml(why)}.<br>
 <a href="${SITE}" style="color:${MUTED};text-decoration:underline">duelbinder.com</a>
 </td></tr>
 </table>

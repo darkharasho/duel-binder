@@ -14,7 +14,8 @@ const ERRORS: Record<string, string> = {
   email: 'That email doesn’t look right. Use the one your Google Play or Apple account uses.',
   name: 'Add your name (up to 200 characters).',
   referred: 'Keep “Who sent you here?” shorter, up to 200 characters.',
-  limit: 'Too many requests from this connection today. Try again tomorrow.'
+  limit: 'Too many requests from this connection today. Try again tomorrow.',
+  bad: 'Something went wrong sending the form. Try again.'
 }
 
 const p = (...paras: string[]): string => paras.map((t) => `<p>${t}</p>`).join('')
@@ -29,7 +30,7 @@ function form(view: BetaView): string {
 <label class="beta-choice"><input type="radio" name="platform" value="ios" required> iPhone</label>
 </fieldset>
 <label>Store email<span class="beta-hint">The email your Google Play account or Apple ID uses.</span>
-<input name="email" type="email" required maxlength="200" autocomplete="email"></label>
+<input name="email" type="email" required maxlength="200" autocomplete="email" pattern="[^\\s@]+@[^\\s@]+\\.[^\\s@]+" title="An email like name@example.com"></label>
 <label>Your name<input name="name" type="text" required maxlength="200" autocomplete="name"></label>
 <label>Who sent you here?<span class="beta-hint">Optional. A friend’s name helps us know you.</span>
 <input name="referred" type="text" maxlength="200"></label>

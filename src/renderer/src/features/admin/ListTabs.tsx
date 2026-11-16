@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import type {
+  AdminBeta,
+  AdminBetaRequest,
   AdminErrorGroup,
   AdminList,
   AdminMerge,
@@ -140,6 +142,116 @@ function Adder({
         </span>
       )}
     </form>
+  )
+}
+
+const BETA_PLATFORMS = [
+  ['android', 'Android'],
+  ['ios', 'iPhone']
+] as const
+const BETA_STATUS = { pending: 'Waiting', added: 'Added', declined: 'Declined' } as const
+
+/**
+ * Phone beta requests from duelbinder.com/beta, like the web dashboard's Beta tab: most are let in
+ * on their own; the rest wait here to be added in Play Console or TestFlight and marked.
+ */
+export function BetaTab({ beta }: { beta: AdminBeta }): React.JSX.Element {
+  const qc = useQueryClient()
+  const reload = (): Promise<void> => qc.invalidateQueries({ queryKey: adminKeys.beta })
+  const add = useMutation({
+    mutationFn: (r: AdminBetaRequest) => admin().decideBeta(r.id, 'added'),
+    onSuccess: async ({ emailed }, r) => {
+      if (!emailed) toast.error(`Marked added, but the email to ${r.email} didn't go out.`)
+      await reload()
+    },
+    onError: (e) => toast.error(errorText(e))
+  })
+  const copy = async (emails: string[]): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(emails.join(', '))
+      toast.success(`Copied ${emails.length}`)
+    } catch {
+      toast.error("Couldn't copy the emails")
+    }
+  }
+  return (
+    <Panel title="Beta">
+      <Note>
+        Android added: {beta.androidAdded} of 12 (Play needs 12 on the closed test for 14 days).
+      </Note>
+      <div className="mt-4 space-y-5">
+        {BETA_PLATFORMS.map(([platform, label]) => {
+          const mine = beta.requests.filter((r) => r.platform === platform)
+          const pending = mine.filter((r) => r.status === 'pending')
+          return (
+            <div key={platform}>
+              <div className="mb-1.5 flex items-center gap-3">
+                <h3 className="text-[13px] font-semibold">
+                  {label} ({pending.length} waiting)
+                </h3>
+                {pending.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void copy(pending.map((r) => r.email))}
+                  >
+                    Copy emails
+                  </Button>
+                )}
+              </div>
+              {mine.length === 0 ? (
+                <Note>No requests yet.</Note>
+              ) : (
+                <Grid
+                  heads={['Name', 'Email', 'Who sent them', 'Asked', 'Status', '']}
+                  left={5}
+                  rows={mine.map((r) => ({
+                    key: r.id,
+                    cells: [
+                      r.name,
+                      r.email,
+                      r.referredBy || '–',
+                      shortWhen(r.createdAt),
+                      BETA_STATUS[r.status],
+                      <span key="act" className="flex justify-end gap-1.5">
+                        {r.status === 'pending' && (
+                          <>
+                            <Button
+                              size="sm"
+                              disabled={add.isPending}
+                              onClick={() => add.mutate(r)}
+                            >
+                              Mark added
+                            </Button>
+                            <ConfirmButton
+                              label="Decline"
+                              title={`Decline ${r.email}?`}
+                              action={async () => {
+                                await admin().decideBeta(r.id, 'declined')
+                                await reload()
+                              }}
+                            />
+                          </>
+                        )}
+                        <ConfirmButton
+                          label="Delete"
+                          title={`Delete ${r.email}'s request for good?`}
+                          description="It won't remove them from Play or TestFlight."
+                          action={async () => {
+                            await admin().deleteBeta(r.id)
+                            await reload()
+                          }}
+                        />
+                      </span>
+                    ]
+                  }))}
+                />
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </Panel>
   )
 }
 

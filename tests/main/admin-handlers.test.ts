@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { adminHandlers } from '../../src/main/ipc/adminHandlers'
 import { createAdminRuns } from '../../src/main/adminRuns'
+import { CloudOfflineError } from '../../src/main/cloud/client'
 
 function make(isAdmin = true) {
   const admin = vi.fn(async (path: string, _body?: unknown): Promise<unknown> => {
@@ -25,6 +26,34 @@ function make(isAdmin = true) {
   >
   return { h, admin, runs, capture }
 }
+
+describe('admin handlers: phone beta', () => {
+  it('reads, decides and deletes beta requests', async () => {
+    const { h, admin } = make()
+    await h['admin:beta']()
+    expect(admin).toHaveBeenLastCalledWith('/admin/beta')
+    await h['admin:decideBeta'](1, 'added')
+    expect(admin).toHaveBeenLastCalledWith('/admin/beta/decide', { id: 1, status: 'added' })
+    await h['admin:deleteBeta'](2)
+    expect(admin).toHaveBeenLastCalledWith('/admin/beta/delete', { id: 2 })
+  })
+
+  it('rejects bad arguments before calling the portal', async () => {
+    const { h, admin } = make()
+    await expect(h['admin:decideBeta'](1, 'pending')).rejects.toThrow('Bad status')
+    await expect(h['admin:decideBeta']('1', 'added')).rejects.toThrow('Bad id')
+    await expect(h['admin:deleteBeta']('x')).rejects.toThrow('Bad id')
+    expect(admin).not.toHaveBeenCalled()
+  })
+
+  it("says App Store Connect wouldn't add the tester when the portal answers 502", async () => {
+    const { h, admin } = make()
+    admin.mockRejectedValueOnce(new CloudOfflineError('The portal failed (502)'))
+    await expect(h['admin:decideBeta'](1, 'added')).rejects.toThrow(
+      "App Store Connect wouldn't add them to the TestFlight group"
+    )
+  })
+})
 
 describe('admin handlers', () => {
   it('reads unwrap the portal answers', async () => {

@@ -11,6 +11,7 @@ import { MAGIC_FAN_CONTENT, SCRYFALL_CREDIT } from '@shared/legal'
 import { useContribute } from '@/features/training/contributeContext'
 import { GAMES } from '@shared/games'
 import { isWeb } from '@/lib/platform'
+import { PhoneBetaSection } from './PhoneBeta'
 import { AccountSection } from './AccountSection'
 import { DexImportButton } from './DexImportDialog'
 import { EbayPricesToggle } from './EbayPricesToggle'
@@ -220,6 +221,10 @@ function DesktopSettings(): React.JSX.Element {
         <ScanPingToggle />
       </Section>
 
+      <Section title="Phone app">
+        <PhoneBetaSection />
+      </Section>
+
       {testerGame !== undefined && (
         <Section title="Contribute photos">
           <p className="text-sm text-muted-foreground">
@@ -306,6 +311,9 @@ function WebSettings(): React.JSX.Element {
         <Row label="Background">
           <WashSetting />
         </Row>
+      </Section>
+      <Section title="Phone app">
+        <PhoneBetaSection />
       </Section>
       <Section title="Privacy">
         <WishlistToggle />

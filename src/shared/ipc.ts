@@ -5,6 +5,7 @@ import type {
   AdminPhotos,
   AdminSkippedSignIn,
   AdminStats,
+  AdminBeta,
   AdminTester,
   AdminTesterBy,
   AdminWorkflow,
@@ -356,11 +357,22 @@ export interface Api {
     photos(): Promise<AdminPhotos>
     /** What the portal's requests cost over the last 7 or 30 days, and the bill it projects. */
     costs(days: 7 | 30): Promise<AdminCosts>
+    /** Phone beta requests (duelbinder.com/beta). */
+    beta(): Promise<AdminBeta>
+    /** Marks a request added (an iPhone one is added in TestFlight too) or declined; whether the "you're in" email went. */
+    decideBeta(id: number, status: 'added' | 'declined'): Promise<{ emailed: boolean }>
+    /** Deletes a request for good. */
+    deleteBeta(id: number): Promise<void>
     /**
      * Rip capture: saves a key frame picked from a live pack opening under the app's data folder
      * (`rip-capture/<session>/<name>`, names as `RIP_SESSION` / `RIP_FRAME` in main); its path.
      */
-    captureSave(session: string, name: string, jpeg: ArrayBuffer, info: RipFrameInfo): Promise<string>
+    captureSave(
+      session: string,
+      name: string,
+      jpeg: ArrayBuffer,
+      info: RipFrameInfo
+    ): Promise<string>
     captureRemove(session: string, name: string): Promise<void>
     /** The owner's note on a session, saved beside its frames as note.txt ('' clears it). */
     captureNote(session: string, note: string): Promise<void>
@@ -615,6 +627,9 @@ export const INVOKE_CHANNELS = [
   'admin:removeAdmin',
   'admin:photos',
   'admin:costs',
+  'admin:beta',
+  'admin:decideBeta',
+  'admin:deleteBeta',
   'admin:captureSave',
   'admin:captureRemove',
   'admin:captureNote',

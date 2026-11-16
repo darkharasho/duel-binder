@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { UnderlineTabs } from '@/components/UnderlineTabs'
 import { api } from '@/lib/api'
 import { ADMIN_PAGE_TABS, ADMIN_QUERY, adminKeys, type AdminPageTab } from './adminTabs'
-import { AdminsTab, ErrorsTab, MergesTab, PhotosTab, TestersTab } from './ListTabs'
+import { AdminsTab, BetaTab, ErrorsTab, MergesTab, PhotosTab, TestersTab } from './ListTabs'
 import { Failed } from './parts'
 import { CostsTab } from './CostsTab'
 import { RipCaptureTab } from './RipCaptureTab'
@@ -83,6 +83,12 @@ export function AdminPage({
     enabled: tab === 'testers',
     ...ADMIN_QUERY
   })
+  const beta = useQuery({
+    queryKey: adminKeys.beta,
+    queryFn: () => admin().beta(),
+    enabled: tab === 'beta',
+    ...ADMIN_QUERY
+  })
   const admins = useQuery({
     queryKey: adminKeys.admins,
     queryFn: () => admin().admins(),
@@ -102,7 +108,7 @@ export function AdminPage({
     enabled: tab === 'costs',
     ...ADMIN_QUERY
   })
-  const fetching = [stats, runs, errors, merges, testers, admins, photos, costs].some(
+  const fetching = [stats, runs, errors, merges, testers, beta, admins, photos, costs].some(
     (q) => q.isFetching
   )
   // Only what's been read is read again; tabs not yet opened stay unread.
@@ -155,6 +161,7 @@ export function AdminPage({
       {tab === 'errors' && <Show q={errors} show={(g) => <ErrorsTab groups={g} />} />}
       {tab === 'merges' && <Show q={merges} show={(m) => <MergesTab merges={m} />} />}
       {tab === 'testers' && <Show q={testers} show={(t) => <TestersTab testers={t} />} />}
+      {tab === 'beta' && <Show q={beta} show={(b) => <BetaTab beta={b} />} />}
       {tab === 'admins' && (
         <Show
           q={admins}

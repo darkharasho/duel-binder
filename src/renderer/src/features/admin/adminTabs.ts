@@ -10,6 +10,7 @@ export const ADMIN_PAGE_TABS = [
   { value: 'storage', label: 'Storage' },
   { value: 'merges', label: 'Merges' },
   { value: 'testers', label: 'Testers' },
+  { value: 'beta', label: 'Beta' },
   { value: 'admins', label: 'Admins' },
   { value: 'photos', label: 'Photos' },
   // On this computer only: key frames from a live pack opening, for scanner work.
@@ -26,6 +27,7 @@ export const adminKeys = {
   runs: ['admin', 'runs'] as const,
   merges: ['admin', 'merges'] as const,
   testers: ['admin', 'testers'] as const,
+  beta: ['admin', 'beta'] as const,
   admins: ['admin', 'admins'] as const,
   photos: ['admin', 'photos'] as const,
   costs: (days: 7 | 30) => ['admin', 'costs', days] as const

@@ -1,3 +1,4 @@
+import { SupporterHeart } from '@/components/SupporterHeart'
 import { useState } from 'react'
 import { BookOpen, Heart, Users } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -240,8 +241,9 @@ export function FriendsPage(): React.JSX.Element {
                   >
                     <FriendAvatar user={f} />
                     <span className="min-w-0">
-                      <span className="block truncate text-sm font-medium">
-                        {f.displayName ?? f.username}
+                      <span className="flex items-center gap-1 text-sm font-medium">
+                        <span className="truncate">{f.displayName ?? f.username}</span>
+                        {f.supporter && <SupporterHeart />}
                       </span>
                       <span className="block truncate text-xs text-muted-foreground">
                         @{f.username}

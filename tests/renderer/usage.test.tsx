@@ -95,6 +95,16 @@ describe('usage counts', () => {
     expect(report()).toHaveBeenCalledWith({ 'buy:ebay': 1, 'buy:tcgplayer': 1 })
   })
 
+  it('sends supporter clicks on their own, so a portal without them keeps the rest', () => {
+    track('open')
+    track('supporter:checkout')
+    track('supporter:manage')
+    flushUsage()
+    expect(report()).toHaveBeenCalledTimes(2)
+    expect(report()).toHaveBeenCalledWith({ open: 1 })
+    expect(report()).toHaveBeenCalledWith({ 'supporter:checkout': 1, 'supporter:manage': 1 })
+  })
+
   it('counts and sends nothing once turned off, and drops what was waiting', () => {
     track('open')
     setUsageEnabled(false)

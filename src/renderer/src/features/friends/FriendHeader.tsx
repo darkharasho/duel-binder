@@ -1,3 +1,4 @@
+import { SupporterHeart } from '@/components/SupporterHeart'
 import { ArrowLeft } from 'lucide-react'
 import type { Friend } from '@shared/types'
 import { Button } from '@/components/ui/button'
@@ -46,8 +47,9 @@ export function FriendHeader({
         </Button>
         <FriendAvatar user={friend} className="size-9 text-base" />
         <div className="min-w-0">
-          <h1 className="truncate text-lg font-semibold leading-tight">
-            {friend.displayName ?? friend.username}
+          <h1 className="flex items-center gap-1.5 text-lg font-semibold leading-tight">
+            <span className="truncate">{friend.displayName ?? friend.username}</span>
+            {friend.supporter && <SupporterHeart />}
           </h1>
           <p className="truncate text-xs leading-tight text-muted-foreground">
             @{friend.username} · Updated {formatRelative(friend.updatedAt)}

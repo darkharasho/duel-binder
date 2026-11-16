@@ -19,6 +19,8 @@ import { ScanPingToggle } from './ScanPingToggle'
 import { UsageToggle } from './UsageToggle'
 import { WashSetting } from './WashSetting'
 import { WishlistToggle } from './WishlistToggle'
+import { SupporterSection } from './SupporterSection'
+import { useFriendsAvailable } from '@/lib/friends'
 import type { UpdateStatus } from '@shared/types'
 
 function Section({
@@ -35,6 +37,10 @@ function Section({
     </section>
   )
 }
+
+const supportFrame = (body: React.ReactNode): React.ReactNode => (
+  <Section title="Support Duel Binder">{body}</Section>
+)
 
 function Row({ label, children }: { label: string; children: React.ReactNode }): React.JSX.Element {
   return (
@@ -120,6 +126,7 @@ const formatMb = (bytes: number): string => `${(bytes / (1024 * 1024)).toFixed(1
 function DesktopSettings(): React.JSX.Element {
   const qc = useQueryClient()
   const sync = useSyncStatus()
+  const signedIn = useFriendsAvailable()
   const { available } = useGame()
   const { testerGame, open: contribute } = useContribute()
   const version = useQuery({ queryKey: ['app', 'version'], queryFn: () => api.app.version() })
@@ -166,6 +173,7 @@ function DesktopSettings(): React.JSX.Element {
       <Section title="Account">
         <AccountSection />
       </Section>
+      <SupporterSection signedIn={signedIn} frame={supportFrame} />
 
       <Section title="App">
         <Row label="Version">{version.data ?? '—'}</Row>
@@ -307,6 +315,7 @@ function WebSettings(): React.JSX.Element {
       <Section title="Account">
         <AccountSection />
       </Section>
+      <SupporterSection signedIn frame={supportFrame} />
       <Section title="App">
         <Row label="Background">
           <WashSetting />

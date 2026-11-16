@@ -18,11 +18,14 @@ import { isWeb } from '@/lib/platform'
 import { fetchMe } from '@/web/account'
 import type { Me } from '@shared/cloud'
 import { SignInMethods } from './SignInMethods'
+import { useOwnSupporter } from '@/lib/supporter'
+import { SupporterHeart } from '@/components/SupporterHeart'
 import { DELETE_WARNING, reasonText } from './accountText'
 
 function Identity({ user }: { user: Me }): React.JSX.Element {
   const [avatarFailed, setAvatarFailed] = useState(false)
   const { avatarUrl, displayName, username } = user
+  const supporter = useOwnSupporter(true)
   return (
     <div className="flex items-center gap-3">
       {avatarUrl && !avatarFailed && (
@@ -33,7 +36,10 @@ function Identity({ user }: { user: Me }): React.JSX.Element {
           onError={() => setAvatarFailed(true)}
         />
       )}
-      <span>Signed in as {displayName ?? username}</span>
+      <span className="flex items-center gap-1">
+        Signed in as {displayName ?? username}
+        {supporter && <SupporterHeart />}
+      </span>
       <span className="text-muted-foreground">@{username}</span>
     </div>
   )

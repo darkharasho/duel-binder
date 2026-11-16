@@ -26,13 +26,31 @@ export interface ShowingTracker {
 }
 
 /**
+ * The cards, lowest id first, that are versions of the one Pokémon card a draft names, when its
+ * options are several cards of one set: a Gem Pack numbers each version as a card of its own
+ * (CBB7C 0801-0807), and every frame of the card offers them all. Else null.
+ */
+function versionCards(item: ScanDraft): number[] | null {
+  const cards = [...new Set(item.options.map((o) => o.cardId))].sort((a, b) => a - b)
+  if (cards.length < 2 || !cards.includes(item.cardId)) return null
+  const set = item.options[0].setName
+  return item.options.every((o) => o.setName === set) ? cards : null
+}
+
+/**
  * What makes two frames' cards one card to count. Mostly the card, but a One Piece card is its
  * printed number: its English and Japanese printings are separate cards, and a frame whose
  * language read fails (English) between ones that read Japanese would count it twice. Every
  * DON!! card shares one number, so a DON!! is its number and its leader, its Gold printing (a
- * separate card too, whose art hashes within a few points of the plain one's) included.
+ * separate card too, whose art hashes within a few points of the plain one's) included. A Gem Pack
+ * card is its versions (versionCards): it reads as a stand-in version until its foil's pattern
+ * names its own, which is the same card in view, not another.
  */
 export function showingKey(item: ScanDraft): string {
+  if (item.game === 'pkm') {
+    const versions = versionCards(item)
+    return versions ? `pkm:versions:${versions[0]}` : String(item.cardId)
+  }
   if (item.game !== 'op' || !item.setCode) return String(item.cardId)
   const number = item.setCode.toUpperCase()
   return number === 'DON!!'

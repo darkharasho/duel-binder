@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createShowingTracker } from '@/features/scan/tracker'
 import type { ScanDraft, ScanOutcome } from '@/features/scan/resolve'
+import type { ScanPrinting } from '@shared/scan/types'
 
 const draft = (cardId: number, imageId = cardId * 10): ScanDraft => ({
   cardId,
@@ -279,5 +280,62 @@ describe('One Piece twins', () => {
       op(3, 'DON!!', 'DON!! (Kaido)')
     ])
     expect(counted).toEqual([1, 3])
+  })
+})
+
+describe('Gem Pack versions', () => {
+  // A Gem Pack numbers each version of a card as a card of its own (CBB7C 0801-0807): one card
+  // held up reads as the stand-in version until the foil's pattern names its own.
+  const version = (cardId: number): ScanPrinting => ({
+    printingId: cardId * 100,
+    cardId,
+    name: 'Furret',
+    frameType: 'pokemon',
+    setName: 'Gem Pack Vol. 7',
+    setCode: `CBB7C 080${cardId}`,
+    rarity: 'Holofoil',
+    language: 'zh-hans',
+    price: null,
+    imageIds: [cardId * 10]
+  })
+  const options = [version(1), version(2), version(5)]
+  const gem = (cardId: number, flag: ScanDraft['flag'] = null): ScanOutcome => ({
+    kind: 'recognized',
+    item: {
+      ...draft(cardId),
+      game: 'pkm',
+      name: 'Furret',
+      setCode: `CBB7C 080${cardId}`,
+      options,
+      flag
+    }
+  })
+
+  it('counts a card once as its stand-in version turns into the version its pattern names', () => {
+    const t = createShowingTracker({ stableFrames: 2 })
+    expect(
+      run(t, [gem(1, 'pick-printing'), gem(1, 'pick-printing'), gem(2), gem(2), gem(1)])
+    ).toEqual([1])
+  })
+
+  it('counts the named version first and the stand-in after it as one card', () => {
+    const t = createShowingTracker({ stableFrames: 2 })
+    expect(run(t, [gem(5), gem(5), gem(1, 'pick-printing'), gem(1, 'pick-printing')])).toEqual([5])
+  })
+
+  it('still counts another Pokémon card with a reprint among its options as its own', () => {
+    const t = createShowingTracker({ stableFrames: 2 })
+    const reprint = (cardId: number): ScanOutcome => ({
+      kind: 'recognized',
+      item: {
+        ...draft(cardId),
+        game: 'pkm',
+        options: [
+          { ...version(cardId), setName: `Set ${cardId}` },
+          { ...version(9), setName: 'Set 9' }
+        ]
+      }
+    })
+    expect(run(t, [reprint(1), reprint(1), reprint(9), reprint(9)])).toEqual([1, 9])
   })
 })

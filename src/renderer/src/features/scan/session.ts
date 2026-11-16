@@ -103,7 +103,9 @@ export function useScanSession(game: GameId = 'ygo'): {
   /**
    * Takes a background rarity read onto a row the user hasn't touched (a rarity or printing edit
    * clears its flag; a quantity change marks it read), once: the flag stays (a guess never
-   * changes it), quantity and key are kept. False when it didn't apply.
+   * changes it) unless the read is sure (unflagged), quantity and key are kept. A read of another
+   * card is taken only as one of the row's options (a Gem Pack version), with its card. False when
+   * it didn't apply.
    */
   applyRead(key: string, next: ScanDraft): boolean
   setPrinting(key: string, printingId: number): void
@@ -195,22 +197,23 @@ export function useScanSession(game: GameId = 'ygo'): {
   const applyRead = useCallback(
     (key: string, next: ScanDraft): boolean => {
       const row = ref.current.find((r) => r.key === key)
-      if (
-        !row ||
-        committingRef.current ||
-        row.flag === null ||
-        row.read ||
-        next.cardId !== row.cardId
-      )
-        return false
+      if (!row || committingRef.current || row.flag === null || row.read) return false
+      // Another card only as one of the row's own options: a Gem Pack version, a card of its own.
+      const version =
+        next.cardId !== row.cardId &&
+        row.options.some((o) => o.printingId === next.printingId && o.cardId === next.cardId)
+      if (next.cardId !== row.cardId && !version) return false
       update((list) =>
         list.map((r) =>
           r.key === key
             ? {
                 ...r,
+                ...(version ? { cardId: next.cardId, name: next.name, imageId: next.imageId } : {}),
                 printingId: next.printingId,
                 rarity: next.rarity,
                 setCode: next.setCode,
+                // A sure read (a Gem Pack's pattern) settles the row; a tilt's stays to be checked.
+                ...(next.flag === null ? { flag: null } : {}),
                 read: true
               }
             : r

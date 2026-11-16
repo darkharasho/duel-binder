@@ -609,7 +609,10 @@ describe('useScanSession', () => {
       let key = ''
       act(() => void (key = result.current.add(draft({ game: 'pkm', flag: 'pick-printing' }))))
       let ok = false
-      act(() => void (ok = result.current.applyRead(key, reread({ game: 'pkm', flag: null }))))
+      act(
+        () =>
+          void (ok = result.current.applyRead(key, reread({ game: 'pkm', flag: 'pick-printing' })))
+      )
       expect(ok).toBe(true)
       expect(result.current.rows[0]).toMatchObject({ flag: 'pick-printing', rarity: 'Rare' })
       await act(async () => void (await result.current.commit()))
@@ -666,6 +669,57 @@ describe('useScanSession', () => {
       act(() => void (ok = result.current.applyRead(key, reread({ cardId: 2 }))))
       expect(ok).toBe(false)
       expect(result.current.rows[0].rarity).toBe('Common')
+    })
+
+    it("takes a sure read of another of the row's cards (a Gem Pack version): its card, unflagged", () => {
+      const { result } = setup(undefined, 'pkm')
+      // Gem Pack versions are cards of their own: 0801 (Holofoil) and 0802 (Poke Ball Pattern).
+      const version = (cardId: number, printingId: number, rarity: string): ScanPrinting => ({
+        ...opt(printingId, rarity),
+        cardId,
+        name: 'Furret',
+        setCode: `CBB7C 080${cardId}`,
+        language: 'zh-hans',
+        imageIds: [cardId * 10]
+      })
+      const options = [version(1, 101, 'Holofoil'), version(2, 102, 'Poke Ball Pattern')]
+      let key = ''
+      act(
+        () =>
+          void (key = result.current.add(
+            draft({
+              game: 'pkm',
+              name: 'Furret',
+              options,
+              rarity: 'Holofoil',
+              flag: 'pick-printing'
+            })
+          ))
+      )
+      const told = draft({
+        game: 'pkm',
+        cardId: 2,
+        name: 'Furret',
+        imageId: 20,
+        printingId: 102,
+        setCode: 'CBB7C 0802',
+        rarity: 'Poke Ball Pattern',
+        options,
+        flag: null
+      })
+      let ok = false
+      act(() => void (ok = result.current.applyRead(key, told)))
+      expect(ok).toBe(true)
+      expect(result.current.rows[0]).toMatchObject({
+        key,
+        cardId: 2,
+        imageId: 20,
+        printingId: 102,
+        setCode: 'CBB7C 0802',
+        rarity: 'Poke Ball Pattern',
+        flag: null,
+        read: true
+      })
     })
 
     it('a saved read marker survives a reload', () => {

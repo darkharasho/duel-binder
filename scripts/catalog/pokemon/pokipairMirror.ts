@@ -10,12 +10,15 @@ import { fillCorners } from '../onepiece/art'
 import { decodeImage } from '../references'
 import { shrink, smallJpeg } from '../thumbs'
 import { HttpError, withRetry } from '../upload'
+import { BULBAGARDEN_GAP_MS, listCategoryFiles } from './setArt'
 import {
+  archivePacks,
   OFFICIAL_PRODUCTS,
   officialSetOf,
   packCopy,
   packHandId,
-  parseOfficialProducts
+  parseOfficialProducts,
+  ZH_ARCHIVE_PACKS
 } from './zhPacks'
 import {
   handId,
@@ -231,7 +234,7 @@ export async function mirrorZhArt(o: MirrorOptions): Promise<MirrorResult> {
     }
     return out
   }
-  /** Each set's pack picture: the official one where there is one, else PokiPair's. */
+  /** Each set's pack picture: the official one where there is one, else PokiPair's, else the archive's. */
   const packs = new Map<string, string>()
   try {
     const hub = await text(POKIPAIR_HUB)
@@ -296,6 +299,20 @@ export async function mirrorZhArt(o: MirrorOptions): Promise<MirrorResult> {
       for (const p of list === null ? [] : parseOfficialProducts(list)) {
         const id = officialSetOf(p.name, o.zhNames)
         if (id !== null && o.cards.has(id)) packs.set(id, p.image)
+      }
+    }
+    // Sets with neither, from the Bulbagarden Archives: a few requests, a night they're needed.
+    const packless = [...o.cards.keys()].filter((id) => !packs.has(id))
+    if (packless.length > 0) {
+      try {
+        const files = await listCategoryFiles(ZH_ARCHIVE_PACKS, {
+          fetch: o.fetch,
+          userAgent: CATALOG_USER_AGENT,
+          pause: () => o.sleep(BULBAGARDEN_GAP_MS)
+        })
+        for (const [id, url] of archivePacks(files, packless)) packs.set(id, url)
+      } catch (e) {
+        o.log(`zh art: archive packs failed: ${e instanceof Error ? e.message : String(e)}`)
       }
     }
     if (!o.portal) return result

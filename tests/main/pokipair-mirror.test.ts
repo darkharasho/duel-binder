@@ -33,11 +33,25 @@ const gemCards: ZhCatalogCard[] = ['0101', '0102', '0103'].map((n) => ({
   name: "Team Rocket's Raticate"
 }))
 
+const archiveFile = (title: string, width: number, height: number) => ({
+  ns: 6,
+  title: `File:${title}`,
+  imageinfo: [
+    {
+      url: `https://archives.bulbagarden.net/media/upload/a/ab/${title.replace(/ /g, '_')}`,
+      width,
+      height
+    }
+  ]
+})
+
 function setup(
   over: {
     image?: (url: string) => Response
     page?: (url: string) => Response
     official?: () => Response
+    /** Another set, with no PokiPair or official pack. */
+    extraSet?: string
   } = {}
 ) {
   const urls: string[] = []
@@ -56,6 +70,19 @@ function setup(
       return over.page?.(url) ?? new Response(fixture('csv8.html'))
     if (url.includes('gem-pack-vol-7')) return new Response(fixture('gem7.html'))
     if (url.includes('nine-colors')) return new Response('<html></html>')
+    if (url.startsWith('https://archives.bulbagarden.net/w/api.php'))
+      return Response.json({
+        query: {
+          pages: {
+            1: archiveFile('CSVH1a Pack.png', 300, 520),
+            2: archiveFile('CS4a Booster 25 Pack.png', 300, 520)
+          }
+        }
+      })
+    if (url.startsWith('https://archives.bulbagarden.net/media/upload/'))
+      return new Response(png() as unknown as BodyInit, {
+        headers: { 'content-type': 'image/png' }
+      })
     if (url.startsWith('https://media.pokipair.com/'))
       return (
         over.image?.(url) ??
@@ -74,7 +101,8 @@ function setup(
   const cards = new Map([
     ['CSV8C', csv8Cards],
     ['CBB7C', gemCards],
-    ['CS4aC', []]
+    ['CS4aC', []],
+    ...(over.extraSet ? [[over.extraSet, []] as [string, ZhCatalogCard[]]] : [])
   ])
   const run = (
     o: {
@@ -150,6 +178,20 @@ describe('mirrorZhArt', () => {
     t.uploads.length = 0
     await t.run()
     expect(t.uploads.filter((u) => u.size === 'pack')).toEqual([])
+  })
+
+  it("fills a set with no other pack from Bulbagarden's, by its code, and nothing else", async () => {
+    const t = setup({ extraSet: 'CSVH1aC' })
+    const r = await t.run()
+    expect(r.packs).toBe(4)
+    expect(t.record.packs!['CSVH1aC']).toMatch(/bulbagarden\.net\/.*CSVH1a_Pack\.png$/)
+    expect(t.record.packs!['CS4aC']).toMatch(/^https:\/\/media\.pokipair\.com\//)
+  })
+
+  it('asks Bulbagarden nothing when every set has a pack', async () => {
+    const t = setup()
+    await t.run()
+    expect(t.urls.some((u) => u.includes('bulbagarden'))).toBe(false)
   })
 
   it('keeps going with PokiPair packs when pokemon.cn is down', async () => {

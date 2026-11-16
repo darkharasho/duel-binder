@@ -725,3 +725,37 @@ export async function warmSetArt(opts: {
   }
   return out
 }
+
+/** Languages whose sets are another language's under the same code: Traditional Chinese prints Japanese sets, French English ones. */
+export const TWIN_PACK_LANGUAGES: readonly (readonly [string, TdLang])[] = [
+  ['zh-hant', 'ja'],
+  ['fr', 'en']
+]
+
+/**
+ * Pack rows for the languages with no pack art of their own, borrowed from the twin set's: the
+ * set of the twin language with the same code. A code two sets share on either side (French and
+ * English "30C") is left out rather than guessed. Replaces the language's rows each night, after
+ * the twin's rows are written.
+ */
+export function writeTwinPackArt(db: Database.Database): number {
+  const copy = db.prepare(
+    `INSERT INTO pokemon_set_art (language, set_name, kind, sort_order, image_url, image_key)
+     SELECT t.language, t.set_name, 'pack', a.sort_order, a.image_url, a.image_key
+     FROM sets t
+     JOIN sets s ON s.game = 'pkm' AND s.language = @twin AND s.set_code = t.set_code
+     JOIN pokemon_set_art a ON a.language = s.language AND a.set_name = s.set_name AND a.kind = 'pack'
+     WHERE t.game = 'pkm' AND t.language = @lang AND t.set_code <> ''
+       AND (SELECT COUNT(*) FROM sets x WHERE x.game = 'pkm' AND x.language = t.language AND x.set_code = t.set_code) = 1
+       AND (SELECT COUNT(*) FROM sets x WHERE x.game = 'pkm' AND x.language = s.language AND x.set_code = s.set_code) = 1`
+  )
+  const drop = db.prepare("DELETE FROM pokemon_set_art WHERE language = ? AND kind = 'pack'")
+  let rows = 0
+  db.transaction(() => {
+    for (const [lang, twin] of TWIN_PACK_LANGUAGES) {
+      drop.run(lang)
+      rows += copy.run({ lang, twin }).changes
+    }
+  })()
+  return rows
+}

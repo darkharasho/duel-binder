@@ -43,12 +43,21 @@ import {
 import { deletesByGame, diffTable, hasGameColumn } from './diff'
 import { ART_BUDGET } from './onepiece/art'
 import { logOnePiece, runOnePieceStep, type OnePieceReport } from './onepiece'
-import { logOnePieceJapanese, runOnePieceJapaneseStep, type JapaneseReport } from './onepiece/japanese'
+import {
+  logOnePieceJapanese,
+  runOnePieceJapaneseStep,
+  type JapaneseReport
+} from './onepiece/japanese'
 import { logMagic, logMagicSymbols, runMagicStep, type MagicStepResult } from './magic'
 import { runPokemonStep, type PokemonReport } from './pokemon'
 import { readZhArtRecord, ZH_ART_RECORD_FILE } from './pokemon/pokipairMirror'
 import { writeZhPackArt } from './pokemon/zhPacks'
-import { refreshPokemonSetArt, shouldRefreshSetArt, warmSetArt } from './pokemon/setArt'
+import {
+  refreshPokemonSetArt,
+  shouldRefreshSetArt,
+  warmSetArt,
+  writeTwinPackArt
+} from './pokemon/setArt'
 import { buildFingerprints, uploadFingerprintRefs, uploadFingerprints } from './fingerprints'
 import { uploadCatalog, type UploadPace } from './upload'
 
@@ -168,8 +177,7 @@ export function findShrinks(work: Database.Database, base: Database.Database | n
   return out
 }
 
-const noArt = (r: PokemonReport): number =>
-  Object.values(r.artMissing).reduce((a, b) => a + b, 0)
+const noArt = (r: PokemonReport): number => Object.values(r.artMissing).reduce((a, b) => a + b, 0)
 
 /**
  * Logs the Pokémon reports. Their problems (unmatched products, variants outside the version
@@ -202,11 +210,13 @@ function logPokemon(reports: PokemonReport[], log: (line: string) => void): void
 export function newSetArtKeys(work: Database.Database, base: Database.Database | null): string[] {
   const keys = (db: Database.Database): string[] =>
     (
-      db.prepare(
-        `SELECT image_key FROM pokemon_set_art
+      db
+        .prepare(
+          `SELECT image_key FROM pokemon_set_art
          UNION SELECT image_key FROM sets WHERE game = 'op' AND image_key LIKE 'ob-%'
          ORDER BY image_key`
-      ).all() as { image_key: string }[]
+        )
+        .all() as { image_key: string }[]
     ).map((r) => r.image_key)
   const old = new Set(base ? keys(base) : [])
   return keys(work).filter((k) => !old.has(k))
@@ -260,7 +270,8 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
   if (!opts.dryRun && (!url || !token)) {
     throw new Error('PORTAL_URL and PORTAL_ADMIN_TOKEN must both be set (or pass --dry-run)')
   }
-  if (opts.dryRun && opts.stage) throw new Error('--dry-run runs every stage, so it takes no --stage')
+  if (opts.dryRun && opts.stage)
+    throw new Error('--dry-run runs every stage, so it takes no --stage')
   const refresh =
     opts.refresh ??
     ((work: Database.Database, onProblem: (p: string) => void) =>
@@ -331,7 +342,14 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
         // file goes up ungated so it is whole by the time scanning is turned on. Magic's photos
         // are scored in CI instead (scanner step 5).
         log(`${game === 'mtg' ? 'Magic' : 'One Piece'} accuracy: no shots yet; not gated`)
-        if (upload) await uploadFingerprints({ url: url!, token: token!, bytes: out.bytes, game, fetch: opts.fetch })
+        if (upload)
+          await uploadFingerprints({
+            url: url!,
+            token: token!,
+            bytes: out.bytes,
+            game,
+            fetch: opts.fetch
+          })
         return
       }
       const report = await gate(work, out.bytes, game)
@@ -420,7 +438,10 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
             await refreshPokemonSetArt(w, { version, log })
           }
           // Nightly, after the weekly refresh (which replaces every pack row).
-          if (out.error === null) writeZhPackArt(w, copied.packs ?? {})
+          if (out.error === null) {
+            writeZhPackArt(w, copied.packs ?? {})
+            log(`Pokémon zh-hant and fr pack art: ${writeTwinPackArt(w)} rows from their twins`)
+          }
           return out
         })
       const out = await step(work)
@@ -479,7 +500,9 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
           // Not async, so this rejects the whole job: a test that forgot to stub `magic` would
           // otherwise download Scryfall's entire bulk file.
           if (process.env['VITEST']) {
-            throw new Error('The default Magic step would download live Scryfall data; pass `magic` in tests')
+            throw new Error(
+              'The default Magic step would download live Scryfall data; pass `magic` in tests'
+            )
           }
           return runMagicStep(w, {
             cachePath: join(opts.dir, 'magic-src.sqlite'),
@@ -600,7 +623,8 @@ async function main(): Promise<void> {
   ]
   const at = args.indexOf('--stage')
   const stage = at < 0 ? undefined : (args.splice(at, 2)[1] as Stage)
-  if (at >= 0 && !STAGES.includes(stage!)) throw new Error(`--stage takes one of: ${STAGES.join(' ')}`)
+  if (at >= 0 && !STAGES.includes(stage!))
+    throw new Error(`--stage takes one of: ${STAGES.join(' ')}`)
   const unknown = args.filter((a) => !flags.includes(a))
   if (unknown.length > 0) throw new Error(`Unknown argument(s): ${unknown.join(' ')}`)
   const { problems } = await runJob({

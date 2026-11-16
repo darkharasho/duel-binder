@@ -319,6 +319,7 @@ export function renderPage(view: PageView): string {
 <meta name="theme-color" content="${wash.base}">
 <title>${TITLE}</title>
 <meta name="description" content="${DESCRIPTION}">
+<meta name="impact-site-verification" value="6be828db-04ec-4b49-a86f-5fd0da352918">
 <link rel="icon" href="/favicon.ico" sizes="48x48">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">

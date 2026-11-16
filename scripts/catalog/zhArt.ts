@@ -86,6 +86,7 @@ async function main(): Promise<void> {
     gapMs: ZH_ART_GAP_MS,
     until: Date.now() + TIME_BUDGET_MS,
     sleep: (ms) => new Promise((done) => setTimeout(done, ms)),
+    save: dry ? undefined : () => writeFileSync(ZH_ART_RECORD, JSON.stringify(record)),
     log: (line) => console.log(line)
   })
   if (!dry) writeFileSync(ZH_ART_RECORD, JSON.stringify(record))

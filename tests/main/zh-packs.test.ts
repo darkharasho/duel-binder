@@ -74,6 +74,18 @@ describe('pack copies', () => {
   })
 })
 
+describe('writeZhPackArt with nothing copied', () => {
+  it('leaves the rows it has (a lost record must not wipe them)', () => {
+    const db = openDatabase(join(mkdtempSync(join(tmpdir(), 'zh-packs-')), 'work.sqlite'))
+    db.prepare(
+      "INSERT INTO pokemon_set_art (language, set_name, kind, sort_order, image_url, image_key) VALUES ('zh-hans', 'Old', 'pack', 0, 'x', 'hp-old')"
+    ).run()
+    writeZhPackArt(db, {})
+    expect(db.prepare('SELECT COUNT(*) AS n FROM pokemon_set_art').get()).toEqual({ n: 1 })
+    db.close()
+  })
+})
+
 describe('writeZhPackArt', () => {
   it("writes each copied pack under its set's name, replacing last night's", () => {
     const db = openDatabase(join(mkdtempSync(join(tmpdir(), 'zh-packs-')), 'work.sqlite'))

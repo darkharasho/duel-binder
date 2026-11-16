@@ -65,6 +65,8 @@ export interface MirrorOptions {
   until?: number
   now?: () => number
   sleep: (ms: number) => Promise<void>
+  /** Called after each set and after the packs, so a run cut short keeps what it copied. */
+  save?: () => void
   log: (line: string) => void
 }
 
@@ -85,9 +87,16 @@ export const ZH_ART_RECORD_FILE = 'pokipair.json'
 /** The record at `path`, or an empty one. */
 export function readZhArtRecord(path: string): MirrorRecord {
   if (!existsSync(path)) return { done: {} }
-  const r = JSON.parse(readFileSync(path, 'utf8')) as Partial<MirrorRecord>
-  return { done: r.done ?? {}, packs: r.packs ?? {} }
+  try {
+    const r = JSON.parse(readFileSync(path, 'utf8')) as Partial<MirrorRecord>
+    return { done: r.done ?? {}, packs: r.packs ?? {} }
+  } catch {
+    return { done: {} } // a broken file is a lost record: copied again, nothing worse
+  }
 }
+
+/** A picture from pokemon.cn, the official site. */
+const isOfficial = (url: string): boolean => url.startsWith('https://image.pokemon.com.cn/')
 
 /** A refusal that means "stop asking for now". */
 class Stop extends Error {}
@@ -145,7 +154,15 @@ export async function mirrorZhArt(o: MirrorOptions): Promise<MirrorResult> {
     return res
   }
   const text = async (url: string): Promise<string | null> => {
-    const res = await get(url)
+    let res: Response
+    try {
+      res = await get(url)
+    } catch (e) {
+      if (e instanceof Stop) throw e
+      // No answer (a timeout, a reset): this page waits for another night; the rest goes on.
+      o.log(`zh art: ${url} failed: ${e instanceof Error ? e.message : String(e)}`)
+      return null
+    }
     if (!res.ok) {
       o.log(`zh art: ${url} answered ${res.status}`)
       return null
@@ -171,6 +188,7 @@ export async function mirrorZhArt(o: MirrorOptions): Promise<MirrorResult> {
   }
 
   let left = o.budget
+  let outOfTime = false
   /** Each set's pack picture: the official one where there is one, else PokiPair's. */
   const packs = new Map<string, string>()
   try {
@@ -184,7 +202,7 @@ export async function mirrorZhArt(o: MirrorOptions): Promise<MirrorResult> {
       const cards = o.cards.get(id) ?? []
       // A set whose cards all have their copy is not asked for again.
       if (cards.length > 0 && cards.every((c) => o.record.done[c.sourceId] !== undefined)) continue
-      if (left <= 0 && o.portal) continue
+      if ((left <= 0 || outOfTime) && o.portal) continue
       const html = await text(set.url)
       if (html === null) continue
       const matches = matchCards(parseSetPage(html).cards, cards)
@@ -195,8 +213,12 @@ export async function mirrorZhArt(o: MirrorOptions): Promise<MirrorResult> {
       const portal = o.portal
       for (const [sourceId, url] of todo) {
         if (left <= 0) break
-        if (o.until !== undefined && (o.now ?? Date.now)() >= o.until)
-          throw new Stop('out of time for tonight')
+        if (o.until !== undefined && (o.now ?? Date.now)() >= o.until) {
+          // Cards wait for tomorrow; the few packs below still go.
+          outOfTime = true
+          result.stopped = 'out of time for tonight'
+          break
+        }
         left--
         const ok = await copy(sourceId, url, async (bytes) => {
           const copies = handCopies(bytes)
@@ -210,6 +232,7 @@ export async function mirrorZhArt(o: MirrorOptions): Promise<MirrorResult> {
           result.uploaded++
         }
       }
+      o.save?.()
     }
 
     if (o.zhNames) {
@@ -222,8 +245,11 @@ export async function mirrorZhArt(o: MirrorOptions): Promise<MirrorResult> {
     if (!o.portal) return result
     const portal = o.portal
     for (const [id, source] of packs) {
+      const kept = o.record.packs[id]
       // The official link's auth key changes every night; the picture is the same.
-      if (o.record.packs[id]?.split('?')[0] === source.split('?')[0]) continue
+      if (kept === source.split('?')[0]) continue
+      // An official pack stays once copied: pokemon.cn only lists its newest products.
+      if (kept !== undefined && isOfficial(kept) && !isOfficial(source)) continue
       const ok = await copy(`${id} pack`, source, async (bytes) => {
         const png = packCopy(bytes)
         if (!png) throw new Error('not a usable image')
@@ -234,6 +260,7 @@ export async function mirrorZhArt(o: MirrorOptions): Promise<MirrorResult> {
         result.packs++
       }
     }
+    o.save?.()
   } catch (e) {
     if (!(e instanceof Stop)) throw e
     result.stopped = e.message

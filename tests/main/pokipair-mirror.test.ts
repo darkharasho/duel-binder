@@ -76,7 +76,15 @@ function setup(
     ['CBB7C', gemCards],
     ['CS4aC', []]
   ])
-  const run = (o: { budget?: number; dry?: boolean; now?: () => number; until?: number } = {}) =>
+  const run = (
+    o: {
+      budget?: number
+      dry?: boolean
+      now?: () => number
+      until?: number
+      save?: () => void
+    } = {}
+  ) =>
     mirrorZhArt({
       cards,
       record,
@@ -93,6 +101,7 @@ function setup(
       gapMs: 1000,
       now: o.now,
       until: o.until,
+      save: o.save,
       sleep,
       log: () => undefined
     })
@@ -182,6 +191,43 @@ describe('mirrorZhArt', () => {
     expect(r.uploaded).toBe(1)
     expect(r.stopped).toMatch(/time/)
     expect(Object.keys(t.record.done)).toHaveLength(1)
+  })
+
+  it('skips a page that never answers, and goes on', async () => {
+    const t = setup({
+      page: () => {
+        throw new Error('timeout')
+      }
+    })
+    const r = await t.run()
+    expect(r.uploaded).toBe(3) // CBB7C only
+    expect(r.stopped).toBeNull()
+  })
+
+  it('saves the record after each set', async () => {
+    const t = setup()
+    const saved: number[] = []
+    await t.run({ save: () => saved.push(Object.keys(t.record.done).length) })
+    expect(saved.slice(0, 2)).toEqual([3, 6])
+  })
+
+  it("never trades an official pack for PokiPair's when pokemon.cn stops listing it", async () => {
+    const t = setup()
+    await t.run()
+    const official = t.record.packs!['CSV8C']
+    t.uploads.length = 0
+    const later = setup({ official: () => new Response('<html></html>') })
+    Object.assign(later.record, { done: t.record.done, packs: { ...t.record.packs } })
+    await later.run()
+    expect(later.record.packs!['CSV8C']).toBe(official)
+    expect(later.uploads.filter((u) => u.id === 'zh-hans-pack-csv8c')).toEqual([])
+  })
+
+  it('still copies packs when out of time for cards', async () => {
+    const t = setup()
+    let clock = 0
+    const r = await t.run({ now: () => clock++, until: 1 })
+    expect(r.packs).toBe(3)
   })
 
   it('stops the run on a rate limit, keeping what was done', async () => {

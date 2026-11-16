@@ -167,6 +167,9 @@ function nameAgrees(ours: string, theirs: string): boolean {
   return short.every((w) => long.includes(w))
 }
 
+/** The share of a page's numbers whose names must agree outright before any of its cards match. */
+const PAGE_AGREEMENT = 0.8
+
 const bareNumber = (n: string): string =>
   n
     .split('/')[0]
@@ -200,13 +203,18 @@ export function matchCards(page: PpCard[], cards: ZhCatalogCard[]): Map<string, 
     const k = bareNumber(c.number)
     ours.set(k, [...(ours.get(k) ?? []), c])
   }
+  const pairs: [ZhCatalogCard, PpCard][] = []
   for (const [k, pics] of byNumber) {
     const mine = ours.get(k) ?? []
     if (mine.length !== 1) continue
     const pick = [...pics].sort((a, b) => rank(a.variant) - rank(b.variant))[0]
-    if (!pick.name || !nameAgrees(mine[0].name, pick.name)) continue
-    out.set(mine[0].sourceId, pick.url)
+    if (pick.name) pairs.push([mine[0], pick])
   }
+  // A page numbered unlike ours (one off, another print run) still lines up here and there
+  // ("Charizard" on our "Charizard ex"): it counts only when most numbers name the same card.
+  const strict = pairs.filter(([c, p]) => sameCardName(c.name, p.name!)).length
+  if (pairs.length === 0 || strict < pairs.length * PAGE_AGREEMENT) return out
+  for (const [c, p] of pairs) if (nameAgrees(c.name, p.name!)) out.set(c.sourceId, p.url)
   return out
 }
 

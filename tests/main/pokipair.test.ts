@@ -182,25 +182,47 @@ describe('matchCards', () => {
   })
 
   it('lets a name with a word more or less agree on the same number, and no other', () => {
+    // Most of the page agrees outright, as a real one does.
+    const exact = Array.from({ length: 16 }, (_, i) => `${20 + i}01`)
     const got = matchCards(
       [
         pp('1801', 'gem', 'Basic Grass Energy'),
         pp('0101', 'gem', 'Pikachu'),
         pp('1001', 'gem', 'Castform'),
-        pp('0107', 'full-art', 'Clefable')
+        pp('0107', 'full-art', 'Clefable'),
+        ...exact.map((n) => pp(n, 'gem', `Mon ${n}`))
       ],
       [
         zh('1801', 'Grass Energy', 'CBB1C'),
         zh('0101', 'Captain Pikachu', 'CBB1C'),
         zh('1001', 'Castform Sunny Form', 'CBB1C'),
-        zh('0107', 'Blissey V ex', 'CBB1C')
+        zh('0107', 'Blissey V ex', 'CBB1C'),
+        ...exact.map((n) => zh(n, `Mon ${n}`, 'CBB1C'))
       ]
     )
-    expect([...got.keys()].sort()).toEqual([
+    expect([...got.keys()].filter((k) => !exact.some((n) => k.endsWith(n))).sort()).toEqual([
       'zh-hans/CBB1C-0101',
       'zh-hans/CBB1C-1001',
       'zh-hans/CBB1C-1801'
     ])
+  })
+
+  it('matches nothing on a page numbered one off from ours, even where an evolution line lines up', () => {
+    const ours = [
+      zh('004', 'Charmander'),
+      zh('005', 'Charizard ex'),
+      zh('006', 'Squirtle'),
+      zh('007', 'Wartortle'),
+      zh('008', 'Blastoise')
+    ]
+    const theirs = [
+      pp('004', 'normal', 'Charmeleon'),
+      pp('005', 'normal', 'Charizard'),
+      pp('006', 'normal', 'Bulbasaur'),
+      pp('007', 'normal', 'Squirtle'),
+      pp('008', 'normal', 'Wartortle')
+    ]
+    expect(matchCards(theirs, ours).size).toBe(0)
   })
 
   it('compares numbers without the set total or leading zeros', () => {

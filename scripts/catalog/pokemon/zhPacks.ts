@@ -101,6 +101,8 @@ export function writeZhPackArt(
     `INSERT INTO pokemon_set_art (language, set_name, kind, sort_order, image_url, image_key)
      VALUES ('zh-hans', ?, 'pack', 0, ?, ?)`
   )
+  // Nothing recorded is a lost record (an evicted cache), not packs gone: keep last night's rows.
+  if (Object.keys(packs).length === 0) return
   db.transaction(() => {
     db.exec("DELETE FROM pokemon_set_art WHERE language = 'zh-hans' AND kind = 'pack'")
     for (const [setId, source] of Object.entries(packs)) {

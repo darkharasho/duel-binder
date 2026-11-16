@@ -7,6 +7,7 @@ import { adminRoute } from './catalogLoad'
 import type { CostMeter } from './meter'
 import { adminMergeRoute } from './merge'
 import { adminTestersRoute } from './testers'
+import { betaSubmitRoute } from './beta'
 import { adminAdminsRoute } from './admins'
 import { rpcRoute } from './rpc'
 import { syncRoute } from './sync'
@@ -148,6 +149,7 @@ async function route(req: Request, deps: AppDeps): Promise<Response> {
     return getFingerprints(req, deps)
   if (req.method === 'GET' && url.pathname === '/scan/fingerprint-refs')
     return getFingerprintRefs(req, deps)
+  if (url.pathname === '/beta') return betaSubmitRoute(req, deps)
   if (req.method === 'GET' && url.pathname === '/admin')
     return (await isAdmin(req, deps)) ? adminPage() : json({ error: 'Not found' }, 404)
   if (url.pathname === '/admin/open') return adminOpenRoute(req, deps)

@@ -1,7 +1,13 @@
 import type { SqlDb } from '../../../src/main/db/sql'
 
 export type LimitKind =
-  'code-email-min' | 'code-email-hour' | 'code-ip' | 'password-email' | 'password-ip' | 'check-ip'
+  | 'code-email-min'
+  | 'code-email-hour'
+  | 'code-ip'
+  | 'password-email'
+  | 'password-ip'
+  | 'check-ip'
+  | 'beta-ip'
 
 const MIN = 60 * 1000
 const HOUR = 60 * MIN
@@ -12,7 +18,9 @@ export const LIMITS: Record<LimitKind, { max: number; windowMs: number }> = {
   'code-ip': { max: 20, windowMs: HOUR },
   'password-email': { max: 10, windowMs: 15 * MIN },
   'password-ip': { max: 50, windowMs: 15 * MIN },
-  'check-ip': { max: 100, windowMs: HOUR }
+  'check-ip': { max: 100, windowMs: HOUR },
+  // The site's beta form: a household asking for a few phones, not a script.
+  'beta-ip': { max: 5, windowMs: 24 * HOUR }
 }
 
 export function isLimited(db: SqlDb, kind: LimitKind, key: string, now: Date): boolean {

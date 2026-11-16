@@ -960,6 +960,17 @@ CREATE TABLE beta_requests (id INTEGER PRIMARY KEY, email TEXT NOT NULL, platfor
   name TEXT NOT NULL, referred_by TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
   created_at TEXT NOT NULL, decided_at TEXT, UNIQUE (email, platform));
 `
+  },
+  // Supporter subscriptions (supporters.ts): one row per account that has a Stripe customer.
+  {
+    name: 'server-48',
+    sql: `
+CREATE TABLE supporters (user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  stripe_customer_id TEXT NOT NULL UNIQUE, stripe_subscription_id TEXT, plan TEXT,
+  status TEXT NOT NULL DEFAULT 'none', amount_cents INTEGER, current_period_end TEXT,
+  cancel_at_period_end INTEGER NOT NULL DEFAULT 0, since TEXT,
+  show_on_site INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL);
+`
   }
 ]
 

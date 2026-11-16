@@ -584,7 +584,7 @@ describe('server-42 feeds mtg_cards', () => {
     ])
     expect(
       (db.prepare('SELECT name FROM server_migrations ORDER BY rowid DESC LIMIT 1').get() as { name: string }).name
-    ).toBe('server-47')
+    ).toBe('server-48')
     db.close()
   })
 })

@@ -70,9 +70,10 @@ EMAIL_SIGN_IN = "on"
 # existing supporters keep their badge. The Price ids are the $3/month and $25/year Prices in Stripe. The secrets
 # STRIPE_SECRET_KEY (a restricted rk_ key: Customers, Checkout Sessions, Subscriptions, Customer portal) and
 # STRIPE_WEBHOOK_SECRET are set with `wrangler secret put` and kept in 1Password Private. Sandbox keys first.
-SUPPORTER_ENABLED = "off"
-# STRIPE_PRICE_MONTH = ""
-# STRIPE_PRICE_YEAR = ""
+SUPPORTER_ENABLED = "on"
+# Live Prices (product prod_Vdf2kVDGStMz5K "Duel Binder Supporter"); the sandbox ones are in the main .env.
+STRIPE_PRICE_MONTH = "price_1UcNihBpiN8YF7XpxJz0v6mp"
+STRIPE_PRICE_YEAR = "price_1UcNihBpiN8YF7Xpi34V8oeD"
 
 # Workers Logs: request logs and console output, searchable in the dashboard for a few days.
 [observability]

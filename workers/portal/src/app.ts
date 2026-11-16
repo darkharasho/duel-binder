@@ -39,6 +39,7 @@ import { emailAuthRoute, emailStatusRoute } from './emailAuth'
 import { emailClaimPage, emailFormRoute, emailMatchPage, emailStartPage } from './emailPages'
 import { appPreflight, withAppCors } from './appCors'
 import { stripeWebhookRoute } from './stripe'
+import { supporterThanksPage } from './supporterThanks'
 import { adminSupportersRoute, supporterNamesRoute } from './supporters'
 import { adminTrainingRoute, trainingRoute, type TrainingBucket } from './training'
 
@@ -148,6 +149,8 @@ async function route(req: Request, deps: AppDeps): Promise<Response> {
   if (url.pathname === '/api/usage') return reportUsage(req, deps)
   if (url.pathname === '/api/errors') return reportError(req, deps)
   if (url.pathname === '/stripe/webhook') return stripeWebhookRoute(req, deps)
+  if (req.method === 'GET' && url.pathname === '/supporter/thanks')
+    return supporterThanksPage(req, deps.env.SITE_URL)
   if (req.method === 'GET' && url.pathname === '/api/supporters/names')
     return supporterNamesRoute(deps)
   if (url.pathname.startsWith('/api/training/'))

@@ -3,6 +3,7 @@ import { renderPage } from './page'
 import { renderBeta } from './beta'
 import { renderPrivacy } from './privacy'
 import { renderTerms } from './terms'
+import { renderSupport } from './support'
 import type { Downloads } from './releases'
 
 const NO_DOWNLOADS: Downloads = {
@@ -17,6 +18,8 @@ export interface SiteDeps {
   appUrl: string
   assets: { fetch(req: Request): Promise<Response> }
   downloads: () => Promise<Downloads>
+  /** The opted-in supporters' names for /support; absent or failing means none are listed. */
+  supporterNames?: () => Promise<string[]>
 }
 
 export async function handleSite(req: Request, deps: SiteDeps): Promise<Response> {
@@ -30,12 +33,22 @@ export async function handleSite(req: Request, deps: SiteDeps): Promise<Response
   }
   // The built web app lives under /app/ and belongs to the app host only.
   if (url.pathname.startsWith('/app/')) return new Response('Not Found', { status: 404 })
-  if (!['/', '/privacy', '/terms', '/beta'].includes(url.pathname)) return deps.assets.fetch(req)
+  if (!['/', '/privacy', '/terms', '/beta', '/support'].includes(url.pathname))
+    return deps.assets.fetch(req)
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     return new Response('Method Not Allowed', { status: 405, headers: { allow: 'GET, HEAD' } })
   }
   if (url.pathname === '/privacy') return html(req, renderPrivacy({ appUrl: deps.appUrl }))
   if (url.pathname === '/terms') return html(req, renderTerms({ appUrl: deps.appUrl }))
+  if (url.pathname === '/support') {
+    let names: string[] = []
+    try {
+      names = (await deps.supporterNames?.()) ?? []
+    } catch {
+      // The page still explains the tier without the list.
+    }
+    return html(req, renderSupport({ appUrl: deps.appUrl, names }))
+  }
   if (url.pathname === '/beta')
     return html(
       req,

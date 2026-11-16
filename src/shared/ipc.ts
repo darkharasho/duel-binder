@@ -1,4 +1,5 @@
 import type {
+  AdminSupporters,
   AdminErrorGroup,
   AdminList,
   AdminMerge,
@@ -358,6 +359,7 @@ export interface Api {
     merges(): Promise<AdminMerge[]>
     /** Undoes a merge; the sign-ins it couldn't give back. */
     undoMerge(closedId: number): Promise<AdminSkippedSignIn[]>
+    supporters(): Promise<AdminSupporters>
     testers(): Promise<AdminTester[]>
     addTester(game: GameId, by: AdminTesterBy, name: string): Promise<void>
     removeTester(id: number): Promise<void>
@@ -641,6 +643,7 @@ export const INVOKE_CHANNELS = [
   'admin:removeAdmin',
   'admin:photos',
   'admin:costs',
+  'admin:supporters',
   'admin:beta',
   'admin:decideBeta',
   'admin:deleteBeta',

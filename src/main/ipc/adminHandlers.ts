@@ -11,6 +11,7 @@ import {
   type AdminWorkflow,
   type RipFrameInfo
 } from '@shared/admin'
+import type { AdminSupporters } from '@shared/admin'
 import type { AdminCosts } from '@shared/costs'
 import { isGameId } from '@shared/games'
 import type { InvokeChannel } from '@shared/ipc'
@@ -87,6 +88,7 @@ export function adminHandlers(
       if (days !== 7 && days !== 30) throw new Error('Bad days')
       return account.admin<AdminCosts>(`/admin/costs?days=${days}`)
     },
+    'admin:supporters': () => account.admin<AdminSupporters>('/admin/supporters'),
     'admin:beta': () => account.admin<AdminBeta>('/admin/beta'),
     'admin:decideBeta': async (requestId: unknown, status: unknown) => {
       if (status !== 'added' && status !== 'declined') throw new Error('Bad status')

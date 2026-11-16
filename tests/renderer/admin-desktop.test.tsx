@@ -80,6 +80,38 @@ function adminApi(): NonNullable<Api['admin']> {
     removeAdmin: vi.fn(async () => {}),
     photos: vi.fn(async () => ({ games: [], testers: [], holders: [] })),
     costs: vi.fn(async () => COSTS),
+    supporters: vi.fn(async () => ({
+      active: 2,
+      monthly: 1,
+      yearly: 1,
+      monthlyCents: 508,
+      list: [
+        {
+          userId: 3,
+          username: 'yugi',
+          displayName: 'Yugi',
+          plan: 'year' as const,
+          amountCents: 2500,
+          status: 'active',
+          since: '2026-11-16T12:00:00.000Z',
+          until: '2027-11-16T00:00:00.000Z',
+          cancelling: false,
+          showOnSite: true
+        },
+        {
+          userId: 2,
+          username: 'kaiba',
+          displayName: null,
+          plan: 'month' as const,
+          amountCents: 300,
+          status: 'active',
+          since: '2026-11-10T12:00:00.000Z',
+          until: '2026-12-10T12:00:00.000Z',
+          cancelling: true,
+          showOnSite: false
+        }
+      ]
+    })),
     beta: vi.fn(async () => ({
       requests: [
         {
@@ -158,6 +190,26 @@ describe('desktop admin pages', () => {
     expect(admin.costs).toHaveBeenLastCalledWith(30)
     await userEvent.click(screen.getByRole('button', { name: 'Last 7 days' }))
     await waitFor(() => expect(admin.costs).toHaveBeenLastCalledWith(7))
+  })
+
+  it('shows supporters and monthly income before and after Stripe fees', async () => {
+    const admin = adminApi()
+    const api = createMockApi({
+      window: { platform: 'linux' },
+      account: { status: vi.fn(async () => status(true)) }
+    })
+    api.admin = admin
+    renderWithProviders(<App />, { api })
+    const group = await screen.findByRole('group', { name: 'Admin' })
+    await userEvent.click(within(group).getByRole('button', { name: 'Admin' }))
+    await userEvent.click(await screen.findByRole('radio', { name: 'Supporters' }))
+    expect(await screen.findByText('$5.08')).toBeInTheDocument()
+    expect(screen.getByText('a month, before Stripe fees')).toBeInTheDocument()
+    // $25 a year: (2500 × 0.971 − 30) / 12 = 199.8; $3 a month: 300 × 0.971 − 30 = 261.3 → $4.61
+    expect(screen.getByText('$4.61')).toBeInTheDocument()
+    expect(screen.getByText('Yugi (yugi)')).toBeInTheDocument()
+    expect(screen.getByText('active (cancelling)')).toBeInTheDocument()
+    expect(admin.supporters).toHaveBeenCalledTimes(1)
   })
 
   it('adds a tester for Magic', async () => {

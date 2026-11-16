@@ -9,6 +9,7 @@ import { ADMIN_PAGE_TABS, ADMIN_QUERY, adminKeys, type AdminPageTab } from './ad
 import { AdminsTab, BetaTab, ErrorsTab, MergesTab, PhotosTab, TestersTab } from './ListTabs'
 import { Failed } from './parts'
 import { CostsTab } from './CostsTab'
+import { SupportersTab } from './SupportersTab'
 import { RipCaptureTab } from './RipCaptureTab'
 import { POLL_MS, loadRuns } from './runs'
 import { LatestRuns, Pulse, RunsTab } from './RunsTab'
@@ -108,9 +109,24 @@ export function AdminPage({
     enabled: tab === 'costs',
     ...ADMIN_QUERY
   })
-  const fetching = [stats, runs, errors, merges, testers, beta, admins, photos, costs].some(
-    (q) => q.isFetching
-  )
+  const supporters = useQuery({
+    queryKey: adminKeys.supporters,
+    queryFn: () => admin().supporters(),
+    enabled: tab === 'supporters',
+    ...ADMIN_QUERY
+  })
+  const fetching = [
+    stats,
+    runs,
+    errors,
+    merges,
+    testers,
+    beta,
+    admins,
+    photos,
+    costs,
+    supporters
+  ].some((q) => q.isFetching)
   // Only what's been read is read again; tabs not yet opened stay unread.
   const refresh = (): void => void qc.invalidateQueries({ queryKey: adminKeys.all })
 
@@ -179,6 +195,9 @@ export function AdminPage({
       {tab === 'photos' && <Show q={photos} show={(p) => <PhotosTab photos={p} />} />}
       {tab === 'costs' && (
         <Show q={costs} show={(c) => <CostsTab costs={c} days={costDays} onDays={setCostDays} />} />
+      )}
+      {tab === 'supporters' && (
+        <Show q={supporters} show={(s) => <SupportersTab supporters={s} />} />
       )}
       {tab === 'capture' && <RipCaptureTab />}
     </div>

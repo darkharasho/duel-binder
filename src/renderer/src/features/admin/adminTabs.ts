@@ -5,6 +5,7 @@ export const ADMIN_PAGE_TABS = [
   { value: 'people', label: 'Users' },
   { value: 'activity', label: 'Usage' },
   { value: 'costs', label: 'Costs' },
+  { value: 'supporters', label: 'Supporters' },
   { value: 'errors', label: 'Errors' },
   { value: 'scanner', label: 'Scanner & prices' },
   { value: 'storage', label: 'Storage' },
@@ -30,6 +31,7 @@ export const adminKeys = {
   beta: ['admin', 'beta'] as const,
   admins: ['admin', 'admins'] as const,
   photos: ['admin', 'photos'] as const,
+  supporters: ['admin', 'supporters'] as const,
   costs: (days: 7 | 30) => ['admin', 'costs', days] as const
 }
 

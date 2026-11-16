@@ -1,7 +1,13 @@
 import type { SqlDb } from '../../../src/main/db/sql'
 
 export type LimitKind =
-  'code-email-min' | 'code-email-hour' | 'code-ip' | 'password-email' | 'password-ip' | 'check-ip'
+  | 'code-email-min'
+  | 'code-email-hour'
+  | 'code-ip'
+  | 'password-email'
+  | 'password-ip'
+  | 'check-ip'
+  | 'beta-ip'
 
 const MIN = 60 * 1000
 const HOUR = 60 * MIN
@@ -12,7 +18,9 @@ export const LIMITS: Record<LimitKind, { max: number; windowMs: number }> = {
   'code-ip': { max: 20, windowMs: HOUR },
   'password-email': { max: 10, windowMs: 15 * MIN },
   'password-ip': { max: 50, windowMs: 15 * MIN },
-  'check-ip': { max: 100, windowMs: HOUR }
+  'check-ip': { max: 100, windowMs: HOUR },
+  // The site's beta form: a household asking for a few phones, not a script.
+  'beta-ip': { max: 5, windowMs: 24 * HOUR }
 }
 
 export function isLimited(db: SqlDb, kind: LimitKind, key: string, now: Date): boolean {
@@ -22,6 +30,13 @@ export function isLimited(db: SqlDb, kind: LimitKind, key: string, now: Date): b
     .prepare('SELECT COUNT(*) AS n FROM auth_limits WHERE kind = ? AND key = ? AND created_at > ?')
     .get(kind, key, since) as { n: number }
   return row.n >= max
+}
+
+/** Drops attempts older than their own kind's window (the beta form's is a day, the rest an hour or less). */
+export function pruneLimits(db: SqlDb, now: Date): void {
+  const del = db.prepare('DELETE FROM auth_limits WHERE kind = ? AND created_at <= ?')
+  for (const [kind, { windowMs }] of Object.entries(LIMITS))
+    del.run(kind, new Date(now.getTime() - windowMs).toISOString())
 }
 
 /** Records one attempt and returns its row id, for `forgetAttempt`. */

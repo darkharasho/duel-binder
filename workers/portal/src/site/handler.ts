@@ -1,10 +1,17 @@
 import { detectOs, isAndroid } from './os'
 import { renderPage } from './page'
+import { renderBeta } from './beta'
 import { renderPrivacy } from './privacy'
 import { renderTerms } from './terms'
 import type { Downloads } from './releases'
 
-const NO_DOWNLOADS: Downloads = { version: null, windows: null, mac: null, linux: null, android: null }
+const NO_DOWNLOADS: Downloads = {
+  version: null,
+  windows: null,
+  mac: null,
+  linux: null,
+  android: null
+}
 
 export interface SiteDeps {
   appUrl: string
@@ -23,13 +30,21 @@ export async function handleSite(req: Request, deps: SiteDeps): Promise<Response
   }
   // The built web app lives under /app/ and belongs to the app host only.
   if (url.pathname.startsWith('/app/')) return new Response('Not Found', { status: 404 })
-  if (url.pathname !== '/' && url.pathname !== '/privacy' && url.pathname !== '/terms')
-    return deps.assets.fetch(req)
+  if (!['/', '/privacy', '/terms', '/beta'].includes(url.pathname)) return deps.assets.fetch(req)
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     return new Response('Method Not Allowed', { status: 405, headers: { allow: 'GET, HEAD' } })
   }
   if (url.pathname === '/privacy') return html(req, renderPrivacy({ appUrl: deps.appUrl }))
   if (url.pathname === '/terms') return html(req, renderTerms({ appUrl: deps.appUrl }))
+  if (url.pathname === '/beta')
+    return html(
+      req,
+      renderBeta({
+        appUrl: deps.appUrl,
+        sent: url.searchParams.get('sent') === '1',
+        error: url.searchParams.get('error')
+      })
+    )
   let downloads = NO_DOWNLOADS
   try {
     downloads = await deps.downloads()
@@ -42,7 +57,7 @@ export async function handleSite(req: Request, deps: SiteDeps): Promise<Response
       downloads,
       os: detectOs(req.headers.get('user-agent')),
       android: isAndroid(req.headers.get('user-agent')),
-      appUrl: deps.appUrl,
+      appUrl: deps.appUrl
     })
   )
 }

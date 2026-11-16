@@ -550,6 +550,87 @@ async function loadMerges() {
   $('merges').replaceChildren(p)
 }
 
+/** Phone beta requests from duelbinder.com/beta: copy emails into Play Console or TestFlight, then mark them. */
+async function loadBeta() {
+  const p = el('section', null, 'panel')
+  p.append(el('h2', 'Beta'))
+  try {
+    const res = await fetch('/admin/beta', { credentials: 'same-origin' })
+    if (!res.ok) throw new Error('HTTP ' + res.status)
+    const data = await res.json()
+    p.append(el('p', 'Android added: ' + data.androidAdded + ' of 12 (Play needs 12 on the closed test for 14 days).', 'note'))
+    const decide = async (r, status, btn) => {
+      btn.disabled = true
+      try {
+        const res = await fetch('/admin/beta/decide', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ id: r.id, status })
+        })
+        const body = await res.json().catch(() => ({}))
+        if (!res.ok) alert('Failed: ' + (body.error ?? 'HTTP ' + res.status))
+        else {
+          if (status === 'added' && !body.emailed) alert('Marked added, but the email to ' + r.email + " didn't go out. Let them know yourself.")
+          loadBeta()
+        }
+      } catch (e) {
+        alert('Failed: ' + e.message)
+      } finally {
+        btn.disabled = false
+      }
+    }
+    for (const [platform, label] of [['android', 'Android'], ['ios', 'iPhone']]) {
+      const mine = data.requests.filter((r) => r.platform === platform)
+      const pending = mine.filter((r) => r.status === 'pending')
+      const head = el('div', null, 'adder')
+      head.append(el('h3', label + ' (' + pending.length + ' waiting)'))
+      if (pending.length) {
+        const copy = el('button', 'Copy emails')
+        copy.type = 'button'
+        copy.addEventListener('click', async () => {
+          await navigator.clipboard.writeText(pending.map((r) => r.email).join(', '))
+          copy.textContent = 'Copied ' + pending.length
+        })
+        head.append(copy)
+      }
+      p.append(head)
+      if (!mine.length) {
+        p.append(el('p', 'No requests yet.', 'note'))
+        continue
+      }
+      const table = el('table', null, 'history')
+      const hr = el('tr')
+      for (const h of ['Name', 'Email', 'Who sent them', 'Asked', 'Status']) hr.append(el('th', h, 'l'))
+      hr.append(el('th', ''))
+      table.append(hr)
+      for (const r of mine) {
+        const tr = el('tr')
+        const cell = el('td', null, 'act')
+        if (r.status === 'pending') {
+          const add = el('button', 'Mark added')
+          add.type = 'button'
+          add.addEventListener('click', () => decide(r, 'added', add))
+          const no = el('button', 'Decline')
+          no.type = 'button'
+          no.addEventListener('click', () => {
+            if (confirm('Decline ' + r.email + '?')) decide(r, 'declined', no)
+          })
+          cell.append(add, no)
+        }
+        tr.append(el('td', r.name), el('td', r.email), el('td', r.referredBy || '-'),
+          el('td', new Date(r.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }), 'v'),
+          el('td', r.status === 'pending' ? 'Waiting' : r.status === 'added' ? 'Added' : 'Declined'), cell)
+        table.append(tr)
+      }
+      p.append(table)
+    }
+  } catch (e) {
+    p.append(el('p', 'Could not load beta requests: ' + e.message, 'note'))
+  }
+  $('beta').replaceChildren(p)
+}
+
 /** Who may use each tester-only game: a table per game, and a form to add an account. */
 async function loadTesters() {
   const p = el('section', null, 'panel')
@@ -866,7 +947,7 @@ async function loadCosts() {
   }
 }
 
-const TABS = ['overview', 'runs', 'people', 'activity', 'costs', 'errors', 'scanner', 'storage', 'merges', 'testers', 'admins', 'photos']
+const TABS = ['overview', 'runs', 'people', 'activity', 'costs', 'errors', 'scanner', 'storage', 'merges', 'testers', 'beta', 'admins', 'photos']
 
 function showTab() {
   const wanted = location.hash.slice(1)
@@ -880,7 +961,7 @@ function showTab() {
 
 window.addEventListener('hashchange', showTab)
 showTab()
-$('refresh').addEventListener('click', () => { load(); loadErrors(); loadRuns(); loadMerges(); loadTesters(); loadAdmins(); loadPhotos(); loadCosts() })
+$('refresh').addEventListener('click', () => { load(); loadErrors(); loadRuns(); loadMerges(); loadTesters(); loadBeta(); loadAdmins(); loadPhotos(); loadCosts() })
 load()
 loadErrors()
 loadRuns()
@@ -889,6 +970,7 @@ loadTesters()
 loadAdmins()
 loadPhotos()
 loadCosts()
+loadBeta()
 `
 
 function csp(nonce: string): string {
@@ -920,7 +1002,7 @@ export function adminPage(): Response {
 <header><div class="wrap">
 <div class="top"><h1>Duel Binder</h1><span class="badge">Admin</span><span class="pulse" id="pulse"></span>
 <span class="grow"></span><span class="at" id="at"></span><a href="/">Back to the app</a><button id="refresh" type="button">Refresh</button></div>
-<nav aria-label="Admin sections"><a href="#overview">Overview</a><a href="#runs">Runs</a><a href="#people">Users</a><a href="#activity">Usage</a><a href="#costs">Costs</a><a href="#errors">Errors</a><a href="#scanner">Scanner &amp; prices</a><a href="#storage">Storage</a><a href="#merges">Merges</a><a href="#testers">Testers</a><a href="#admins">Admins</a><a href="#photos">Photos</a></nav>
+<nav aria-label="Admin sections"><a href="#overview">Overview</a><a href="#runs">Runs</a><a href="#people">Users</a><a href="#activity">Usage</a><a href="#costs">Costs</a><a href="#errors">Errors</a><a href="#scanner">Scanner &amp; prices</a><a href="#storage">Storage</a><a href="#merges">Merges</a><a href="#testers">Testers</a><a href="#beta">Beta</a><a href="#admins">Admins</a><a href="#photos">Photos</a></nav>
 </div></header>
 <main class="wrap">
 <section data-tab id="overview">
@@ -936,6 +1018,7 @@ export function adminPage(): Response {
 <section data-tab class="stack" id="storage" hidden></section>
 <section data-tab id="merges" hidden></section>
 <section data-tab id="testers" hidden></section>
+<section data-tab id="beta" hidden></section>
 <section data-tab id="admins" hidden></section>
 <section data-tab id="photos" hidden></section>
 </main>

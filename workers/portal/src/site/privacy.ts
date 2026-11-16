@@ -79,9 +79,7 @@ export function renderPrivacy(view: PrivacyView): string {
         ],
         [
           'Changes',
-          p(
-            'If this policy changes, this page will say so and show the new date at the top.'
-          )
+          p('If this policy changes, this page will say so and show the new date at the top.')
         ],
         [
           'Contact',

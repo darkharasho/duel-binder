@@ -291,8 +291,19 @@ const SERVER_35_ONEPIECE_CARDS: FrozenTable = {
   name: 'onepiece_cards',
   key: ['card_id'],
   columns: [
-    'card_id', 'number', 'colors', 'card_type', 'cost', 'power', 'counter', 'life', 'attribute',
-    'traits', 'effect', 'trigger', 'block_icon'
+    'card_id',
+    'number',
+    'colors',
+    'card_type',
+    'cost',
+    'power',
+    'counter',
+    'life',
+    'attribute',
+    'traits',
+    'effect',
+    'trigger',
+    'block_icon'
   ]
 }
 const SERVER_35_ONEPIECE_IMAGES: FrozenTable = {
@@ -324,15 +335,35 @@ const SERVER_42_MTG_CARDS: FrozenTable = {
   name: 'mtg_cards',
   key: ['card_id'],
   columns: [
-    'card_id', 'oracle_id', 'layout', 'type_line', 'types', 'mana_cost', 'mana_value', 'colors',
-    'color_identity', 'oracle_text', 'power', 'toughness', 'loyalty', 'defense', 'keywords', 'faces'
+    'card_id',
+    'oracle_id',
+    'layout',
+    'type_line',
+    'types',
+    'mana_cost',
+    'mana_value',
+    'colors',
+    'color_identity',
+    'oracle_text',
+    'power',
+    'toughness',
+    'loyalty',
+    'defense',
+    'keywords',
+    'faces'
   ]
 }
 const SERVER_42_MTG_IMAGES: FrozenTable = {
   name: 'mtg_images',
   key: ['image_id'],
   columns: [
-    'image_id', 'scryfall_id', 'illustration_id', 'artist', 'frame', 'border_color', 'full_art',
+    'image_id',
+    'scryfall_id',
+    'illustration_id',
+    'artist',
+    'frame',
+    'border_color',
+    'full_art',
     'promo_types'
   ]
 }
@@ -399,7 +430,10 @@ function rollupTriggers44(
   const guards = {
     INSERT: [when?.('NEW')],
     DELETE: [when?.('OLD')],
-    UPDATE: [when ? `(${when('OLD')} OR ${when('NEW')})` : undefined, changed ? `(${changed})` : undefined]
+    UPDATE: [
+      when ? `(${when('OLD')} OR ${when('NEW')})` : undefined,
+      changed ? `(${changed})` : undefined
+    ]
   }
   const games = { INSERT: [game('NEW')], DELETE: [game('OLD')], UPDATE: [game('OLD'), game('NEW')] }
   return (['INSERT', 'DELETE', 'UPDATE'] as const).map((op) => {
@@ -437,7 +471,17 @@ function rollupStep(): ServerStep {
       'CREATE INDEX ix_catalog_rollups_game ON catalog_rollups(game);',
       ...rollupTriggers44(
         'card_printings',
-        ['language', 'set_name', 'set_code', 'set_rarity', 'variant', 'card_id', 'game', 'contributed', 'missing_from_api'],
+        [
+          'language',
+          'set_name',
+          'set_code',
+          'set_rarity',
+          'variant',
+          'card_id',
+          'game',
+          'contributed',
+          'missing_from_api'
+        ],
         own,
         (r) => `${r}.contributed = 0`
       ),
@@ -445,7 +489,16 @@ function rollupStep(): ServerStep {
       ...rollupTriggers44('cards', ['type', 'attribute', 'race', 'archetype', 'game'], own),
       ...rollupTriggers44(
         'pokemon_cards',
-        ['card_id', 'category', 'types', 'stage', 'rarity', 'image_url', 'art_twin_id', 'traditional_twin_id'],
+        [
+          'card_id',
+          'category',
+          'types',
+          'stage',
+          'rarity',
+          'image_url',
+          'art_twin_id',
+          'traditional_twin_id'
+        ],
         () => "'pkm'"
       ),
       ...rollupTriggers44(
@@ -721,12 +774,21 @@ CREATE INDEX ix_binder_edits_user_seq ON binder_edits(user_id, seq);
   },
   // Its own step so a slow build commits alone.
   { name: 'server-20', sql: 'CREATE INDEX ix_printings_card ON card_printings(card_id);' },
-  { name: 'server-21', sql: 'CREATE INDEX ix_pokemon_cards_illustrator ON pokemon_cards(illustrator);' },
+  {
+    name: 'server-21',
+    sql: 'CREATE INDEX ix_pokemon_cards_illustrator ON pokemon_cards(illustrator);'
+  },
   { name: 'server-22', sql: 'CREATE INDEX ix_cards_name ON cards(name COLLATE NOCASE);' },
-  { name: 'server-23', sql: 'CREATE INDEX ix_pokemon_cards_local_name ON pokemon_cards(local_name COLLATE NOCASE);' },
+  {
+    name: 'server-23',
+    sql: 'CREATE INDEX ix_pokemon_cards_local_name ON pokemon_cards(local_name COLLATE NOCASE);'
+  },
   { name: 'server-24', sql: 'CREATE INDEX ix_printings_set_name ON card_printings(set_name);' },
   { name: 'server-25', sql: 'CREATE INDEX ix_cards_archetype ON cards(archetype);' },
-  { name: 'server-26', sql: 'CREATE INDEX ix_printings_rarity ON card_printings(set_rarity, game);' },
+  {
+    name: 'server-26',
+    sql: 'CREATE INDEX ix_printings_rarity ON card_printings(set_rarity, game);'
+  },
   {
     name: 'server-27',
     sql: 'CREATE INDEX ix_printings_language_card ON card_printings(language, contributed, card_id, game);'
@@ -888,6 +950,15 @@ CREATE TABLE admin_handoffs (code_hash TEXT PRIMARY KEY,
 CREATE TABLE request_costs (day TEXT NOT NULL, user_id INTEGER NOT NULL, area TEXT NOT NULL,
   requests INTEGER NOT NULL, rows_read INTEGER NOT NULL, rows_written INTEGER NOT NULL,
   ms INTEGER NOT NULL, PRIMARY KEY (day, user_id, area));
+`
+  },
+  // Requests to join the phone app betas, from the site's /beta form (beta.ts).
+  {
+    name: 'server-47',
+    sql: `
+CREATE TABLE beta_requests (id INTEGER PRIMARY KEY, email TEXT NOT NULL, platform TEXT NOT NULL,
+  name TEXT NOT NULL, referred_by TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+  created_at TEXT NOT NULL, decided_at TEXT, UNIQUE (email, platform));
 `
   }
 ]

@@ -50,7 +50,7 @@ ${washLayer(wash)}
 <header class="hero">
 <h1>${page.heading}</h1>
 <p class="lead">${page.lead}</p>
-<p class="meta">${page.updated}</p>
+${page.updated ? `<p class="meta">${page.updated}</p>` : ''}
 </header>
 ${page.sections.map(([h, body]) => section(h, body)).join('\n')}
 </main>

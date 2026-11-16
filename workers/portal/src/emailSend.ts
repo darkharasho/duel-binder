@@ -20,7 +20,7 @@ const INTRO: Record<Purpose, string> = {
   change: 'Use this code to confirm your new Duel Binder email.'
 }
 
-const escapeHtml = (s: string): string =>
+export const escapeHtml = (s: string): string =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
 // The app's look: near-black with soft violet and amber glows, frosted panels with hairline
@@ -74,9 +74,9 @@ Sent by Duel Binder because this address was entered in the app.<br>
 </body></html>`
 }
 
-const para = (s: string): string =>
+export const para = (s: string): string =>
   `<p style="margin:0 0 18px;font-size:15px;line-height:1.6;color:${INK}">${s}</p>`
-const small = (s: string): string =>
+export const small = (s: string): string =>
   `<p style="margin:0;font-size:13px;line-height:1.6;color:${MUTED}">${s}</p>`
 
 const TITLE: Record<Purpose, string> = {

@@ -7,6 +7,7 @@ import { adminRoute } from './catalogLoad'
 import type { CostMeter } from './meter'
 import { adminMergeRoute } from './merge'
 import { adminTestersRoute } from './testers'
+import { adminBetaRoute, betaSubmitRoute } from './beta'
 import { adminAdminsRoute } from './admins'
 import { rpcRoute } from './rpc'
 import { syncRoute } from './sync'
@@ -52,6 +53,8 @@ export interface Env extends AppleSignInEnv {
   ADMIN_DISCORD_ID?: string
   /** The eBay price Worker the price alarm asks. */
   PRICE_WORKER_URL: string
+  /** The Play opt-in link the beta's "you're in" email gives Android testers. */
+  BETA_ANDROID_OPTIN_URL?: string
   /** 'on' turns email + password sign-in on (it also needs `AppDeps.email`). */
   EMAIL_SIGN_IN?: string
 }
@@ -148,6 +151,7 @@ async function route(req: Request, deps: AppDeps): Promise<Response> {
     return getFingerprints(req, deps)
   if (req.method === 'GET' && url.pathname === '/scan/fingerprint-refs')
     return getFingerprintRefs(req, deps)
+  if (url.pathname === '/beta') return betaSubmitRoute(req, deps)
   if (req.method === 'GET' && url.pathname === '/admin')
     return (await isAdmin(req, deps)) ? adminPage() : json({ error: 'Not found' }, 404)
   if (url.pathname === '/admin/open') return adminOpenRoute(req, deps)
@@ -157,6 +161,8 @@ async function route(req: Request, deps: AppDeps): Promise<Response> {
     return adminAdminsRoute(req, deps)
   if (url.pathname === '/admin/testers' || url.pathname === '/admin/testers/remove')
     return adminTestersRoute(req, deps)
+  if (url.pathname === '/admin/beta' || url.pathname === '/admin/beta/decide')
+    return adminBetaRoute(req, deps)
   if (url.pathname === '/admin/training' || url.pathname.startsWith('/admin/training/'))
     return adminTrainingRoute(req, deps)
   if (url.pathname.startsWith('/admin/')) return adminRoute(req, deps)

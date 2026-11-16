@@ -484,6 +484,20 @@ describe('image route', () => {
       ).run('en', `art ${key}`, kind, url, key)
     }
 
+    it('serves a hand pack (hp-) from R2 only, and 404s one whose row is not hand art', async () => {
+      addArt('hp-zhpack', `${HAND_ART_PREFIX}zh-hans-pack-csv8c/high.jpg`)
+      addArt('hp-evil', `${BULBAGARDEN_IMAGE_PREFIX}a/ab/X.png`)
+      expect((await get('set/hp-zhpack')).status).toBe(404) // not uploaded yet
+      await bucket.put('hand/zh-hans-pack-csv8c/high.jpg', JPEG.buffer, {
+        httpMetadata: { contentType: 'image/jpeg' }
+      })
+      const res = await get('set/hp-zhpack')
+      expect(res.status).toBe(200)
+      expect(res.headers.get('cache-control')).toBe('public, max-age=86400')
+      expect((await get('set/hp-evil')).status).toBe(404)
+      expect(upstream).not.toHaveBeenCalled()
+    })
+
     it('serves Bulbagarden pack art and Pokémon TCG API logos with a User-Agent, then from R2', async () => {
       const pack = `${BULBAGARDEN_IMAGE_PREFIX}a/ab/SV1_Booster_Koraidon.png`
       addArt('bp-pack', pack)

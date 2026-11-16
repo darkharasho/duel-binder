@@ -61,13 +61,20 @@ export function distance(a: string, b: string): number {
 }
 
 /**
- * A JPEG small copy of Bandai's PNG. The card's rounded corners are transparent, and a JPEG
- * would turn them black, so each see-through pixel takes the first opaque pixel of its row.
- * Null when the PNG can't be decoded or the copy is over the Worker's limit.
+ * A JPEG small copy of Bandai's PNG, its corners filled (fillCorners). Null when the PNG can't be
+ * decoded or the copy is over the Worker's limit.
  */
 export function smallCopy(png: Uint8Array): Uint8Array | null {
   const img = decodeImage(png)
   if (!img || img.width <= 0 || img.height <= 0) return null
+  return smallJpeg(fillCorners(img))
+}
+
+/**
+ * The image made opaque for a JPEG: a card's rounded corners are transparent and would turn black,
+ * so each see-through pixel takes the first opaque pixel of its row.
+ */
+export function fillCorners(img: RgbaImage): RgbaImage {
   const data = new Uint8Array(img.data)
   for (let y = 0; y < img.height; y++) {
     const row = y * img.width * 4
@@ -89,8 +96,7 @@ export function smallCopy(png: Uint8Array): Uint8Array | null {
       data[i + 3] = 255
     }
   }
-  const filled: RgbaImage = { width: img.width, height: img.height, data }
-  return smallJpeg(filled)
+  return { width: img.width, height: img.height, data }
 }
 
 export interface ArtPortal {

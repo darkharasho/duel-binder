@@ -137,7 +137,9 @@ function unseenTwins(
            AND t.illustrator IS NULL AND ${artless} AND tc.id = t.card_id`
       )
       .all(...cardIds) as Row[])
-  ].filter((r, i, all) => all.findIndex((o) => o.cardId === r.cardId && o.twinId === r.twinId) === i)
+  ].filter(
+    (r, i, all) => all.findIndex((o) => o.cardId === r.cardId && o.twinId === r.twinId) === i
+  )
   const named = rows.filter(
     (r) =>
       nameKey(r.name) === nameKey(r.twinName) ||
@@ -393,7 +395,8 @@ const ownArt = (column: string): string =>
 
 /**
  * The Simplified Chinese printings of cards that show one of cardIds' art (`art_twin_id`, the
- * catalog's English twin of a card with no art of its own), each with the card it shows. Not
+ * catalog's English twin, kept for this even once the card has art of its own: our copy of its
+ * Chinese print, which isn't fingerprinted), each with the card it shows. Not
  * where one card is of an own-art rarity and the other isn't: the catalog links a Chinese
  * Illustration Rare to its regular English card by name and number, whose art it doesn't show.
  */
@@ -410,7 +413,7 @@ export function chineseOfArt(
       .prepare(
         `SELECT z.card_id AS cardId, z.art_twin_id AS twinId FROM pokemon_cards z
          JOIN pokemon_cards e ON e.card_id = z.art_twin_id
-         WHERE z.art_twin_id IN (${chunk.map(() => '?').join(',')}) AND z.image_url IS NULL
+         WHERE z.art_twin_id IN (${chunk.map(() => '?').join(',')})
            AND (z.rarity IS NULL OR ${ownArt('z.rarity')} = ${ownArt('e.rarity')})`
       )
       .all(...chunk) as { cardId: number; twinId: number }[]

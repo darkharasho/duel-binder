@@ -90,8 +90,12 @@ export interface FingerprintResult {
   references: { count: number; fetched: number; failed: number }
 }
 
-/** Pokémon languages the scanner doesn't read, by the start of `source_id`. */
-const UNSCANNED_SOURCES = ['zh-hant', 'fr', 'de', 'it', 'es']
+/**
+ * Pokémon languages left out of the fingerprints, by the start of `source_id`: ones the scanner
+ * doesn't read, and Simplified Chinese, which it reaches through each card's English twin
+ * (chineseOfArt) even once the card shows our copy of its own print.
+ */
+const UNSCANNED_SOURCES = ['zh-hans', 'zh-hant', 'fr', 'de', 'it', 'es']
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 

@@ -46,6 +46,8 @@ import { logOnePiece, runOnePieceStep, type OnePieceReport } from './onepiece'
 import { logOnePieceJapanese, runOnePieceJapaneseStep, type JapaneseReport } from './onepiece/japanese'
 import { logMagic, logMagicSymbols, runMagicStep, type MagicStepResult } from './magic'
 import { runPokemonStep, type PokemonReport } from './pokemon'
+import { readZhArtRecord, ZH_ART_RECORD_FILE } from './pokemon/pokipairMirror'
+import { writeZhPackArt } from './pokemon/zhPacks'
 import { refreshPokemonSetArt, shouldRefreshSetArt, warmSetArt } from './pokemon/setArt'
 import { buildFingerprints, uploadFingerprintRefs, uploadFingerprints } from './fingerprints'
 import { uploadCatalog, type UploadPace } from './upload'
@@ -406,15 +408,19 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
       const step =
         opts.pokemon ??
         (async (w: Database.Database) => {
+          const copied = readZhArtRecord(join(opts.dir, ZH_ART_RECORD_FILE))
           const out = await runPokemonStep(w, {
             cachePath: join(opts.dir, 'pokemon-src.sqlite'),
             version,
-            log
+            log,
+            handArt: new Set(Object.keys(copied.done))
           })
           // Weekly; a source that fails keeps last week's rows and is asked again tomorrow.
           if (out.error === null && shouldRefreshSetArt(w, new Date())) {
             await refreshPokemonSetArt(w, { version, log })
           }
+          // Nightly, after the weekly refresh (which replaces every pack row).
+          if (out.error === null) writeZhPackArt(w, copied.packs ?? {})
           return out
         })
       const out = await step(work)

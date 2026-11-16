@@ -19,6 +19,8 @@ export interface PokemonStepOpts {
   log: (l: string) => void
   /** Replaces the live sources (tests). */
   sources?: PokemonSources
+  /** zh-hans source ids whose art the job copied (see RefreshPokemonOpts.handArt). */
+  handArt?: ReadonlySet<string>
 }
 
 /**
@@ -43,7 +45,11 @@ export async function runPokemonStep(
       close = () => live.close()
       sources = live
     }
-    const reports = await refreshPokemon(work, sources, { log: opts.log, langs: NIGHTLY_LANGS })
+    const reports = await refreshPokemon(work, sources, {
+      log: opts.log,
+      langs: NIGHTLY_LANGS,
+      handArt: opts.handArt
+    })
     return { reports, error: null }
   } catch (e) {
     return { reports: [], error: e instanceof Error ? e.message : String(e) }

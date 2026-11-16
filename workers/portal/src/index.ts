@@ -13,6 +13,7 @@ import { bindingSender } from './emailSend'
 import { createAnonImageQuota, createImageQuota, createMissCache, edgeImage } from './images'
 import { doSql } from './doSql'
 import { migrateServer } from './migrate'
+import { handArtRoute } from './handArt'
 import { opArtRoute } from './opArt'
 import { catalogSnapshotRoute } from './catalogSnapshot'
 import { thumbsRoute } from './thumbs'
@@ -138,6 +139,8 @@ export default {
     if (thumbs) return thumbs
     const opArt = await opArtRoute(req, env.IMAGES, env.ADMIN_TOKEN)
     if (opArt) return opArt
+    const handArt = await handArtRoute(req, env.IMAGES, env.ADMIN_TOKEN)
+    if (handArt) return handArt
     const art = await edgeImage(req, env.IMAGES, edgeCache(), (p) => ctx.waitUntil(p), store)
     // CORS after the cache, so the cached copy stays the same for every origin.
     if (art) return withAppCors(req, art)

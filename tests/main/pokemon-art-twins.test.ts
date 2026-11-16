@@ -5,6 +5,9 @@ import { join } from 'node:path'
 import type Database from 'better-sqlite3'
 import { openDatabase } from '../../src/main/db/database'
 import { borrowedArt, japaneseArt, traditionalArt } from '../../src/main/repo/cards'
+import { chineseOfArt } from '../../src/main/repo/scan'
+import { localScope } from '../../src/main/repo/scope'
+import { HAND_ART_PREFIX } from '../../src/shared/imageSources'
 import { listSets } from '../../src/main/repo/sets'
 import { setMeta } from '../../src/main/db/meta'
 import { pokemonId } from '../../src/shared/games/ids'
@@ -429,6 +432,20 @@ describe('refreshPokemon with English art', () => {
     expect(borrowedArt(db)).toEqual([])
     await run([zhCard()])
     expect(row()).toEqual({ image_url: own, art_twin_id: null })
+  })
+
+  it('copied Chinese art (hand art) shows as its own and keeps the twin the scanner maps through', async () => {
+    const opts = { langs: ['en', 'zh-hans'] as PkmLang[], handArt: new Set(['zh-hans/CSV5C-001']) }
+    for (let night = 0; night < 2; night++) {
+      await refreshPokemon(db, sources([zhCard()]), opts)
+      expect(row()).toEqual({
+        image_url: `${HAND_ART_PREFIX}zh-hans-csv5c-001`,
+        art_twin_id: pokemonId('en/sv03-001')
+      })
+    }
+    expect(borrowedArt(db)).toEqual([]) // its own art wins
+    const found = chineseOfArt(db, [pokemonId('en/sv03-001')], localScope("'pkm'"))
+    expect(found.map((f) => f.printing.cardId)).toEqual([pokemonId('zh-hans/CSV5C-001')])
   })
 
   it('a link that no longer holds is cleared', async () => {

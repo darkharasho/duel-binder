@@ -15,7 +15,9 @@ const NOW = new Date('2026-11-16T12:00:00.000Z')
 const LATER = new Date('2026-12-16T12:00:00.000Z')
 const END = Date.parse('2027-11-16T00:00:00.000Z') / 1000
 
-const sub = (over: Partial<StripeSubscription> & { interval?: 'month' | 'year'; amount?: number } = {}): StripeSubscription => ({
+const sub = (
+  over: Partial<StripeSubscription> & { interval?: 'month' | 'year'; amount?: number } = {}
+): StripeSubscription => ({
   id: 'sub_1',
   customer: 'cus_1',
   status: 'active',
@@ -24,7 +26,10 @@ const sub = (over: Partial<StripeSubscription> & { interval?: 'month' | 'year'; 
     data: [
       {
         current_period_end: END,
-        price: { unit_amount: over.amount ?? 2500, recurring: { interval: over.interval ?? 'year' } }
+        price: {
+          unit_amount: over.amount ?? 2500,
+          recurring: { interval: over.interval ?? 'year' }
+        }
       }
     ]
   },
@@ -77,7 +82,9 @@ describe('supporters model', () => {
   it('sets no since while the subscription is incomplete', () => {
     writeSubscription(db, alice, sub({ status: 'incomplete' }), NOW)
     expect(supporterOf(db, alice)).toBeNull()
-    const row = db.prepare('SELECT since FROM supporters WHERE user_id = ?').get(alice) as { since: string | null }
+    const row = db.prepare('SELECT since FROM supporters WHERE user_id = ?').get(alice) as {
+      since: string | null
+    }
     expect(row.since).toBeNull()
   })
 

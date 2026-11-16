@@ -41,10 +41,15 @@ describe('support pages', () => {
 
   it('thanks the buyer, or says nothing was charged, or that changes are saved', async () => {
     const text = (q: string): Promise<string> =>
-      supporterThanksPage(new Request(`${APP}/supporter/thanks${q}`), 'https://duelbinder.com').text()
+      supporterThanksPage(
+        new Request(`${APP}/supporter/thanks${q}`),
+        'https://duelbinder.com',
+        APP
+      ).text()
     expect(await text('')).toContain('Thank you for supporting Duel Binder!')
     expect(await text('?cancelled=1')).toContain('No charge was made.')
     expect(await text('?managed=1')).toContain('Your changes are saved.')
+    expect(await text('')).toContain(`<a href="${APP}/">Back to Duel Binder</a>`)
   })
 
   it('covers subscriptions in the terms and Stripe in the privacy policy', () => {

@@ -134,6 +134,27 @@ describe('SupporterSection', () => {
     expect(screen.queryByRole('button', { name: '$3 / month' })).toBeNull()
   })
 
+  it('opens Stripe through the given opener in the store apps', async () => {
+    const openUrl = vi.fn()
+    const api = createMockApi({
+      supporter: { status: vi.fn(async () => ({ ...open, hasCustomer: true })) }
+    })
+    renderWithProviders(
+      <SupporterSection signedIn store openUrl={openUrl} frame={(b) => <section>{b}</section>} />,
+      { api }
+    )
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Manage' }))
+    await waitFor(() => expect(openUrl).toHaveBeenCalledWith('https://billing.stripe.test/bps_1'))
+    expect(openSpy).not.toHaveBeenCalled()
+  })
+
+  it('explains a lone Manage button', async () => {
+    show({ ...open, hasCustomer: true }, { store: true })
+    expect(
+      await screen.findByText('Manage shows your past Duel Binder payments and card.')
+    ).toBeInTheDocument()
+  })
+
   it('shows the error when checkout fails', async () => {
     const { api } = show(open)
     vi.mocked(api.supporter.checkout).mockRejectedValueOnce(

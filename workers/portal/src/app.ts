@@ -150,7 +150,7 @@ async function route(req: Request, deps: AppDeps): Promise<Response> {
   if (url.pathname === '/api/errors') return reportError(req, deps)
   if (url.pathname === '/stripe/webhook') return stripeWebhookRoute(req, deps)
   if (req.method === 'GET' && url.pathname === '/supporter/thanks')
-    return supporterThanksPage(req, deps.env.SITE_URL)
+    return supporterThanksPage(req, deps.env.SITE_URL, deps.env.PUBLIC_URL)
   if (req.method === 'GET' && url.pathname === '/api/supporters/names')
     return supporterNamesRoute(deps)
   if (url.pathname.startsWith('/api/training/'))

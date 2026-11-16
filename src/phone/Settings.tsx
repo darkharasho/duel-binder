@@ -13,6 +13,7 @@ import { HitPriceInput } from '@/features/scan/HitPriceInput'
 import { useScanHub } from '@/features/scan/ScanHub'
 import { DeleteAccount } from '@/features/settings/AccountSection'
 import { SupporterSection } from '@/features/settings/SupporterSection'
+import { openAdminSheet } from './nativeSignIn'
 import { useOwnSupporter } from '@/lib/supporter'
 import { SupporterHeart } from '@/components/SupporterHeart'
 import { PHONE_BETA_URL } from '@/features/settings/PhoneBeta'
@@ -258,6 +259,7 @@ export function Settings({
 
       <SupporterSection
         signedIn
+        openUrl={isNativeApp() ? (url) => void openAdminSheet(url).catch(() => {}) : undefined}
         frame={(body) => (
           <section aria-label="Support Duel Binder" className="space-y-2 px-4">
             <h2 className="text-[13px] font-medium uppercase tracking-wide text-muted-foreground">

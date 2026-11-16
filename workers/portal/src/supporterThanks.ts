@@ -1,11 +1,12 @@
 import { pageShell } from './home'
+import { esc } from './site/page'
 
 /**
  * GET /supporter/thanks: where Stripe Checkout and the Customer Portal send people back. A plain
  * page; the app's Settings refetches the supporter status itself (a desktop buyer is often signed
  * out in this browser).
  */
-export function supporterThanksPage(req: Request, siteUrl: string): Response {
+export function supporterThanksPage(req: Request, siteUrl: string, appUrl: string): Response {
   const q = new URL(req.url).searchParams
   const [title, text] =
     q.get('cancelled') === '1'
@@ -20,7 +21,7 @@ export function supporterThanksPage(req: Request, siteUrl: string): Response {
   return new Response(
     pageShell(
       siteUrl,
-      `<main class="wrap"><h1>${title}</h1><p class="lead">${text}</p></main>`,
+      `<main class="wrap"><h1>${title}</h1><p class="lead">${text}</p><p><a href="${esc(appUrl)}/">Back to Duel Binder</a></p></main>`,
       title
     ),
     {

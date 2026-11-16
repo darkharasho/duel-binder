@@ -8,7 +8,7 @@ import {
 import type { AdminSupporters } from '../../../src/shared/admin'
 import type { AppDeps } from './app'
 import { isAdmin } from './auth'
-import { stripeCall } from './stripe'
+import { listSubscriptions, stripeCall } from './stripe'
 
 /**
  * Supporter subscriptions. Stripe owns the truth: the webhook (stripe.ts) re-reads a customer's
@@ -34,6 +34,10 @@ const ACTIVE = ['active', 'trialing', 'past_due']
 const ACTIVE_SQL = `status IN ('active', 'trialing', 'past_due')`
 
 export const isActiveStatus = (status: string): boolean => ACTIVE.includes(status)
+
+/** The subscription to track: a live one if any (newest first), else the newest. */
+export const pickSubscription = (subs: StripeSubscription[]): StripeSubscription | undefined =>
+  subs.find((s) => isActiveStatus(s.status)) ?? subs[0]
 
 /** Writes Stripe's state of the account's subscription; `since` is set the first time it is active. */
 export function writeSubscription(
@@ -128,6 +132,7 @@ export function thanksNames(db: SqlDb): string[] {
   return rows.map((r) => r.name)
 }
 
+const ALREADY = 'You already support Duel Binder. Use Manage to change your plan.'
 const CHECKOUT_ID = 'duelbinder-supporter-kqzmwhrt'
 
 const customerOf = (db: SqlDb, userId: number): string | null =>
@@ -141,6 +146,7 @@ async function viaStripe<T>(run: () => Promise<T>): Promise<T> {
   try {
     return await run()
   } catch (e) {
+    if (e instanceof CollectionError) throw e
     console.error('stripe call failed', e instanceof Error ? e.message : e)
     throw new CollectionError("Couldn't reach the payment service. Try again.")
   }
@@ -166,11 +172,18 @@ export async function startCheckout(
   if (!isSupporterPlan(plan)) throw new CollectionError('plan must be month or year')
   const price = plan === 'month' ? deps.env.STRIPE_PRICE_MONTH : deps.env.STRIPE_PRICE_YEAR
   if (!price) throw new CollectionError("Supporter subscriptions aren't open yet")
-  if (supporterOf(deps.db, userId))
-    throw new CollectionError('You already support Duel Binder. Use Manage to change your plan.')
+  if (supporterOf(deps.db, userId)) throw new CollectionError(ALREADY)
   const base = deps.env.PUBLIC_URL
   return viaStripe(async () => {
     let customer = customerOf(deps.db, userId)
+    if (customer) {
+      // A payment whose webhook hasn't landed yet must not lead to a second subscription.
+      const live = (await listSubscriptions(deps, customer)).find((s) => isActiveStatus(s.status))
+      if (live) {
+        writeSubscription(deps.db, userId, live, deps.now())
+        throw new CollectionError(ALREADY)
+      }
+    }
     if (!customer) {
       customer = (
         await stripeCall<{ id: string }>(deps, 'POST', '/v1/customers', {
@@ -223,26 +236,42 @@ export function showOnSite(deps: AppDeps, userId: number, on: unknown): Supporte
 }
 
 /**
- * Cancels these accounts' live subscriptions now (account delete). A failure is logged and left:
- * the account is deleted either way, and the owner can cancel in the Stripe Dashboard.
+ * Deletes these accounts' Stripe customers (account delete): that cancels every subscription they
+ * have at once and makes any open Checkout unusable, so nothing goes on billing an account that's
+ * gone. A failure is logged and left: the account is deleted either way, and the owner can delete
+ * the customer in the Stripe Dashboard.
  */
-export async function cancelSubscriptions(deps: AppDeps, userIds: number[]): Promise<void> {
-  const get = deps.db.prepare(
-    'SELECT stripe_subscription_id AS id, status FROM supporters WHERE user_id = ?'
-  )
+export async function deleteCustomers(deps: AppDeps, userIds: number[]): Promise<void> {
   for (const userId of userIds) {
-    const row = get.get(userId) as { id: string | null; status: string } | undefined
-    if (!row?.id || ['canceled', 'incomplete_expired', 'none'].includes(row.status)) continue
+    const customer = customerOf(deps.db, userId)
+    if (!customer) continue
     try {
-      await stripeCall(deps, 'DELETE', `/v1/subscriptions/${encodeURIComponent(row.id)}`)
+      await stripeCall(deps, 'DELETE', `/v1/customers/${encodeURIComponent(customer)}`)
     } catch (e) {
-      console.error(
-        'subscription cancel on delete failed',
-        row.id,
-        e instanceof Error ? e.message : e
-      )
+      console.error('stripe customer delete failed', customer, e instanceof Error ? e.message : e)
     }
   }
+}
+
+/**
+ * Account merge: the closed account's subscription follows its owner to the survivor, unless the
+ * survivor's own is live; then the closed account keeps it (listed in the admin Supporters tab).
+ * Call inside the merge's transaction.
+ */
+export function mergeSupporter(db: SqlDb, survivor: number, closed: number): void {
+  const status = (id: number): string | undefined =>
+    (
+      db.prepare('SELECT status FROM supporters WHERE user_id = ?').get(id) as
+        { status: string } | undefined
+    )?.status
+  const theirs = status(closed)
+  if (theirs === undefined) return
+  const mine = status(survivor)
+  if (mine !== undefined) {
+    if (isActiveStatus(mine) || !isActiveStatus(theirs)) return
+    db.prepare('DELETE FROM supporters WHERE user_id = ?').run(survivor)
+  }
+  db.prepare('UPDATE supporters SET user_id = ? WHERE user_id = ?').run(survivor, closed)
 }
 
 const noStore = (body: unknown, status = 200): Response =>

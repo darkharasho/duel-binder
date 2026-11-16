@@ -1,6 +1,6 @@
 import type { AppDeps } from './app'
 import { sameString } from './auth'
-import { writeSubscription, type StripeSubscription } from './supporters'
+import { pickSubscription, writeSubscription, type StripeSubscription } from './supporters'
 
 /** Every Stripe call pins this version (the latest when written); responses are read to its shapes. */
 export const STRIPE_VERSION = '2026-10-28.endive'
@@ -93,6 +93,23 @@ const HANDLED = new Set([
   'radar.early_fraud_warning.created'
 ])
 
+/** Events the owner should look at in the Stripe Dashboard; logged to Workers Logs. */
+const RISK = new Set([
+  'charge.refunded',
+  'charge.dispute.created',
+  'radar.early_fraud_warning.created'
+])
+
+/** A customer's subscriptions, newest first (up to 10). */
+export async function listSubscriptions(
+  deps: AppDeps,
+  customer: string
+): Promise<StripeSubscription[]> {
+  const q = new URLSearchParams({ customer, status: 'all', limit: '10' })
+  return (await stripeCall<{ data: StripeSubscription[] }>(deps, 'GET', `/v1/subscriptions?${q}`))
+    .data
+}
+
 const idOf = (v: unknown): string | null =>
   typeof v === 'string'
     ? v
@@ -130,7 +147,8 @@ export async function stripeWebhookRoute(req: Request, deps: AppDeps): Promise<R
 
   try {
     let customer = idOf(object.customer)
-    if (!customer && type === 'radar.early_fraud_warning.created') {
+    // Disputes and early fraud warnings name only their charge.
+    if (!customer) {
       const charge = idOf(object.charge)
       if (charge)
         customer = idOf(
@@ -144,23 +162,16 @@ export async function stripeWebhookRoute(req: Request, deps: AppDeps): Promise<R
         )
     }
     if (!customer) return ok()
-    let userId = (
+    // The row is made when checkout opens, so a customer without one belongs to no account (or to
+    // one deleted since): a paid session is never attached by its reference alone.
+    const userId = (
       deps.db
         .prepare('SELECT user_id FROM supporters WHERE stripe_customer_id = ?')
         .get(customer) as { user_id: number } | undefined
     )?.user_id
-    if (userId === undefined && type === 'checkout.session.completed') {
-      const ref = Number(object.client_reference_id)
-      if (Number.isInteger(ref) && deps.db.prepare('SELECT 1 FROM users WHERE id = ?').get(ref))
-        userId = ref
-    }
     if (userId === undefined) return ok()
-    const list = await stripeCall<{ data: StripeSubscription[] }>(
-      deps,
-      'GET',
-      `/v1/subscriptions?${new URLSearchParams({ customer, status: 'all', limit: '1' })}`
-    )
-    const sub = list.data[0]
+    if (RISK.has(type)) console.warn('stripe risk event', type, customer, String(userId))
+    const sub = pickSubscription(await listSubscriptions(deps, customer))
     if (sub) writeSubscription(deps.db, userId, sub, deps.now())
     return ok()
   } catch (e) {

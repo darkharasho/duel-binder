@@ -36,9 +36,15 @@ function go(url: string): void {
 export function SupporterSection({
   signedIn,
   store = isNativeApp(),
-  frame
+  frame,
+  openUrl = go
 }: {
   signedIn: boolean
+  /**
+   * Opens Stripe's page. The store apps pass their sign-in sheet: a webview won't open a window
+   * once the tap has turned into a wait.
+   */
+  openUrl?: (url: string) => void
   /** The App Store and Play builds: status and Manage only. */
   store?: boolean
   frame: (body: React.ReactNode) => React.ReactNode
@@ -61,7 +67,7 @@ export function SupporterSection({
       setError(null)
       track(what === 'manage' ? 'supporter:manage' : 'supporter:checkout')
     },
-    onSuccess: ({ url }) => go(url),
+    onSuccess: ({ url }) => openUrl(url),
     onError: (e: Error) => setError(friendsErrorMessage(e))
   })
   const listed = useMutation({
@@ -123,7 +129,12 @@ export function SupporterSection({
           {s.hasCustomer && manage}
         </>
       ) : (
-        manage
+        <>
+          <p className="text-muted-foreground">
+            Manage shows your past Duel Binder payments and card.
+          </p>
+          {manage}
+        </>
       )}
       {error && (
         <p role="alert" className="text-destructive">

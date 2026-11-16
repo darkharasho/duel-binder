@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type Database from 'better-sqlite3'
 import { addUser, memoryBucket, noPrintingArt, noPrices, seededServerDb } from './helpers'
 import { fakeStripe, stripeSub } from './stripeFake'
@@ -47,20 +47,33 @@ describe('Stripe webhook', () => {
     }
   })
 
-  const send = (type: string, object: Record<string, unknown>, header?: string | null): Promise<Response> => {
+  const send = (
+    type: string,
+    object: Record<string, unknown>,
+    header?: string | null
+  ): Promise<Response> => {
     const body = JSON.stringify({ id: 'evt_1', type, data: { object } })
     const headers: Record<string, string> = { 'content-type': 'application/json' }
     const sig = header === undefined ? sign(body) : header
     if (sig !== null) headers['stripe-signature'] = sig
     return handle(new Request(`${BASE}/stripe/webhook`, { method: 'POST', headers, body }), deps)
   }
-  const checkout = (): Promise<Response> =>
-    send('checkout.session.completed', {
+  /** The row startCheckout leaves before the buyer pays. */
+  const started = (userId = alice, customer = 'cus_1'): void => {
+    db.prepare(
+      'INSERT OR IGNORE INTO supporters (user_id, stripe_customer_id, updated_at) VALUES (?, ?, ?)'
+    ).run(userId, customer, NOW.toISOString())
+  }
+
+  const checkout = (): Promise<Response> => {
+    started()
+    return send('checkout.session.completed', {
       object: 'checkout.session',
       client_reference_id: String(alice),
       customer: 'cus_1',
       subscription: 'sub_1'
     })
+  }
 
   describe('signature', () => {
     it('accepts a good signature, including among several v1 entries', async () => {
@@ -73,7 +86,9 @@ describe('Stripe webhook', () => {
     it('refuses a wrong secret, a stale time, a changed body and no header', async () => {
       const body = '{"a":1}'
       expect(await verifyStripeSignature(SECRET, sign(body, 'whsec_other'), body, NOW)).toBe(false)
-      expect(await verifyStripeSignature(SECRET, sign(body, SECRET, T - 301), body, NOW)).toBe(false)
+      expect(await verifyStripeSignature(SECRET, sign(body, SECRET, T - 301), body, NOW)).toBe(
+        false
+      )
       expect(await verifyStripeSignature(SECRET, sign(body), '{"a":2}', NOW)).toBe(false)
       expect(await verifyStripeSignature(SECRET, null, body, NOW)).toBe(false)
       expect(await verifyStripeSignature(SECRET, 'garbage', body, NOW)).toBe(false)
@@ -81,8 +96,12 @@ describe('Stripe webhook', () => {
 
     it('answers 400 to a badly signed event and writes nothing', async () => {
       stripe.subs.set('cus_1', stripeSub())
-      expect((await send('checkout.session.completed', { customer: 'cus_1' }, 'bad')).status).toBe(400)
-      expect((await send('checkout.session.completed', { customer: 'cus_1' }, null)).status).toBe(400)
+      expect((await send('checkout.session.completed', { customer: 'cus_1' }, 'bad')).status).toBe(
+        400
+      )
+      expect((await send('checkout.session.completed', { customer: 'cus_1' }, null)).status).toBe(
+        400
+      )
       expect(supporterOf(db, alice)).toBeNull()
     })
 
@@ -93,6 +112,7 @@ describe('Stripe webhook', () => {
   })
 
   it('makes the buyer a supporter on checkout', async () => {
+    started()
     stripe.subs.set('cus_1', stripeSub())
     expect((await checkout()).status).toBe(200)
     expect(supporterOf(db, alice)).toMatchObject({ plan: 'year', since: NOW.toISOString() })
@@ -120,7 +140,9 @@ describe('Stripe webhook', () => {
     stripe.subs.set('cus_1', stripeSub())
     await checkout()
     stripe.subs.set('cus_1', stripeSub({ status: 'past_due' }))
-    expect((await send('invoice.payment_failed', { object: 'invoice', customer: 'cus_1' })).status).toBe(200)
+    expect(
+      (await send('invoice.payment_failed', { object: 'invoice', customer: 'cus_1' })).status
+    ).toBe(200)
     expect(supporterOf(db, alice)).not.toBeNull()
   })
 
@@ -137,14 +159,62 @@ describe('Stripe webhook', () => {
 
     stripe.subs.set('cus_1', stripeSub({ status: 'canceled' }))
     stripe.charges.set('ch_2', { id: 'ch_2', customer: 'cus_1' })
-    await send('radar.early_fraud_warning.created', { object: 'radar.early_fraud_warning', charge: 'ch_2' })
+    await send('radar.early_fraud_warning.created', {
+      object: 'radar.early_fraud_warning',
+      charge: 'ch_2'
+    })
     expect(supporterOf(db, alice)).toBeNull()
   })
 
   it('ignores customers it does not know', async () => {
     stripe.subs.set('cus_x', stripeSub({ customer: 'cus_x' }))
-    expect((await send('customer.subscription.updated', { ...stripeSub({ customer: 'cus_x' }) })).status).toBe(200)
+    expect(
+      (await send('customer.subscription.updated', { ...stripeSub({ customer: 'cus_x' }) })).status
+    ).toBe(200)
     expect(db.prepare('SELECT count(*) AS n FROM supporters').get()).toEqual({ n: 0 })
+  })
+
+  it('never attaches a paid checkout by its reference alone', async () => {
+    // A row is made before checkout opens; none means the account was deleted meanwhile.
+    stripe.subs.set('cus_1', stripeSub())
+    await send('checkout.session.completed', {
+      client_reference_id: String(alice),
+      customer: 'cus_1',
+      subscription: 'sub_1'
+    })
+    expect(db.prepare('SELECT count(*) AS n FROM supporters').get()).toEqual({ n: 0 })
+  })
+
+  it('tracks a live subscription over a newer ended one', async () => {
+    started()
+    stripe.subs.set('cus_1', stripeSub({ id: 'sub_2', status: 'canceled' }))
+    stripe.older.set('cus_1', [stripeSub({ id: 'sub_1' })])
+    await send('customer.subscription.deleted', {
+      ...stripeSub({ id: 'sub_2', status: 'canceled' })
+    })
+    expect(supporterOf(db, alice)).not.toBeNull()
+    expect(db.prepare('SELECT stripe_subscription_id AS id FROM supporters').get()).toEqual({
+      id: 'sub_1'
+    })
+    const list = stripe.calls.find((c) => c.path === '/v1/subscriptions')!
+    expect(list.query.get('limit')).toBe('10')
+  })
+
+  it('finds the customer of a dispute through its charge, and logs it for the owner', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    started()
+    stripe.subs.set('cus_1', stripeSub())
+    stripe.charges.set('ch_9', { id: 'ch_9', customer: 'cus_1' })
+    await send('charge.dispute.created', { object: 'dispute', id: 'dp_1', charge: 'ch_9' })
+    expect(stripe.calls.some((c) => c.path === '/v1/charges/ch_9')).toBe(true)
+    expect(supporterOf(db, alice)).not.toBeNull()
+    expect(warn).toHaveBeenCalledWith(
+      'stripe risk event',
+      'charge.dispute.created',
+      'cus_1',
+      String(alice)
+    )
+    warn.mockRestore()
   })
 
   it('ignores a checkout naming an account that does not exist', async () => {

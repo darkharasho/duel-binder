@@ -72,7 +72,12 @@ describe('supporter RPC', () => {
   const posts = (path: string) => stripe.calls.filter((c) => c.method === 'POST' && c.path === path)
 
   it('answers 401 signed out', async () => {
-    for (const ch of ['supporter:status', 'supporter:checkout', 'supporter:manage', 'supporter:setShowOnSite'])
+    for (const ch of [
+      'supporter:status',
+      'supporter:checkout',
+      'supporter:manage',
+      'supporter:setShowOnSite'
+    ])
       expect((await rpc(ch, [], null)).status).toBe(401)
   })
 
@@ -98,7 +103,10 @@ describe('supporter RPC', () => {
 
   it('starts a checkout for a new customer', async () => {
     const res = await rpc('supporter:checkout', ['year'])
-    expect(res).toEqual({ status: 200, body: { result: { url: 'https://checkout.stripe.test/cs_1' } } })
+    expect(res).toEqual({
+      status: 200,
+      body: { result: { url: 'https://checkout.stripe.test/cs_1' } }
+    })
     expect(posts('/v1/customers')[0].form.get('metadata[user_id]')).toBe(String(alice))
     const f = posts('/v1/checkout/sessions')[0].form
     expect(Object.fromEntries(f)).toEqual({
@@ -121,7 +129,10 @@ describe('supporter RPC', () => {
     const sessions = posts('/v1/checkout/sessions')
     expect(sessions[1].form.get('customer')).toBe('cus_1')
     expect(sessions[1].form.get('line_items[0][price]')).toBe('price_month')
-    expect((await rpc('supporter:status')).body.result).toMatchObject({ hasCustomer: true, supporter: null })
+    expect((await rpc('supporter:status')).body.result).toMatchObject({
+      hasCustomer: true,
+      supporter: null
+    })
   })
 
   it('refuses checkout to a current supporter', async () => {
@@ -131,10 +142,27 @@ describe('supporter RPC', () => {
     )
   })
 
+  it('checks Stripe before a second checkout, in case a payment has not landed yet', async () => {
+    await rpc('supporter:checkout', ['month'])
+    // They paid, but the webhook hasn't arrived: the row still says none.
+    stripe.subs.set('cus_1', stripeSub({ interval: 'month', amount: 300 }))
+    const res = await rpc('supporter:checkout', ['year'])
+    expect(res.body.error).toBe('You already support Duel Binder. Use Manage to change your plan.')
+    expect(posts('/v1/checkout/sessions')).toHaveLength(1)
+    expect((await rpc('supporter:status')).body.result).toMatchObject({
+      supporter: { plan: 'month' }
+    })
+  })
+
   it('opens the Customer Portal only with a customer', async () => {
-    expect(await rpc('supporter:manage')).toEqual({ status: 400, body: { error: 'No subscription to manage' } })
+    expect(await rpc('supporter:manage')).toEqual({
+      status: 400,
+      body: { error: 'No subscription to manage' }
+    })
     writeSubscription(db, alice, stripeSub(), NOW)
-    expect((await rpc('supporter:manage')).body.result).toEqual({ url: 'https://billing.stripe.test/bps_1' })
+    expect((await rpc('supporter:manage')).body.result).toEqual({
+      url: 'https://billing.stripe.test/bps_1'
+    })
     expect(Object.fromEntries(posts('/v1/billing_portal/sessions')[0].form)).toEqual({
       customer: 'cus_1',
       return_url: `${BASE}/supporter/thanks?managed=1`
@@ -158,6 +186,9 @@ describe('supporter RPC', () => {
   it('reports a Stripe failure as a plain error', async () => {
     stripe.fail.add('/v1/customers')
     const res = await rpc('supporter:checkout', ['month'])
-    expect(res).toEqual({ status: 400, body: { error: "Couldn't reach the payment service. Try again." } })
+    expect(res).toEqual({
+      status: 400,
+      body: { error: "Couldn't reach the payment service. Try again." }
+    })
   })
 })

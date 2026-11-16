@@ -4,7 +4,8 @@ import type Database from 'better-sqlite3'
 import { addUser, memoryBucket, noPrices, noPrintingArt, seededServerDb } from './helpers'
 import { fakeStripe, stripeSub } from './stripeFake'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
-import { setShowOnSite, writeSubscription } from '../../workers/portal/src/supporters'
+import { setShowOnSite, supporterOf, writeSubscription } from '../../workers/portal/src/supporters'
+import { mergeAccounts } from '../../workers/portal/src/merge'
 import type { AdminSupporters } from '../../src/shared/admin'
 
 const BASE = 'https://portal.test'
@@ -77,7 +78,7 @@ describe('supporters around the portal', () => {
       const res = await post('/api/account/delete', 'tok-alice', { confirm: 'delete' })
       expect(res.status).toBe(204)
       expect(stripe.calls.map((c) => `${c.method} ${c.path}`)).toEqual([
-        'DELETE /v1/subscriptions/sub_1'
+        'DELETE /v1/customers/cus_1'
       ])
       expect(db.prepare('SELECT count(*) AS n FROM supporters').get()).toEqual({ n: 0 })
     })
@@ -85,7 +86,7 @@ describe('supporters around the portal', () => {
     it('still deletes when the cancel fails', async () => {
       const log = vi.spyOn(console, 'error').mockImplementation(() => {})
       writeSubscription(db, alice, stripeSub(), NOW)
-      stripe.fail.add('/v1/subscriptions/sub_1')
+      stripe.fail.add('/v1/customers/cus_1')
       expect((await post('/api/account/delete', 'tok-alice', { confirm: 'delete' })).status).toBe(
         204
       )
@@ -96,12 +97,66 @@ describe('supporters around the portal', () => {
       log.mockRestore()
     })
 
-    it('makes no Stripe call for an ended subscription', async () => {
-      writeSubscription(db, alice, stripeSub({ status: 'canceled' }), NOW)
+    it('deletes the customer even with only a checkout started', async () => {
+      db.prepare(
+        'INSERT INTO supporters (user_id, stripe_customer_id, updated_at) VALUES (?, ?, ?)'
+      ).run(alice, 'cus_9', NOW.toISOString())
+      expect((await post('/api/account/delete', 'tok-alice', { confirm: 'delete' })).status).toBe(
+        204
+      )
+      expect(stripe.calls.map((c) => `${c.method} ${c.path}`)).toEqual([
+        'DELETE /v1/customers/cus_9'
+      ])
+    })
+
+    it('makes no Stripe call without a customer', async () => {
       expect((await post('/api/account/delete', 'tok-alice', { confirm: 'delete' })).status).toBe(
         204
       )
       expect(stripe.calls).toHaveLength(0)
+    })
+  })
+
+  describe('account merge', () => {
+    let bea: number
+    beforeEach(() => {
+      bea = addUser(db, 'apple:bea-sub', 'bea')
+    })
+    const merge = (survivor: number, closed: number): void =>
+      mergeAccounts(db, {
+        survivor,
+        closed,
+        cards: 'higher',
+        username: 'mine',
+        moved: { provider: 'apple', subject: 'bea-sub' },
+        appleRefreshToken: null,
+        now: NOW
+      })
+
+    it("moves the closed account's subscription to the survivor", () => {
+      writeSubscription(db, bea, stripeSub({ id: 'sub_b', customer: 'cus_b' }), NOW)
+      merge(alice, bea)
+      expect(supporterOf(db, alice)).not.toBeNull()
+      expect(db.prepare('SELECT user_id FROM supporters').all()).toEqual([{ user_id: alice }])
+    })
+
+    it("takes the closed account's live subscription over the survivor's ended one", () => {
+      writeSubscription(db, alice, stripeSub({ status: 'canceled' }), NOW)
+      writeSubscription(db, bea, stripeSub({ id: 'sub_b', customer: 'cus_b' }), NOW)
+      merge(alice, bea)
+      expect(db.prepare('SELECT user_id, stripe_customer_id FROM supporters').all()).toEqual([
+        { user_id: alice, stripe_customer_id: 'cus_b' }
+      ])
+    })
+
+    it("keeps the survivor's live subscription and holds the other with the closed account", () => {
+      writeSubscription(db, alice, stripeSub(), NOW)
+      writeSubscription(db, bea, stripeSub({ id: 'sub_b', customer: 'cus_b' }), NOW)
+      merge(alice, bea)
+      expect(db.prepare('SELECT user_id FROM supporters ORDER BY user_id').all()).toEqual([
+        { user_id: alice },
+        { user_id: bea }
+      ])
     })
   })
 

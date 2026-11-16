@@ -3,7 +3,7 @@ import type { AppDeps } from './app'
 import { revokeAppleToken } from './apple'
 import { clearSessionCookie, currentUser, fromPublicOrigin } from './auth'
 import { mergedFrom } from './merge'
-import { cancelSubscriptions } from './supporters'
+import { deleteCustomers } from './supporters'
 
 /** The most keys one R2 delete call takes. */
 const DELETE_BATCH = 1000
@@ -70,7 +70,7 @@ export async function deleteAccountRoute(req: Request, deps: AppDeps): Promise<R
   // Held accounts only: a purged hold's id may now be a new user's (mergedFrom leaves it out).
   const held = mergedFrom(deps.db, userId)
   // Live supporter subscriptions stop billing first; the account goes either way.
-  await cancelSubscriptions(deps, [userId, ...held])
+  await deleteCustomers(deps, [userId, ...held])
   // Training photos' rows cascade with the users row; their R2 objects are deleted after.
   const photoKey = deps.db.prepare('SELECT r2_key FROM training_photos WHERE user_id = ?')
   const photoKeys = [userId, ...held].flatMap((id) =>

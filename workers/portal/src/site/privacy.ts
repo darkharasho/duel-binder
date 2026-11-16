@@ -13,13 +13,15 @@ export function renderPrivacy(view: PrivacyView): string {
       description: 'What Duel Binder stores about you, why, and how to delete it.',
       heading: 'Privacy',
       lead: 'What Duel Binder keeps about you, why, and how to delete it.',
-      updated: 'Last updated October 31, 2026',
+      updated: 'Last updated November 16, 2026',
       sections: [
         [
           'What is stored',
           p(
             'When you sign in with Discord, the portal stores your Discord id, username, display name and avatar. It asks Discord for the <code>identify</code> and <code>email</code> scopes, not your servers or your messages. When you sign in with Apple, in the iPhone app, it stores Apple’s id for your account and, if you share it, your name. The portal also asks Discord and Apple for your email, and keeps it, and any email you sign up with, only to sign you in, send you codes and offer to link your accounts. Nothing else.',
-            'Either way it also stores your collection, wishlist, notes and value history; your friends and blocks; your sign-in sessions; and when your account last used the portal, to the hour.'
+            'When you sign up with an email and a password, the password is kept only as a salted hash, never as the password itself, so not even the portal can read it back.',
+            'However you sign in, it also stores your collection, wishlist, notes, binders, favourites, scan sessions and value history; your friends and blocks; your sign-in sessions; when your account last used the portal, to the hour; and how many requests your account made each day, by kind, to see what the portal costs to run.',
+            'To stop people guessing passwords or flooding the beta form, sign-in and beta-form attempts are counted by IP address. Those counts are deleted after an hour, or a day for the beta form.'
           )
         ],
         [
@@ -45,9 +47,24 @@ export function renderPrivacy(view: PrivacyView): string {
           )
         ],
         [
+          'Scanner photos you send',
+          p(
+            'If you help test the scanner, Contribute photos sends the pictures you take, with the card you say each one shows, to the portal. Only these photos leave your device; normal scanning never uploads anything.',
+            'They are stored on Cloudflare, seen only by the developer and used only to teach the scanner. Removing a photo in the app deletes it from the portal, and deleting your account deletes all of them.'
+          )
+        ],
+        [
+          'Beta requests',
+          p(
+            'The form at <a href="/beta">duelbinder.com/beta</a> stores the email, name, phone type and “who sent you” you enter, and when you asked. They are used only to let you into the test and email you when you’re in.',
+            'For iPhone, your email and name are sent to Apple through App Store Connect, which adds you to TestFlight and emails you the invite. For Android, the email tells you to join a group on Google Groups and opt in on Google Play; Google handles both.',
+            'A beta request isn’t part of your Duel Binder account. It is kept while the beta runs; to have it deleted, email support@duelbinder.com.'
+          )
+        ],
+        [
           'Who else handles it',
           p(
-            'The portal runs on Cloudflare, which stores its data and keeps request logs, which can include IP addresses, for a few days for troubleshooting. Discord and Apple handle signing in. Nothing is shared with anyone else.'
+            'The portal runs on Cloudflare, which stores its data, sends its emails and keeps request logs, which can include IP addresses, for a few days for troubleshooting. Discord and Apple handle signing in with them. For the phone betas, Apple (TestFlight) and Google (Google Groups and Google Play) get what the beta request section says. Nothing is shared with anyone else.'
           )
         ],
         [
@@ -55,7 +72,7 @@ export function renderPrivacy(view: PrivacyView): string {
           p(
             'Nothing is sold or used for ads.',
             'There are no third-party trackers.',
-            'When you scan cards, the camera picture is processed on your phone and never uploaded.',
+            'When you scan cards, the camera picture is processed on your device and never uploaded. The only photos that leave it are ones you choose to send with Contribute photos.',
             'Card images come through the portal, in every app and on the web, so the sites that host them don’t see you. Two things load from elsewhere: Discord avatars, yours and your friends’, come straight from Discord, and the desktop app checks GitHub for updates.'
           )
         ],
@@ -74,7 +91,7 @@ export function renderPrivacy(view: PrivacyView): string {
         [
           'Children',
           p(
-            'Duel Binder isn’t meant for children under 13, and an account needs Discord or Apple, which set their own minimum ages.'
+            'Duel Binder isn’t meant for children under 13, and you shouldn’t make an account if you’re younger. Discord and Apple also set their own minimum ages.'
           )
         ],
         [

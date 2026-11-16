@@ -279,13 +279,13 @@ describe('renderPrivacy', () => {
     expect(html).toContain('<h1>Privacy</h1>')
     for (const text of [
       'Discord id, username, display name and avatar',
-      'your collection, wishlist, notes and value history',
+      'your collection, wishlist, notes, binders, favourites, scan sessions and value history',
       'friends and blocks',
       'sign-in sessions',
       'to sync and show your collection',
       'Nothing is sold or used for ads.',
       'There are no third-party trackers.',
-      'the camera picture is processed on your phone and never uploaded',
+      'the camera picture is processed on your device and never uploaded',
       'Card images come through the portal',
       'Discord avatars, yours and your friends’, come straight from Discord',
       'the desktop app checks GitHub for updates',
@@ -297,10 +297,17 @@ describe('renderPrivacy', () => {
       'You can turn them off in Settings',
       'The portal runs on Cloudflare',
       'Last updated',
-      '<a href="mailto:support@duelbinder.com">support@duelbinder.com</a>'
+      '<a href="mailto:support@duelbinder.com">support@duelbinder.com</a>',
+      // Email sign-in, scanner photos and beta requests (2026-11-16).
+      'only as a salted hash',
+      'Scanner photos you send',
+      'Beta requests',
+      'App Store Connect',
+      'Google Groups'
     ]) {
       expect(html).toContain(text)
     }
+    expect(html).not.toContain('an account needs Discord or Apple')
     expect(html).toContain('<link rel="canonical" href="https://duelbinder.com/privacy">')
     expect(html.replace('<script src="/account.js" defer></script>', '')).not.toMatch(/<script/i)
   })

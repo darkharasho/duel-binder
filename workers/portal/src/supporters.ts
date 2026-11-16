@@ -27,7 +27,12 @@ const ACTIVE_SQL = `status IN ('active', 'trialing', 'past_due')`
 export const isActiveStatus = (status: string): boolean => ACTIVE.includes(status)
 
 /** Writes Stripe's state of the account's subscription; `since` is set the first time it is active. */
-export function writeSubscription(db: SqlDb, userId: number, sub: StripeSubscription, now: Date): void {
+export function writeSubscription(
+  db: SqlDb,
+  userId: number,
+  sub: StripeSubscription,
+  now: Date
+): void {
   const item = sub.items.data[0]
   const interval = item?.price.recurring?.interval
   const plan: SupporterPlan | null = interval === 'month' || interval === 'year' ? interval : null

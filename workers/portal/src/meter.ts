@@ -113,7 +113,7 @@ export function createCostMeter(now: () => number): CostMeter {
   }
 }
 
-const KNOWN = new Set(['api', 'admin', 'auth', 'scan', 'img'])
+const KNOWN = new Set(['api', 'admin', 'auth', 'scan', 'img', 'stripe', 'supporter'])
 const PART = /^[a-z][a-z0-9-]{0,31}$/
 const CHANNEL = /^[a-z][a-zA-Z0-9:-]{0,47}$/
 

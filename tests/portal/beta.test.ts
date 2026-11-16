@@ -1,18 +1,24 @@
+import { createHash } from 'node:crypto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type Database from 'better-sqlite3'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
-import { memoryBucket, noPrintingArt, noPrices, seededServerDb } from './helpers'
+import type { EmailMessage } from '../../workers/portal/src/emailSend'
+import { addUser, memoryBucket, noPrintingArt, noPrices, seededServerDb } from './helpers'
 
 const BASE = 'https://portal.test'
 const SITE = 'https://site.test'
-const TOKEN = 'admin-secret'
+// The owner's desktop session; the admin routes go by the signed-in account, like the Testers tab.
+const TOKEN = 'tok-owner'
+const OPT_IN = 'https://play.google.com/apps/internaltest/123'
 
 describe('phone beta requests', () => {
   let db: Database.Database
   let deps: AppDeps
+  let sent: EmailMessage[]
 
   beforeEach(async () => {
     db = await seededServerDb()
+    sent = []
     deps = {
       db,
       assets: { fetch: async () => new Response('nope', { status: 404 }) },
@@ -24,12 +30,24 @@ describe('phone beta requests', () => {
         SITE_URL: SITE,
         DISCORD_CLIENT_ID: 'c',
         DISCORD_CLIENT_SECRET: 's',
-        ADMIN_TOKEN: TOKEN,
-        PRICE_WORKER_URL: 'https://prices.test'
+        ADMIN_TOKEN: 'admin-secret',
+        ADMIN_DISCORD_ID: '999',
+        PRICE_WORKER_URL: 'https://prices.test',
+        BETA_ANDROID_OPTIN_URL: OPT_IN
       },
+      email: { send: async (m) => void sent.push(m) },
       now: () => new Date('2026-11-16T12:00:00.000Z'),
       fetch: (async () => new Response('?', { status: 404 })) as unknown as typeof fetch
     }
+    const owner = addUser(db, '999', 'owner')
+    db.prepare(
+      "INSERT INTO sessions (token_hash, user_id, kind, created_at, expires_at) VALUES (?, ?, 'desktop', ?, ?)"
+    ).run(
+      createHash('sha256').update(TOKEN).digest('hex'),
+      owner,
+      '2026-11-01T00:00:00.000Z',
+      '2027-11-01T00:00:00.000Z'
+    )
   })
 
   const sam = {
@@ -133,5 +151,100 @@ describe('phone beta requests', () => {
     // Another address is still welcome.
     const other = await post({ ...sam, email: 'q@example.com' }, SITE, '5.6.7.8')
     expect(other.headers.get('location')).toBe(SITE + '/beta?sent=1')
+  })
+
+  const admin = (path: string, body?: unknown, auth = true): Promise<Response> =>
+    handle(
+      new Request(BASE + path, {
+        method: body === undefined ? 'GET' : 'POST',
+        headers: {
+          ...(auth ? { authorization: `Bearer ${TOKEN}` } : {}),
+          ...(body === undefined ? {} : { 'content-type': 'application/json' })
+        },
+        body: body === undefined ? undefined : JSON.stringify(body)
+      }),
+      deps
+    )
+  const list = async (): Promise<{
+    requests: { id: number; email: string; platform: string; status: string; referredBy: string }[]
+    androidAdded: number
+  }> => (await admin('/admin/beta')).json() as never
+  const decide = async (id: number, status: string): Promise<{ status: number; body: unknown }> => {
+    const res = await admin('/admin/beta/decide', { id, status })
+    return { status: res.status, body: await res.json() }
+  }
+  const idOf = (email: string, platform = 'android'): number =>
+    (
+      db
+        .prepare('SELECT id FROM beta_requests WHERE email = ? AND platform = ?')
+        .get(email, platform) as {
+        id: number
+      }
+    ).id
+
+  it('lists requests for the admin only, pending first', async () => {
+    await post({ ...sam, email: 'a@example.com' })
+    await post({ ...sam, email: 'b@example.com', platform: 'ios' })
+    expect((await admin('/admin/beta', undefined, false)).status).toBe(404)
+    await decide(idOf('a@example.com'), 'declined')
+    const l = await list()
+    expect(l.requests.map((r) => [r.email, r.status])).toEqual([
+      ['b@example.com', 'pending'],
+      ['a@example.com', 'declined']
+    ])
+    expect(l.requests[0]).toMatchObject({ platform: 'ios', referredBy: 'Dub' })
+    expect(l.androidAdded).toBe(0)
+  })
+
+  it('marking added emails the Play link once', async () => {
+    await post(sam)
+    const id = idOf('sam@example.com')
+    expect(await decide(id, 'added')).toEqual({ status: 200, body: { ok: true, emailed: true } })
+    expect(sent).toHaveLength(1)
+    expect(sent[0].to).toBe('sam@example.com')
+    expect(sent[0].text).toContain(OPT_IN)
+    expect(sent[0].html).toContain(OPT_IN)
+    expect((await list()).androidAdded).toBe(1)
+    expect(await decide(id, 'added')).toEqual({ status: 200, body: { ok: true, emailed: false } })
+    expect(sent).toHaveLength(1)
+    const row = db.prepare('SELECT status, decided_at FROM beta_requests WHERE id = ?').get(id)
+    expect(row).toEqual({ status: 'added', decided_at: '2026-11-16T12:00:00.000Z' })
+  })
+
+  it('tells iPhone testers to watch for the TestFlight invite', async () => {
+    await post({ ...sam, platform: 'ios' })
+    await decide(idOf('sam@example.com', 'ios'), 'added')
+    expect(sent[0].text).toContain('TestFlight')
+    expect(sent[0].text).not.toContain(OPT_IN)
+  })
+
+  it('declining sends nothing; bad ids and statuses are refused', async () => {
+    await post(sam)
+    const id = idOf('sam@example.com')
+    expect(await decide(id, 'declined')).toEqual({
+      status: 200,
+      body: { ok: true, emailed: false }
+    })
+    expect(sent).toEqual([])
+    expect((await decide(9999, 'added')).status).toBe(404)
+    expect((await decide(id, 'pending')).status).toBe(400)
+    expect((await admin('/admin/beta/decide', { id, status: 'added' }, false)).status).toBe(404)
+  })
+
+  it('still marks added without an email binding', async () => {
+    deps.email = undefined
+    await post(sam)
+    const id = idOf('sam@example.com')
+    expect(await decide(id, 'added')).toEqual({ status: 200, body: { ok: true, emailed: false } })
+    expect((await list()).androidAdded).toBe(1)
+  })
+
+  it('still marks added when sending fails', async () => {
+    deps.email = { send: async () => Promise.reject(new Error('down')) }
+    await post(sam)
+    expect(await decide(idOf('sam@example.com'), 'added')).toEqual({
+      status: 200,
+      body: { ok: true, emailed: false }
+    })
   })
 })

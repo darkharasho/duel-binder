@@ -46,6 +46,8 @@ SITE_URL = "https://duelbinder.com"
 PUBLIC_URL = "https://app.duelbinder.com"
 DISCORD_CLIENT_ID = "1563797080420655266"
 PRICE_WORKER_URL = "https://ygo-ebay-prices.project96.workers.dev"
+# The Play opt-in link the beta's "you're in" email sends Android testers (internal test for now).
+BETA_ANDROID_OPTIN_URL = "https://play.google.com/apps/internaltest/4699025211362629714"
 # The Chinese Pokémon eBay sweep's Browse calls a day; "0" is off (see src/pokemonSweep.ts).
 POKEMON_SWEEP_DAILY_CALLS = "100"
 # The Japanese One Piece eBay sweep's Browse calls a day; "0" is off (see src/onePieceSweep.ts). It shares

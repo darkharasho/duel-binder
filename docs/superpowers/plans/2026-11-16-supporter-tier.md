@@ -20,12 +20,14 @@
 ## Global Constraints
 
 - **Price:** $3/month or $25/year. The price ids come from wrangler vars `STRIPE_PRICE_MONTH` and `STRIPE_PRICE_YEAR`. No prices in code.
-- **Secrets:** `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` are wrangler secrets.
+- **Secrets:** `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` are wrangler secrets, never in code, logs or error text. `STRIPE_SECRET_KEY` is a **restricted key** (`rk_…`) with write access only to Customers, Checkout Sessions, Subscriptions and Customer portal (Stripe best practice).
+- **Sandbox first:** development uses a Stripe sandbox; live keys only at launch.
+- **Checkout:** never pass `payment_method_types`; pass `integration_identifier=duelbinder-supporter-kqzmwhrt`. No `automatic_tax` (Stripe Tax off, owner decision).
 - **Gate:** `SUPPORTER_ENABLED = "on"`. Any other value means checkout refuses and every client hides the section. Existing rows still show their badges.
 - **Nothing locked:** no feature checks the supporter flag except the badge, the thanks list and the Settings section.
 - **No nagging:** no prompts, banners or counts anywhere outside Settings, the site footer link and the `/support` page.
 - **No buy buttons in store builds:** builds where `isNativeApp()` is true show only status and *Manage*.
-- **Stripe API version:** pin the `Stripe-Version: 2025-03-31.basil` header on every call. The period end comes from `items.data[0].current_period_end`.
+- **Stripe API version:** pin the `Stripe-Version: 2026-10-28.endive` header (latest) on every call. The period end comes from `items.data[0].current_period_end`. Invoices and charges don't carry a top-level `subscription` on this version, so the webhook never reads one there.
 - **Webhook tolerance:** 300 s on the `t=` timestamp.
 - **DO SQLite:** one statement per table; no compound UNIONs (memory: do-sqlite-compound-limit).
 - **Copy for non-supporters:** "Hosting, card art and price lookups cost money every month. Supporting keeps the app free for everyone." Buttons read "$3 / month" and "$25 / year".
@@ -145,7 +147,8 @@
   - `checkout.session.completed` with `client_reference_id: String(alice)`, `customer: 'cus_1'`, `subscription: 'sub_1'` makes alice a supporter. The row's customer is `cus_1`.
   - `customer.subscription.updated` for `cus_1` re-reads `sub_1`. If Stripe says `canceled`, the row becomes canceled, even when the event body says `active`. This shows the latest state wins.
   - A replayed old `customer.subscription.created` after the cancel leaves the row canceled.
-  - `invoice.payment_failed` with `subscription: 'sub_1'` while Stripe says `past_due` leaves alice still a supporter.
+  - `invoice.payment_failed` for `customer: 'cus_1'` while Stripe says `past_due` leaves alice still a supporter.
+  - `charge.refunded` for `cus_1` after an owner refund-cancel re-reads and leaves the row canceled (risk events: `charge.refunded`, `charge.dispute.created`, `radar.early_fraud_warning.created` all just re-sync the customer).
   - An event for an unknown customer `cus_x` answers 200 and writes no row.
   - An unknown event type answers 200 and makes no Stripe calls.
   - With `STRIPE_WEBHOOK_SECRET` unset, the route answers 404.
@@ -153,8 +156,9 @@
 - [ ] **Step 3: Implement.**
   - Read the raw body as text once, verify it, then `JSON.parse`.
   - Compare signatures in constant time with `sameString` from `auth.ts`.
-  - Find the user from `client_reference_id`, but only on `checkout.session.completed`, and only when that user exists. Otherwise look it up by `stripe_customer_id`.
-  - Get the subscription id from `data.object.id` (subscription events) or `data.object.subscription` (checkout and invoice).
+  - Handled events: `checkout.session.completed`, `customer.subscription.created|updated|deleted`, `invoice.paid`, `invoice.payment_failed`, `charge.refunded`, `charge.dispute.created`, `radar.early_fraud_warning.created`. Every one resolves to a **customer id** (`data.object.customer`; for the fraud warning, re-read its charge to get the customer).
+  - Find the row by `stripe_customer_id`. On `checkout.session.completed` only, if no row matches, use `client_reference_id` when that user exists.
+  - Re-sync: `GET /v1/subscriptions?customer=<id>&status=all&limit=1` (newest first) and write it. No subscription: leave the row alone.
 - [ ] **Step 4: Run.** Expected: PASS.
 - [ ] **Step 5: Commit** with message `feat(portal): Stripe webhook keeps supporters in step`.
 
@@ -184,6 +188,8 @@
   - `checkout('month')` with the gate off: 400 `Supporter subscriptions aren't open yet`.
   - `checkout('week')`: 400.
   - `checkout('year')` creates the customer with `metadata[user_id]`, then a session with these fields, and answers `{ url }`:
+    - no `payment_method_types` field at all
+    - `integration_identifier=duelbinder-supporter-kqzmwhrt`
     - `mode=subscription`
     - `customer=cus_1`
     - `client_reference_id=<id>`
@@ -352,6 +358,7 @@ How a URL opens: `isWeb() && !isNativeApp()` uses `window.location.assign(url)`.
 1. Owner:
    - Create the Stripe account and the Prices ($3 monthly, $25 yearly).
    - Turn on the Customer Portal with cancel, plan switch and card update allowed.
-   - Add a webhook endpoint `https://app.duelbinder.com/stripe/webhook` for the five event types.
+   - Add a webhook endpoint `https://app.duelbinder.com/stripe/webhook` for the event types listed in Task 2.
+   - Create the restricted key (permissions in Global Constraints) in the sandbox, then again in live mode.
 2. Set the test-mode secrets and the price-id vars, and set `SUPPORTER_ENABLED = "on"`. Deploy the portal (from a fresh worktree: `npm ci`, then `npm run deploy`). Do a test-mode checkout on desktop, web and the phone web app. Cancel in the portal and check the badge stays until the period end.
 3. Swap to the live keys and price ids, then tag the release.

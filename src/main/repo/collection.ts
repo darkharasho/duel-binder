@@ -57,7 +57,7 @@ export const cardPriceColumns = (scope: Scope, opCols = ''): string => `
          c.id AS id, c.name, c.type, c.frame_type, c.race, c.attribute, c.level, c.linkval, c.atk, c.def,
          c.archetype, c.desc, c.tcgplayer_price, ${POKEMON_COLS}${opCols},
          p.id AS p_id, p.card_id, p.set_name, p.set_code, ${RARITY_LABEL} AS set_rarity, p.set_rarity_code, ${setPrice(scope.ebayPrices)} AS set_price,
-         p.market_price, ${twinPrice(scope)} AS en_twin_price, p.game AS p_game,
+         p.market_price, p.tcg_product_id, ${twinPrice(scope)} AS en_twin_price, p.game AS p_game,
          p.missing_from_api, p.language, p.contributed,
          ip.printing_id AS ip_id, ip.price AS ip_price, ip.checked_at AS ip_checked_at,
          ip.listing_count AS ip_listing_count`

@@ -176,6 +176,8 @@ export interface PrintingDbRow {
   contributed?: number
   /** The set's release date; absent from queries that don't select it. */
   release_date?: string | null
+  /** The TCGplayer product id; absent from queries that don't select it. */
+  tcg_product_id?: number | null
 }
 
 /**
@@ -231,6 +233,7 @@ export function rowToPrinting(row: PrintingDbRow): Printing {
     language: isLanguage(row.language) ? row.language : 'en',
     ...(row.pkey ? { pkey: row.pkey } : {}),
     ...(row.release_date ? { releaseDate: row.release_date } : {}),
+    ...(row.tcg_product_id != null ? { tcgProductId: row.tcg_product_id } : {}),
     ...(artImageId !== null ? { artImageId } : {})
   }
 }
@@ -482,7 +485,7 @@ export function getCardDetail(db: SqlDb, cardId: number, scope: Scope = LOCAL): 
       .prepare(
         `SELECT p.id, p.card_id, p.set_name, p.set_code, ${RARITY_LABEL} AS set_rarity, p.set_rarity_code,
                 ${setPrice(scope.ebayPrices)} AS set_price, p.market_price, p.missing_from_api, p.language, p.pkey,
-                COALESCE(rs.tcg_date, res.tcg_date) AS release_date
+                p.tcg_product_id, COALESCE(rs.tcg_date, res.tcg_date) AS release_date
          FROM card_printings p
          LEFT JOIN sets rs ON rs.game = p.game AND rs.language = p.language AND rs.set_name = p.set_name
          LEFT JOIN sets res ON res.game = p.game AND res.language = 'en' AND res.set_name = p.set_name

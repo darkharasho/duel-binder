@@ -47,6 +47,13 @@ test('getCardDetail', () => {
   expect(getCardDetail(db, 1)).toBeNull()
 })
 
+test('card details give each printing its TCGplayer product id', () => {
+  db.prepare("UPDATE card_printings SET tcg_product_id = 777 WHERE set_code = 'LOB-EN005'").run()
+  const d = getCardDetail(db, 46986414)!
+  expect(d.printings.find((p) => p.setCode === 'LOB-EN005')?.tcgProductId).toBe(777)
+  expect(d.printings.find((p) => p.setCode === 'SDY-006')).not.toHaveProperty('tcgProductId')
+})
+
 test("getCardDetail dates a printing by its set, else the English set's", () => {
   db.prepare(
     "INSERT OR REPLACE INTO sets (game, language, set_name, set_code, tcg_date) VALUES ('ygo','en','Legend of Blue Eyes White Dragon','LOB','2002-03-08')"

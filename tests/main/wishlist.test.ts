@@ -91,6 +91,12 @@ describe('wishlist repo', () => {
     expect(wishesForCard(db, p.card_id)).toEqual([{ printingId: p.id, quantity: null }])
   })
 
+  it('wishlist rows carry the TCGplayer product id', () => {
+    db.prepare('UPDATE card_printings SET tcg_product_id = 777 WHERE id = ?').run(p.id)
+    setWish(db, p.id, null, T1)
+    expect(listWishlist(db)[0].printing.tcgProductId).toBe(777)
+  })
+
   it('wanting a printing twice writes once, and a removed one comes back', () => {
     setWish(db, p.id, null, T1)
     db.prepare('UPDATE wishlist_entries SET dirty = 0').run()

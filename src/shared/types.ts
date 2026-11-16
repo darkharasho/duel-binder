@@ -83,6 +83,8 @@ export interface Printing {
   artImageId?: number
   /** The set's release date (ISO YYYY-MM-DD), when known. Only from the card details read. */
   releaseDate?: string
+  /** The printing's TCGplayer product, when known; only where the query selects it. */
+  tcgProductId?: number
 }
 
 /** sortOrder 0 is the original art. */

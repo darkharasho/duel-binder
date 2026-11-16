@@ -49,8 +49,7 @@ export function hexHash(s: string): Uint32Array {
   const out = new Uint32Array(HASH_WORDS)
   for (let w = 0; w < HASH_WORDS; w++) {
     let v = 0
-    for (let b = 0; b < 4; b++)
-      v |= parseInt(s.slice((w * 4 + b) * 2, (w * 4 + b) * 2 + 2), 16) << (b * 8)
+    for (let b = 0; b < 4; b++) v |= parseInt(s.slice((w * 4 + b) * 2, (w * 4 + b) * 2 + 2), 16) << (b * 8)
     out[w] = v >>> 0
   }
   return out
@@ -112,21 +111,13 @@ export interface ArtPortal {
 export const UPLOAD_TIMEOUT_MS = 60_000
 
 /** PUTs one stored copy of an entry's art to the portal. */
-export async function uploadArt(
-  o: ArtPortal,
-  size: 'full' | 'small',
-  imageId: number,
-  bytes: Uint8Array
-): Promise<void> {
+export async function uploadArt(o: ArtPortal, size: 'full' | 'small', imageId: number, bytes: Uint8Array): Promise<void> {
   const path = `/api/admin/op-art/${size}/${imageId}`
   const fetchFn = o.fetch ?? fetch
   await withRetry(path, async () => {
     const res = await fetchFn(`${o.url.replace(/\/+$/, '')}${path}`, {
       method: 'PUT',
-      headers: {
-        authorization: `Bearer ${o.token}`,
-        'content-type': size === 'full' ? 'image/png' : 'image/jpeg'
-      },
+      headers: { authorization: `Bearer ${o.token}`, 'content-type': size === 'full' ? 'image/png' : 'image/jpeg' },
       body: bytes as Uint8Array<ArrayBuffer>,
       signal: AbortSignal.timeout(o.timeoutMs ?? UPLOAD_TIMEOUT_MS)
     })
@@ -196,14 +187,7 @@ const message = (e: unknown): string => (e instanceof Error ? e.message : String
 export async function refreshArt(o: RefreshArtOptions): Promise<ArtResult> {
   const { cache, sources, now, log } = o
   const region = o.region ?? 'en'
-  const result: ArtResult = {
-    fetched: 0,
-    failed: 0,
-    uploaded: 0,
-    changed: [],
-    firstNoticed: [],
-    tooLarge: []
-  }
+  const result: ArtResult = { fetched: 0, failed: 0, uploaded: 0, changed: [], firstNoticed: [], tooLarge: [] }
   let left = o.budget ?? ART_BUDGET
   /** Takes up to `items.length` downloads out of what is left of the budget. */
   const spend = <T>(items: T[]): T[] => {
@@ -216,8 +200,7 @@ export async function refreshArt(o: RefreshArtOptions): Promise<ArtResult> {
     log(`Art: ${what} failed: ${message(e)}`)
   }
   const entries = new Map<string, BandaiEntry>()
-  for (const b of o.batches)
-    for (const e of b.entries) if (!entries.has(e.bandaiId)) entries.set(e.bandaiId, e)
+  for (const b of o.batches) for (const e of b.entries) if (!entries.has(e.bandaiId)) entries.set(e.bandaiId, e)
   const ordered = [...entries.values()]
 
   /**
@@ -248,10 +231,7 @@ export async function refreshArt(o: RefreshArtOptions): Promise<ArtResult> {
     const row = cache.getBandaiArt(id)!
     const first = row.notedAt === null
     cache.putBandaiArt({
-      ...row,
-      checkedAt: now,
-      changedHash: hash,
-      notedAt: row.notedAt ?? now
+      ...row, checkedAt: now, changedHash: hash, notedAt: row.notedAt ?? now
     })
     result.changed.push(id)
     if (first) {
@@ -272,14 +252,8 @@ export async function refreshArt(o: RefreshArtOptions): Promise<ArtResult> {
         const img = decodeImage(got.bytes)
         if (!img) throw new Error('not a PNG or JPEG')
         cache.putBandaiArt({
-          bandaiId: e.bandaiId,
-          hash: hashHex(artHash(img)),
-          lastModified: got.lastModified,
-          checkedAt: now,
-          storedAt: null,
-          changedHash: null,
-          notedAt: null,
-          tooLargeAt: null
+          bandaiId: e.bandaiId, hash: hashHex(artHash(img)), lastModified: got.lastModified, checkedAt: now,
+          storedAt: null, changedHash: null, notedAt: null, tooLargeAt: null
         })
         // Uploaded at once, so at most CONCURRENCY images are held at a time.
         if (o.portal) await store(o.portal, e.bandaiId, got.bytes)
@@ -290,11 +264,8 @@ export async function refreshArt(o: RefreshArtOptions): Promise<ArtResult> {
 
     // TCGplayer: every candidate of a number with an entry that has no product yet, and each stored product with no hash.
     const wanted = new Map<number, OpProduct>()
-    const needed = new Set(
-      batch.entries.filter((e) => !o.stored.has(e.bandaiId)).map((e) => e.number)
-    )
-    for (const p of batch.candidates)
-      if (p.number !== null && needed.has(p.number)) wanted.set(p.productId, p)
+    const needed = new Set(batch.entries.filter((e) => !o.stored.has(e.bandaiId)).map((e) => e.number))
+    for (const p of batch.candidates) if (p.number !== null && needed.has(p.number)) wanted.set(p.productId, p)
     for (const e of batch.entries) {
       const pid = o.stored.get(e.bandaiId)
       const p = pid === undefined ? undefined : batch.candidates.find((c) => c.productId === pid)
@@ -309,12 +280,7 @@ export async function refreshArt(o: RefreshArtOptions): Promise<ArtResult> {
         result.fetched++
         const img = decodeImage(bytes)
         if (!img) throw new Error('not a PNG or JPEG')
-        cache.putTcgArt({
-          productId: p.productId,
-          imageUrl: p.imageUrl!,
-          hash: hashHex(artHash(img)),
-          fetchedAt: now
-        })
+        cache.putTcgArt({ productId: p.productId, imageUrl: p.imageUrl!, hash: hashHex(artHash(img)), fetchedAt: now })
       } catch (err) {
         fail(`TCGplayer image ${p.productId}`, err)
       }
@@ -329,13 +295,8 @@ export async function refreshArt(o: RefreshArtOptions): Promise<ArtResult> {
     const pending = ordered.filter((e) => {
       const row = cache.getBandaiArt(e.bandaiId)
       return (
-        row !== null &&
-        row.storedAt === null &&
-        row.changedHash === null &&
-        row.checkedAt < now &&
-        (row.tooLargeAt === null ||
-          row.tooLargeAt < FULL_LIMIT_RAISED_AT ||
-          now - row.tooLargeAt > RECHECK_MS)
+        row !== null && row.storedAt === null && row.changedHash === null && row.checkedAt < now &&
+        (row.tooLargeAt === null || row.tooLargeAt < FULL_LIMIT_RAISED_AT || now - row.tooLargeAt > RECHECK_MS)
       )
     })
     // Left from an earlier night: downloaded again, which costs budget; without budget it waits.
@@ -354,12 +315,7 @@ export async function refreshArt(o: RefreshArtOptions): Promise<ArtResult> {
           noteChange(id, hash)
           return
         }
-        cache.putBandaiArt({
-          ...row,
-          hash,
-          lastModified: got.lastModified ?? row.lastModified,
-          checkedAt: now
-        })
+        cache.putBandaiArt({ ...row, hash, lastModified: got.lastModified ?? row.lastModified, checkedAt: now })
         await store(portal, id, got.bytes)
       } catch (err) {
         fail(`art upload ${id}`, err)
@@ -385,12 +341,7 @@ export async function refreshArt(o: RefreshArtOptions): Promise<ArtResult> {
       if (!img) throw new Error('not a PNG or JPEG')
       const hash = hashHex(artHash(img))
       if (distance(hash, row.hash) <= SAME_ART_MAX) {
-        cache.putBandaiArt({
-          ...cache.getBandaiArt(id)!,
-          hash,
-          lastModified: got.lastModified ?? row.lastModified,
-          checkedAt: now
-        })
+        cache.putBandaiArt({ ...cache.getBandaiArt(id)!, hash, lastModified: got.lastModified ?? row.lastModified, checkedAt: now })
       } else {
         noteChange(id, hash)
       }

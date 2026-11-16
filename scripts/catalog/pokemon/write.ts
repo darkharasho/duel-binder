@@ -1,8 +1,10 @@
 import type Database from 'better-sqlite3'
 import { movedEnough } from '../../../src/main/tcgplayer/prices'
 import { pokemonId } from '../../../src/shared/games/ids'
+import { HAND_ART_PREFIX } from '../../../src/shared/imageSources'
 import { hasNativeScript } from '../../../src/shared/setNames'
 import { findArt, findArtByName, handArtUrl, NAME_GROUPS } from './art'
+import { handId } from './pokipair'
 import { dexColumns, resolveDexIds } from './dexIds'
 import { englishTwins, JAPANESE_MIRRORS, japaneseMirror, traditionalTwins } from './artTwins'
 import { englishNamer, type EnglishNamer } from './englishNames'
@@ -62,6 +64,11 @@ export interface RefreshPokemonOpts {
   log?: (l: string) => void
   /** The clock for `cards.updated_at` on changed cards (tests pin it). */
   now?: () => Date
+  /**
+   * zh-hans source ids whose art the job has copied into R2 (catalog-work/pokipair.json): each
+   * shows that copy as its own art, as hand art.
+   */
+  handArt?: ReadonlySet<string>
 }
 
 interface CardPlan {
@@ -512,7 +519,7 @@ function writePlans(db: Database.Database, plans: LangPlan[], nowIso: string): v
             sourceId,
             imageUrl: cp.imageUrl,
             localName: cp.localName,
-            artTwinId: stored?.image_url ? null : cp.artTwinId,
+            artTwinId: stored?.image_url && !isHandArt(stored.image_url) ? null : cp.artTwinId,
             traditionalTwinId: stored?.image_url ? null : cp.traditionalTwinId,
             ...dexColumns(cp.dexIds)
           })
@@ -843,6 +850,26 @@ function freeName(name: string, alts: string[], taken: (n: string) => boolean): 
  * failure throws before a row is written, except that a European language that fails is logged and
  * left out for the night, its rows as they were. Then all languages are written in one transaction.
  */
+/**
+ * Copied Simplified Chinese art (pokipairMirror.ts) as each card's own. After the borrowing passes,
+ * so a card keeps its English twin: the scanner still reaches the Chinese card through it
+ * (chineseOfArt), while the card shows its own art.
+ */
+function copiedArt(plans: LangPlan[], copied: ReadonlySet<string>): void {
+  for (const plan of plans) {
+    if (plan.lang !== 'zh-hans') continue
+    for (const set of plan.sets)
+      for (const cp of set.cards) {
+        const sourceId = `${plan.lang}/${cp.card.id}`
+        if (!cp.imageUrl && copied.has(sourceId))
+          cp.imageUrl = `${HAND_ART_PREFIX}${handId(sourceId)}`
+      }
+  }
+}
+
+/** Art we keep a copy of ourselves: a card with it still has its twins (see copiedArt). */
+const isHandArt = (url: string | null | undefined): boolean => !!url?.startsWith(HAND_ART_PREFIX)
+
 export async function refreshPokemon(
   work: Database.Database,
   sources: PokemonSources,
@@ -880,6 +907,7 @@ export async function refreshPokemon(
   borrowJapaneseArt(plans)
   fillDexIds(plans)
   nameSeries(plans)
+  if (opts.handArt) copiedArt(plans, opts.handArt)
   writePlans(work, plans, (opts.now ?? (() => new Date()))().toISOString())
   return plans.map((p) => p.report)
 }

@@ -7,25 +7,19 @@
  * Env: PORTAL_URL, PORTAL_ADMIN_TOKEN (not needed for --dry-run). Reads the zh-hans cards from
  * catalog-work/work.sqlite (last night's) and keeps catalog-work/pokipair.json.
  */
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, writeFileSync } from 'node:fs'
 import Database from 'better-sqlite3'
 import type { ZhCatalogCard } from './pokemon/pokipair'
 import {
   mirrorZhArt,
+  readZhArtRecord,
   ZH_ART_BUDGET,
   ZH_ART_GAP_MS,
-  type MirrorRecord
+  ZH_ART_RECORD_FILE
 } from './pokemon/pokipairMirror'
 
-export const ZH_ART_RECORD = 'catalog-work/pokipair.json'
 const WORK_DB = 'catalog-work/work.sqlite'
-
-/** The record at `path`, or an empty one. */
-export function readZhArtRecord(path = ZH_ART_RECORD): MirrorRecord {
-  if (!existsSync(path)) return { done: {} }
-  const r = JSON.parse(readFileSync(path, 'utf8')) as Partial<MirrorRecord>
-  return { done: r.done ?? {} }
-}
+const ZH_ART_RECORD = `catalog-work/${ZH_ART_RECORD_FILE}`
 
 /** The catalog's zh-hans cards by set id, their number the part of the source id after the last dash. */
 export function zhCards(db: Database.Database): Map<string, ZhCatalogCard[]> {
@@ -58,7 +52,7 @@ async function main(): Promise<void> {
   const db = new Database(WORK_DB, { readonly: true })
   const cards = zhCards(db)
   db.close()
-  const record = readZhArtRecord()
+  const record = readZhArtRecord(ZH_ART_RECORD)
   const r = await mirrorZhArt({
     cards,
     record,

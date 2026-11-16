@@ -4,6 +4,7 @@
  * one request at a time with a gap before each, a nightly budget, and the run stops at the first
  * rate limit. What it copied is kept in a record the Pokémon stage reads, and is never asked again.
  */
+import { existsSync, readFileSync } from 'node:fs'
 import { encode as encodeJpeg } from 'jpeg-js'
 import { fillCorners } from '../onepiece/art'
 import { decodeImage } from '../references'
@@ -59,6 +60,16 @@ export interface MirrorResult {
   failed: number
   /** Why the run stopped early (a rate limit), or null. */
   stopped: string | null
+}
+
+/** The record's file in the job's work directory (catalog-work), kept in the Actions cache. */
+export const ZH_ART_RECORD_FILE = 'pokipair.json'
+
+/** The record at `path`, or an empty one. */
+export function readZhArtRecord(path: string): MirrorRecord {
+  if (!existsSync(path)) return { done: {} }
+  const r = JSON.parse(readFileSync(path, 'utf8')) as Partial<MirrorRecord>
+  return { done: r.done ?? {} }
 }
 
 /** A refusal that means "stop asking for now". */

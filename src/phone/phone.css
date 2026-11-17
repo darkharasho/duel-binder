@@ -63,3 +63,10 @@
     box-shadow: 0 0 0 10px rgb(251 191 36 / 0);
   }
 }
+
+/* The screen fades to the app's dark base just before a live update switches the bundle. */
+.live-update-fade body {
+  opacity: 0;
+  transition: opacity 150ms;
+  background: #111113;
+}

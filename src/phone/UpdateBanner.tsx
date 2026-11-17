@@ -1,37 +1,28 @@
 import { useEffect, useState } from 'react'
 import { XIcon } from 'lucide-react'
 import { ANDROID_CHANNEL, APP_PLATFORM } from '@/lib/portal'
-import { UPDATE_DISMISSED_KEY, checkForUpdate, type Update } from './updateCheck'
+import { isNewer } from '../shared/androidRelease'
+import { UPDATE_DISMISSED_KEY, readShellUpdate, type Update } from './updateCheck'
 
-const appVersion = (): string => (typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'dev')
+const readVisible = (): Update | null => {
+  const found = readShellUpdate(localStorage)
+  if (!found || localStorage.getItem(UPDATE_DISMISSED_KEY) === found.version) return null
+  // Just installed that APK: the stored answer is stale until the next check replaces it.
+  if (typeof __APP_VERSION__ === 'string' && !isNewer(found.version, __APP_VERSION__)) return null
+  return found
+}
 
-const defaultCheck = (): Promise<Update | null> =>
-  checkForUpdate({
-    fetch: (i, n) => fetch(i, n),
-    now: () => Date.now(),
-    storage: localStorage,
-    current: appVersion()
-  })
-
-/** The update line, in the Android APK build only. `check` is for tests. */
-export function UpdateBanner({
-  check = defaultCheck
-}: {
-  check?: () => Promise<Update | null>
-}): React.JSX.Element | null {
+/** The update line, in the Android APK build only. Reads what the live-update check stored. */
+export function UpdateBanner(): React.JSX.Element | null {
   const enabled = APP_PLATFORM === 'android' && ANDROID_CHANNEL === 'apk'
-  const [update, setUpdate] = useState<Update | null>(null)
+  const [update, setUpdate] = useState<Update | null>(() => (enabled ? readVisible() : null))
   useEffect(() => {
     if (!enabled) return
-    let live = true
-    void check().then((found) => {
-      if (live && found && localStorage.getItem(UPDATE_DISMISSED_KEY) !== found.version)
-        setUpdate(found)
-    })
-    return () => {
-      live = false
-    }
-  }, [enabled, check])
+    const sync = (): void => setUpdate(readVisible())
+    sync()
+    window.addEventListener('duelbinder:shell-update', sync)
+    return () => window.removeEventListener('duelbinder:shell-update', sync)
+  }, [enabled])
 
   if (!enabled || !update) return null
   return (

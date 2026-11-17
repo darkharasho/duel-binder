@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { Toaster } from '@/components/ui/sonner'
 import { isNativeApp } from '@/lib/portal'
 import type { EngineFactory } from '@/features/scan/engine'
@@ -11,6 +12,7 @@ import { DB_OPEN_ELSEWHERE } from './data/openRetry'
 import type { PhoneStore } from './data/store'
 import { PhoneScreen } from './PhoneScreen'
 import { PhoneShell } from './PhoneShell'
+import { updatedNote } from './liveUpdateSwitch'
 import { claimSavedScans } from './savedScans'
 import { SignIn } from './SignIn'
 import { exitStream } from './stream/device'
@@ -61,6 +63,13 @@ export function App({
   // A reloaded page can't know the app was left sideways and awake by a stream, so it starts upright.
   useEffect(() => {
     if (isNativeApp()) void exitStream()
+  }, [])
+
+  // Once after a live update has switched the bundle: say which version is now running.
+  useEffect(() => {
+    if (!isNativeApp() || typeof __APP_VERSION__ !== 'string') return
+    const note = updatedNote(localStorage, __APP_VERSION__)
+    if (note) toast(note, { duration: 2000 })
   }, [])
 
   // A fatal wins over every other view, whenever it comes.

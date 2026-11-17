@@ -19,7 +19,18 @@ const config: CapacitorConfig = {
     // Android: light status and gesture bar icons on the dark app. With a WebView that passes the
     // insets through, the page lays itself out with env(safe-area-inset-*) as on iOS; with an older
     // one, Capacitor pads the window instead and the dark window background shows behind the bars.
-    SystemBars: { style: 'DARK', insetsHandling: 'css' }
+    SystemBars: { style: 'DARK', insetsHandling: 'css' },
+    // Live updates run in manual mode (our own check, see the app-update Worker route). The two
+    // URLs point at our own host so that even a stray call can't reach Capgo; /api/app-update/none
+    // is a 404. No publicKey, and statsUrl '' turns the plugin's stats off.
+    CapacitorUpdater: {
+      autoUpdate: false,
+      appReadyTimeout: 10000,
+      resetWhenUpdate: true,
+      statsUrl: '',
+      updateUrl: 'https://app.duelbinder.com/api/app-update/none',
+      channelUrl: 'https://app.duelbinder.com/api/app-update/none'
+    }
   },
   ios: {
     // The page lays itself out under the status bar and home indicator (viewport-fit=cover).

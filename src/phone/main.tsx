@@ -38,6 +38,12 @@ async function start(): Promise<void> {
   )
 }
 
+// Tell the live-update plugin this bundle booted, or it rolls back to the previous one.
+if (isNativeApp())
+  void import('@capgo/capacitor-updater').then(({ CapacitorUpdater }) =>
+    CapacitorUpdater.notifyAppReady()
+  )
+
 void start()
 
 // Android's back button closes what's open, then goes Home, then leaves (see backButton.ts).

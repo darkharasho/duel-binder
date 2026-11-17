@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import { appBundlesRoute, type AppBundleBucket } from '../../workers/portal/src/appBundles'
-import type { ManifestEntry, ReleaseRecord } from '../../src/shared/appBundles'
+import type { AppUpdateAnswer, IndexEntry, ManifestEntry, ReleaseRecord } from '../../src/shared/appBundles'
 
 const ORIGIN = 'https://app.duelbinder.com'
 const ADMIN = 'admin-secret'
@@ -90,7 +90,7 @@ const release = async (
   expect(res!.status).toBe(200)
 }
 
-const update = async (b: AppBundleBucket, q: string): Promise<{ status: number; body: any }> => {
+const update = async (b: AppBundleBucket, q: string): Promise<{ status: number; body: AppUpdateAnswer }> => {
   const res = await call(b, `/api/app-update?${q}`)
   return { status: res!.status, body: await res!.json() }
 }
@@ -102,7 +102,7 @@ describe('app-update', () => {
     await release(b, 'ios', '1.1.0')
     const res = await call(b, '/api/app-update?target=ios&builtin=1.0.0&current=1.0.0')
     expect(res!.headers.get('cache-control')).toBe('public, max-age=60')
-    const body = (await res!.json()) as any
+    const body = (await res!.json()) as Partial<ReleaseRecord>
     expect(body.version).toBe('1.1.0')
     expect(body.signature).toBe('sig-1.1.0')
     expect(body.manifest).toHaveLength(1)
@@ -162,7 +162,7 @@ describe('app-update', () => {
     expect(held.size).toBe(1)
     b.store.clear()
     const again = await call(b, path, {}, cache)
-    expect(((await again!.json()) as any).version).toBe('1.1.0')
+    expect(((await again!.json()) as Partial<ReleaseRecord>).version).toBe('1.1.0')
   })
 })
 
@@ -240,7 +240,7 @@ describe('admin', () => {
   it('admin: withdraw then restore round-trips the index', async () => {
     const b = bucket()
     await release(b, 'ios', '1.0.0')
-    const index = async (): Promise<any[]> =>
+    const index = async (): Promise<IndexEntry[]> =>
       JSON.parse(new TextDecoder().decode(b.store.get('app-bundles/ios/index.json')))
     const before = await index()
     await post(b, '/api/admin/app-bundles/ios/releases/1.0.0/withdraw')
@@ -258,11 +258,11 @@ describe('admin', () => {
       url: 'https://x/a.apk'
     })
     await release(b, 'android-apk', '2.0.0')
-    const read = (k: string): any => JSON.parse(new TextDecoder().decode(b.store.get(k)))
-    const rec = read('app-bundles/android-apk/releases/2.0.0.json')
+    const read = <T>(k: string): T => JSON.parse(new TextDecoder().decode(b.store.get(k))) as T
+    const rec = read<ReleaseRecord>('app-bundles/android-apk/releases/2.0.0.json')
     expect(rec.withdrawn).toBe(true)
     expect(rec.apkUrl).toBe('https://x/a.apk')
-    const idx = read('app-bundles/android-apk/index.json')
+    const idx = read<IndexEntry[]>('app-bundles/android-apk/index.json')
     expect(idx).toHaveLength(1)
     expect(idx[0].withdrawn).toBe(true)
     expect(idx[0].apkUrl).toBe('https://x/a.apk')

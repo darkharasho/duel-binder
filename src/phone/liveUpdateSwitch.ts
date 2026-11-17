@@ -58,7 +58,7 @@ export function useHomeIdleSwitch(page: Page, deps?: HomeIdleDeps): void {
       timer = undefined
       if (document.querySelector('[role="dialog"]') !== null) return arm()
       const mine = epoch
-      let busy = false
+      let busy: boolean
       try {
         busy = await d.syncing()
       } catch {

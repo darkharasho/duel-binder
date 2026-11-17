@@ -45,6 +45,9 @@ jobs:
       - name: Upload the live bundle
         id: live
         if: startsWith(github.ref, 'refs/tags/v')
+        # A portal outage must not block the App Store build. Go live checks steps.live.outcome,
+        # which is the result before continue-on-error, so a failed upload still skips it.
+        continue-on-error: true
         env:
           PORTAL_ADMIN_TOKEN: ${{ secrets.PORTAL_ADMIN_TOKEN }}
         run: npx tsx scripts/live-update/publish.ts upload ios out/ios-web "$RUNNER_TEMP/ios-release.json"
@@ -141,7 +144,8 @@ jobs:
 
           TARGET=ios
           DRAFT="$RUNNER_TEMP/ios-release.json"
-          # Tell the owner when the native shell changed, so a store release is needed.
+          # Tell the owner when the native shell changed, so a store release is needed. Best-effort:
+          # the release is already published, so nothing below may fail the step.
           PREV=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)
           PREV="${PREV#v}"
           CUR=$(node -p "require('$DRAFT').fingerprint")
@@ -149,8 +153,10 @@ jobs:
           if [ -n "$PREV" ]; then
             CODE=$(curl -s -o "$RUNNER_TEMP/prev-builtin.json" -w '%{http_code}' \
               -H "authorization: Bearer $PORTAL_ADMIN_TOKEN" \
-              "https://app.duelbinder.com/api/admin/app-bundles/$TARGET/builtins/$PREV")
-            if [ "$CODE" = "200" ]; then OLD=$(node -p "require('$RUNNER_TEMP/prev-builtin.json').fingerprint"); fi
+              "https://app.duelbinder.com/api/admin/app-bundles/$TARGET/builtins/$PREV") || CODE=000
+            if [ "$CODE" = "200" ]; then
+              OLD=$(node -p "require('$RUNNER_TEMP/prev-builtin.json').fingerprint") || OLD=""
+            fi
           fi
           if [ "$OLD" != "$CUR" ]; then
             echo "::notice::Native shell changed: submit a store release for iOS"

@@ -92,7 +92,8 @@ describe('the Pokédex page', () => {
     renderWithProviders(<PokedexPage />, { api: dexApi() })
     expect(await screen.findByText('2 / 1025 caught · 0.2%')).toBeInTheDocument()
     expect(screen.getByText('Generation I · Kanto')).toBeInTheDocument()
-    expect(screen.getByText('Generation IX · Paldea')).toBeInTheDocument()
+    // The list's end arrives a few steps after the first screenful.
+    expect(await screen.findByText('Generation IX · Paldea', {}, { timeout: 5000 })).toBeInTheDocument()
     expect(within(tile('Charizard')).getByText('×4')).toBeInTheDocument()
     expect(within(tile('Charizard')).getByText('#006')).toBeInTheDocument()
     // One copy: no badge.
@@ -197,6 +198,8 @@ describe('the Pokédex page', () => {
   it('a species with no cards says so', async () => {
     renderWithProviders(<PokedexPage />, { api: dexApi() })
     await screen.findByText(/2 \/ 1025 caught/)
+    // The last species arrives a few steps after the first screenful.
+    await screen.findByText('Pecharunt', {}, { timeout: 5000 })
     await userEvent.click(tile('Pecharunt'))
     const panel = await screen.findByRole('dialog')
     expect(await within(panel).findByText('No cards of Pecharunt yet')).toBeInTheDocument()

@@ -22,9 +22,19 @@ function endAt(bottom: { px: number }): Element {
 describe('useChunkedList', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('gives everything at once with no idle callbacks', () => {
-    const { result } = renderHook(() => useChunkedList(items))
-    expect(result.current[0]).toBe(items)
+  it('steps on timers where there are no idle callbacks (Safari, iOS), not all at once', () => {
+    vi.useFakeTimers()
+    try {
+      vi.stubGlobal('requestIdleCallback', undefined)
+      const { result } = renderHook(() => useChunkedList(items))
+      expect(result.current[0]).toHaveLength(120)
+      act(() => vi.advanceTimersByTime(200))
+      expect(result.current[0]).toHaveLength(320)
+      for (let i = 0; i < 6; i++) act(() => vi.advanceTimersByTime(200))
+      expect(result.current[0]).toBe(items)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('gives a first screenful, then the rest in idle steps', () => {

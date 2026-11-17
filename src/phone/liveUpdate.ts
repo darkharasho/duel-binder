@@ -11,7 +11,7 @@ import { LIVE_UPDATE_PUBLIC_KEY } from './liveUpdateKey'
 export interface Updater {
   getBuiltinVersion(): Promise<{ version: string }>
   download(o: {
-    url?: string
+    url: string
     version: string
     manifest: ManifestEntry[]
   }): Promise<{ id: string; version: string }>
@@ -52,6 +52,13 @@ export const PENDING_KEY = `${KEY}.pending`
 /** The version whose "Updated to X" note has been shown (written by the home switch). */
 export const SHOWN_KEY = `${KEY}.shown`
 export const SHELL_UPDATE_KEY = 'duelbinder.shellUpdate'
+
+/**
+ * A placeholder: the plugin's manifest download never fetches it, but iOS `downloadBundle` first does
+ * `guard let url = URL(string: urlString)`, which throws on an empty string. Our own 404 sink keeps
+ * it valid and, if it were ever fetched, unable to reach anyone else.
+ */
+export const DOWNLOAD_PLACEHOLDER_URL = `${PORTAL_ORIGIN}/api/app-update/none`
 
 const CHECK_INTERVAL_MS = 10 * 60 * 1000
 
@@ -130,8 +137,13 @@ export function createLiveUpdate(deps: LiveUpdateDeps): LiveUpdate {
     if (failed().includes(version) || pending()?.version === version) return
     if (!(await verifies(deps.publicKey, deps.target, version, manifest, signature))) return
 
-    const bundle = await updater.download({ version, manifest })
-    await updater.next({ id: bundle.id })
+    const bundle = await updater.download({ url: DOWNLOAD_PLACEHOLDER_URL, version, manifest })
+    try {
+      await updater.next({ id: bundle.id })
+    } catch (err) {
+      await updater.delete({ id: bundle.id }).catch(() => undefined)
+      throw err
+    }
     const old = pending()
     if (old && old.id !== bundle.id) await updater.delete({ id: old.id }).catch(() => undefined)
     storage.setItem(PENDING_KEY, JSON.stringify({ id: bundle.id, version: bundle.version }))
@@ -177,7 +189,7 @@ export function startLiveUpdate(): LiveUpdate | null {
   const plugin = import('@capgo/capacitor-updater').then((m) => m.CapacitorUpdater)
   const updater: Updater = {
     getBuiltinVersion: async () => (await plugin).getBuiltinVersion(),
-    download: async (o) => (await plugin).download({ url: '', ...o }),
+    download: async (o) => (await plugin).download(o),
     next: async (o) => (await plugin).next(o),
     set: async (o) => (await plugin).set(o),
     delete: async (o) => (await plugin).delete(o),

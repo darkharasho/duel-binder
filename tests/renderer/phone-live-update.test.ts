@@ -1,7 +1,7 @@
 import { webcrypto } from 'node:crypto'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { signedMessage, type BundleTarget, type ManifestEntry } from '../../src/shared/appBundles'
-import { createLiveUpdate, type Updater } from '../../src/phone/liveUpdate'
+import { createLiveUpdate, DOWNLOAD_PLACEHOLDER_URL, type Updater } from '../../src/phone/liveUpdate'
 
 const subtle: SubtleCrypto =
   (globalThis.crypto?.subtle as SubtleCrypto | undefined) ?? (webcrypto.subtle as SubtleCrypto)
@@ -55,7 +55,7 @@ function setup(answers: unknown[] | (() => Promise<unknown>)) {
   let n = 0
   const updater = {
     getBuiltinVersion: vi.fn(async () => ({ version: '0.100.0' })),
-    download: vi.fn(async (o: { version: string }) => ({ id: `id-${o.version}`, version: o.version })),
+    download: vi.fn(async (o: { url: string; version: string }) => ({ id: `id-${o.version}`, version: o.version })),
     next: vi.fn(async () => ({})),
     set: vi.fn(async () => undefined),
     delete: vi.fn(async () => undefined),
@@ -106,6 +106,10 @@ describe('liveUpdate', () => {
     expect(s.doFetch.mock.calls[0][0]).toContain('builtin=0.100.0')
     expect(s.doFetch.mock.calls[0][0]).toContain('current=0.100.0')
     expect(s.updater.download).toHaveBeenCalledTimes(1)
+    expect(s.updater.download.mock.calls[0][0]).toMatchObject({
+      url: DOWNLOAD_PLACEHOLDER_URL
+    })
+    expect(DOWNLOAD_PLACEHOLDER_URL).toMatch(/\/api\/app-update\/none$/)
     expect(s.updater.next).toHaveBeenCalledWith({ id: 'id-0.101.0' })
     expect(s.live.pending()).toEqual({ id: 'id-0.101.0', version: '0.101.0' })
   })
@@ -142,6 +146,14 @@ describe('liveUpdate', () => {
     await s.live.check()
     expect(s.updater.delete).toHaveBeenCalledWith({ id: 'id-0.101.0' })
     expect(s.live.pending()).toEqual({ id: 'id-0.102.0', version: '0.102.0' })
+  })
+
+  it('liveUpdate: a failed next() deletes the downloaded bundle', async () => {
+    const s = setup([await offer('0.101.0')])
+    s.updater.next.mockRejectedValueOnce(new Error('boom'))
+    await expect(s.live.check()).resolves.toBeUndefined()
+    expect(s.updater.delete).toHaveBeenCalledWith({ id: 'id-0.101.0' })
+    expect(s.live.pending()).toBeNull()
   })
 
   it('liveUpdate: offline is silent', async () => {

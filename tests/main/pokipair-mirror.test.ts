@@ -253,6 +253,39 @@ describe('mirrorZhArt', () => {
     expect(r.stopped).toBeNull()
   })
 
+  it('skips a page cut off part way through, and goes on', async () => {
+    const cutOff = () =>
+      new Response(
+        new ReadableStream({
+          start(c) {
+            c.error(new TypeError('terminated'))
+          }
+        })
+      )
+    const t = setup({ page: cutOff })
+    const r = await t.run()
+    expect(r.uploaded).toBe(3) // CBB7C only
+    expect(r.stopped).toBeNull()
+  })
+
+  it('asks again for a picture whose connection dropped once', async () => {
+    const tried = new Set<string>()
+    const t = setup({
+      image: (url) => {
+        if (!tried.has(url)) {
+          tried.add(url)
+          throw new TypeError('fetch failed')
+        }
+        return new Response(png() as unknown as BodyInit, {
+          headers: { 'content-type': 'image/png' }
+        })
+      }
+    })
+    const r = await t.run()
+    expect(r.uploaded).toBe(6)
+    expect(r.failed).toBe(0)
+  })
+
   it('saves the record after each set', async () => {
     const t = setup()
     const saved: number[] = []

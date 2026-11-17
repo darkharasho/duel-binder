@@ -197,6 +197,10 @@ async function upload(
   })
 }
 
+/** Tries per PokiPair request, and the pause before asking again. */
+const FETCH_TRIES = 3
+const RETRY_PAUSE_MS = 5_000
+
 /** Copies tonight's share of PokiPair's art; see the file comment. */
 export async function mirrorZhArt(o: MirrorOptions): Promise<MirrorResult> {
   const result: MirrorResult = { matched: 0, uploaded: 0, failed: 0, packs: 0, stopped: null }
@@ -216,21 +220,43 @@ export async function mirrorZhArt(o: MirrorOptions): Promise<MirrorResult> {
       throw new Stop(`${new URL(url).host} answered ${res.status} for ${url}`)
     return res
   }
+  /**
+   * Asks for `url` and reads all of it, asking again after a dropped connection (PokiPair
+   * resets a few in each long run, sometimes part way through a body). Null for a status
+   * other than 2xx; throws once every try failed, or at once on a rate limit.
+   */
+  const fetchBody = async <T>(
+    url: string,
+    read: (res: Response) => Promise<T>
+  ): Promise<T | null> => {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const res = await get(url)
+        if (!res.ok) {
+          o.log(`zh art: ${url} answered ${res.status}`)
+          return null
+        }
+        return await read(res)
+      } catch (e) {
+        if (e instanceof Stop || attempt >= FETCH_TRIES) throw e
+        await o.sleep(RETRY_PAUSE_MS)
+      }
+    }
+  }
   const text = async (url: string): Promise<string | null> => {
-    let res: Response
     try {
-      res = await get(url)
+      return await fetchBody(url, (res) => res.text())
     } catch (e) {
       if (e instanceof Stop) throw e
       // No answer (a timeout, a reset): this page waits for another night; the rest goes on.
       o.log(`zh art: ${url} failed: ${e instanceof Error ? e.message : String(e)}`)
       return null
     }
-    if (!res.ok) {
-      o.log(`zh art: ${url} answered ${res.status}`)
-      return null
-    }
-    return res.text()
+  }
+  const bytesOf = async (url: string): Promise<Uint8Array> => {
+    const bytes = await fetchBody(url, async (res) => new Uint8Array(await res.arrayBuffer()))
+    if (bytes === null) throw new Error('no picture there')
+    return bytes
   }
   const copy = async (
     what: string,
@@ -238,9 +264,7 @@ export async function mirrorZhArt(o: MirrorOptions): Promise<MirrorResult> {
     keep: (bytes: Uint8Array) => Promise<void>
   ): Promise<boolean> => {
     try {
-      const res = await get(url)
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      await keep(new Uint8Array(await res.arrayBuffer()))
+      await keep(await bytesOf(url))
       return true
     } catch (e) {
       if (e instanceof Stop) throw e
@@ -264,9 +288,7 @@ export async function mirrorZhArt(o: MirrorOptions): Promise<MirrorResult> {
       }
       let bytes: Uint8Array
       try {
-        const res = await get(c.thumb!)
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        bytes = new Uint8Array(await res.arrayBuffer())
+        bytes = await bytesOf(c.thumb!)
       } catch (e) {
         if (e instanceof Stop) throw e
         o.log(`zh art: ${c.thumb} failed: ${e instanceof Error ? e.message : String(e)}`)

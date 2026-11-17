@@ -41,10 +41,13 @@ export function useHomeIdleSwitch(page: Page, deps?: HomeIdleDeps): void {
     let applying = false
     let called = false
     let gone = false
+    // Nothing arms until liveUpdate has checked its pending entry against the plugin: before that
+    // it may name the bundle that is already running, or one the plugin rolled back.
+    let reconciled = false
 
     // Input during the fade is ignored: the switch is already under way.
     const arm = (): void => {
-      if (applying || gone) return
+      if (applying || gone || !reconciled) return
       epoch++
       if (timer !== undefined) clearTimeout(timer)
       timer = undefined
@@ -80,7 +83,10 @@ export function useHomeIdleSwitch(page: Page, deps?: HomeIdleDeps): void {
 
     for (const e of INPUTS) document.addEventListener(e, arm, true)
     window.addEventListener(LIVE_PENDING_EVENT, arm)
-    arm()
+    void lu.ready().then(() => {
+      reconciled = true
+      arm()
+    })
     return () => {
       gone = true
       if (timer !== undefined) clearTimeout(timer)

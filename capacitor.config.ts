@@ -28,6 +28,9 @@ const config: CapacitorConfig = {
       appReadyTimeout: 10000,
       resetWhenUpdate: true,
       statsUrl: '',
+      // Lets liveUpdate.ts mark a withdrawn staged bundle as errored so it never launches: Android
+      // ignores next() back to a healthy running bundle, so that alone can't unstage it.
+      allowManualBundleError: true,
       updateUrl: 'https://app.duelbinder.com/api/app-update/none',
       channelUrl: 'https://app.duelbinder.com/api/app-update/none'
     }

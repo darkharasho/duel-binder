@@ -1,7 +1,13 @@
 import { webcrypto } from 'node:crypto'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { signedMessage, type BundleTarget, type ManifestEntry } from '../../src/shared/appBundles'
-import { createLiveUpdate, DOWNLOAD_PLACEHOLDER_URL, type Updater } from '../../src/phone/liveUpdate'
+import {
+  createLiveUpdate,
+  DOWNLOAD_PLACEHOLDER_URL,
+  FAILED_KEY,
+  PENDING_KEY,
+  type Updater
+} from '../../src/phone/liveUpdate'
 
 const subtle: SubtleCrypto =
   (globalThis.crypto?.subtle as SubtleCrypto | undefined) ?? (webcrypto.subtle as SubtleCrypto)
@@ -50,15 +56,53 @@ function memoryStorage(): Storage {
   }
 }
 
-function setup(answers: unknown[] | (() => Promise<unknown>)) {
+interface SetupOpts {
+  /** The running bundle's version (deps.current). */
+  current?: string
+  /** What `current()` reports as the running bundle. */
+  running?: { id: string; version: string }
+  /** localStorage contents before start-up. */
+  seed?: Record<string, string>
+  /** Bundles on disk before start-up (besides builtin). */
+  bundles?: { id: string; version: string; status?: string }[]
+  /** What `getFailedUpdate()` returns once. */
+  failedUpdate?: { bundle: { id: string; version: string } } | null
+}
+
+function setup(answers: unknown[] | (() => Promise<unknown>), opts: SetupOpts = {}) {
   let failedCb: ((i: { bundle: { version: string } }) => void) | undefined
   let n = 0
+  const current = opts.current ?? '0.100.0'
+  const disk = new Map<string, { id: string; version: string; status: string }>()
+  for (const b of opts.bundles ?? []) disk.set(b.id, { status: 'success', ...b })
+  let failedUpdate = opts.failedUpdate ?? null
   const updater = {
     getBuiltinVersion: vi.fn(async () => ({ version: '0.100.0' })),
-    download: vi.fn(async (o: { url: string; version: string }) => ({ id: `id-${o.version}`, version: o.version })),
-    next: vi.fn(async () => ({})),
-    set: vi.fn(async () => undefined),
-    delete: vi.fn(async () => undefined),
+    download: vi.fn(async (o: { url: string; version: string }) => {
+      const b = { id: `id-${o.version}`, version: o.version }
+      disk.set(b.id, { ...b, status: 'pending' })
+      return b
+    }),
+    next: vi.fn(async (_o: { id: string }) => ({})),
+    set: vi.fn(async (_o: { id: string }) => undefined),
+    delete: vi.fn(async (o: { id: string }) => void disk.delete(o.id)),
+    setBundleError: vi.fn(async (o: { id: string }) => {
+      const b = disk.get(o.id)
+      if (b) b.status = 'error'
+      return { bundle: b }
+    }),
+    current: vi.fn(async () => ({
+      bundle: opts.running ?? { id: 'builtin', version: current },
+      native: '0.100.0'
+    })),
+    list: vi.fn(async () => ({
+      bundles: [{ id: 'builtin', version: '0.100.0', status: 'success' }, ...disk.values()]
+    })),
+    getFailedUpdate: vi.fn(async () => {
+      const f = failedUpdate
+      failedUpdate = null
+      return f
+    }),
     addListener: vi.fn(async (_e: 'updateFailed', cb: typeof failedCb) => {
       failedCb = cb
       return {}
@@ -71,6 +115,7 @@ function setup(answers: unknown[] | (() => Promise<unknown>)) {
   })
   let t = 1_000_000
   const storage = memoryStorage()
+  for (const [k, v] of Object.entries(opts.seed ?? {})) storage.setItem(k, v)
   let visible: () => void = () => undefined
   const live = createLiveUpdate({
     updater: updater as unknown as Updater,
@@ -78,7 +123,7 @@ function setup(answers: unknown[] | (() => Promise<unknown>)) {
     storage,
     now: () => t,
     target: TARGET,
-    current: '0.100.0',
+    current,
     publicKey,
     on: (_e, cb) => {
       visible = cb
@@ -90,6 +135,7 @@ function setup(answers: unknown[] | (() => Promise<unknown>)) {
     updater,
     doFetch,
     storage,
+    disk,
     advance: (ms: number) => void (t += ms),
     fail: (v: string) => failedCb?.({ bundle: { version: v } }),
     fireVisible: () => visible()
@@ -209,6 +255,141 @@ describe('liveUpdate', () => {
     await s.live.check()
     await s.live.applyNow()
     expect(s.updater.set).toHaveBeenCalledWith({ id: 'id-0.101.0' })
+  })
+
+  it('liveUpdate: a rejected set clears pending, so Home stops retrying', async () => {
+    const s = setup([await offer('0.101.0')])
+    await s.live.check()
+    s.updater.set.mockRejectedValueOnce(new Error('gone'))
+    await expect(s.live.applyNow()).rejects.toThrow('gone')
+    expect(s.live.pending()).toBeNull()
+    // the staged bundle no longer launches next: next goes back to the running bundle
+    expect(s.updater.next).toHaveBeenLastCalledWith({ id: 'builtin' })
+    await s.live.applyNow()
+    expect(s.updater.set).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('liveUpdate start-up reconciliation', () => {
+  const P = (id: string, version: string) => ({ [PENDING_KEY]: JSON.stringify({ id, version }) })
+
+  it('reconcile: after a switch, the running version is not pending', async () => {
+    const s = setup([{ version: null }], {
+      current: '0.101.0',
+      running: { id: 'id-0.101.0', version: '0.101.0' },
+      seed: P('id-0.101.0', '0.101.0'),
+      bundles: [{ id: 'id-0.101.0', version: '0.101.0' }]
+    })
+    expect(s.live.pending()).toBeNull()
+    await s.live.ready()
+    expect(s.live.pending()).toBeNull()
+    expect(s.storage.getItem(PENDING_KEY)).toBeNull()
+    // the running bundle is never deleted or set again
+    expect(s.updater.delete).not.toHaveBeenCalled()
+    await s.live.applyNow()
+    expect(s.updater.set).not.toHaveBeenCalled()
+  })
+
+  it('reconcile: a running id match clears pending even if the version string differs', async () => {
+    const s = setup([{ version: null }], {
+      running: { id: 'id-x', version: '0.101.0' },
+      seed: P('id-x', '0.101.0+b'),
+      bundles: [{ id: 'id-x', version: '0.101.0' }]
+    })
+    await s.live.ready()
+    expect(s.live.pending()).toBeNull()
+  })
+
+  it('reconcile: getFailedUpdate records the failed version and clears pending', async () => {
+    const s = setup([await offer('0.101.0')], {
+      seed: P('id-0.101.0', '0.101.0'),
+      failedUpdate: { bundle: { id: 'id-0.101.0', version: '0.101.0' } }
+    })
+    await s.live.ready()
+    expect(s.live.pending()).toBeNull()
+    expect(JSON.parse(s.storage.getItem(FAILED_KEY)!)).toEqual(['0.101.0'])
+    // and the failed version is never downloaded again
+    await s.live.check()
+    expect(s.updater.download).not.toHaveBeenCalled()
+  })
+
+  it('reconcile: a pending id missing from list() is cleared', async () => {
+    const s = setup([{ version: null }], { seed: P('id-0.101.0', '0.101.0') })
+    await s.live.ready()
+    expect(s.live.pending()).toBeNull()
+  })
+
+  it('reconcile: a pending bundle in error status is cleared', async () => {
+    const s = setup([{ version: null }], {
+      seed: P('id-0.101.0', '0.101.0'),
+      bundles: [{ id: 'id-0.101.0', version: '0.101.0', status: 'error' }]
+    })
+    await s.live.ready()
+    expect(s.live.pending()).toBeNull()
+  })
+
+  it('reconcile: a healthy staged bundle stays pending', async () => {
+    const s = setup([await offer('0.101.0')], {
+      seed: P('id-0.101.0', '0.101.0'),
+      bundles: [{ id: 'id-0.101.0', version: '0.101.0', status: 'pending' }]
+    })
+    await s.live.ready()
+    expect(s.live.pending()).toEqual({ id: 'id-0.101.0', version: '0.101.0' })
+  })
+
+  it('reconcile: plugin errors leave a usable instance', async () => {
+    const s = setup([{ version: null }], { seed: P('id-0.101.0', '0.101.0') })
+    s.updater.list.mockRejectedValue(new Error('x'))
+    await expect(s.live.ready()).resolves.toBeUndefined()
+  })
+})
+
+describe('liveUpdate withdrawn release', () => {
+  it('withdraw: a null answer unstages the downloaded bundle', async () => {
+    const s = setup([await offer('0.101.0'), { version: null }])
+    await s.live.check()
+    expect(s.live.pending()).not.toBeNull()
+    s.advance(11 * 60_000)
+    await s.live.check()
+    expect(s.updater.next).toHaveBeenLastCalledWith({ id: 'builtin' })
+    // Android ignores next(running): the errored mark is what keeps it from launching
+    expect(s.updater.setBundleError).toHaveBeenCalledWith({ id: 'id-0.101.0' })
+    expect(s.updater.delete).toHaveBeenCalledWith({ id: 'id-0.101.0' })
+    expect(s.live.pending()).toBeNull()
+    // withdrawing is not a rollback: the version may be offered again
+    expect(s.storage.getItem(FAILED_KEY)).toBeNull()
+  })
+
+  it('withdraw: an older fallback answer replaces the staged bundle', async () => {
+    const s = setup([await offer('0.102.0'), await offer('0.101.0')])
+    await s.live.check()
+    s.advance(11 * 60_000)
+    await s.live.check()
+    expect(s.updater.delete).toHaveBeenCalledWith({ id: 'id-0.102.0' })
+    expect(s.live.pending()).toEqual({ id: 'id-0.101.0', version: '0.101.0' })
+  })
+
+  it('withdraw: unstaging points next at the running live bundle, not builtin', async () => {
+    const s = setup([await offer('0.102.0'), { version: null }], {
+      current: '0.101.0',
+      running: { id: 'id-0.101.0', version: '0.101.0' },
+      bundles: [{ id: 'id-0.101.0', version: '0.101.0' }]
+    })
+    await s.live.check()
+    s.advance(11 * 60_000)
+    await s.live.check()
+    expect(s.updater.next).toHaveBeenLastCalledWith({ id: 'id-0.101.0' })
+    expect(s.live.pending()).toBeNull()
+  })
+
+  it('withdraw: an older fallback whose version already failed still unstages', async () => {
+    const s = setup([await offer('0.102.0'), await offer('0.101.0')])
+    s.fail('0.101.0')
+    await s.live.check()
+    s.advance(11 * 60_000)
+    await s.live.check()
+    expect(s.updater.delete).toHaveBeenCalledWith({ id: 'id-0.102.0' })
+    expect(s.live.pending()).toBeNull()
   })
 })
 

@@ -18,6 +18,13 @@ export interface Updater {
   next(o: { id: string }): Promise<unknown>
   set(o: { id: string }): Promise<void>
   delete(o: { id: string }): Promise<void>
+  /** Needs `allowManualBundleError`; an errored bundle never launches and can be deleted. */
+  setBundleError(o: { id: string }): Promise<unknown>
+  /** The running bundle (`id` is 'builtin' for the one inside the app). */
+  current(): Promise<{ bundle: { id: string; version: string } }>
+  list(): Promise<{ bundles: { id: string; version: string; status: string }[] }>
+  /** The bundle the plugin last rolled back, once; null after that. */
+  getFailedUpdate(): Promise<{ bundle: { id?: string; version: string } } | null>
   addListener(
     e: 'updateFailed',
     cb: (info: { bundle: { version: string } }) => void
@@ -27,8 +34,13 @@ export interface Updater {
 export interface LiveUpdate {
   /** Ask the portal for an update and stage it for the next launch. Never throws. */
   check(): Promise<void>
-  /** The downloaded bundle that will run on the next launch, if any. */
+  /**
+   * The downloaded bundle that will run on the next launch, if any. Always null until `ready()`
+   * resolves, so nothing switches on a stale entry.
+   */
   pending(): { id: string; version: string } | null
+  /** Resolves once the stored pending entry has been checked against the plugin. Never rejects. */
+  ready(): Promise<void>
   /** Switch to the pending bundle now (reloads the page). */
   applyNow(): Promise<void>
   dispose(): void
@@ -99,26 +111,86 @@ async function verifies(
   )
 }
 
+type Pending = { id: string; version: string }
+
+/** Bundle states that can never launch: a pending entry naming one is stale. */
+const DEAD = new Set(['error', 'deleted', 'deleting'])
+
 export function createLiveUpdate(deps: LiveUpdateDeps): LiveUpdate {
   const { updater, storage } = deps
   let running: Promise<void> | null = null
+  let reconciled = false
 
   const failed = (): string[] => readJson<string[]>(storage, FAILED_KEY) ?? []
-  const pending = (): { id: string; version: string } | null =>
-    readJson<{ id: string; version: string }>(storage, PENDING_KEY)
+  const stored = (): Pending | null => readJson<Pending>(storage, PENDING_KEY)
+  const pending = (): Pending | null => (reconciled ? stored() : null)
 
-  // The plugin rolled a bundle back: never offer that version again.
-  updater
-    .addListener('updateFailed', (info) => {
-      const v = info.bundle.version
-      const list = failed()
-      if (!list.includes(v)) storage.setItem(FAILED_KEY, JSON.stringify([...list, v]))
-      const p = pending()
-      if (p && p.version === v) storage.removeItem(PENDING_KEY)
-    })
+  const markFailed = (bundle: { id?: string; version: string }): void => {
+    const v = bundle.version
+    const list = failed()
+    if (!list.includes(v)) storage.setItem(FAILED_KEY, JSON.stringify([...list, v]))
+    const p = stored()
+    if (p && (p.version === v || (bundle.id !== undefined && p.id === bundle.id)))
+      storage.removeItem(PENDING_KEY)
+  }
+
+  // The plugin rolled a bundle back: never offer that version again. A bundle that fails before its
+  // JS runs never hears this event; start-up reconciliation catches that case.
+  updater.addListener('updateFailed', (info) => markFailed(info.bundle)).catch(() => undefined)
+
+  /**
+   * Make the stored pending entry agree with the plugin before anything acts on it: a bundle that
+   * is already running (after a switch), was rolled back, or is gone from disk (rollback cleanup, a
+   * store update with resetWhenUpdate) is not pending.
+   */
+  async function reconcile(): Promise<void> {
+    const rolledBack = await updater.getFailedUpdate().catch(() => null)
+    if (rolledBack?.bundle) markFailed(rolledBack.bundle)
+    const p = stored()
+    if (!p) return
+    const cur = await updater
+      .current()
+      .then((r) => r.bundle)
+      .catch(() => null)
+    if (p.version === deps.current || (cur && (p.id === cur.id || p.version === cur.version))) {
+      storage.removeItem(PENDING_KEY)
+      return
+    }
+    const bundles = await updater
+      .list()
+      .then((r) => r.bundles)
+      .catch(() => null)
+    if (!bundles) return
+    const b = bundles.find((x) => x.id === p.id)
+    if (!b || DEAD.has(b.status)) storage.removeItem(PENDING_KEY)
+  }
+
+  const ready = reconcile()
     .catch(() => undefined)
+    .then(() => {
+      reconciled = true
+    })
+
+  /**
+   * Stop a staged bundle from launching and drop it. `next` goes back to the running bundle (iOS);
+   * Android ignores that when the running bundle is healthy, so the staged one is also marked as
+   * errored, which no launch takes and which `delete` then accepts. All best-effort.
+   */
+  async function unstage(p: Pending): Promise<void> {
+    storage.removeItem(PENDING_KEY)
+    const cur = await updater
+      .current()
+      .then((r) => r.bundle.id)
+      .catch(() => null)
+    if (cur && cur !== p.id) await updater.next({ id: cur }).catch(() => undefined)
+    if (cur !== p.id) {
+      await updater.setBundleError({ id: p.id }).catch(() => undefined)
+      await updater.delete({ id: p.id }).catch(() => undefined)
+    }
+  }
 
   async function run(): Promise<void> {
+    await ready
     const last = Number(storage.getItem(CHECKED_AT_KEY) ?? 0)
     if (deps.now() - last < CHECK_INTERVAL_MS) return
     storage.setItem(CHECKED_AT_KEY, String(deps.now()))
@@ -136,9 +208,13 @@ export function createLiveUpdate(deps: LiveUpdateDeps): LiveUpdate {
     if (storage.getItem(SHELL_UPDATE_KEY) !== before && typeof window !== 'undefined')
       window.dispatchEvent(new Event('duelbinder:shell-update'))
 
+    // The portal no longer offers what is staged (withdrawn, or replaced): don't launch it.
+    const staged = stored()
+    if (staged && answer.version !== staged.version) await unstage(staged)
+
     if (answer.version === null) return
     const { version, manifest, signature } = answer
-    if (failed().includes(version) || pending()?.version === version) return
+    if (failed().includes(version) || stored()?.version === version) return
     if (!(await verifies(deps.publicKey, deps.target, version, manifest, signature))) return
 
     const bundle = await updater.download({ url: DOWNLOAD_PLACEHOLDER_URL, version, manifest })
@@ -148,8 +224,6 @@ export function createLiveUpdate(deps: LiveUpdateDeps): LiveUpdate {
       await updater.delete({ id: bundle.id }).catch(() => undefined)
       throw err
     }
-    const old = pending()
-    if (old && old.id !== bundle.id) await updater.delete({ id: old.id }).catch(() => undefined)
     storage.setItem(PENDING_KEY, JSON.stringify({ id: bundle.id, version: bundle.version }))
     // Tell a Home visit already under way, which decided earlier that nothing was pending.
     if (typeof window !== 'undefined') window.dispatchEvent(new Event('duelbinder:live-pending'))
@@ -169,9 +243,17 @@ export function createLiveUpdate(deps: LiveUpdateDeps): LiveUpdate {
   return {
     check,
     pending,
+    ready: () => ready,
     async applyNow() {
       const p = pending()
-      if (p) await updater.set({ id: p.id })
+      if (!p) return
+      try {
+        await updater.set({ id: p.id })
+      } catch (err) {
+        // The bundle can't be switched to (deleted, broken): stop offering it, or Home retries forever.
+        await unstage(p)
+        throw err
+      }
     },
     dispose: offVisible
   }
@@ -199,6 +281,10 @@ export function startLiveUpdate(): LiveUpdate | null {
     next: async (o) => (await plugin).next(o),
     set: async (o) => (await plugin).set(o),
     delete: async (o) => (await plugin).delete(o),
+    setBundleError: async (o) => (await plugin).setBundleError(o),
+    current: async () => (await plugin).current(),
+    list: async () => (await plugin).list(),
+    getFailedUpdate: async () => (await plugin).getFailedUpdate(),
     addListener: async (e, cb) => (await plugin).addListener(e, cb)
   }
   const live = createLiveUpdate({

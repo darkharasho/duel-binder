@@ -6,11 +6,15 @@ import { updatedNote, useHomeIdleSwitch } from '../../src/phone/liveUpdateSwitch
 
 const BUNDLE = { id: 'id-1', version: '0.103.2' }
 
-function fakeLive(pending: { id: string; version: string } | null = BUNDLE) {
+function fakeLive(
+  pending: { id: string; version: string } | null = BUNDLE,
+  ready: Promise<void> = Promise.resolve()
+) {
   const state = { pending }
   const live: LiveUpdate = {
     check: vi.fn(async () => undefined),
     pending: vi.fn(() => state.pending),
+    ready: vi.fn(() => ready),
     applyNow: vi.fn(async () => undefined),
     dispose: vi.fn()
   }
@@ -132,6 +136,49 @@ describe('useHomeIdleSwitch', () => {
     expect(document.documentElement.classList.contains('live-update-fade')).toBe(false)
     await flush(2150)
     expect(live.applyNow).toHaveBeenCalledTimes(2)
+  })
+
+  it('switch: a rejected apply that clears pending does not re-arm', async () => {
+    const { live, state } = fakeLive()
+    vi.mocked(live.applyNow).mockImplementationOnce(async () => {
+      state.pending = null
+      throw new Error('x')
+    })
+    renderHook(() => useHomeIdleSwitch('dashboard', { live, syncing: async () => false }))
+    await flush(2150)
+    expect(live.applyNow).toHaveBeenCalledTimes(1)
+    document.dispatchEvent(new Event('touchstart'))
+    await flush(10_000)
+    expect(live.applyNow).toHaveBeenCalledTimes(1)
+    expect(vi.getTimerCount()).toBe(0)
+    expect(document.documentElement.classList.contains('live-update-fade')).toBe(false)
+  })
+
+  it('switch: does not arm before start-up reconciliation finishes', async () => {
+    let done: () => void = () => undefined
+    const { live, state } = fakeLive(BUNDLE, new Promise<void>((r) => (done = r)))
+    renderHook(() => useHomeIdleSwitch('dashboard', { live, syncing: async () => false }))
+    document.dispatchEvent(new Event('touchstart'))
+    window.dispatchEvent(new Event('duelbinder:live-pending'))
+    await flush(5000)
+    expect(live.applyNow).not.toHaveBeenCalled()
+    expect(vi.getTimerCount()).toBe(0)
+    // reconciliation found the entry stale (it is the running bundle): still nothing
+    state.pending = null
+    done()
+    await flush(5000)
+    expect(live.applyNow).not.toHaveBeenCalled()
+  })
+
+  it('switch: arms once reconciliation keeps a pending bundle', async () => {
+    let done: () => void = () => undefined
+    const { live } = fakeLive(BUNDLE, new Promise<void>((r) => (done = r)))
+    renderHook(() => useHomeIdleSwitch('dashboard', { live, syncing: async () => false }))
+    await flush(3000)
+    expect(live.applyNow).not.toHaveBeenCalled()
+    done()
+    await flush(2150)
+    expect(live.applyNow).toHaveBeenCalledTimes(1)
   })
 
   it('switch: nothing pending, nothing armed', async () => {

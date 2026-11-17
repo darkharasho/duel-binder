@@ -147,6 +147,8 @@ export function createLiveUpdate(deps: LiveUpdateDeps): LiveUpdate {
     const old = pending()
     if (old && old.id !== bundle.id) await updater.delete({ id: old.id }).catch(() => undefined)
     storage.setItem(PENDING_KEY, JSON.stringify({ id: bundle.id, version: bundle.version }))
+    // Tell a Home visit already under way, which decided earlier that nothing was pending.
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('duelbinder:live-pending'))
   }
 
   function check(): Promise<void> {

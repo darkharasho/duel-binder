@@ -155,6 +155,15 @@ export function Settings({
   const sync = useQuery({ queryKey: SYNC_STATE_KEY, queryFn: () => store.syncState() })
   const catalog = useQuery({ queryKey: CATALOG_KEY, queryFn: () => store.catalog() })
   const version = useQuery({ queryKey: ['phone', 'version'], queryFn: () => api.app.version() })
+  // The installed shell's version, shown only when a live update has moved the bundle past it.
+  const shell = useQuery({
+    queryKey: ['phone', 'shellVersion'],
+    enabled: isNativeApp(),
+    queryFn: async () => {
+      const { CapacitorUpdater } = await import('@capgo/capacitor-updater')
+      return (await CapacitorUpdater.getBuiltinVersion()).version
+    }
+  })
 
   const signOut = async (): Promise<void> => {
     setSigningOut(true)
@@ -362,6 +371,12 @@ export function Settings({
               {version.data && (
                 <>
                   Version <span className="font-mono">{version.data}</span>
+                  {shell.data && shell.data !== version.data && (
+                    <>
+                      {' '}
+                      (app <span className="font-mono">{shell.data}</span>)
+                    </>
+                  )}
                 </>
               )}
             </span>

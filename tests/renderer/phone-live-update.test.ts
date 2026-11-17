@@ -101,7 +101,11 @@ const MIN = 60_000
 describe('liveUpdate', () => {
   it('liveUpdate: downloads a newer signed offer and sets it next', async () => {
     const s = setup([await offer('0.101.0')])
+    const heard = vi.fn()
+    window.addEventListener('duelbinder:live-pending', heard)
     await s.live.check()
+    window.removeEventListener('duelbinder:live-pending', heard)
+    expect(heard).toHaveBeenCalledTimes(1)
     expect(s.doFetch.mock.calls[0][0]).toContain('target=android-play')
     expect(s.doFetch.mock.calls[0][0]).toContain('builtin=0.100.0')
     expect(s.doFetch.mock.calls[0][0]).toContain('current=0.100.0')

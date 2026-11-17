@@ -45,6 +45,7 @@ import { useReloadAsGamesLand } from './useCatalogStatus'
 import { ContributeScreen } from './training/ContributeScreen'
 import { trainingOutbox } from './training/outbox'
 import { UpdateBanner } from './UpdateBanner'
+import { useHomeIdleSwitch } from './liveUpdateSwitch'
 
 const TABS: { page: Page; label: string; icon: LucideIcon }[] = [
   { page: 'dashboard', label: 'Home', icon: HouseIcon },
@@ -145,6 +146,7 @@ function Shell({ engineFactory }: { engineFactory?: EngineFactory }): React.JSX.
   const tabs = TABS.filter((t) => pageInGame(t.page, def))
   const more = MORE.filter((m) => pageInGame(m.page, def))
   useReadyChecks()
+  useHomeIdleSwitch(page)
   // A switch to a game without this page (Scan) goes Home.
   useEffect(() => {
     if (!pageInGame(page, def)) onNavigate('dashboard')

@@ -132,6 +132,11 @@ export const ABSENT_MS = 600
  * cards a pile of scanned ones in view shows on top as each new card is lowered onto it.
  */
 export const RECENT_CARDS = 3
+/**
+ * Frames in a row the card shown must read as its other finish (a Normal's Reverse Holofoil, or
+ * back) to count again: its twin swapped in, not a held card's finish read wavering.
+ */
+export const FINISH_SWAP_FRAMES = 4
 
 // Rarity from the card's look, tuned on real webcam photos. A reading of the name's ink counts
 // only when it is a line of text where a name starts.

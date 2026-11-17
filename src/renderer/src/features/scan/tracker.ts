@@ -2,6 +2,7 @@ import {
   ABSENT_MS,
   GUESS_STABLE_FRAMES,
   GUESS_SWAP_FRAMES,
+  FINISH_SWAP_FRAMES,
   PHOTO_SETTLE_MS,
   RECENT_CARDS,
   STABLE_FRAMES
@@ -59,6 +60,19 @@ export function showingKey(item: ScanDraft): string {
 }
 
 /**
+ * A Pokémon draft's finish when it has settled which of a card's Normal (or Holofoil) and
+ * Reverse Holofoil printings it is (the reverse check, applyReverseCheck): 'reverse' or 'plain'.
+ * Null when it hasn't (still flagged) or the card has no such pair.
+ */
+export function finishOf(item: ScanDraft): 'reverse' | 'plain' | null {
+  if (item.game !== 'pkm' || item.flag !== null || item.guess) return null
+  const mine = item.options.filter((o) => o.cardId === item.cardId)
+  if (!mine.some((o) => o.rarity === 'Reverse Holofoil')) return null
+  if (item.rarity === 'Reverse Holofoil') return 'reverse'
+  return item.rarity === 'Normal' || item.rarity === 'Holofoil' ? 'plain' : null
+}
+
+/**
  * Turns per-frame outcomes into counted cards, one per showing. A card counts once it has been
  * recognized in stableFrames frames in a row. Frames are matched by card alone (showingKey): the same card
  * read by its code in one frame and its art in the next, or matched to another of its artworks,
@@ -70,6 +84,12 @@ export function showingKey(item: ScanDraft): string {
  * card is in view. A card whose art matches poorly (a holo, a full-art print, a case's glare)
  * flickers between recognized and far-art `none` frames, so one far-art `none` right after a
  * recognized frame counts as unsure; a second in a row is a real `none`.
+ *
+ * A Pokémon card's Normal and its Reverse Holofoil are one card but two to count: a pack often
+ * holds both, shown one after the other. So the card shown, read as the other finish (finishOf)
+ * for finishFrames in a row, counts again, once per finish until the view clears. A read whose
+ * finish isn't settled is the card shown, whichever it was, and so is any read when the counted
+ * one's finish wasn't settled.
  *
  * A best guess has to hold for guessFrames, so the frames that may yet read its language or number
  * come first. As it can't be taken back, it holds for swapFrames while a card shown hasn't cleared:
@@ -84,6 +104,7 @@ export function createShowingTracker(
     absentMs?: number
     settleMs?: number
     recentCards?: number
+    finishFrames?: number
   } = {}
 ): ShowingTracker {
   const stableFrames = opts.stableFrames ?? STABLE_FRAMES
@@ -92,9 +113,14 @@ export function createShowingTracker(
   const absentMs = opts.absentMs ?? ABSENT_MS
   const settleMs = opts.settleMs ?? PHOTO_SETTLE_MS
   const recentCards = opts.recentCards ?? RECENT_CARDS
+  const finishFrames = opts.finishFrames ?? FINISH_SWAP_FRAMES
   let streakOf: string | null = null
   let streak = 0
   let shown: string | null = null
+  // The finish the card shown was counted as, when settled (finishOf).
+  let shownFinish: string | null = null
+  // The finishes of the card shown counted since the view cleared.
+  let finishesCounted = new Set<string>()
   let absentSince: number | null = null
   let settledUntil = 0
   // The cards counted lately, newest first, since the view last cleared.
@@ -128,6 +154,8 @@ export function createShowingTracker(
         absentSince ??= now
         if (now - absentSince >= absentMs) {
           shown = null
+          shownFinish = null
+          finishesCounted = new Set()
           settledUntil = 0
           recent = []
           held = null
@@ -140,8 +168,22 @@ export function createShowingTracker(
       const { guess } = outcome.item
       const key = showingKey(outcome.item)
       if (key === shown) {
+        const finish = finishOf(outcome.item)
+        if (finish === null || shownFinish === null || finish === shownFinish) {
+          clearStreak()
+          return null
+        }
+        // The other finish of the card shown: its twin swapped in, or the read wavering.
+        const finishKey = `${key}:${finish}`
+        streak = finishKey === streakOf ? streak + 1 : 1
+        streakOf = finishKey
+        if (streak < finishFrames) return null
         clearStreak()
-        return null
+        shownFinish = finish
+        if (finishesCounted.has(finish)) return null
+        finishesCounted.add(finish)
+        held = null
+        return outcome.item
       }
       streak = key === streakOf ? streak + 1 : 1
       streakOf = key
@@ -153,6 +195,8 @@ export function createShowingTracker(
         return null
       }
       shown = key
+      shownFinish = finishOf(outcome.item)
+      finishesCounted = new Set(shownFinish ? [shownFinish] : [])
       held = null
       remember(key)
       return outcome.item
@@ -161,6 +205,8 @@ export function createShowingTracker(
     settle(now, item = null) {
       clearStreak()
       shown = item ? showingKey(item) : null
+      shownFinish = item ? finishOf(item) : null
+      finishesCounted = new Set(shownFinish ? [shownFinish] : [])
       held = null
       if (shown !== null) remember(shown)
       settledUntil = now + settleMs
@@ -175,6 +221,8 @@ export function createShowingTracker(
       settledUntil = 0
       justSeen = false
       shown = null
+      shownFinish = null
+      finishesCounted = new Set()
       absentSince = null
       recent = []
       held = null

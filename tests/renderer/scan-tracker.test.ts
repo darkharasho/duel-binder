@@ -339,3 +339,80 @@ describe('Gem Pack versions', () => {
     expect(run(t, [reprint(1), reprint(1), reprint(9), reprint(9)])).toEqual([1, 9])
   })
 })
+
+describe('a Normal and its Reverse Holofoil', () => {
+  // One card, two printings: a pack often has a card and its reverse holo, shown one after the other.
+  const printing = (printingId: number, rarity: string): ScanPrinting => ({
+    printingId,
+    cardId: 1,
+    name: 'Pikachu',
+    frameType: 'pokemon',
+    setName: 'Mega Evolution',
+    setCode: 'MEG 050',
+    rarity,
+    language: 'en',
+    price: null,
+    imageIds: [10]
+  })
+  const normal = printing(100, 'Normal')
+  const reverse = printing(101, 'Reverse Holofoil')
+  const read = (p: ScanPrinting, flag: ScanDraft['flag'] = null): ScanOutcome => ({
+    kind: 'recognized',
+    item: {
+      ...draft(1),
+      game: 'pkm',
+      name: 'Pikachu',
+      printingId: p.printingId,
+      setCode: p.setCode,
+      rarity: p.rarity,
+      options: [normal, reverse],
+      flag
+    }
+  })
+  const tracker = (): ReturnType<typeof createShowingTracker> =>
+    createShowingTracker({ stableFrames: 2, finishFrames: 4 })
+  const printed = (t: ReturnType<typeof createShowingTracker>, outcomes: ScanOutcome[]) =>
+    outcomes.flatMap((o, i) => {
+      const d = t.push(i * 100, o)
+      return d ? [d.rarity] : []
+    })
+
+  it('counts both when swapped one for the other without the view clearing', () => {
+    expect(
+      printed(tracker(), [...Array(3).fill(read(normal)), ...Array(4).fill(read(reverse))])
+    ).toEqual(['Normal', 'Reverse Holofoil'])
+  })
+
+  it('counts a held card once when its finish reads the other way for a few frames', () => {
+    const t = tracker()
+    expect(
+      printed(t, [
+        read(normal),
+        read(normal),
+        read(reverse),
+        read(reverse),
+        read(reverse),
+        read(normal)
+      ])
+    ).toEqual(['Normal'])
+  })
+
+  it('does not count the first finish again when the read flips back to it', () => {
+    const t = tracker()
+    const flips = [...Array(2).fill(read(normal)), ...Array(4).fill(read(reverse))]
+    expect(printed(t, [...flips, ...Array(4).fill(read(normal))])).toEqual([
+      'Normal',
+      'Reverse Holofoil'
+    ])
+  })
+
+  it('keeps a card whose finish is still to be checked one showing', () => {
+    const t = tracker()
+    expect(
+      printed(t, [
+        ...Array(2).fill(read(normal, 'check-rarity')),
+        ...Array(6).fill(read(reverse, 'check-rarity'))
+      ])
+    ).toEqual(['Normal'])
+  })
+})

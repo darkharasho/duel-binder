@@ -163,6 +163,11 @@ async function putRelease(
     if (!m || !HASH_RE.test(m.file_hash)) return json({ error: 'bad-body' }, 400)
     if (!(await bucket.head(fileKey(m.file_hash)))) return json({ error: 'file-missing' }, 400)
   }
+  const prior = await readJson<ReleaseRecord>(bucket, releaseKey(target, version))
+  delete r.withdrawn
+  delete r.apkUrl
+  if (prior?.withdrawn) r.withdrawn = true
+  if (prior?.apkUrl) r.apkUrl = prior.apkUrl
   await writeRecord(bucket, r)
   if (!(await bucket.head(builtinKey(target, version))))
     await bucket.put(

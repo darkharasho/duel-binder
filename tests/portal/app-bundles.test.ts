@@ -249,4 +249,53 @@ describe('admin', () => {
     expect(await index()).toEqual(before)
     expect((await post(b, '/api/admin/app-bundles/ios/releases/7.0.0/withdraw'))!.status).toBe(404)
   })
+
+  it('admin: re-PUT keeps withdrawn and apkUrl', async () => {
+    const b = bucket()
+    await release(b, 'android-apk', '2.0.0')
+    await post(b, '/api/admin/app-bundles/android-apk/releases/2.0.0/withdraw')
+    await post(b, '/api/admin/app-bundles/android-apk/releases/2.0.0/apk', {
+      url: 'https://x/a.apk'
+    })
+    await release(b, 'android-apk', '2.0.0')
+    const read = (k: string): any => JSON.parse(new TextDecoder().decode(b.store.get(k)))
+    const rec = read('app-bundles/android-apk/releases/2.0.0.json')
+    expect(rec.withdrawn).toBe(true)
+    expect(rec.apkUrl).toBe('https://x/a.apk')
+    const idx = read('app-bundles/android-apk/index.json')
+    expect(idx).toHaveLength(1)
+    expect(idx[0].withdrawn).toBe(true)
+    expect(idx[0].apkUrl).toBe('https://x/a.apk')
+  })
+
+  it('admin: GET and POST without a token are 401', async () => {
+    const b = bucket()
+    expect((await call(b, '/api/admin/app-bundles/ios/builtins/1.0.0'))!.status).toBe(401)
+    expect(
+      (await call(b, '/api/admin/app-bundles/ios/releases/1.0.0/withdraw', { method: 'POST' }))!
+        .status
+    ).toBe(401)
+  })
+
+  it('admin: a hash path that is not 64 hex characters is rejected', async () => {
+    const b = bucket()
+    const res = await call(b, '/api/admin/app-bundles/files/abc123', {
+      method: 'PUT',
+      auth: true,
+      body: 'x'
+    })
+    expect(res!.status).toBe(400)
+    expect((await call(b, '/api/app-bundles/files/abc123'))!.status).toBe(404)
+  })
+
+  it('admin: a bad JSON body is 400', async () => {
+    const b = bucket()
+    for (const path of [
+      '/api/admin/app-bundles/ios/releases/1.0.0',
+      '/api/admin/app-bundles/ios/builtins/1.0.0'
+    ]) {
+      const res = await call(b, path, { method: 'PUT', auth: true, body: '{nope' })
+      expect(res!.status).toBe(400)
+    }
+  })
 })

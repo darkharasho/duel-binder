@@ -91,6 +91,49 @@ describe('useHomeIdleSwitch', () => {
     expect(live.applyNow).not.toHaveBeenCalled()
   })
 
+  it('switch: a touch during the fade still switches', async () => {
+    const { live } = fakeLive()
+    renderHook(() => useHomeIdleSwitch('dashboard', { live, syncing: async () => false }))
+    await flush(2100)
+    document.dispatchEvent(new Event('touchstart'))
+    window.dispatchEvent(new Event('duelbinder:live-pending'))
+    await flush(50)
+    expect(live.applyNow).toHaveBeenCalledTimes(1)
+    await flush(5000)
+    expect(live.applyNow).toHaveBeenCalledTimes(1)
+  })
+
+  it('switch: a touch while the sync check runs restarts the wait', async () => {
+    const { live } = fakeLive()
+    let release: (v: boolean) => void = () => undefined
+    const syncing = vi
+      .fn<() => Promise<boolean>>()
+      .mockImplementationOnce(() => new Promise<boolean>((r) => (release = r)))
+      .mockResolvedValue(false)
+    renderHook(() => useHomeIdleSwitch('dashboard', { live, syncing }))
+    await flush(2000)
+    document.dispatchEvent(new Event('touchstart'))
+    release(false)
+    await flush(1999)
+    expect(live.applyNow).not.toHaveBeenCalled()
+    await flush(1)
+    await flush(150)
+    expect(live.applyNow).toHaveBeenCalledTimes(1)
+    await flush(5000)
+    expect(live.applyNow).toHaveBeenCalledTimes(1)
+  })
+
+  it('switch: a failed apply retries on Home', async () => {
+    const { live } = fakeLive()
+    vi.mocked(live.applyNow).mockRejectedValueOnce(new Error('x'))
+    renderHook(() => useHomeIdleSwitch('dashboard', { live, syncing: async () => false }))
+    await flush(2150)
+    expect(live.applyNow).toHaveBeenCalledTimes(1)
+    expect(document.documentElement.classList.contains('live-update-fade')).toBe(false)
+    await flush(2150)
+    expect(live.applyNow).toHaveBeenCalledTimes(2)
+  })
+
   it('switch: nothing pending, nothing armed', async () => {
     const { live } = fakeLive(null)
     renderHook(() => useHomeIdleSwitch('dashboard', { live, syncing: async () => false }))

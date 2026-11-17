@@ -36,38 +36,44 @@ export function useHomeIdleSwitch(page: Page, deps?: HomeIdleDeps): void {
     const lu = d.live
     if (!lu) return
     let timer: ReturnType<typeof setTimeout> | undefined
+    let fadeTimer: ReturnType<typeof setTimeout> | undefined
+    let epoch = 0
     let applying = false
     let called = false
     let gone = false
 
-    const clear = (): void => {
+    // Input during the fade is ignored: the switch is already under way.
+    const arm = (): void => {
+      if (applying || gone) return
+      epoch++
       if (timer !== undefined) clearTimeout(timer)
       timer = undefined
-    }
-    const arm = (): void => {
-      clear()
-      if (applying || gone || !lu.pending()) return
+      if (!lu.pending()) return
       timer = setTimeout(() => void fire(), idleMs)
     }
     const fire = async (): Promise<void> => {
       timer = undefined
       if (document.querySelector('[role="dialog"]') !== null) return arm()
+      const mine = epoch
       let busy = false
       try {
         busy = await d.syncing()
       } catch {
         busy = false
       }
-      if (gone) return
+      // Input (or a pending-event) arrived during the check: that re-armed a fresh wait.
+      if (gone || epoch !== mine) return
       if (busy) return arm()
       applying = true
       document.documentElement.classList.add(FADE_CLASS)
-      timer = setTimeout(() => {
-        timer = undefined
+      fadeTimer = setTimeout(() => {
+        fadeTimer = undefined
         called = true
         void lu.applyNow().catch(() => {
           applying = false
+          called = false
           document.documentElement.classList.remove(FADE_CLASS)
+          arm()
         })
       }, FADE_MS)
     }
@@ -77,7 +83,8 @@ export function useHomeIdleSwitch(page: Page, deps?: HomeIdleDeps): void {
     arm()
     return () => {
       gone = true
-      clear()
+      if (timer !== undefined) clearTimeout(timer)
+      if (fadeTimer !== undefined) clearTimeout(fadeTimer)
       for (const e of INPUTS) document.removeEventListener(e, arm, true)
       window.removeEventListener(LIVE_PENDING_EVENT, arm)
       if (!called) document.documentElement.classList.remove(FADE_CLASS)

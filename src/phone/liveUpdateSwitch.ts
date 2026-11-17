@@ -67,6 +67,8 @@ export function useHomeIdleSwitch(page: Page, deps?: HomeIdleDeps): void {
       // Input (or a pending-event) arrived during the check: that re-armed a fresh wait.
       if (gone || epoch !== mine) return
       if (busy) return arm()
+      // A check may have unstaged it (withdrawn) during the wait: then there is nothing to fade to.
+      if (!lu.pending()) return
       applying = true
       document.documentElement.classList.add(FADE_CLASS)
       fadeTimer = setTimeout(() => {

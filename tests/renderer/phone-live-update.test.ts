@@ -265,8 +265,38 @@ describe('liveUpdate', () => {
     expect(s.live.pending()).toBeNull()
     // the staged bundle no longer launches next: next goes back to the running bundle
     expect(s.updater.next).toHaveBeenLastCalledWith({ id: 'builtin' })
-    await s.live.applyNow()
+    await expect(s.live.applyNow()).rejects.toThrow()
     expect(s.updater.set).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('liveUpdate round 2', () => {
+  it('applyNow rejects when nothing is pending, so Home clears its fade', async () => {
+    const s = setup([{ version: null }])
+    await s.live.ready()
+    await expect(s.live.applyNow()).rejects.toThrow()
+    expect(s.updater.set).not.toHaveBeenCalled()
+  })
+
+  it('unstage without knowing the running bundle never errors or deletes it', async () => {
+    const s = setup([await offer('0.101.0'), { version: null }])
+    await s.live.check()
+    s.updater.current.mockRejectedValue(new Error('x'))
+    s.advance(11 * 60_000)
+    await s.live.check()
+    expect(s.live.pending()).toBeNull()
+    expect(s.updater.setBundleError).not.toHaveBeenCalled()
+    expect(s.updater.delete).not.toHaveBeenCalled()
+  })
+
+  it('a malformed answer leaves the staged bundle alone', async () => {
+    const s = setup([await offer('0.101.0'), {}])
+    await s.live.check()
+    s.advance(11 * 60_000)
+    await s.live.check()
+    expect(s.live.pending()).toEqual({ id: 'id-0.101.0', version: '0.101.0' })
+    expect(s.updater.delete).not.toHaveBeenCalled()
+    expect(s.updater.download).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -286,7 +316,7 @@ describe('liveUpdate start-up reconciliation', () => {
     expect(s.storage.getItem(PENDING_KEY)).toBeNull()
     // the running bundle is never deleted or set again
     expect(s.updater.delete).not.toHaveBeenCalled()
-    await s.live.applyNow()
+    await expect(s.live.applyNow()).rejects.toThrow()
     expect(s.updater.set).not.toHaveBeenCalled()
   })
 

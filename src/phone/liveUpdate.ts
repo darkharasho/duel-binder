@@ -183,11 +183,11 @@ export function createLiveUpdate(deps: LiveUpdateDeps): LiveUpdate {
       .current()
       .then((r) => r.bundle.id)
       .catch(() => null)
-    if (cur && cur !== p.id) await updater.next({ id: cur }).catch(() => undefined)
-    if (cur !== p.id) {
-      await updater.setBundleError({ id: p.id }).catch(() => undefined)
-      await updater.delete({ id: p.id }).catch(() => undefined)
-    }
+    // Without knowing what runs, touch nothing: it could be this very bundle.
+    if (cur === null || cur === p.id) return
+    await updater.next({ id: cur }).catch(() => undefined)
+    await updater.setBundleError({ id: p.id }).catch(() => undefined)
+    await updater.delete({ id: p.id }).catch(() => undefined)
   }
 
   async function run(): Promise<void> {
@@ -210,6 +210,8 @@ export function createLiveUpdate(deps: LiveUpdateDeps): LiveUpdate {
       window.dispatchEvent(new Event('duelbinder:shell-update'))
 
     // The portal no longer offers what is staged (withdrawn, or replaced): don't launch it.
+    // A malformed answer (say `{}` from a proxy) says nothing, so it changes nothing.
+    if (answer.version !== null && typeof answer.version !== 'string') return
     const staged = stored()
     if (staged && answer.version !== staged.version) await unstage(staged)
 
@@ -247,7 +249,8 @@ export function createLiveUpdate(deps: LiveUpdateDeps): LiveUpdate {
     ready: () => ready,
     async applyNow() {
       const p = pending()
-      if (!p) return
+      // Reject, so a Home switch already fading undoes its fade instead of staying black.
+      if (!p) throw new Error('No live update is pending')
       try {
         await updater.set({ id: p.id })
       } catch (err) {

@@ -154,6 +154,43 @@ describe('useHomeIdleSwitch', () => {
     expect(document.documentElement.classList.contains('live-update-fade')).toBe(false)
   })
 
+  it('switch: pending withdrawn during the idle wait leaves no fade behind', async () => {
+    const { live, state } = fakeLive()
+    // like the real applyNow: nothing pending rejects
+    vi.mocked(live.applyNow).mockImplementation(async () => {
+      if (!state.pending) throw new Error('nothing pending')
+    })
+    renderHook(() => useHomeIdleSwitch('dashboard', { live, syncing: async () => false }))
+    await flush(1000)
+    state.pending = null // a foreground check unstaged it
+    await flush(5000)
+    expect(document.documentElement.classList.contains('live-update-fade')).toBe(false)
+    expect(live.applyNow).not.toHaveBeenCalled()
+    // not stuck "applying": a new download still arms and switches
+    state.pending = BUNDLE
+    window.dispatchEvent(new Event('duelbinder:live-pending'))
+    await flush(2150)
+    expect(live.applyNow).toHaveBeenCalledTimes(1)
+  })
+
+  it('switch: pending withdrawn during the fade clears the fade', async () => {
+    const { live, state } = fakeLive()
+    vi.mocked(live.applyNow).mockImplementation(async () => {
+      if (!state.pending) throw new Error('nothing pending')
+    })
+    renderHook(() => useHomeIdleSwitch('dashboard', { live, syncing: async () => false }))
+    await flush(2000)
+    expect(document.documentElement.classList.contains('live-update-fade')).toBe(true)
+    state.pending = null
+    await flush(150)
+    expect(live.applyNow).toHaveBeenCalledTimes(1)
+    expect(document.documentElement.classList.contains('live-update-fade')).toBe(false)
+    state.pending = BUNDLE
+    window.dispatchEvent(new Event('duelbinder:live-pending'))
+    await flush(2150)
+    expect(live.applyNow).toHaveBeenCalledTimes(2)
+  })
+
   it('switch: does not arm before start-up reconciliation finishes', async () => {
     let done: () => void = () => undefined
     const { live, state } = fakeLive(BUNDLE, new Promise<void>((r) => (done = r)))

@@ -78,6 +78,9 @@ describe('TCGplayer catalog', () => {
     })
     expect(r).toMatchObject({ groups: 1, updatedGroups: 1, ok: true })
     expect(shouldRefreshTcgCatalog(db, now)).toBe(false)
+    // A new set's cards are listed days after the set: looked for again the next day.
+    expect(shouldRefreshTcgCatalog(db, new Date('2026-10-24T19:00:00Z'))).toBe(false)
+    expect(shouldRefreshTcgCatalog(db, new Date('2026-10-24T21:00:00Z'))).toBe(true)
 
     const lookup = createTcgplayerLookup(db)
     // Same rarity wins over another product with that number.

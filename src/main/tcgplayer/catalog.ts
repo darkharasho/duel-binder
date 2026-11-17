@@ -14,7 +14,13 @@ import { needsOwnScan, printingVariant } from '../yugipedia/printingArt'
 export const TCGCSV_URL = 'https://tcgcsv.com/tcgplayer/2'
 const REPO_URL = 'https://github.com/darkharasho/duel-binder'
 export const TCGPLAYER_IMAGE_PREFIX = 'https://tcgplayer-cdn.tcgplayer.com/product/'
-export const TCG_CATALOG_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000
+/**
+ * How often the set listing is read. Daily: a new set's cards appear on TCGplayer days after the
+ * set does (Magnificent Maestros: set 2026-11-12, cards 2026-11-14), and until they're read its
+ * printings have no product and so no price. Cheap: one listing, then only the sets that changed.
+ * 20 hours, so a nightly run whose start drifts never skips a night.
+ */
+export const TCG_CATALOG_INTERVAL_MS = 20 * 60 * 60 * 1000
 const TIMEOUT_MS = 60_000
 
 interface Group {

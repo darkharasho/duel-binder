@@ -30,6 +30,8 @@ jobs:
       PROJECT: ios/App/App.xcodeproj
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -38,6 +40,14 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Build the web files and copy them into the Xcode project
         run: npm run build:ios
+
+      # Live (over-the-air) web bundle for installed apps; it only goes live in "Go live" below.
+      - name: Upload the live bundle
+        id: live
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          PORTAL_ADMIN_TOKEN: ${{ secrets.PORTAL_ADMIN_TOKEN }}
+        run: npx tsx scripts/live-update/publish.ts upload ios out/ios-web "$RUNNER_TEMP/ios-release.json"
 
       - name: Check for signing secrets
         id: secrets
@@ -108,3 +118,40 @@ jobs:
             -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
             -exportPath "$RUNNER_TEMP/export" "${AUTH[@]}"
           rm -f "$KEY_PATH"
+
+      # Runs even when the TestFlight upload failed: the bundle works for apps already installed.
+      - name: Go live
+        if: "!cancelled() && startsWith(github.ref, 'refs/tags/v') && steps.live.outcome == 'success'"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PORTAL_ADMIN_TOKEN: ${{ secrets.PORTAL_ADMIN_TOKEN }}
+          LIVE_UPDATE_SIGNING_KEY: ${{ secrets.LIVE_UPDATE_SIGNING_KEY }}
+        run: |
+          # release.yml creates the release after its tests; wait for it, or nothing goes live.
+          FOUND=false
+          for _ in $(seq 1 60); do
+            if gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then FOUND=true; break; fi
+            sleep 30
+          done
+          if [ "$FOUND" != "true" ]; then
+            echo "::error::The release for $GITHUB_REF_NAME never appeared, so the live bundle was not published."
+            exit 1
+          fi
+          npx tsx scripts/live-update/publish.ts release "$RUNNER_TEMP/ios-release.json"
+
+          TARGET=ios
+          DRAFT="$RUNNER_TEMP/ios-release.json"
+          # Tell the owner when the native shell changed, so a store release is needed.
+          PREV=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)
+          PREV="${PREV#v}"
+          CUR=$(node -p "require('$DRAFT').fingerprint")
+          OLD=""
+          if [ -n "$PREV" ]; then
+            CODE=$(curl -s -o "$RUNNER_TEMP/prev-builtin.json" -w '%{http_code}' \
+              -H "authorization: Bearer $PORTAL_ADMIN_TOKEN" \
+              "https://app.duelbinder.com/api/admin/app-bundles/$TARGET/builtins/$PREV")
+            if [ "$CODE" = "200" ]; then OLD=$(node -p "require('$RUNNER_TEMP/prev-builtin.json').fingerprint"); fi
+          fi
+          if [ "$OLD" != "$CUR" ]; then
+            echo "::notice::Native shell changed: submit a store release for iOS"
+          fi

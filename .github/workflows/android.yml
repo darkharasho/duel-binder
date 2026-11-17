@@ -36,6 +36,8 @@ jobs:
       CERT_SHA256: C2:CD:AD:90:43:3C:DC:AB:D5:E5:B8:5F:45:90:F6:E4:E1:81:63:37:41:E7:0A:1E:D4:72:26:1A:4F:FB:38:07
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -78,6 +80,7 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          PORTAL_ADMIN_TOKEN: ${{ secrets.PORTAL_ADMIN_TOKEN }}
         run: |
           export ANDROID_KEYSTORE_FILE="$RUNNER_TEMP/release.jks"
           printf '%s' "$KEYSTORE" | base64 -d > "$ANDROID_KEYSTORE_FILE"
@@ -87,11 +90,18 @@ jobs:
 
           # The APK: the update banner checks GitHub releases.
           npm run build:android
+          # Live (over-the-air) web bundle; it only goes live in "Go live" below.
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            npx tsx scripts/live-update/publish.ts upload android-apk out/android-web "$RUNNER_TEMP/apk-release.json"
+          fi
           (cd android && ./gradlew assembleRelease --console=plain "${VERSIONS[@]}")
           cp android/app/build/outputs/apk/release/app-release.apk "dist/Duel-Binder-$NAME.apk"
 
           # The Play bundle: Play updates it, so it never shows the banner.
           ANDROID_CHANNEL=play npm run build:android
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            npx tsx scripts/live-update/publish.ts upload android-play out/android-web "$RUNNER_TEMP/play-release.json"
+          fi
           (cd android && ./gradlew bundleRelease --console=plain "${VERSIONS[@]}")
           cp android/app/build/outputs/bundle/release/app-release.aab "dist/Duel-Binder-$NAME.aab"
           rm -f "$ANDROID_KEYSTORE_FILE"
@@ -125,11 +135,51 @@ jobs:
           tracks: internal
           status: completed
 
+      # Runs even when the Play upload failed: the bundles work for apps already installed.
+      - name: Go live
+        if: "!cancelled() && steps.build.outcome == 'success' && startsWith(github.ref, 'refs/tags/v')"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PORTAL_ADMIN_TOKEN: ${{ secrets.PORTAL_ADMIN_TOKEN }}
+          LIVE_UPDATE_SIGNING_KEY: ${{ secrets.LIVE_UPDATE_SIGNING_KEY }}
+        run: |
+          # release.yml creates the release after its tests; wait for it, or nothing goes live.
+          FOUND=false
+          for _ in $(seq 1 60); do
+            if gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then FOUND=true; break; fi
+            sleep 30
+          done
+          if [ "$FOUND" != "true" ]; then
+            echo "::error::The release for $GITHUB_REF_NAME never appeared, so the live bundles were not published."
+            exit 1
+          fi
+          npx tsx scripts/live-update/publish.ts release "$RUNNER_TEMP/apk-release.json"
+          npx tsx scripts/live-update/publish.ts release "$RUNNER_TEMP/play-release.json"
+
+          # Both Android targets share one fingerprint, so checking the APK covers both.
+          TARGET=android-apk
+          DRAFT="$RUNNER_TEMP/apk-release.json"
+          # Tell the owner when the native shell changed, so a store release is needed.
+          PREV=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)
+          PREV="${PREV#v}"
+          CUR=$(node -p "require('$DRAFT').fingerprint")
+          OLD=""
+          if [ -n "$PREV" ]; then
+            CODE=$(curl -s -o "$RUNNER_TEMP/prev-builtin.json" -w '%{http_code}' \
+              -H "authorization: Bearer $PORTAL_ADMIN_TOKEN" \
+              "https://app.duelbinder.com/api/admin/app-bundles/$TARGET/builtins/$PREV")
+            if [ "$CODE" = "200" ]; then OLD=$(node -p "require('$RUNNER_TEMP/prev-builtin.json').fingerprint"); fi
+          fi
+          if [ "$OLD" != "$CUR" ]; then
+            echo "::notice::Native shell changed: submit a store release for Android"
+          fi
+
       - name: Attach the APK to the release
         # Runs even if the Play upload failed, so APK installs still get the update.
         if: "!cancelled() && steps.build.outcome == 'success' && startsWith(github.ref, 'refs/tags/v') && vars.ANDROID_RELEASE == 'true'"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PORTAL_ADMIN_TOKEN: ${{ secrets.PORTAL_ADMIN_TOKEN }}
         run: |
           # release.yml creates the release after its tests; wait for it.
           for _ in $(seq 1 60); do
@@ -137,3 +187,15 @@ jobs:
             sleep 30
           done
           gh release upload "$GITHUB_REF_NAME" "dist/Duel-Binder-$NAME.apk" --clobber -R "$GITHUB_REPOSITORY"
+
+          # The APK's download link only works once the release is published, so wait for that
+          # before the portal starts pointing installed APKs at it.
+          for _ in $(seq 1 60); do
+            [ "$(gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" --json isDraft -q .isDraft)" = "false" ] && break
+            sleep 60
+          done
+          if [ "$(gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" --json isDraft -q .isDraft)" != "false" ]; then
+            echo "::error::The release for $GITHUB_REF_NAME is still a draft, so the APK link was not recorded."
+            exit 1
+          fi
+          npx tsx scripts/live-update/publish.ts apk "$NAME" "https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/Duel-Binder-$NAME.apk"

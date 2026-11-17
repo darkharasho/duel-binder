@@ -49,9 +49,53 @@ export function matchesTone(title, rarity) {
   return tone === null || titleTone(title) === tone
 }
 
+// An overframe printing, as the catalog names it: "Ultra Rare (Overframe)".
+const OVERFRAME_RARITY = /\(\s*over\s*-?\s*frame\s*\)\s*$/i
+// How sellers name an overframe: "Overframe", "Over Frame", "Extended Art", "Extended", "Ext Art",
+// a title cut short at "(Exte…", オーバーフレーム.
+const OVERFRAME_WORDS =
+  /\bover\s*-?\s*frame\b|\bextended\b|\bext\.?\s*art\b|\(exte|オーバーフレーム/i
+// Rarities sellers write without "Rare" ("MAMS-EN001 Starlight"), so RARITY_PHRASES misses them.
+const BARE_RARITY_WORDS = [
+  'starlight',
+  'ghost',
+  'grand master',
+  'quarter century',
+  'prismatic',
+  'secret',
+  "collector's",
+  'platinum'
+]
+
+/** True for an overframe rarity: "Ultra Rare (Overframe)". */
+export function isOverframe(rarity) {
+  return OVERFRAME_RARITY.test(String(rarity))
+}
+
+/** True when the listing names an overframe, however the seller spells it. */
+export function namesOverframe(title) {
+  return OVERFRAME_WORDS.test(String(title))
+}
+
+/**
+ * True when the title, card name aside, names a rarity word the requested rarity lacks, even
+ * without "Rare" ("Extended MAMS-EN001 Starlight" for an Ultra Rare). The card name is taken out
+ * first, so "Starlight Road" or "Ghost Ogre" isn't read as a rarity.
+ */
+export function namesBareRarity(title, rarity, name = '') {
+  let t = String(title).toLowerCase()
+  const n = String(name).toLowerCase()
+  if (n) t = t.split(n).join(' ')
+  const r = String(rarity).toLowerCase()
+  return BARE_RARITY_WORDS.some(
+    (w) => new RegExp(`(?<![a-z])${w}(?![a-z])`).test(t) && !r.includes(w)
+  )
+}
+
 export function buildQuery({ code, name, set, rarity: asked, lang }) {
   // Sellers spell the tone too many ways to put it in the query; listings are sorted by it after.
-  const rarity = untoned(asked)
+  // An overframe goes without rarity words: sellers write "Extended Ultra", "Ext Art", "Overframe".
+  const rarity = isOverframe(asked) ? '' : untoned(asked)
   const word = EBAY_WORDS[lang] ?? ''
   const parts = []
   if (code) {

@@ -6,6 +6,9 @@ import {
   namesOtherRarity,
   namesLongerRarity,
   matchesTone,
+  isOverframe,
+  namesOverframe,
+  namesBareRarity,
   askingPrice
 } from './price.js'
 import { setPrices, parseListing, sweepKey } from './set.js'
@@ -48,7 +51,8 @@ export function resetTokenCache() {
 
 async function cacheKey(p) {
   // A one-rarity lookup keeps its v3 key, so those cached results stay good.
-  const v = p.rarities > 1 ? 'v4' : 'v3'
+  // An overframe gets v5: its v3/v4 answers counted plain listings.
+  const v = isOverframe(p.rarity) ? 'v5' : p.rarities > 1 ? 'v4' : 'v3'
   const fields = [v, p.code, p.name.toLowerCase(), p.set, p.rarity, p.lang]
   if (p.rarities > 1) fields.push(String(p.rarities))
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(fields.join('|')))
@@ -161,7 +165,40 @@ function matchingPrices(items, ref, { otherRarities = true } = {}) {
     .filter(Number.isFinite)
 }
 
+/**
+ * An overframe's prices: listings naming the overframe and no other rarity. Its plain printing
+ * sells for a tenth as much, so a listing that doesn't say overframe is never counted.
+ */
+function overframePrices(items, ref) {
+  const base = baseRarity(ref.rarity)
+  return items
+    .filter((i) => {
+      const listed = listingRarity(i.title, ref)
+      return (
+        titleMatches(i.title, ref) &&
+        isSingleCard(i.title) &&
+        namesOverframe(i.title) &&
+        !namesOtherRarity(i.title, ref.rarity) &&
+        !namesBareRarity(i.title, ref.rarity, ref.name) &&
+        (listed === null || listed === base) &&
+        i.price?.currency === 'USD'
+      )
+    })
+    .map((i) => Number.parseFloat(i.price.value))
+    .filter(Number.isFinite)
+}
+
 async function lookup(env, params) {
+  if (isOverframe(params.rarity)) {
+    // One wide search without rarity words; no fallback, too few listings is no price.
+    const prices = overframePrices(await search(env, buildQuery(params), { limit: 200 }), params)
+    return {
+      ...askingPrice(prices),
+      rarityFallback: false,
+      currency: 'USD',
+      checkedAt: new Date().toISOString()
+    }
+  }
   let prices = matchingPrices(await search(env, buildQuery(params)), params)
   let rarityFallback = false
   if (prices.length < 2 && params.rarity) {

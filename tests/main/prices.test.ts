@@ -7,6 +7,7 @@ import { REQUEST_WINDOW_MS, countCandidates, priceCandidates } from '../../src/m
 import { getMeta } from '../../src/main/db/meta'
 import { addEntry } from '../../src/main/repo/collection'
 import { seededDb } from './helpers'
+import { SCHEMA_V48 } from '../../src/main/db/schema'
 
 const q = { code: 'LB-05', name: 'Blue-Eyes White Dragon', set: 'LOB', rarity: 'Ultra Rare', lang: 'ja' as const }
 const ok = (body: unknown, status = 200): Response =>
@@ -260,7 +261,7 @@ test('a printing requested in the last 7 days is a candidate; an older request i
   expect(countCandidates(db, NOW)).toBe(1)
 })
 
-test('a Manga-Style printing is priced as its tone, other variants as their rarity', () => {
+test('a Manga-Style printing is priced as its tone, an overframe as one, other variants as their rarity', () => {
   const ids = ['Manga-Style, Color', 'Overframe', 'New artwork'].map((variant, i) => {
     const id = unowned(`X-JP0${i}`, 'ja')
     db.prepare('UPDATE card_printings SET variant = ? WHERE id = ?').run(variant, id)
@@ -273,10 +274,17 @@ test('a Manga-Style printing is priced as its tone, other variants as their rari
   const rarity = new Map(priceCandidates(db, NOW).map((c) => [c.id, c.rarity]))
   expect([...ids, mono].map((id) => rarity.get(id))).toEqual([
     'Ultra Rare (Manga-Style, Color)',
-    'Ultra Rare',
+    'Ultra Rare (Overframe)',
     'Ultra Rare',
     'Ultra Rare (Manga-Style, Monochrome)'
   ])
+})
+
+test('an overframe already named in its rarity is not named twice', () => {
+  const id = unowned('MAMS-DE001', 'de')
+  db.prepare("UPDATE card_printings SET set_rarity = 'Ultra Rare (Overframe)', variant = 'Overframe' WHERE id = ?").run(id)
+  request(id, ago(0))
+  expect(priceCandidates(db, NOW).find((c) => c.id === id)?.rarity).toBe('Ultra Rare (Overframe)')
 })
 
 test('a requested printing priced since the request is not a candidate again', () => {
@@ -368,4 +376,31 @@ test('the refresh tells the price Worker how many rarities share the code in tha
   const by = new Map(lookup.mock.calls.map((c) => [c[0].code, c[0].rarities]))
   expect(by.get('RV01-KR005')).toBe(3)
   expect(by.get('RV01-KR006')).toBe(1)
+})
+
+test('V48 drops overframe eBay prices only, so they are fetched again', () => {
+  const add = (code: string, rarity: string, variant: string | null) => {
+    const id = Number(
+      db
+        .prepare(
+          `INSERT INTO card_printings (card_id, language, set_name, set_code, set_rarity, variant)
+           VALUES (46986414, 'en', 'Magnificent Maestros', ?, ?, ?)`
+        )
+        .run(code, rarity, variant).lastInsertRowid
+    )
+    db.prepare('INSERT INTO intl_prices (printing_id, price, listing_count, checked_at) VALUES (?, 11.89, 19, ?)').run(
+      id,
+      ago(1)
+    )
+    return id
+  }
+  const english = add('MAMS-EN001', 'Ultra Rare (Overframe)', null)
+  const german = add('MAMS-DE001', 'Ultra Rare', 'Overframe')
+  const plain = add('MAMS-EN101', 'Ultra Rare', null)
+  const art = add('MAMS-EN102', 'Ultra Rare', 'New artwork')
+  db.exec(SCHEMA_V48)
+  const left = (db.prepare('SELECT printing_id AS id FROM intl_prices').all() as { id: number }[]).map((r) => r.id)
+  expect(left).not.toContain(english)
+  expect(left).not.toContain(german)
+  expect(left).toEqual(expect.arrayContaining([plain, art]))
 })

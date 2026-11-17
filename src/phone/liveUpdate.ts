@@ -6,6 +6,7 @@ import {
   type ManifestEntry
 } from '../shared/appBundles'
 import { LIVE_UPDATE_PUBLIC_KEY } from './liveUpdateKey'
+import { SHELL_UPDATE_KEY } from './updateCheck'
 
 /** The part of the updater plugin (`CapacitorUpdater`) that live updates use. */
 export interface Updater {
@@ -63,7 +64,7 @@ export const FAILED_KEY = `${KEY}.failed`
 export const PENDING_KEY = `${KEY}.pending`
 /** The version whose "Updated to X" note has been shown (written by the home switch). */
 export const SHOWN_KEY = `${KEY}.shown`
-export const SHELL_UPDATE_KEY = 'duelbinder.shellUpdate'
+export { SHELL_UPDATE_KEY }
 
 /**
  * A placeholder: the plugin's manifest download never fetches it, but iOS `downloadBundle` first does

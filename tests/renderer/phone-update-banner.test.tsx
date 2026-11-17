@@ -1,7 +1,8 @@
 import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { UpdateBanner } from '../../src/phone/UpdateBanner'
-import { UPDATE_DISMISSED_KEY, readShellUpdate } from '../../src/phone/updateCheck'
+import { SHELL_UPDATE_KEY as LIVE_SHELL_KEY } from '../../src/phone/liveUpdate'
+import { SHELL_UPDATE_KEY, UPDATE_DISMISSED_KEY, readShellUpdate } from '../../src/phone/updateCheck'
 
 const build = vi.hoisted(() => ({
   platform: 'android' as 'web' | 'ios' | 'android',
@@ -27,6 +28,15 @@ beforeEach(() => {
   localStorage.clear()
   build.platform = 'android'
   build.channel = 'apk'
+  vi.stubGlobal('__APP_VERSION__', '0.47.0')
+})
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
+
+it('one shell-update key, shared by the live-update check and the banner', () => {
+  expect(SHELL_UPDATE_KEY).toBe(SHELL_KEY)
+  expect(LIVE_SHELL_KEY).toBe(SHELL_UPDATE_KEY)
 })
 
 describe('readShellUpdate', () => {
@@ -82,6 +92,16 @@ describe('UpdateBanner', () => {
 
     render(<UpdateBanner />)
     expect(screen.queryByRole('link')).not.toBeInTheDocument()
+  })
+
+  it('banner: hidden once this build is that version or newer (just installed the APK)', () => {
+    store()
+    for (const v of ['0.48.0', '0.49.0']) {
+      vi.stubGlobal('__APP_VERSION__', v)
+      const view = render(<UpdateBanner />)
+      expect(screen.queryByRole('link'), v).not.toBeInTheDocument()
+      view.unmount()
+    }
   })
 
   it('banner: appears when liveUpdate stores one later', async () => {

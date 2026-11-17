@@ -91,7 +91,9 @@ export function pickShellUpdate(
   q: { fingerprint: string; builtin: string }
 ): { version: string; url: string } | null {
   const top = newest(
-    index.filter((x) => x.apkUrl && x.fingerprint !== q.fingerprint && isNewer(x.version, q.builtin))
+    index.filter(
+      (x) => x.apkUrl && !x.withdrawn && x.fingerprint !== q.fingerprint && isNewer(x.version, q.builtin)
+    )
   )
   return top && top.apkUrl ? { version: top.version, url: top.apkUrl } : null
 }

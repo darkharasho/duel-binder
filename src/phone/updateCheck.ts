@@ -4,7 +4,8 @@
  * what the portal said under `duelbinder.shellUpdate`. A dismissed version isn't shown again.
  */
 
-const SHELL_UPDATE_KEY = 'duelbinder.shellUpdate'
+/** Where liveUpdate.ts stores the portal's shell (APK) update and the banner reads it. */
+export const SHELL_UPDATE_KEY = 'duelbinder.shellUpdate'
 export const UPDATE_DISMISSED_KEY = 'duelbinder.updateDismissed'
 
 export interface Update {

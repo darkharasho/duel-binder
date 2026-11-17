@@ -47,6 +47,17 @@ describe('pickShellUpdate', () => {
     expect(pickShellUpdate(idx, { fingerprint: 'fpB', builtin: '0.101.0' })).toBeNull()
     expect(pickShellUpdate([e('0.104.0', 'fpB', 48)], { fingerprint: 'fpA', builtin: '0.101.0' })).toBeNull()
   })
+  it('never offers a withdrawn APK', () => {
+    const idx = [
+      e('0.103.0', 'fpB', 48, { apkUrl: 'https://x/103.apk' }),
+      e('0.104.0', 'fpB', 48, { apkUrl: 'https://x/104.apk', withdrawn: true })
+    ]
+    expect(pickShellUpdate(idx, { fingerprint: 'fpA', builtin: '0.101.0' })).toEqual({
+      version: '0.103.0',
+      url: 'https://x/103.apk'
+    })
+    expect(pickShellUpdate([idx[1]], { fingerprint: 'fpA', builtin: '0.101.0' })).toBeNull()
+  })
 })
 
 describe('signedMessage', () => {

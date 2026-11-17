@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react'
 import { XIcon } from 'lucide-react'
 import { ANDROID_CHANNEL, APP_PLATFORM } from '@/lib/portal'
+import { isNewer } from '../shared/androidRelease'
 import { UPDATE_DISMISSED_KEY, readShellUpdate, type Update } from './updateCheck'
 
 const readVisible = (): Update | null => {
   const found = readShellUpdate(localStorage)
-  return found && localStorage.getItem(UPDATE_DISMISSED_KEY) !== found.version ? found : null
+  if (!found || localStorage.getItem(UPDATE_DISMISSED_KEY) === found.version) return null
+  // Just installed that APK: the stored answer is stale until the next check replaces it.
+  if (typeof __APP_VERSION__ === 'string' && !isNewer(found.version, __APP_VERSION__)) return null
+  return found
 }
 
 /** The update line, in the Android APK build only. Reads what the live-update check stored. */

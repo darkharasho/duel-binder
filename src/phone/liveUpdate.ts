@@ -129,8 +129,12 @@ export function createLiveUpdate(deps: LiveUpdateDeps): LiveUpdate {
     if (!res.ok) return
     const answer = (await res.json()) as AppUpdateAnswer
 
+    const before = storage.getItem(SHELL_UPDATE_KEY)
     if (answer.shellUpdate) storage.setItem(SHELL_UPDATE_KEY, JSON.stringify(answer.shellUpdate))
     else storage.removeItem(SHELL_UPDATE_KEY)
+    // Tell the APK banner, but only when the answer changed.
+    if (storage.getItem(SHELL_UPDATE_KEY) !== before && typeof window !== 'undefined')
+      window.dispatchEvent(new Event('duelbinder:shell-update'))
 
     if (answer.version === null) return
     const { version, manifest, signature } = answer

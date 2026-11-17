@@ -175,12 +175,27 @@ describe('liveUpdate', () => {
       version: '0.103.0',
       url: 'https://x/a.apk'
     })
-    s.advance(11 * MIN)
     // an answer without one clears it
     const t = setup([{ version: null }])
     t.storage.setItem('duelbinder.shellUpdate', '{"version":"1","url":"u"}')
     await t.live.check()
     expect(t.storage.getItem('duelbinder.shellUpdate')).toBeNull()
+  })
+
+  it('liveUpdate: announces shellUpdate only when it changes', async () => {
+    const same = { version: null, shellUpdate: { version: '0.103.0', url: 'https://x/a.apk' } }
+    const s = setup([same, same, { version: null }])
+    const heard = vi.fn()
+    window.addEventListener('duelbinder:shell-update', heard)
+    await s.live.check()
+    expect(heard).toHaveBeenCalledTimes(1)
+    s.advance(11 * MIN)
+    await s.live.check()
+    expect(heard).toHaveBeenCalledTimes(1)
+    s.advance(11 * MIN)
+    await s.live.check()
+    window.removeEventListener('duelbinder:shell-update', heard)
+    expect(heard).toHaveBeenCalledTimes(2)
   })
 
   it('liveUpdate: a return to the foreground runs a check', async () => {

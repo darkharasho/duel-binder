@@ -1,0 +1,200 @@
+import { webcrypto } from 'node:crypto'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { signedMessage, type BundleTarget, type ManifestEntry } from '../../src/shared/appBundles'
+import { createLiveUpdate, type Updater } from '../../src/phone/liveUpdate'
+
+const subtle: SubtleCrypto =
+  (globalThis.crypto?.subtle as SubtleCrypto | undefined) ?? (webcrypto.subtle as SubtleCrypto)
+
+const TARGET: BundleTarget = 'android-play'
+const manifest = (v: string): ManifestEntry[] => [
+  { file_name: 'index.html', file_hash: 'a'.repeat(64), download_url: `https://x/${v}/index` },
+  { file_name: 'assets/app.js', file_hash: 'b'.repeat(64), download_url: `https://x/${v}/app` }
+]
+
+const b64url = (buf: ArrayBuffer): string => Buffer.from(buf).toString('base64url')
+
+let pair: CryptoKeyPair
+let publicKey: JsonWebKey
+
+beforeEach(async () => {
+  pair = (await subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, [
+    'sign',
+    'verify'
+  ])) as CryptoKeyPair
+  publicKey = await subtle.exportKey('jwk', pair.publicKey)
+})
+
+async function offer(version: string, tamper = false): Promise<unknown> {
+  const m = manifest(version)
+  const sig = await subtle.sign(
+    { name: 'ECDSA', hash: 'SHA-256' },
+    pair.privateKey,
+    signedMessage(TARGET, version, m) as Uint8Array<ArrayBuffer>
+  )
+  const sent = tamper ? m.map((e, i) => (i === 0 ? { ...e, file_hash: 'c'.repeat(64) } : e)) : m
+  return { version, manifest: sent, signature: b64url(sig) }
+}
+
+function memoryStorage(): Storage {
+  const m = new Map<string, string>()
+  return {
+    get length() {
+      return m.size
+    },
+    clear: () => m.clear(),
+    getItem: (k) => m.get(k) ?? null,
+    key: (i) => [...m.keys()][i] ?? null,
+    removeItem: (k) => void m.delete(k),
+    setItem: (k, v) => void m.set(k, v)
+  }
+}
+
+function setup(answers: unknown[] | (() => Promise<unknown>)) {
+  let failedCb: ((i: { bundle: { version: string } }) => void) | undefined
+  let n = 0
+  const updater = {
+    getBuiltinVersion: vi.fn(async () => ({ version: '0.100.0' })),
+    download: vi.fn(async (o: { version: string }) => ({ id: `id-${o.version}`, version: o.version })),
+    next: vi.fn(async () => ({})),
+    set: vi.fn(async () => undefined),
+    delete: vi.fn(async () => undefined),
+    addListener: vi.fn(async (_e: 'updateFailed', cb: typeof failedCb) => {
+      failedCb = cb
+      return {}
+    })
+  }
+  const doFetch = vi.fn(async (_url: string) => {
+    if (typeof answers === 'function') return (await answers()) as Response
+    const a = answers[Math.min(n++, answers.length - 1)]
+    return new Response(JSON.stringify(a), { status: 200 })
+  })
+  let t = 1_000_000
+  const storage = memoryStorage()
+  let visible: () => void = () => undefined
+  const live = createLiveUpdate({
+    updater: updater as unknown as Updater,
+    fetch: doFetch as unknown as typeof fetch,
+    storage,
+    now: () => t,
+    target: TARGET,
+    current: '0.100.0',
+    publicKey,
+    on: (_e, cb) => {
+      visible = cb
+      return () => undefined
+    }
+  })
+  return {
+    live,
+    updater,
+    doFetch,
+    storage,
+    advance: (ms: number) => void (t += ms),
+    fail: (v: string) => failedCb?.({ bundle: { version: v } }),
+    fireVisible: () => visible()
+  }
+}
+
+const MIN = 60_000
+
+describe('liveUpdate', () => {
+  it('liveUpdate: downloads a newer signed offer and sets it next', async () => {
+    const s = setup([await offer('0.101.0')])
+    await s.live.check()
+    expect(s.doFetch.mock.calls[0][0]).toContain('target=android-play')
+    expect(s.doFetch.mock.calls[0][0]).toContain('builtin=0.100.0')
+    expect(s.doFetch.mock.calls[0][0]).toContain('current=0.100.0')
+    expect(s.updater.download).toHaveBeenCalledTimes(1)
+    expect(s.updater.next).toHaveBeenCalledWith({ id: 'id-0.101.0' })
+    expect(s.live.pending()).toEqual({ id: 'id-0.101.0', version: '0.101.0' })
+  })
+
+  it("liveUpdate: refuses an offer whose signature doesn't verify", async () => {
+    const s = setup([await offer('0.101.0', true)])
+    await s.live.check()
+    expect(s.updater.download).not.toHaveBeenCalled()
+    expect(s.live.pending()).toBeNull()
+  })
+
+  it('liveUpdate: skips a version the plugin rolled back', async () => {
+    const s = setup([await offer('0.102.0')])
+    s.fail('0.102.0')
+    await s.live.check()
+    expect(s.updater.download).not.toHaveBeenCalled()
+  })
+
+  it('liveUpdate: checks at most every 10 minutes', async () => {
+    const s = setup([{ version: null }])
+    await s.live.check()
+    s.advance(5 * MIN)
+    await s.live.check()
+    expect(s.doFetch).toHaveBeenCalledTimes(1)
+    s.advance(6 * MIN)
+    await s.live.check()
+    expect(s.doFetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('liveUpdate: a newer offer replaces the pending one', async () => {
+    const s = setup([await offer('0.101.0'), await offer('0.102.0')])
+    await s.live.check()
+    s.advance(11 * MIN)
+    await s.live.check()
+    expect(s.updater.delete).toHaveBeenCalledWith({ id: 'id-0.101.0' })
+    expect(s.live.pending()).toEqual({ id: 'id-0.102.0', version: '0.102.0' })
+  })
+
+  it('liveUpdate: offline is silent', async () => {
+    const s = setup(async () => {
+      throw new TypeError('offline')
+    })
+    await expect(s.live.check()).resolves.toBeUndefined()
+    expect(s.updater.download).not.toHaveBeenCalled()
+  })
+
+  it('liveUpdate: stores shellUpdate from the answer', async () => {
+    const s = setup([{ version: null, shellUpdate: { version: '0.103.0', url: 'https://x/a.apk' } }])
+    await s.live.check()
+    expect(JSON.parse(s.storage.getItem('duelbinder.shellUpdate')!)).toEqual({
+      version: '0.103.0',
+      url: 'https://x/a.apk'
+    })
+    s.advance(11 * MIN)
+    // an answer without one clears it
+    const t = setup([{ version: null }])
+    t.storage.setItem('duelbinder.shellUpdate', '{"version":"1","url":"u"}')
+    await t.live.check()
+    expect(t.storage.getItem('duelbinder.shellUpdate')).toBeNull()
+  })
+
+  it('liveUpdate: a return to the foreground runs a check', async () => {
+    const s = setup([{ version: null }])
+    s.fireVisible()
+    await vi.waitFor(() => expect(s.doFetch).toHaveBeenCalledTimes(1))
+  })
+
+  it('liveUpdate: applyNow sets the pending bundle', async () => {
+    const s = setup([await offer('0.101.0')])
+    await s.live.check()
+    await s.live.applyNow()
+    expect(s.updater.set).toHaveBeenCalledWith({ id: 'id-0.101.0' })
+  })
+})
+
+describe('bundleTarget', () => {
+  const load = async (platform: string, channel?: string) => {
+    vi.resetModules()
+    vi.doMock('@/lib/portal', () => ({
+      APP_PLATFORM: platform,
+      ANDROID_CHANNEL: channel ?? 'apk',
+      PORTAL_ORIGIN: 'https://app.duelbinder.com'
+    }))
+    return (await import('../../src/phone/liveUpdate')).bundleTarget()
+  }
+  it('bundleTarget: android play/apk and ios, null on web', async () => {
+    expect(await load('android', 'play')).toBe('android-play')
+    expect(await load('android', 'apk')).toBe('android-apk')
+    expect(await load('ios')).toBe('ios')
+    expect(await load('web')).toBeNull()
+  })
+})

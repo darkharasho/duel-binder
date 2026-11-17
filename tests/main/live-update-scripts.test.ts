@@ -43,7 +43,7 @@ describe('live update scripts', () => {
     const pem = privateKey.export({ type: 'pkcs8', format: 'pem' }) as string
     const manifest: ManifestEntry[] = [{ file_name: 'index.html', file_hash: 'ab', download_url: 'u' }]
     const msg = signedMessage('ios', '1.2.3', manifest)
-    const sig = Buffer.from(sign(msg, pem), 'base64url')
+    const sig = new Uint8Array(Buffer.from(sign(msg, pem), 'base64url'))
     const key = await crypto.subtle.importKey(
       'spki',
       publicKey.export({ type: 'spki', format: 'der' }),
@@ -51,6 +51,6 @@ describe('live update scripts', () => {
       false,
       ['verify']
     )
-    expect(await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, key, sig, msg)).toBe(true)
+    expect(await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, key, sig, new Uint8Array(msg))).toBe(true)
   })
 })

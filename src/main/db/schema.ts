@@ -714,6 +714,15 @@ ${gameRollupTriggers('konami_logos', null, () => "'ygo'")}
 ${gameRollupTriggers('pokemon_set_art', null, () => "'pkm'")}
 `
 
+/**
+ * Overframe eBay prices counted plain listings (its plain printing sells for a tenth as much), so
+ * they're dropped and fetched again, priced from listings naming the overframe. The portal too.
+ */
+export const SCHEMA_V48 = `
+DELETE FROM intl_prices WHERE printing_id IN (SELECT id FROM card_printings
+  WHERE set_rarity LIKE '%(Overframe)' OR variant = 'Overframe');
+`
+
 export const MIGRATIONS: Migration[] = [
   { version: 1, sql: SCHEMA_V1 },
   { version: 2, sql: SCHEMA_V2 },
@@ -761,5 +770,6 @@ export const MIGRATIONS: Migration[] = [
   { version: 44, sql: SCHEMA_V44, server: SCHEMA_V44_SERVER },
   { version: 45, sql: SCHEMA_V45, server: false },
   { version: 46, sql: SCHEMA_V46, server: false },
-  { version: 47, sql: SCHEMA_V47, server: false }
+  { version: 47, sql: SCHEMA_V47, server: false },
+  { version: 48, sql: SCHEMA_V48 }
 ]

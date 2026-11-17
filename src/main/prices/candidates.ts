@@ -57,10 +57,13 @@ function candidateFilter(
 /**
  * The rarity a printing is priced as: its own, with a Manga-Style tone kept in its variant added
  * ("Ultra Rare (Manga-Style, Color)"), as the Monochrome one carries it in its rarity, so the price
- * Worker keeps to listings of that tone. Other variants are left out, as before.
+ * Worker keeps to listings of that tone. An overframe kept in its variant is added the way the
+ * English catalog writes it ("Ultra Rare (Overframe)"), so the Worker counts only overframe
+ * listings. Other variants are left out, as before.
  */
 const PRICED_RARITY = `p.set_rarity || CASE WHEN p.variant LIKE '%, Color' OR p.variant LIKE '%, Monochrome'
-  THEN ' (' || p.variant || ')' ELSE '' END`
+  THEN ' (' || p.variant || ')'
+  WHEN p.variant = 'Overframe' AND p.set_rarity NOT LIKE '%Overframe%' THEN ' (Overframe)' ELSE '' END`
 
 /**
  * How many rarities the printing's set code has in its language: RV01-KR005 comes in Ultra, Secret

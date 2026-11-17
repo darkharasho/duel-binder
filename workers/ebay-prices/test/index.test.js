@@ -643,6 +643,62 @@ describe('GET /v1/pokemon-listings', () => {
   })
 })
 
+describe('overframe prices', () => {
+  const mk = (title, value) => ({ title, price: { value, currency: 'USD' } })
+  const OVERFRAME_URL =
+    'https://w.test/v1/price?code=MAMS-EN001&name=Blue-Eyes%20White%20Dragon%2C%20the%20White%20Phantom%20Beast&set=Magnificent%20Maestros&rarity=Ultra%20Rare%20(Overframe)&lang=en&rarities=4'
+
+  it('counts only listings naming the overframe, from one wide search without rarity words', async () => {
+    const f = makeFetch([
+      json({
+        itemSummaries: [
+          mk('Blue-Eyes White Dragon, the White Phantom Beast MAMS-EN001 Ultra Rare 1st', '10'),
+          mk('Blue-Eyes White Dragon, the White Phantom Beast Ultra Rare MAMS-EN001 NM', '11'),
+          mk('Blue-Eyes White Dragon, the White Phantom Beast UR MAMS-EN001', '12'),
+          mk('Blue-Eyes White Dragon the White Phantom Beast MAMS-EN001 Overframe Extended Art', '150'),
+          mk('Blue-Eyes White Dragon, the White Phantom Beast (Extended) MAMS-EN001 Ultra LP', '130'),
+          mk('Konami Blue-Eyes White Dragon White Phantom Beast Ext Art MAMS-EN001', '140'),
+          mk('Blue-Eyes White Dragon, the White Phantom Beast (Extended) MAMS-EN001 Starlight', '1049'),
+          mk('Blue-Eyes White Dragon, the White Phantom Beast MAMS-EN001 Extended Art PSA 10', '400')
+        ]
+      })
+    ])
+    vi.stubGlobal('fetch', f)
+    const body = await (await worker.fetch(req(OVERFRAME_URL), env)).json()
+    expect(body).toMatchObject({ price: 140, listingCount: 3, rarityFallback: false })
+    const searches = f.calls.filter((u) => u.includes('item_summary'))
+    expect(searches).toHaveLength(1)
+    const q = new URL(searches[0]).searchParams
+    expect(q.get('q')).toBe('"MAMS-EN001"')
+    expect(q.get('limit')).toBe('200')
+  })
+
+  it('answers no price rather than a plain one when too few overframes are listed', async () => {
+    const f = makeFetch([
+      json({
+        itemSummaries: [
+          mk('Blue-Eyes White Dragon, the White Phantom Beast MAMS-EN001 Ultra Rare', '10'),
+          mk('Blue-Eyes White Dragon, the White Phantom Beast MAMS-EN001 Ultra Rare NM', '11'),
+          mk('Blue-Eyes White Dragon, the White Phantom Beast MAMS-EN001 Overframe', '150')
+        ]
+      })
+    ])
+    vi.stubGlobal('fetch', f)
+    const body = await (await worker.fetch(req(OVERFRAME_URL), env)).json()
+    expect(body).toMatchObject({ price: null, listingCount: 1, rarityFallback: false })
+    expect(f.calls.filter((u) => u.includes('item_summary'))).toHaveLength(1)
+  })
+
+  it('ignores an overframe answer cached before the fix', async () => {
+    env.PRICES.get = vi.fn(async (k) => (k.startsWith('v4:') ? '{"price":11.89}' : null))
+    const f = makeFetch([json(items([]))])
+    vi.stubGlobal('fetch', f)
+    const body = await (await worker.fetch(req(OVERFRAME_URL), env)).json()
+    expect(body.price).toBeNull()
+    expect(env.PRICES.get.mock.calls[0][0]).toMatch(/^v5:/)
+  })
+})
+
 describe('GET /v1/onepiece-listings', () => {
   const URL_ = 'https://w.test/v1/onepiece-listings?code=OP05&lang=ja'
   beforeEach(() => vi.useFakeTimers({ toFake: ['setTimeout'] }))

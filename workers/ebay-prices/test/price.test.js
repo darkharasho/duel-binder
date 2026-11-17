@@ -7,7 +7,10 @@ import {
   askingPrice,
   rarityTone,
   titleTone,
-  matchesTone
+  matchesTone,
+  isOverframe,
+  namesOverframe,
+  namesBareRarity
 } from '../src/price.js'
 
 describe('buildQuery', () => {
@@ -209,5 +212,57 @@ describe('namesLongerRarity', () => {
     expect(namesLongerRarity(qc, 'Quarter Century Secret Rare')).toBe(false)
     expect(namesLongerRarity('Pot of Prosperity RC04-JP067 Secret Rare', 'Secret Rare')).toBe(false)
     expect(namesLongerRarity('SDK-001 Ultra Rare', 'Secret Rare')).toBe(false)
+  })
+})
+
+describe('overframes', () => {
+  it('knows an overframe rarity', () => {
+    expect(isOverframe('Ultra Rare (Overframe)')).toBe(true)
+    expect(isOverframe('Common (Overframe)')).toBe(true)
+    expect(isOverframe('Ultra Rare')).toBe(false)
+    expect(isOverframe('Ultra Rare (Manga-Style, Color)')).toBe(false)
+  })
+
+  it('queries an overframe without rarity words', () => {
+    expect(
+      buildQuery({
+        code: 'MAMS-EN001',
+        name: 'Blue-Eyes',
+        set: 'Magnificent Maestros',
+        rarity: 'Ultra Rare (Overframe)',
+        lang: 'en'
+      })
+    ).toBe('"MAMS-EN001"')
+  })
+
+  it.each([
+    'MAMS-EN001 Blue-Eyes Ultra Rare Overframe',
+    'Blue-Eyes MAMS-EN001 1st Ed OverFrame',
+    'Blue-Eyes Over-Frame MAMS-EN001',
+    'Blue-Eyes White Dragon Extended Art MAMS-EN001',
+    'Blue-Eyes (Extended) MAMS-EN001 Ultra LP',
+    'Blue-Eyes Ext Art MAMS-EN001',
+    'Blue-Eyes - MAMS-EN001 Ultra Rare (Exte...',
+    'ブルーアイズ オーバーフレーム'
+  ])('reads an overframe in %s', (title) => {
+    expect(namesOverframe(title)).toBe(true)
+  })
+
+  it('does not read a plain listing as an overframe', () => {
+    expect(namesOverframe('Blue-Eyes MAMS-EN001 Ultra Rare 1st Ed NM')).toBe(false)
+    expect(namesOverframe('Blue-Eyes MAMS-EN001 Full Frame Ultra')).toBe(false)
+  })
+
+  it('reads a rarity sellers write without "Rare", the card name aside', () => {
+    const r = 'Ultra Rare (Overframe)'
+    expect(namesBareRarity('Blue-Eyes (Extended) MAMS-EN001 Starlight', r, 'Blue-Eyes')).toBe(true)
+    expect(namesBareRarity('Blue-Eyes Extended Art Ghost MAMS-EN001', r, 'Blue-Eyes')).toBe(true)
+    expect(namesBareRarity('Starlight Road MAMS-EN050 Extended Art', r, 'Starlight Road')).toBe(
+      false
+    )
+    expect(namesBareRarity('Blue-Eyes MAMS-EN001 Extended Ultra', r, 'Blue-Eyes')).toBe(false)
+    expect(namesBareRarity('X Starlight Rare Overframe', 'Starlight Rare (Overframe)', 'X')).toBe(
+      false
+    )
   })
 })

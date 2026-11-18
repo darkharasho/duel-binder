@@ -346,6 +346,33 @@ describe('resolvePokemonSignals', () => {
     })
   })
 
+  it('names a card whose unseen twin is outside the picked set, but not one whose twin is in it', async () => {
+    // Celebrations Classic Collection's Charizard and 30th Classic Collection's are one card but
+    // for the anniversary stamp, both printing 4/102: with Celebrations Classic Collection
+    // picked, the Charizard is that set's.
+    const ctx = (twinCode: string, set: ScanPrinting[]): ResolveContext => ({
+      ...pkm('en'),
+      setPrintings: set,
+      lookups: {
+        ...lookups,
+        printingsForCards: async (ids) =>
+          PKM.filter((p) => ids.includes(p.cardId)).map((p) =>
+            p.cardId === 1 ? { ...p, unseenTwin: true as const, unseenTwinCodes: [twinCode] } : p
+          )
+      }
+    })
+    const own = PKM.filter((p) => p.cardId === 1)
+    const signals = raw({ art: [twins[0]] })
+    expect(await recognized(signals, ctx('30C 001', own))).toMatchObject({ cardId: 1 })
+    // Both sets picked: either could be the card in hand.
+    const both = [...own, { ...own[0], printingId: 99, cardId: 99, setCode: '30C 001' }]
+    expect(await resolveSignals(signals, ctx('30C 001', both))).toEqual({ kind: 'unsure' })
+    // No set picked: as before.
+    expect(await resolveSignals(signals, { ...ctx('30C 001', own), setPrintings: null })).toEqual({
+      kind: 'unsure'
+    })
+  })
+
   it('zh text with ja art match is unsure', async () => {
     const art = [{ imageId: 201, distance: 20 }]
     expect(await resolveSignals(raw({ art }), pkm('other'))).toEqual({ kind: 'unsure' })

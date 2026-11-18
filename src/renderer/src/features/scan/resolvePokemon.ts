@@ -493,6 +493,13 @@ export async function resolvePokemonSignals(
   // only nearly that far could be either, so the card is named, marked as a guess.
   const untold = async (p: ScanPrinting): Promise<'yes' | 'maybe' | false> => {
     if (!p.unseenTwin) return false
+    // A twin printed only in sets other than the picked ones isn't the card in hand: the user
+    // said which set it is (Celebrations' Classic Collection Charizard and 30th Classic
+    // Collection's differ only by the anniversary stamp, which the scanner doesn't read).
+    if (ctx.setPrintings && p.unseenTwinCodes?.length) {
+      const picked = new Set(ctx.setPrintings.map((s) => s.setCode))
+      if (!p.unseenTwinCodes.some((c) => picked.has(c))) return false
+    }
     const read = numbered.filter((n) => n.cardId === p.cardId).map((n) => numberOf(n.setCode))
     const told = !!p.unseenTwinCodes?.length && read.length > 0
     if (told && !p.unseenTwinCodes!.some((c) => read.includes(numberOf(c)))) return false

@@ -1,3 +1,4 @@
+import type { SlabRead } from './slabLabel'
 import type { Language } from '../languages'
 /** Raw pixels, 4 bytes per pixel (R, G, B, A), row-major. */
 export interface RgbaImage {
@@ -80,6 +81,8 @@ export interface ScanDraft {
   game?: 'pkm' | 'op' | 'mtg'
   /** Shown in a graded slab; priced as the raw card. */
   slab?: true
+  /** What the slab's label was read as (grader, grade, cert), once read; only with `slab`. */
+  slabRead?: SlabRead
   /**
    * The scanner's best guess at a Pokémon card, not a certain match: shown as such until the user
    * has looked at it. Left out when certain, as it always is for Yu-Gi-Oh.

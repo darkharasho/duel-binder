@@ -8,6 +8,7 @@ import type { ScanDraft } from './resolve'
 import { printingOf } from './scanLook'
 import { sessionCardOf } from './sessionCards'
 import type { ScanSessionCardDraft } from '@shared/scanSessions'
+import type { SlabRead } from '@shared/scan/slabLabel'
 
 export interface ScanRow extends ScanDraft {
   key: string
@@ -117,6 +118,8 @@ export function useScanSession(game: GameId = 'ygo'): {
   setSlab(key: string, on: boolean): void
   /** Takes one copy off a row (the whole row at one), as when it was added as a graded copy. */
   takeOne(key: string): void
+  /** Notes what a slab row's label was read as, for the graded-copy form to start from. */
+  setSlabRead(key: string, read: SlabRead): void
   remove(key: string): void
   clear(): void
   /**
@@ -253,10 +256,19 @@ export function useScanSession(game: GameId = 'ygo'): {
           if (r.key !== key || (r.slab === true) === on) return r
           const next: ScanRow = { ...r, error: undefined }
           if (on) next.slab = true
-          else delete next.slab
+          else {
+            delete next.slab
+            delete next.slabRead
+          }
           return next
         })
       ),
+    [update]
+  )
+
+  const setSlabRead = useCallback(
+    (key: string, read: SlabRead): void =>
+      update((list) => list.map((r) => (r.key === key && r.slab ? { ...r, slabRead: read } : r))),
     [update]
   )
 
@@ -406,6 +418,7 @@ export function useScanSession(game: GameId = 'ygo'): {
     setQuantity,
     setSlab,
     takeOne,
+    setSlabRead,
     remove,
     clear,
     refreshPrices,

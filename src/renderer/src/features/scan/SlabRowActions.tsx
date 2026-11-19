@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { ShieldCheckIcon } from 'lucide-react'
+import type { SlabRead } from '@shared/scan/slabLabel'
 import { GradedForm, type GradedPrinting } from '@/features/graded/GradedForm'
 import { cn } from '@/lib/utils'
 import { printingOf } from './scanLook'
@@ -27,6 +28,14 @@ export function slabPrintings(row: ScanRow): GradedPrinting[] {
       }
     ]
   })
+}
+
+/** "PSA 10 · #12345678": what a label was read as, or '' when nothing was. */
+// eslint-disable-next-line react-refresh/only-export-components -- tested on its own
+export function labelText(read: SlabRead | undefined): string {
+  if (!read) return ''
+  const title = [read.company, read.grade, read.label].filter(Boolean).join(' ')
+  return [title, read.cert ? `#${read.cert}` : ''].filter(Boolean).join(' · ')
 }
 
 const PILL =
@@ -60,6 +69,11 @@ export function SlabRowActions({
         <ShieldCheckIcon aria-hidden className="size-3.5 shrink-0" />
         Graded slab: not added as a raw card
       </p>
+      {labelText(row.slabRead) && (
+        <p className="text-xs text-muted-foreground">
+          Label reads <span className="text-foreground">{labelText(row.slabRead)}</span>
+        </p>
+      )}
       <div className="flex flex-wrap gap-1.5">
         <button
           type="button"
@@ -80,6 +94,7 @@ export function SlabRowActions({
         printings={printings}
         printingId={printingId}
         onAdded={onAdded}
+        initial={row.slabRead}
       />
     </div>
   )

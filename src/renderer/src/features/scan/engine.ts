@@ -35,6 +35,8 @@ export interface FrameSignals {
   version?: VersionCues | null
   /** Pokémon only: the card is in a graded slab (its label block shows above it). */
   slab?: boolean
+  /** A slab's label, straightened, for reading its grade (slabLabelBand); only when `slab`. */
+  slabBand?: OcrBand
   /**
    * 'holder' when the art matched only on the second look of a profile's holderSearch, which
    * must then clear the art margin against every other name (resolvePokemon).
@@ -77,6 +79,8 @@ export type WorkerRequest =
       wantBands: boolean
       /** Measure the card's look for the rarity look model too (about 3.7 ms more a frame). */
       wantLook: boolean
+      /** False: don't cut a slab's label out this frame (about 10 ms); left out, it's cut. */
+      wantSlabLabel?: false
       /** A photo: every language's art, the whole holder search, and bands whatever wantBands says. */
       photo?: true
       /**
@@ -125,6 +129,8 @@ export interface RawSignals {
   cues: RarityCues | null
   version?: VersionCues | null
   slab?: boolean
+  /** As FrameSignals.slabBand. */
+  slabBand?: OcrBand
   /** As FrameSignals.artVia. */
   artVia?: 'holder'
   /** As FrameSignals.artBack. */
@@ -153,6 +159,8 @@ export interface ScanEngine {
       candidates: number[] | null
       wantText: boolean
       wantLook?: boolean
+      /** Cut a slab's label out (slabBand); true when left out. */
+      wantSlabLabel?: boolean
       photo?: boolean
       tilt?: number[]
       at?: number
@@ -449,6 +457,7 @@ export function createScanEngine(deps: {
         candidates,
         wantText,
         wantLook = false,
+        wantSlabLabel = true,
         photo = false,
         tilt,
         at,
@@ -473,6 +482,7 @@ export function createScanEngine(deps: {
               candidates,
               wantBands: wantText,
               wantLook,
+              ...(wantSlabLabel ? {} : { wantSlabLabel: false as const }),
               ...(photo ? { photo: true as const } : {}),
               ...(tilt ? { tilt, at: grabbed } : {}),
               ...(region ? { region } : {})
@@ -497,6 +507,7 @@ export function createScanEngine(deps: {
         ...(signals.artVia ? { artVia: signals.artVia } : {}),
         ...(signals.artBack !== undefined ? { artBack: signals.artBack } : {}),
         ...(signals.tiltKept ? { tiltKept: true } : {}),
+        ...(signals.slabBand ? { slabBand: signals.slabBand } : {}),
         ...(signals.ms ? { ms: signals.ms } : {})
       }
       if (!wantText || !found)

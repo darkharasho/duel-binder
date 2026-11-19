@@ -366,6 +366,20 @@ describe('useScanSession', () => {
     expect(result.current.rows).toEqual([])
   })
 
+  it('notes a slab row’s label read, and drops it when the row is marked as not a slab', () => {
+    const { result } = setup()
+    act(() => result.current.add(draft({ slab: true })))
+    act(() => result.current.add(draft({ cardId: 2, printingId: 201, imageId: 20 })))
+    const [raw, slab] = result.current.rows
+    const read = { company: 'PSA', grade: '10', cert: '12345678' }
+    act(() => result.current.setSlabRead(slab.key, read))
+    // A raw row has no label to note.
+    act(() => result.current.setSlabRead(raw.key, read))
+    expect(result.current.rows.map((r) => r.slabRead)).toEqual([undefined, read])
+    act(() => result.current.setSlab(slab.key, false))
+    expect(result.current.rows[1].slabRead).toBeUndefined()
+  })
+
   it('takeOne takes a copy added as a graded copy off its row', () => {
     const { result } = setup()
     act(() => result.current.add(draft({ slab: true })))

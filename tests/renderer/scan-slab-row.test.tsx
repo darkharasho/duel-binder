@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ScanRowItem, type ScanRowActions } from '@/features/scan/ScanRowItem'
-import { slabPrintings } from '@/features/scan/SlabRowActions'
+import { labelText, slabPrintings } from '@/features/scan/SlabRowActions'
 import type { ScanRow } from '@/features/scan/session'
 import { createMockApi, renderWithProviders } from './mockApi'
 import { printing } from './scanFakes'
@@ -70,6 +70,35 @@ describe('a scanned slab on the session list', () => {
       expect(save).toHaveBeenCalledWith(expect.objectContaining({ printingId: 502, grade: '10' }))
     )
     await waitFor(() => expect(a.takeOne).toHaveBeenCalledWith('k'))
+  })
+
+  it('shows what the label was read as, and starts the form from it', async () => {
+    const user = userEvent.setup()
+    const save = vi.fn(async () => 'uid-1')
+    const read = { company: 'CGC', grade: '9.5', cert: '6096255128' }
+    renderWithProviders(
+      <ScanRowItem row={row({ slabRead: read })} actions={actions()} language={null} scanned={1} />,
+      { api: createMockApi({ graded: { save } }) }
+    )
+    expect(screen.getByText('CGC 9.5 · #6096255128')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Add as slab' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByLabelText('Cert number')).toHaveValue('6096255128')
+    await user.click(within(dialog).getByRole('button', { name: 'Add graded copy' }))
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(
+        expect.objectContaining({ company: 'CGC', grade: '9.5', cert: '6096255128' })
+      )
+    )
+  })
+
+  it('words a label read', () => {
+    expect(labelText(undefined)).toBe('')
+    expect(labelText({})).toBe('')
+    expect(labelText({ cert: '123' })).toBe('#123')
+    expect(labelText({ company: 'BGS', grade: '10', label: 'Black Label' })).toBe(
+      'BGS 10 Black Label'
+    )
   })
 
   it('marks a wrongly spotted slab as not one', async () => {

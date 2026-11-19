@@ -151,7 +151,8 @@ async function handle(msg: WorkerRequest): Promise<void> {
           first,
           false,
           !!msg.tilt,
-          nudgePass && !(again && profile.holderSearch)
+          nudgePass && !(again && profile.holderSearch),
+          msg.wantSlabLabel !== false
         ),
       (img) => findCandidates(cv, img, profile),
       keep ? held : null

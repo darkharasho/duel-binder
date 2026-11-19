@@ -75,22 +75,23 @@ describe('graded prices', () => {
   })
 
   it('reads collector numbers out of set codes', () => {
-    expect(collectorNumber('FO 4/62')).toBe('4')
-    expect(collectorNumber('M5 065/81')).toBe('65')
+    expect(collectorNumber('FO 4/62')).toBe('4/62')
+    expect(collectorNumber('M5 065/81')).toBe('65/81')
     expect(collectorNumber('ONE 75')).toBe('75')
-    expect(collectorNumber('SWSH TG05/TG30')).toBe('TG05')
+    expect(collectorNumber('SWSH TG05/TG30')).toBe('TG05/TG30')
     expect(collectorNumber('BASEP')).toBe('')
   })
 
   it('searches Pokémon by name and number, with the edition the printing says', () => {
     const base = { game: 'pkm', pkey: 'k', company: 'PSA', grade: '10' }
-    const row = { set_code: 'FO 4/62', language: 'en', name: 'Dragonite' }
+    const row = { set_code: 'FO 4/62', set_name: 'Fossil', language: 'en', name: 'Dragonite' }
     expect(
       gradedQuery(base, { ...row, set_rarity: '1st Edition Holofoil', first_in_set: 1 })
     ).toMatchObject({
       code: '',
       name: 'Dragonite',
-      number: '4',
+      number: '4/62',
+      set: 'Fossil',
       edition: '1st'
     })
     expect(gradedQuery(base, { ...row, set_rarity: 'Holofoil', first_in_set: 1 })).toMatchObject({

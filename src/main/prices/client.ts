@@ -80,8 +80,10 @@ export interface GradedPriceQuery {
   /** A unique card code (Yu-Gi-Oh!, One Piece); '' to search by name and number. */
   code: string
   name: string
-  /** The collector number without the set's total ("4" for "FO 4/62"); '' when none. */
+  /** The collector number, with the set's total when it has one ("4/62" for "FO 4/62"); '' when none. */
   number: string
+  /** The printing's set name: a reprint line's listings count only for its own printing. */
+  set: string
   lang: Language
   company: string
   grade: string
@@ -107,6 +109,7 @@ export function createGradedPriceClient(opts: {
         code: q.code,
         name: q.name,
         number: q.number,
+        set: q.set,
         lang: q.lang,
         company: q.company,
         grade: q.grade

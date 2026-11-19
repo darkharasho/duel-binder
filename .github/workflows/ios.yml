@@ -25,10 +25,17 @@ permissions:
 
 jobs:
   ios:
-    runs-on: macos-26
+    # Xcode 27 (iOS 27 SDK) is only on GitHub's xcode-27 image so far, not on macos-26.
+    runs-on: xcode-27
     env:
       PROJECT: ios/App/App.xcodeproj
     steps:
+      # Pinned so a new runner default doesn't change the SDK under us.
+      - name: Use Xcode 27.2 (iOS 27.2 SDK)
+        run: |
+          sudo xcode-select -s /Applications/Xcode_27.2.app
+          xcodebuild -version
+          xcodebuild -showsdks | grep -i iphoneos
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0

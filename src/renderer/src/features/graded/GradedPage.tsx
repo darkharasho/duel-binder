@@ -176,6 +176,7 @@ export function GradedPage({ onNavigate }: { onNavigate?: NavigateFn } = {}): Re
               defaultPrintingId: open.printing.id
             }}
             onClose={() => setOpen(null)}
+            slab={open}
           />
         </CardSheet>
       )}

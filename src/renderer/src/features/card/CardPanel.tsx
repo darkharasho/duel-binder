@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { printingReverseLook } from '@shared/reverseHolo'
 import { useQuery } from '@tanstack/react-query'
 import type { Language } from '@shared/languages'
+import type { GradedCopy } from '@shared/graded'
 import type { CardSearchResult } from '@shared/types'
 import { CardDetails } from '@/components/CardDetails'
 import { CopyNameButton } from '@/components/CopyNameButton'
@@ -18,6 +19,7 @@ import { EntryEditor } from '@/features/collection/EntryEditor'
 import { FriendCopies } from '@/features/friends/FriendCopies'
 import { FriendWants } from '@/features/friends/FriendWants'
 import { GradedCopies } from '@/features/graded/GradedCopies'
+import { SlabArt } from '@/features/graded/SlabArt'
 import { api, queryKeys } from '@/lib/api'
 import { useGame } from '@/lib/game'
 import { isPhone } from '@/lib/platform'
@@ -54,6 +56,8 @@ interface CardPanelProps {
   /** Lists only preferSet's printings. */
   onlySet?: boolean
   nav?: PanelNav
+  /** A graded copy the panel was opened on: drawn in its case while its printing is shown. */
+  slab?: GradedCopy
 }
 
 const NONE_OWNED: ReadonlySet<number> = new Set()
@@ -82,7 +86,8 @@ export function CardPanel({
   caption,
   preferSet,
   onlySet,
-  nav
+  nav,
+  slab
 }: CardPanelProps): React.JSX.Element {
   const { def } = useGame()
   const detail = useQuery({
@@ -244,6 +249,11 @@ export function CardPanel({
         panelArt?.imageId !== undefined && (
           <PanelCardArt
             imageId={panelArt.imageId}
+            slab={
+              slab && (shown?.id ?? opened) === slab.printing.id ? (
+                <SlabArt slab={slab} size="full" />
+              ) : undefined
+            }
             printingId={panelArt.printingId}
             alt={name ?? ''}
             nav={nav}

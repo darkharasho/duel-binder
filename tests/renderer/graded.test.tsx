@@ -294,6 +294,21 @@ describe('GradedPage', () => {
     await waitFor(() => expect(screen.getAllByTestId('slab')).toHaveLength(1))
   })
 
+  it('opens a slab in its case on the card panel', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<GradedPage />, {
+      api: createMockApi({
+        graded: { list: async () => [slab('a', { company: 'CGC', grade: '9.5' })] }
+      })
+    })
+    await user.click(await screen.findByRole('button', { name: 'Blue-Eyes White Dragon, CGC 9.5' }))
+    // The page's tile, then the panel's slab (narrow and wide layouts).
+    await waitFor(() => expect(screen.getAllByTestId('slab').length).toBeGreaterThan(1))
+    const panel = screen.getAllByTestId('slab').slice(1)
+    expect(panel.map((el) => el.dataset.grader)).toEqual(panel.map(() => 'CGC'))
+    expect(screen.getAllByText('9.5').length).toBeGreaterThan(1)
+  })
+
   it('shows how to start with no slabs', async () => {
     renderWithProviders(<GradedPage />)
     expect(await screen.findByText('No graded cards yet')).toBeInTheDocument()

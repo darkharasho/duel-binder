@@ -19,7 +19,8 @@ import {
   type FrameSource,
   type Quad
 } from './detect'
-import { isSlab } from './holder'
+import { slabQuad } from './holder'
+import { slabLabelBand } from './slabLabel'
 import { pokemonVersionCues } from './pokemonVersion'
 import { rarityLook } from './rarityCues'
 
@@ -96,6 +97,8 @@ export function cutCodeBands(
  * is a live frame's short holder search (recognizeArt). wantUpright adds the upright card, for
  * keeping a frame for a rarity read; it is still a whole live frame, with the same rarity cues,
  * look, version cues and slab as without it. nudgePass is recognizeArt's (holderPass unless told).
+ * wantSlabLabel cuts a slab's label out (slabBand, about 10 ms): the live loop asks for it now and
+ * then, not on every frame.
  */
 export function analyze(
   cv: CV,
@@ -109,7 +112,8 @@ export function analyze(
   held: Quad | null = null,
   thorough = true,
   wantUpright = false,
-  nudgePass = holderPass
+  nudgePass = holderPass,
+  wantSlabLabel = true
 ): AnalyzedFrame {
   const frame = toMat(cv, img)
   return using([frame], () =>
@@ -125,7 +129,8 @@ export function analyze(
       held,
       thorough,
       wantUpright,
-      nudgePass
+      nudgePass,
+      wantSlabLabel
     )
   )
 }
@@ -142,7 +147,8 @@ function analyzeFrame(
   held: Quad | null,
   thorough: boolean,
   wantUpright: boolean,
-  nudgePass: boolean
+  nudgePass: boolean,
+  wantSlabLabel: boolean
 ): AnalyzedFrame {
   let quad: Quad
   let art: ArtMatch[] = []
@@ -200,7 +206,11 @@ function analyzeFrame(
   // Yu-Gi-Oh's signals carry no slab key.
   const pokemon = profile.game === 'pkm'
   const version = pokemon && upright ? pokemonVersionCues(upright, profile) : null
-  const slab = pokemon ? isSlab(cv, img, quad) : undefined
+  const slabUp = pokemon ? slabQuad(img, quad) : null
+  const slab = pokemon ? slabUp !== null : undefined
+  // A slab's label, cut out for reading its grade after the card is counted (useScanLoop).
+  const slabBand = slabUp && wantSlabLabel ? slabLabelBand(cv, img, slabUp) : null
+  const label = slabBand ? { slabBand } : {}
   const kept = wantUpright && upright ? { upright } : {}
   if (!wantBands)
     return {
@@ -213,6 +223,7 @@ function analyzeFrame(
       cues,
       version,
       ...(slab === undefined ? {} : { slab }),
+      ...label,
       ...via,
       look,
       ...kept
@@ -238,6 +249,7 @@ function analyzeFrame(
     cues,
     version,
     ...(slab === undefined ? {} : { slab }),
+    ...label,
     ...via,
     look,
     ...kept

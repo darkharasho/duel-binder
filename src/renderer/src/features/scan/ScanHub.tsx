@@ -20,6 +20,7 @@ import { api } from '@/lib/api'
 import { unpricedIntl, useRequestPrices } from '@/lib/priceRequests'
 import type { ScanDraft } from './resolve'
 import { useScanSession } from './session'
+import type { SlabRead } from '@shared/scan/slabLabel'
 import { sessionSummary } from './window/summary'
 import { rememberedCamera } from './useCamera'
 
@@ -62,6 +63,8 @@ export interface ScanHub {
   count(draft: ScanDraft): string
   /** Takes a background rarity read onto a row the user hasn't touched, and flashes it. */
   reread(key: string, next: ScanDraft): void
+  /** Notes what a counted slab's label was read as (useScanLoop's onSlabRead). */
+  slabRead(key: string, read: SlabRead): void
   /** Hears each row a commit saves (key, copies); returns the unsubscribe. */
   onSaved: ReturnType<typeof useScanSession>['onSaved']
   openWindow(): Promise<void>
@@ -223,7 +226,10 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
   const [seen] = useState(createSeen)
   // The row each draft became, in memory: after a reload a read has no row to find, and is dropped.
   const [rowKeys] = useState(() => new Map<string, string>())
-  const { add, applyRead, refreshPrices } = session
+  const { add, applyRead, refreshPrices, setSlabRead } = session
+  // The slab rows each scan-window draft became, for its label's read (kept apart from rowKeys,
+  // which a rarity read empties).
+  const [slabKeys] = useState(() => new Map<string, string>())
 
   // Unpriced non-English pulls on the list: ask for their prices, and fill them in as syncs bring them.
   useRequestPrices(
@@ -356,7 +362,11 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
         setState(null)
         sendSettings()
       } else if (m.kind === 'state') setState(m.state)
-      else if (m.kind === 'rarity') {
+      else if (m.kind === 'slab') {
+        const key = slabKeys.get(m.id)
+        if (key !== undefined) setSlabRead(key, m.read)
+        slabKeys.delete(m.id)
+      } else if (m.kind === 'rarity') {
         const key = rowKeys.get(m.id)
         if (key !== undefined) {
           reread(key, m.draft)
@@ -371,7 +381,9 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
         if ((m.draft.game ?? 'ygo') !== gameRef.current) return
         if (!seen.has(m.id)) {
           seen.add(m.id)
-          rowKeys.set(m.id, count(m.draft))
+          const key = count(m.draft)
+          rowKeys.set(m.id, key)
+          if (m.draft.slab) slabKeys.set(m.id, key)
         }
         // Acknowledged once it's on the list (saved there), and again for every resend.
         scanWindow.send({ kind: 'ack', id: m.id, scanned: copiesOf(m.draft) })
@@ -383,7 +395,7 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
       offMessage()
       clearTimeout(highlightTimer.current)
     }
-  }, [copiesOf, count, reread, rowKeys, sendSettings, setSettings, seen])
+  }, [copiesOf, count, reread, rowKeys, slabKeys, setSlabRead, sendSettings, setSettings, seen])
 
   const hub = useMemo<ScanHub>(
     () => ({
@@ -397,6 +409,7 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
       setSettings,
       count,
       reread,
+      slabRead: setSlabRead,
       onSaved: session.onSaved,
       openWindow: () => window.api.scanWindow.open(),
       retryCamera: () => window.api.scanWindow.send({ kind: 'retryCamera' }),
@@ -416,6 +429,7 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
       setSettings,
       count,
       reread,
+      setSlabRead,
       summaryOn
     ]
   )

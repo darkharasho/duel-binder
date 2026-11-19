@@ -63,7 +63,7 @@ export function useHubScan({
   /** Code mode's state; `aim` when it's off. */
   codeStatus: CodeStatus
 } {
-  const { settings, count, reread, session } = useScanHub()
+  const { settings, count, reread, slabRead, session } = useScanHub()
   const { copiesOf } = session
   const { game } = useGame()
   const { setKey, setPrintings, setUnreadable, setsSkipped } = useScanSets(settings.sets)
@@ -100,6 +100,7 @@ export function useHubScan({
     tiltModels,
     onDraft,
     onRarityRead: reread,
+    onSlabRead: slabRead,
     onStalled,
     wholeFrame,
     maxFrameWidth,

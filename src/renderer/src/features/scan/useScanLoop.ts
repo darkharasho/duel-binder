@@ -9,6 +9,7 @@ import type { Language } from '@shared/languages'
 import type { CardLanguage } from '@shared/scan/language'
 import { tellPokemonLanguage, type PokemonTextLanguage } from '@shared/scan/pokemonLanguage'
 import { SCAN_PROFILES } from '@shared/scan/profiles'
+import { parseSlabLabel, type SlabRead } from '@shared/scan/slabLabel'
 import { reverseRefStats } from '@shared/scan/reverseHolo'
 import {
   ABSENT_MS,
@@ -83,6 +84,10 @@ const ART_RECHECK_MS = 60_000
 const ART_UPDATE_CHECK_MS = 60 * 60_000
 const LOOKUP_TIMEOUT_MS = 30_000
 const LANGUAGE_TIMEOUT_MS = 20_000
+/** A live frame cuts a slab's label out at most this often: the cut costs about 10 ms. */
+const SLAB_LABEL_EVERY_MS = 600
+/** A label cut this long ago still goes with a slab counted now (the same slab, still held). */
+const SLAB_LABEL_KEPT_MS = 3000
 /**
  * A shown camera whose picture hasn't moved for this long is taken as frozen (a stream the
  * system muted in the background, or one that died without ending) and handed to onStalled.
@@ -149,6 +154,11 @@ export interface ScanLoopOptions {
    * flagged). Called at most once per row, never with the printing it counted on.
    */
   onRarityRead?: (rowId: string, draft: ScanDraft) => void
+  /**
+   * Row `rowId` was counted in a graded slab and its label read: what it says (grader, grade,
+   * cert), only when it said something. Called at most once per row, after the count.
+   */
+  onSlabRead?: (rowId: string, read: SlabRead) => void
   /** The camera's picture stopped moving; reopening the camera is the cure. */
   onStalled?: () => void
   /**
@@ -477,6 +487,10 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     autoPhotos: 0,
     photoFailedUntil: 0,
     lastFound: false,
+    // When a live frame last asked for a slab's label (SLAB_LABEL_EVERY_MS), and the latest label
+    // cut, for the slab counted next.
+    slabAskedAt: -Infinity,
+    slabBand: null as { band: OcrBand; at: number } | null,
     shown: null as number | null,
     absentSince: null as number | null,
     // When the video's picture last moved, to tell a frozen camera.
@@ -740,6 +754,34 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     }
 
     /**
+     * Whether a live frame grabbed at `at` cuts a slab's label: one every SLAB_LABEL_EVERY_MS at
+     * most (it costs about 10 ms a frame), and only for Pokémon, whose slabs are told.
+     */
+    const wantSlabLabel = (at: number): boolean => {
+      if (latest.current.game !== 'pkm' || at - l.slabAskedAt < SLAB_LABEL_EVERY_MS) return false
+      l.slabAskedAt = at
+      return true
+    }
+    /** The label cut lately, for a slab counted on a frame that didn't cut one. */
+    const recentSlabBand = (): OcrBand | undefined =>
+      l.slabBand && performance.now() - l.slabBand.at < SLAB_LABEL_KEPT_MS
+        ? l.slabBand.band
+        : undefined
+
+    /**
+     * Reads a counted slab's label in the background (it never holds up the count) and hands
+     * what it says to onSlabRead. A failed or empty read says nothing: the user fills in the form.
+     */
+    const readSlab = (rowId: string, band: OcrBand): void => {
+      void within(api.scan.readText([band], 'eng'), LANGUAGE_TIMEOUT_MS)
+        .then(([text = '']) => {
+          const read = parseSlabLabel(text)
+          if (live && Object.keys(read).length > 0) latest.current.onSlabRead?.(rowId, read)
+        })
+        .catch(() => undefined)
+    }
+
+    /**
      * Counts `draft`, the one way live frames and photos both count a card: any read in progress
      * ends, the card shows as counted and goes to onDraft, and when its rarity is one a tilt may
      * read, and onDraft gave its row's id, a read of it starts on the frames that follow; a
@@ -750,11 +792,17 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
       draft: ScanDraft,
       engine: ScanEngine,
       o: typeof latest.current,
-      quad: Quad | null
+      quad: Quad | null,
+      slabBand?: OcrBand
     ): void => {
       endRead()
       showCounted(draft)
       const rowId = latest.current.onDraft(draft)
+      if (typeof rowId === 'string' && draft.slab && slabBand) {
+        readSlab(rowId, slabBand)
+        // Read once: the next slab counted waits for a label of its own.
+        l.slabBand = null
+      }
       l.version =
         typeof rowId === 'string' && draft.game === 'pkm' && draft.flag === 'pick-printing'
           ? { rowId, key: showingKey(draft), printingId: null, frames: 0 }
@@ -979,6 +1027,8 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
       if (!profile) return
       setOutline(null)
       let best: ScanOutcome | null = null
+      // The label of the frame `best` came from, when it's a slab.
+      let bestBand: OcrBand | undefined
       for (let i = 0; i < PHOTO_FRAMES && !stale(); i++) {
         if (i) await new Promise((done) => setTimeout(done, PHOTO_GAP_MS))
         const grabbed = await grab(video).catch(() => null)
@@ -1025,14 +1075,18 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
         if (looked.kind !== 'recognized') continue
         if (!looked.item.guess) {
           best = looked
+          bestBand = raw.slabBand
           break
         }
-        best ??= looked
+        if (!best) {
+          best = looked
+          bestBand = raw.slabBand
+        }
       }
       if (stale() || (quiet && best === null)) return
       tracker.current.settle(performance.now(), best?.kind === 'recognized' ? best.item : null)
       if (best?.kind === 'recognized') {
-        counted(best.item, engine, o, null)
+        counted(best.item, engine, o, null, bestBand)
       } else {
         l.photoFailedUntil = performance.now() + PHOTO_FAILED_MS
         setStatus({ kind: 'photo-failed' })
@@ -1113,6 +1167,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
             candidates,
             wantText: l.lastFound,
             wantLook: !!o.lookModel && profile.rarityLook,
+            wantSlabLabel: wantSlabLabel(started),
             ...(read ? { tilt: read.imageIds, at: started } : {}),
             ...(region ? { region } : {}),
             onVision: (seen) => {
@@ -1132,6 +1187,9 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
           .then(
             (raw) => {
               analyzed = performance.now()
+              // A frame with a card and no slab: the label kept was another card's.
+              if (raw.slabBand) l.slabBand = { band: raw.slabBand, at: analyzed }
+              else if (raw.found && raw.slab === false) l.slabBand = null
               // The worker's whole frame comes back (timings and all), as the read and readout use.
               return raw as RawSignals & FrameSignals
             },
@@ -1317,7 +1375,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
           if (draft) {
             // A photo asked for on its own while this frame was read is no longer needed.
             if (l.photoQuiet) l.photoWanted = false
-            counted(draft, engine, o, raw.quad)
+            counted(draft, engine, o, raw.quad, raw.slabBand ?? recentSlabBand())
           } else {
             // A card counted lately, back in view: say why it wasn't counted again.
             const held = tracker.current.heldBack()

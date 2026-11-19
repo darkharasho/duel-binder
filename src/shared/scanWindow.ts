@@ -1,3 +1,4 @@
+import type { SlabRead } from './scan/slabLabel'
 import type { FinishLock } from './scan/finish'
 import type { Language } from './languages'
 import type { FingerprintStatus, ScanDraft } from './scan/types'
@@ -178,6 +179,11 @@ export type FromScanWindow =
    * that followed. Sent only once that draft is acknowledged; resent until `rarityAck`.
    */
   | { kind: 'rarity'; id: string; draft: ScanDraft }
+  /**
+   * What the label of the slab counted as the draft with this id says. Best effort: sent once
+   * that draft is acknowledged, never resent; a lost one leaves the form to the user.
+   */
+  | { kind: 'slab'; id: string; read: SlabRead }
 
 export type ScanWindowMessage = ToScanWindow | FromScanWindow
 
@@ -190,7 +196,7 @@ const TO: readonly string[] = [
   'rarityAck',
   'summary'
 ]
-const FROM: readonly string[] = ['ready', 'state', 'draft', 'rarity']
+const FROM: readonly string[] = ['ready', 'state', 'draft', 'rarity', 'slab']
 
 const kindOf = (v: unknown): unknown =>
   typeof v === 'object' && v !== null ? (v as { kind?: unknown }).kind : undefined

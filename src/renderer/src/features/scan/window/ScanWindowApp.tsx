@@ -1,3 +1,4 @@
+import type { SlabRead } from '@shared/scan/slabLabel'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { GameId } from '@shared/games/types'
@@ -38,6 +39,9 @@ type Rereads = Map<string, ScanDraft>
 
 const sendReread = (id: string, draft: ScanDraft): void =>
   window.api.scanWindow.send({ kind: 'rarity', id, draft })
+
+/** How long a slab's label read waits for its pull to be acknowledged before it's sent anyway. */
+const SLAB_READ_WAIT_MS = 1500
 
 /**
  * Sends every pull still waiting for its acknowledgement, and every rarity read whose pull the
@@ -121,6 +125,15 @@ function Scanner({
     },
     [outbox, rereads]
   )
+  // Best effort (see the 'slab' message): once its pull is acknowledged, or after a wait.
+  const onSlabRead = useCallback(
+    (id: string, read: SlabRead): void => {
+      const send = (): void => window.api.scanWindow.send({ kind: 'slab', id, read })
+      if (!outbox.pending().some((e) => e.id === id)) send()
+      else setTimeout(send, SLAB_READ_WAIT_MS)
+    },
+    [outbox]
+  )
   const [filter] = useLanguageFilter()
   const loop = useScanLoop({
     videoRef,
@@ -136,6 +149,7 @@ function Scanner({
     tiltModels,
     onDraft,
     onRarityRead,
+    onSlabRead,
     onStalled: camera.retry,
     wholeFrame: true
   })

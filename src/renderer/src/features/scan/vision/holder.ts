@@ -86,7 +86,16 @@ function labelAbove(frame: Mat, p: Quad): boolean {
  * only adds a Raw tag, but neither answer changes which card is named.
  */
 export function isSlab(_cv: CV, frame: Mat, quad: Quad): boolean {
-  if (labelAbove(frame, quad)) return true
+  return slabQuad(frame, quad) !== null
+}
+
+/**
+ * The card's corners turned so the slab's label is above its top edge (quad itself, or turned
+ * half a turn), or null when the card isn't in a slab.
+ */
+export function slabQuad(frame: Mat, quad: Quad): Quad | null {
+  if (labelAbove(frame, quad)) return quad
   // The same card turned half a turn: its bottom edge is the top.
-  return labelAbove(frame, [quad[2], quad[3], quad[0], quad[1]])
+  const turned: Quad = [quad[2], quad[3], quad[0], quad[1]]
+  return labelAbove(frame, turned) ? turned : null
 }

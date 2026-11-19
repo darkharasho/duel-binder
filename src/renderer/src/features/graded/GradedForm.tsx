@@ -11,6 +11,7 @@ import {
   type GradedDraft
 } from '@shared/graded'
 import type { Language } from '@shared/languages'
+import type { SlabRead } from '@shared/scan/slabLabel'
 import { printingChip, printingParts } from '@shared/printingLabel'
 import { LanguageTag } from '@/components/LanguageTag'
 import { PrintingLabel } from '@/components/PrintingLabel'
@@ -68,7 +69,8 @@ export function GradedForm({
   printings,
   printingId,
   slab,
-  onAdded
+  onAdded,
+  initial
 }: {
   open: boolean
   onClose: () => void
@@ -77,6 +79,8 @@ export function GradedForm({
   printingId: number | undefined
   slab?: GradedCopy
   onAdded?: () => void
+  /** A new slab's fields to start from: what a scanned label was read as. */
+  initial?: SlabRead
 }): React.JSX.Element {
   useBackHandler(open, onClose)
   return (
@@ -97,6 +101,7 @@ export function GradedForm({
             printingId={printingId}
             slab={slab}
             onAdded={onAdded}
+            initial={slab ? undefined : initial}
           />
         )}
       </DialogContent>
@@ -109,13 +114,15 @@ function Fields({
   printings,
   printingId,
   slab,
-  onAdded
+  onAdded,
+  initial
 }: {
   onClose: () => void
   printings: GradedPrinting[]
   printingId: number | undefined
   slab?: GradedCopy
   onAdded?: () => void
+  initial?: SlabRead
 }): React.JSX.Element {
   const qc = useQueryClient()
   // A slab's own printing is listed even when the card's list leaves it out (contributed).
@@ -126,12 +133,14 @@ function Fields({
   const [printing, setPrinting] = useState(
     String(slab?.printing.id ?? printingId ?? choosable[0]?.id ?? '')
   )
-  const startCompany = slab?.company ?? 'PSA'
+  const startCompany = slab?.company ?? initial?.company ?? 'PSA'
   const [company, setCompany] = useState(isListed(startCompany) ? startCompany : OTHER)
   const [otherCompany, setOtherCompany] = useState(isListed(startCompany) ? '' : startCompany)
-  const [grade, setGrade] = useState(slab?.grade ?? '10')
-  const [label, setLabel] = useState(slab?.label ?? '')
-  const [cert, setCert] = useState(slab?.cert ?? '')
+  const [grade, setGrade] = useState(
+    slab?.grade ?? (initial?.grade && GRADES.includes(initial.grade) ? initial.grade : '10')
+  )
+  const [label, setLabel] = useState(slab?.label ?? initial?.label ?? '')
+  const [cert, setCert] = useState(slab?.cert ?? initial?.cert ?? '')
   const [value, setValue] = useState(moneyText(slab?.value ?? null))
   const [paid, setPaid] = useState(moneyText(slab?.paid ?? null))
   const [notes, setNotes] = useState(slab?.notes ?? '')

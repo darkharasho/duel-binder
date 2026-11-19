@@ -95,7 +95,7 @@ export function cutCodeBands(
  * an earlier frame's outline, tried before the frame is searched (recognizeArt). thorough false
  * is a live frame's short holder search (recognizeArt). wantUpright adds the upright card, for
  * keeping a frame for a rarity read; it is still a whole live frame, with the same rarity cues,
- * look, version cues and slab as without it.
+ * look, version cues and slab as without it. nudgePass is recognizeArt's (holderPass unless told).
  */
 export function analyze(
   cv: CV,
@@ -108,7 +108,8 @@ export function analyze(
   holderPass = true,
   held: Quad | null = null,
   thorough = true,
-  wantUpright = false
+  wantUpright = false,
+  nudgePass = holderPass
 ): AnalyzedFrame {
   const frame = toMat(cv, img)
   return using([frame], () =>
@@ -123,7 +124,8 @@ export function analyze(
       holderPass,
       held,
       thorough,
-      wantUpright
+      wantUpright,
+      nudgePass
     )
   )
 }
@@ -139,7 +141,8 @@ function analyzeFrame(
   holderPass: boolean,
   held: Quad | null,
   thorough: boolean,
-  wantUpright: boolean
+  wantUpright: boolean,
+  nudgePass: boolean
 ): AnalyzedFrame {
   let quad: Quad
   let art: ArtMatch[] = []
@@ -162,7 +165,8 @@ function analyzeFrame(
       profile,
       holderPass,
       held,
-      thorough
+      thorough,
+      nudgePass
     )
     if (!found) return NOTHING
     quad = found.quad

@@ -70,7 +70,7 @@ describe('readFramed', () => {
     const outlines = vi.fn(() => [])
     const img = frame()
     expect(readFramed(img, null, read, outlines).tag).toBe('whole')
-    expect(read).toHaveBeenCalledWith(img, null)
+    expect(read).toHaveBeenCalledWith(img, null, false)
     expect(outlines).not.toHaveBeenCalled()
   })
 
@@ -89,7 +89,7 @@ describe('readFramed', () => {
 
   it('reads round a card the crop cuts off when the crop matched nothing, and keeps it when closer', () => {
     const card = quad(1000, 200, 1600, 1000)
-    const read = vi.fn((img: RgbaImage, first: Quad | null) =>
+    const read = vi.fn((img: RgbaImage, first: Quad | null, _again: boolean) =>
       img.width === CROP.width ? matched('crop', 95) : { ...matched('cut', 70), first }
     )
     const out = readFramed(frame(), CROP, read, () => [card])
@@ -97,6 +97,8 @@ describe('readFramed', () => {
     // The cut-off outline is tried first, in the region's pixels.
     expect((out as Signals & { first: Quad }).first).toEqual(shiftQuad(card, -964, -152))
     expect(out.quad).toEqual(shiftQuad(quad(10, 10, 110, 160), 964, 152))
+    // Only the second read is told it is one, so it can skip the slow searches.
+    expect(read.mock.calls.map((c) => c[2])).toEqual([false, true])
   })
 
   it('keeps the crop when the cut-off read came no closer', () => {
@@ -115,9 +117,9 @@ describe('readFramed', () => {
   it('tries the held outline first, in the crop’s pixels, and not when it lies outside', () => {
     const read = vi.fn(() => matched('crop', 30))
     readFramed(frame(), CROP, read, () => [], quad(600, 100, 1200, 900))
-    expect(read).toHaveBeenLastCalledWith(expect.anything(), quad(45, 100, 645, 900))
+    expect(read).toHaveBeenLastCalledWith(expect.anything(), quad(45, 100, 645, 900), false)
     readFramed(frame(), CROP, read, () => [], quad(100, 100, 500, 900))
-    expect(read).toHaveBeenLastCalledWith(expect.anything(), null)
+    expect(read).toHaveBeenLastCalledWith(expect.anything(), null, false)
   })
 })
 

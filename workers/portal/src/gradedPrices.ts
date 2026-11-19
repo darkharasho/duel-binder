@@ -49,16 +49,21 @@ interface Candidate {
 
 interface PrintingRow {
   set_code: string
+  set_name: string
   set_rarity: string
   language: string
   name: string
   first_in_set: number
 }
 
-/** "FO 4/62" → "4", "M5 065/81" → "65", "ONE 75" → "75"; '' when the code holds no number. */
+/**
+ * The collector number in a set code, with the set's total when it prints one: "FO 4/62" →
+ * "4/62", "M5 065/81" → "65/81", "ONE 75" → "75"; '' when the code holds none.
+ */
 export function collectorNumber(setCode: string): string {
-  const m = /^\S+\s+0*(\d+[A-Za-z]?|[A-Za-z]+\d+)(?:\/|$)/.exec(setCode.trim())
-  return m ? m[1] : ''
+  const m = /^\S+\s+0*(\d+[A-Za-z]?|[A-Za-z]+\d+)(?:\/0*([A-Za-z]*\d+))?$/.exec(setCode.trim())
+  if (!m) return ''
+  return m[2] ? `${m[1]}/${m[2]}` : m[1]
 }
 
 /**
@@ -73,12 +78,12 @@ export function gradedQuery(c: Candidate, p: PrintingRow): GradedPriceQuery | nu
   if (c.game === 'ygo' || c.game === 'op') {
     // Yu-Gi-Oh! and One Piece codes name one card: LOB-EN001, OP02-105. A DON!! has none.
     if (!/^[A-Z0-9]+-[A-Z]*\d+[A-Z]?$/i.test(p.set_code)) return null
-    return { ...base, code: p.set_code, name: p.name, number: '', edition: '' }
+    return { ...base, code: p.set_code, name: p.name, number: '', set: p.set_name, edition: '' }
   }
   const number = collectorNumber(p.set_code)
   if (!number) return null
   const edition = /\b1st Edition\b/i.test(p.set_rarity) ? '1st' : p.first_in_set ? 'unlimited' : ''
-  return { ...base, code: '', name: p.name, number, edition }
+  return { ...base, code: '', name: p.name, number, set: p.set_name, edition }
 }
 
 function readCalls(db: SqlDb, today: string): number {
@@ -123,7 +128,7 @@ export async function runGradedPrices(
       )
       .all(stale, limit) as Candidate[]
   const printing = db.prepare(
-    `SELECT p.set_code, p.set_rarity, p.language, c.name,
+    `SELECT p.set_code, p.set_name, p.set_rarity, p.language, c.name,
        EXISTS (SELECT 1 FROM card_printings o WHERE o.card_id = p.card_id AND o.set_code = p.set_code
          AND o.language = p.language AND o.set_rarity LIKE '%1st Edition%') AS first_in_set
      FROM card_printings p JOIN cards c ON c.id = p.card_id WHERE p.pkey = ?`

@@ -232,6 +232,10 @@ export const isGrader = (company) => Object.hasOwn(GRADER_NAMES, company)
 /** A grade the app knows: 1 to 10 in half steps, or Authentic. */
 export const isGrade = (grade) => /^(10|[1-9](\.5)?|Authentic)$/.test(String(grade))
 
+// Reprint lines that copy an older card's name and number (Celebrations' Classic Collection
+// prints Base Set's Charizard as 4/102 again).
+const REPRINT_LINES = [/\bcelebrations?\b/, /\bclassic collection\b/]
+
 // Lots, several copies and fakes: a graded listing of one card says none of these.
 const NOT_ONE_SLAB =
   /\b(lot|bundle|proxy|orica|custom|set of \d+|\d+ copies|choose|pick|you pick|u pick)\b|\b[2-9]\s?x\b|\bx\s?[2-9]\b/i
@@ -256,25 +260,34 @@ const escape = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
  * GEM MINT 10", never "PSA 1" for a 10 or "PSA 9" for a 9.5); and it isn't a lot. An English
  * card's listing that says Japanese (or the other way) is another printing.
  */
-export function gradedTitleMatches(title, { code, name, number, lang, company, grade, edition }) {
+export function gradedTitleMatches(
+  title,
+  { code, name, number, set, lang, company, grade, edition }
+) {
   const t = String(title).toLowerCase()
   // A Pokémon 1st Edition printing sells for many times its Unlimited one, and the other way.
   const first = /\b1st\b|first edition/.test(t)
   if (edition === '1st' && !first) return false
-  if (edition === 'unlimited' && first) return false
+  // Shadowless is Base Set's early print, priced well above its Unlimited one.
+  if (edition === 'unlimited' && (first || /\bshadowless\b/.test(t))) return false
   if (code) {
     if (!t.includes(code.toLowerCase())) return false
   } else {
     if (!name || !t.includes(name.toLowerCase())) return false
     if (number) {
-      // "5/20", "#5", "005" or " 5 ": the number without leading zeros, standing alone.
-      const n = escape(
-        String(number)
-          .replace(/^0+(?=\d)/, '')
-          .toLowerCase()
-      )
-      if (!new RegExp(`(?<![\\w.])(?:#\\s*)?0*${n}(?![\\w.]|\\.\\d)`).test(t)) return false
+      // "4/102" asks for its set's total too ("4/102", "#004/102"): Base Set 2's Charizard is a
+      // 4 as well. A number alone ("5", "TG05") is "#5", "005" or " 5 ", standing alone.
+      const [n, total] = String(number)
+        .toLowerCase()
+        .split('/')
+        .map((x) => escape(x.trim().replace(/^0+(?=\d)/, '')))
+      const tail = total ? `\\s*\\/\\s*0*${total}` : ''
+      const re = new RegExp(`(?<![\\w.])(?:#\\s*)?0*${n}${tail}(?![\\w.]|\\.\\d)`)
+      if (!re.test(t)) return false
     }
+    // Reprints that print the same name and number: only when they're the printing asked for.
+    const asked = String(set ?? '').toLowerCase()
+    for (const reprint of REPRINT_LINES) if (reprint.test(t) && !reprint.test(asked)) return false
   }
   const who = GRADER_NAMES[company]
   if (!who) return false

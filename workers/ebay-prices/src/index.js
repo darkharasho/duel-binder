@@ -304,11 +304,12 @@ async function lookupQuota(env) {
 
 async function gradedCacheKey(p) {
   const fields = [
-    'g1',
+    'g2',
     p.game,
     p.code,
     p.name.toLowerCase(),
     p.number,
+    p.set,
     p.lang,
     p.company,
     p.grade,
@@ -316,7 +317,7 @@ async function gradedCacheKey(p) {
   ]
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(fields.join('|')))
   const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
-  return `g1:${hex}`
+  return `g2:${hex}`
 }
 
 // One printing's asking price in one grader's slab at one grade: one Browse call over listings in
@@ -325,7 +326,8 @@ async function lookupGraded(env, params) {
   const items = await search(env, buildGradedQuery(params), {
     limit: 200,
     category: GRADED_CATEGORIES[params.game],
-    filter: `conditionIds:{${GRADED_CONDITION}}`
+    // Fixed price only: an auction's price is its current bid, often a fraction of what it sells for.
+    filter: `conditionIds:{${GRADED_CONDITION}},buyingOptions:{FIXED_PRICE}`
   })
   const prices = items
     .filter((i) => gradedTitleMatches(i.title, params) && i.price?.currency === 'USD')
@@ -341,6 +343,8 @@ async function gradedPrice(env, ctx, q) {
     code: (q.get('code') ?? '').trim().toUpperCase(),
     name: (q.get('name') ?? '').trim(),
     number: (q.get('number') ?? '').trim(),
+    // The printing's set name: a reprint line's listings count only for that line's printing.
+    set: (q.get('set') ?? '').trim(),
     lang: q.get('lang') ?? '',
     company: (q.get('company') ?? '').trim().toUpperCase(),
     grade: (q.get('grade') ?? '').trim(),
@@ -354,7 +358,7 @@ async function gradedPrice(env, ctx, q) {
     !isGrader(params.company) ||
     !isGrade(params.grade) ||
     !(params.code || params.name) ||
-    [params.code, params.name, params.number].some((v) => v.length > MAX_FIELD)
+    [params.code, params.name, params.number, params.set].some((v) => v.length > MAX_FIELD)
   )
     return respond({ error: 'bad request' }, 400)
   const key = await gradedCacheKey(params)

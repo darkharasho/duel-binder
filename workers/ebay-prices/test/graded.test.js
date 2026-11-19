@@ -64,6 +64,34 @@ describe('gradedTitleMatches', () => {
   })
 })
 
+describe('set totals and reprints', () => {
+  it('needs the set total when the number has one, and keeps reprint lines apart', () => {
+    const base = { ...pkm, name: 'Charizard', number: '4/102', set: 'Base Set', grade: '9' }
+    expect(gradedTitleMatches('Charizard 4/102 Base Set Holo PSA 9', base)).toBe(true)
+    expect(gradedTitleMatches('Charizard #004/102 Holo PSA 9', base)).toBe(true)
+    // Base Set 2's Charizard is a 4 too, of 130.
+    expect(gradedTitleMatches('Charizard 4/130 Base Set 2 PSA 9', base)).toBe(false)
+    expect(gradedTitleMatches('Charizard #4 Holo PSA 9', base)).toBe(false)
+    // Celebrations' Classic Collection prints it as 4/102 again.
+    expect(gradedTitleMatches('Charizard 4/102 Celebrations Classic Collection PSA 9', base)).toBe(
+      false
+    )
+    const cc = { ...base, set: 'Celebrations: Classic Collection' }
+    expect(gradedTitleMatches('Charizard 4/102 Celebrations Classic Collection PSA 9', cc)).toBe(
+      true
+    )
+    // A Japanese number's zeros.
+    expect(
+      gradedTitleMatches('Palafin 021/081 Japanese PSA 9', {
+        ...base,
+        name: 'Palafin',
+        number: '21/81',
+        lang: 'ja'
+      })
+    ).toBe(true)
+  })
+})
+
 describe('editions', () => {
   it('keeps a 1st Edition slab apart from an Unlimited one', () => {
     const t1 = 'Dragonite 4/62 Fossil 1st Edition Holo PSA 7'
@@ -72,6 +100,10 @@ describe('editions', () => {
     expect(gradedTitleMatches(tu, { ...pkm, number: '4', edition: '1st' })).toBe(false)
     expect(gradedTitleMatches(t1, { ...pkm, number: '4', edition: 'unlimited' })).toBe(false)
     expect(gradedTitleMatches(tu, { ...pkm, number: '4', edition: 'unlimited' })).toBe(true)
+    const shadowless = 'Dragonite 4/62 Shadowless Holo PSA 7'
+    expect(gradedTitleMatches(shadowless, { ...pkm, number: '4', edition: 'unlimited' })).toBe(
+      false
+    )
     expect(buildGradedQuery({ ...pkm, number: '4', edition: '1st' })).toBe(
       '"Dragonite" 4 1st PSA 7'
     )
@@ -126,7 +158,9 @@ describe('GET /v1/graded-price', () => {
     // 1000 is over three times the median, so it's dropped; the PSA 8 isn't this grade.
     const search = f.calls[1]
     expect(search).toContain('category_ids=183454')
-    expect(decodeURIComponent(search)).toContain('filter=conditionIds:{2750}')
+    expect(decodeURIComponent(search)).toContain(
+      'filter=conditionIds:{2750},buyingOptions:{FIXED_PRICE}'
+    )
     expect(decodeURIComponent(search).replace(/\+/g, ' ')).toContain('q="Dragonite" 5 PSA 7')
     expect(env.PRICES.store.size).toBe(1)
     // The second ask is answered from KV.

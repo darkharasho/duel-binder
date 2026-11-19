@@ -71,7 +71,7 @@ describe('GradedCopies (card panel)', () => {
     await user.click(screen.getByRole('button', { name: 'Add graded copy' }))
     const dialog = await screen.findByRole('dialog')
     expect(
-      within(dialog).getByText(/don't count toward set or binder progress/)
+      within(dialog).getByText(/Doesn't count toward set or binder progress/)
     ).toBeInTheDocument()
     await user.type(within(dialog).getByLabelText('Cert number'), ' 123 ')
     await user.type(within(dialog).getByLabelText('Value (USD)'), '$1,250.50')

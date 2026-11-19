@@ -1,5 +1,10 @@
 import type { SqlDb } from '../../../src/main/db/sql'
-import { projectMonthly, type AdminCosts, type CostTotals } from '../../../src/shared/costs'
+import {
+  projectMonthly,
+  type AdminCosts,
+  type CostTotals,
+  type UserArea
+} from '../../../src/shared/costs'
 import type { AppDeps } from './app'
 import type { CostRow } from './meter'
 
@@ -10,6 +15,8 @@ const DAY_MS = 24 * 60 * 60 * 1000
 const SCENARIOS = [100, 500, 5000]
 const TOP_USERS = 20
 const TOP_AREAS = 30
+/** Areas listed under each top user. */
+const USER_AREAS = 3
 
 const utcDay = (t: number): string => new Date(t).toISOString().slice(0, 10)
 
@@ -93,12 +100,16 @@ export function collectCosts(deps: AppDeps, days: number): AdminCosts {
   let people = NONE
   let system = NONE
   const users = new Map<number, CostTotals>()
+  const userAreas = new Map<number, UserArea[]>()
   const areas = new Map<string, CostTotals>()
   for (const g of groups) {
     const t = totals(g)
     if (g.user_id > 0) {
       people = plus(people, t)
       users.set(g.user_id, plus(users.get(g.user_id) ?? NONE, t))
+      const mine = userAreas.get(g.user_id) ?? []
+      mine.push({ area: g.area, requests: t.requests, rowsRead: t.rowsRead })
+      userAreas.set(g.user_id, mine)
     } else system = plus(system, t)
     areas.set(g.area, plus(areas.get(g.area) ?? NONE, t))
   }
@@ -132,7 +143,10 @@ export function collectCosts(deps: AppDeps, days: number): AdminCosts {
     byUser: top.map(([userId, t]) => ({
       userId,
       username: names.get(userId) ?? `#${userId}`,
-      ...t
+      ...t,
+      areas: (userAreas.get(userId) ?? [])
+        .sort((a, b) => b.rowsRead - a.rowsRead)
+        .slice(0, USER_AREAS)
     })),
     byArea: [...areas]
       .map(([area, t]) => ({ area, ...t }))

@@ -1,4 +1,4 @@
-import type { AdminCosts } from '@shared/costs'
+import type { AdminCosts, UserArea } from '@shared/costs'
 import { Button } from '@/components/ui/button'
 import { bytes, n } from './adminTabs'
 import { Grid, Note, Panel, Tile } from './parts'
@@ -11,6 +11,10 @@ function big(v: number): string {
   if (a >= 1e4) return `${(v / 1e3).toFixed(1)}K`
   return Math.round(v).toLocaleString()
 }
+
+/** A user's dearest areas by rows read, e.g. "api/catalog 27.9M · img 210.0K". */
+const userAreas = (areas: UserArea[] | undefined): string =>
+  (areas ?? []).map((a) => `${a.area} ${big(a.rowsRead)}`).join(' · ')
 
 const dollars = (v: number): string => `$${v < 10 ? v.toFixed(2) : Math.round(v).toLocaleString()}`
 
@@ -102,11 +106,17 @@ export function CostsTab({
         </Panel>
         <Panel title="By user">
           <Grid
-            heads={['User', 'Requests', 'Rows read', 'Rows written']}
+            heads={['User', 'Requests', 'Rows read', 'Rows written', 'Mostly']}
             rows={[
               ...c.byUser.map((x) => ({
                 key: x.userId,
-                cells: [`@${x.username}`, big(x.requests), big(x.rowsRead), big(x.rowsWritten)]
+                cells: [
+                  `@${x.username}`,
+                  big(x.requests),
+                  big(x.rowsRead),
+                  big(x.rowsWritten),
+                  userAreas(x.areas)
+                ]
               })),
               {
                 key: 'system',
@@ -114,7 +124,8 @@ export function CostsTab({
                   '(no user: system)',
                   big(c.system.requests),
                   big(c.system.rowsRead),
-                  big(c.system.rowsWritten)
+                  big(c.system.rowsWritten),
+                  ''
                 ]
               }
             ]}

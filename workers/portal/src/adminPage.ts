@@ -945,9 +945,10 @@ function renderCosts(c) {
   const people = el('section', null, 'panel')
   people.append(el('h2', 'By user'))
   const sys = c.system
-  people.append(costTable(['User', 'Requests', 'Rows read', 'Rows written'], [
-    ...c.byUser.map((x) => [x.username, big(x.requests), big(x.rowsRead), big(x.rowsWritten)]),
-    ['(no user: system)', big(sys.requests), big(sys.rowsRead), big(sys.rowsWritten)]
+  const mostly = (areas) => (areas || []).map((a) => a.area + ' ' + big(a.rowsRead)).join(' · ')
+  people.append(costTable(['User', 'Requests', 'Rows read', 'Rows written', 'Mostly'], [
+    ...c.byUser.map((x) => [x.username, big(x.requests), big(x.rowsRead), big(x.rowsWritten), mostly(x.areas)]),
+    ['(no user: system)', big(sys.requests), big(sys.rowsRead), big(sys.rowsWritten), '']
   ]))
 
   const daily = el('section', null, 'panel')

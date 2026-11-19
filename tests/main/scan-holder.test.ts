@@ -116,13 +116,12 @@ describe('isSlab', () => {
 })
 
 describe('analyze', () => {
-  it('checks for a slab for Pokémon only', () => {
+  it('checks for a slab for every game', () => {
     const img = load(shots[0].file)
-    const pkm = analyze(cv, img, null, null, false, false, scanProfile('pkm'))
-    expect(pkm.found).toBe(true)
-    expect(pkm.slab).toBe(false)
-    const ygo = analyze(cv, img, null, null, false, false, scanProfile('ygo'))
-    expect(ygo.found).toBe(true)
-    expect('slab' in ygo).toBe(false)
+    for (const game of ['pkm', 'ygo'] as const) {
+      const r = analyze(cv, img, null, null, false, false, scanProfile(game))
+      expect(r.found).toBe(true)
+      expect(r.slab).toBe(false)
+    }
   })
 })

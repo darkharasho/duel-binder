@@ -301,12 +301,18 @@ export const VERSION_OTHER_RATIO = 2
 /** ...and this many times as textured as the card's text box, which noise and detail hit too. */
 export const VERSION_REFERENCE_RATIO = 1.5
 
-// A graded slab's label block, untuned until real photos (Task 13). Boxes are in card widths and
+// A graded slab's label block, tuned on 144 eBay and owner slab photos, 78 live Yu-Gi-Oh! slab frames
+// on a light wooden desk, and ~3,000 bare, sleeved and toploader photos and frames (3 taken as slabs). Boxes are in card widths and
 // heights from the card's top-left corner (u across, v down), so they hold at any distance.
 /** The label block sits above the card: v from here... */
 export const SLAB_LABEL_V = [-0.26, -0.06] as const
 /** ...and u from here (a label is about as wide as the card). */
 export const SLAB_LABEL_U = [0.08, 0.92] as const
+/**
+ * How far up the label window is also tried, in the card's heights: a Pokémon card fills its
+ * case's well, a smaller Yu-Gi-Oh! card sits lower in the same case, its label further above it.
+ */
+export const SLAB_LABEL_LIFTS = [0, 0.03, 0.06, 0.09, 0.12, 0.15, 0.18, 0.21, 0.24] as const
 /** A label sample at least this bright (luma 0-255) counts as the label's paper... */
 export const SLAB_LABEL_MIN_BRIGHT = 170
 /** ...and this share of the label box must be paper. */
@@ -316,12 +322,16 @@ export const SLAB_LABEL_MIN_PAPER_SHARE = 0.6
  * least this many times over the whole box (a plain strip, or a margin, flips none).
  */
 export const SLAB_INK_DARKER_BY = 80
-export const SLAB_TEXT_MIN_FLIPS = 12
+export const SLAB_TEXT_MIN_FLIPS = 36
 /**
  * The label's paper must be this much brighter (luma) than the holder beside it and the strip
  * above it, which is plastic over the desk: a bright desk or a card sleeve's glare isn't a label.
  */
-export const SLAB_MIN_CONTRAST = 40
+export const SLAB_MIN_CONTRAST = 30
+/** ...on at least this many of its three sides (left, right, above)... */
+export const SLAB_MIN_CONTRAST_SIDES = 2
+/** ...and at least this much brighter on every side: a card's own white border is barely so. */
+export const SLAB_MIN_CONTRAST_ALL = 20
 
 /** Frames a photo looks at, this far apart, stopping at the first that names a card for certain. */
 export const PHOTO_FRAMES = 3

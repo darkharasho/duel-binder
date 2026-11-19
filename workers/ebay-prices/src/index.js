@@ -9,7 +9,11 @@ import {
   isOverframe,
   namesOverframe,
   namesBareRarity,
-  askingPrice
+  askingPrice,
+  buildGradedQuery,
+  gradedTitleMatches,
+  isGrade,
+  isGrader
 } from './price.js'
 import { setPrices, parseListing, sweepKey } from './set.js'
 
@@ -33,6 +37,13 @@ const POKEMON_MAX_PAGES = 3
 const POKEMON_LANGS = new Set(['zh-hans', 'zh-hant'])
 const POKEMON_CODE = /^[A-Za-z0-9.]{3,12}$/
 const POKEMON_MAX_CODES = 2
+// Each game's individual-cards category, for graded lookups (a slab is listed with the singles).
+const GRADED_CATEGORIES = Object.freeze({
+  ygo: '31395',
+  pkm: POKEMON_CATEGORY,
+  op: '183454',
+  mtg: '38292'
+})
 // One Piece sweep: one card-number prefix (OP05, ST01, EB04, PRB02) in Japanese, at most 3 calls, in
 // eBay's CCG Individual Cards category; the portal picks the listings (onePieceSweep.ts).
 const CCG_SINGLES_CATEGORY = '183454'
@@ -291,6 +302,88 @@ async function lookupQuota(env) {
   }
 }
 
+async function gradedCacheKey(p) {
+  const fields = [
+    'g1',
+    p.game,
+    p.code,
+    p.name.toLowerCase(),
+    p.number,
+    p.lang,
+    p.company,
+    p.grade,
+    p.edition
+  ]
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(fields.join('|')))
+  const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
+  return `g1:${hex}`
+}
+
+// One printing's asking price in one grader's slab at one grade: one Browse call over listings in
+// eBay's Graded condition, the titles that name exactly this grade.
+async function lookupGraded(env, params) {
+  const items = await search(env, buildGradedQuery(params), {
+    limit: 200,
+    category: GRADED_CATEGORIES[params.game],
+    filter: `conditionIds:{${GRADED_CONDITION}}`
+  })
+  const prices = items
+    .filter((i) => gradedTitleMatches(i.title, params) && i.price?.currency === 'USD')
+    .map((i) => Number.parseFloat(i.price.value))
+    .filter(Number.isFinite)
+  return { ...askingPrice(prices), currency: 'USD', checkedAt: new Date().toISOString() }
+}
+
+/** Answers /v1/graded-price from KV, or looks it up and caches it for CACHE_TTL. */
+async function gradedPrice(env, ctx, q) {
+  const params = {
+    game: q.get('game') ?? '',
+    code: (q.get('code') ?? '').trim().toUpperCase(),
+    name: (q.get('name') ?? '').trim(),
+    number: (q.get('number') ?? '').trim(),
+    lang: q.get('lang') ?? '',
+    company: (q.get('company') ?? '').trim().toUpperCase(),
+    grade: (q.get('grade') ?? '').trim(),
+    // '1st' or 'unlimited' when the printing says which; '' when it doesn't.
+    edition: ['1st', 'unlimited'].includes(q.get('edition')) ? q.get('edition') : ''
+  }
+  if (params.grade.toLowerCase() === 'authentic') params.grade = 'Authentic'
+  if (
+    !Object.hasOwn(GRADED_CATEGORIES, params.game) ||
+    !Object.hasOwn(EBAY_WORDS, params.lang) ||
+    !isGrader(params.company) ||
+    !isGrade(params.grade) ||
+    !(params.code || params.name) ||
+    [params.code, params.name, params.number].some((v) => v.length > MAX_FIELD)
+  )
+    return respond({ error: 'bad request' }, 400)
+  const key = await gradedCacheKey(params)
+  try {
+    const hit = await env.PRICES.get(key)
+    if (hit) return new Response(hit, { headers: { 'content-type': 'application/json' } })
+  } catch {
+    // KV read failure is a cache miss.
+  }
+  try {
+    const body = JSON.stringify(await lookupGraded(env, params))
+    const write = Promise.resolve()
+      .then(() => env.PRICES.put(key, body, { expirationTtl: CACHE_TTL }))
+      .catch(() => {})
+    if (ctx?.waitUntil) ctx.waitUntil(write)
+    else await write
+    return new Response(body, { headers: { 'content-type': 'application/json' } })
+  } catch (e) {
+    console.error(
+      'ebay graded lookup failed',
+      String(e?.message ?? '')
+        .split(' ')
+        .slice(0, 2)
+        .join(' ')
+    )
+    return respond({ error: 'upstream' }, 502)
+  }
+}
+
 export default {
   async fetch(request, env, ctx) {
     if (request.method !== 'GET') return respond({ error: 'method not allowed' }, 405)
@@ -365,6 +458,10 @@ export default {
         )
         return respond({ error: 'upstream' }, 502)
       }
+    }
+    if (url.pathname === '/v1/graded-price') {
+      if (!clientOk) return respond({ error: 'bad request' }, 400)
+      return gradedPrice(env, ctx, url.searchParams)
     }
     if (url.pathname !== '/v1/price') return respond({ error: 'not found' }, 404)
 

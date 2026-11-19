@@ -68,6 +68,8 @@ export type MetaKey =
   | 'sweep_onepiece_day'
   /** The portal's eBay sweep calls for one UTC day, as `YYYY-MM-DD:N`. */
   | 'sweep_calls_day'
+  /** Graded-price eBay calls for one UTC day, as `YYYY-MM-DD:N` (workers/portal/src/gradedPrices.ts). */
+  | 'graded_calls_day'
   /** When the token cards were last read from Yugipedia (ISO). */
   | 'token_cards_synced_at'
   /** Seq of the last server price change applied from the price change feed. */

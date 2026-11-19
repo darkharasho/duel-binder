@@ -211,3 +211,82 @@ export function askingPrice(prices) {
   if (kept.length < 2) return { price: null, listingCount: kept.length }
   return { price: Math.round(median(kept) * 100) / 100, listingCount: kept.length }
 }
+
+// Graded copies (slabs): one printing at one grader's grade.
+
+/** How sellers write each grader's name in a title. */
+const GRADER_NAMES = Object.freeze({
+  PSA: 'psa',
+  BGS: '(?:bgs|beckett)',
+  CGC: 'cgc',
+  SGC: 'sgc',
+  TAG: 'tag',
+  ACE: 'ace',
+  ARS: 'ars',
+  PCG: 'pcg',
+  CCIC: 'ccic'
+})
+
+export const isGrader = (company) => Object.hasOwn(GRADER_NAMES, company)
+
+/** A grade the app knows: 1 to 10 in half steps, or Authentic. */
+export const isGrade = (grade) => /^(10|[1-9](\.5)?|Authentic)$/.test(String(grade))
+
+// Lots, several copies and fakes: a graded listing of one card says none of these.
+const NOT_ONE_SLAB =
+  /\b(lot|bundle|proxy|orica|custom|set of \d+|\d+ copies|choose|pick|you pick|u pick)\b|\b[2-9]\s?x\b|\bx\s?[2-9]\b/i
+
+/**
+ * The search for one printing in a slab: its code (Yu-Gi-Oh's are unique), or its name and
+ * collector number, then the grader and grade, and the language word for a non-English card.
+ */
+export function buildGradedQuery({ code, name, number, lang, company, grade, edition }) {
+  const parts = code ? [`"${code}"`] : [`"${name}"`, number]
+  if (edition === '1st') parts.push('1st')
+  parts.push(company, grade === 'Authentic' ? 'Authentic' : grade)
+  if (lang && lang !== 'en') parts.push(EBAY_WORDS[lang] ?? '')
+  return parts.filter(Boolean).join(' ')
+}
+
+const escape = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/**
+ * True when a title is one slab of the asked printing at the asked grade: it names the code, or
+ * the name and the collector number; it names the grader with exactly this grade ("PSA 10", "PSA
+ * GEM MINT 10", never "PSA 1" for a 10 or "PSA 9" for a 9.5); and it isn't a lot. An English
+ * card's listing that says Japanese (or the other way) is another printing.
+ */
+export function gradedTitleMatches(title, { code, name, number, lang, company, grade, edition }) {
+  const t = String(title).toLowerCase()
+  // A Pokémon 1st Edition printing sells for many times its Unlimited one, and the other way.
+  const first = /\b1st\b|first edition/.test(t)
+  if (edition === '1st' && !first) return false
+  if (edition === 'unlimited' && first) return false
+  if (code) {
+    if (!t.includes(code.toLowerCase())) return false
+  } else {
+    if (!name || !t.includes(name.toLowerCase())) return false
+    if (number) {
+      // "5/20", "#5", "005" or " 5 ": the number without leading zeros, standing alone.
+      const n = escape(
+        String(number)
+          .replace(/^0+(?=\d)/, '')
+          .toLowerCase()
+      )
+      if (!new RegExp(`(?<![\\w.])(?:#\\s*)?0*${n}(?![\\w.]|\\.\\d)`).test(t)) return false
+    }
+  }
+  const who = GRADER_NAMES[company]
+  if (!who) return false
+  const words = '(?:\\s*(?:gem\\s*mint|gem\\s*mt|gem|mint|pristine|black\\s*label))?'
+  const what =
+    grade === 'Authentic'
+      ? '\\s*(?:authentic|auth\\b|a\\b)'
+      : `${words}\\s*-?\\s*${escape(grade)}(?![\\d]|\\.\\d)`
+  if (!new RegExp(`\\b${who}${what}`).test(t)) return false
+  if (NOT_ONE_SLAB.test(t)) return false
+  const japanese = /\b(japanese|japan|jpn|jp)\b|日本/.test(t)
+  if (lang === 'en' && japanese) return false
+  if (lang === 'ja' && !japanese) return false
+  return true
+}

@@ -49,12 +49,85 @@ export function createPriceClient(opts: { url: string; fetchFn?: typeof fetch })
           headers: { 'X-Client': 'duel-binder' },
           signal: ctrl.signal
         })
-        if (res.status !== 200) throw new PriceUnavailableError(`Price service returned ${res.status}`)
+        if (res.status !== 200)
+          throw new PriceUnavailableError(`Price service returned ${res.status}`)
         const body = (await res.json()) as Partial<PriceResult> | null
         if (
           !body ||
           typeof body !== 'object' ||
-          !(body.price === null || (typeof body.price === 'number' && Number.isFinite(body.price))) ||
+          !(
+            body.price === null ||
+            (typeof body.price === 'number' && Number.isFinite(body.price))
+          ) ||
+          typeof body.listingCount !== 'number' ||
+          typeof body.checkedAt !== 'string'
+        )
+          throw new PriceUnavailableError('Price service returned an unexpected response')
+        return { price: body.price, listingCount: body.listingCount, checkedAt: body.checkedAt }
+      } catch (e) {
+        if (e instanceof PriceUnavailableError) throw e
+        throw new PriceUnavailableError('Price service is unreachable')
+      } finally {
+        clearTimeout(timer)
+      }
+    }
+  }
+}
+
+/** One printing in one grader's slab at one grade, as the eBay Worker's /v1/graded-price takes it. */
+export interface GradedPriceQuery {
+  game: string
+  /** A unique card code (Yu-Gi-Oh!, One Piece); '' to search by name and number. */
+  code: string
+  name: string
+  /** The collector number without the set's total ("4" for "FO 4/62"); '' when none. */
+  number: string
+  lang: Language
+  company: string
+  grade: string
+  /** '1st' or 'unlimited' when the printing says which; '' when it doesn't. */
+  edition: '' | '1st' | 'unlimited'
+}
+
+export interface GradedPriceClient {
+  lookup(q: GradedPriceQuery): Promise<PriceResult>
+}
+
+/** The client for the eBay Worker's graded prices; throws PriceUnavailableError as createPriceClient's. */
+export function createGradedPriceClient(opts: {
+  url: string
+  fetchFn?: typeof fetch
+}): GradedPriceClient {
+  const fetchFn = opts.fetchFn ?? fetch
+  const base = opts.url.replace(/\/+$/, '')
+  return {
+    async lookup(q) {
+      const params = new URLSearchParams({
+        game: q.game,
+        code: q.code,
+        name: q.name,
+        number: q.number,
+        lang: q.lang,
+        company: q.company,
+        grade: q.grade
+      })
+      if (q.edition) params.set('edition', q.edition)
+      const ctrl = new AbortController()
+      const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS)
+      try {
+        const res = await fetchFn(`${base}/v1/graded-price?${params}`, {
+          headers: { 'X-Client': 'duel-binder' },
+          signal: ctrl.signal
+        })
+        if (res.status !== 200)
+          throw new PriceUnavailableError(`Price service returned ${res.status}`)
+        const body = (await res.json()) as Partial<PriceResult> | null
+        if (
+          !body ||
+          !(
+            body.price === null ||
+            (typeof body.price === 'number' && Number.isFinite(body.price))
+          ) ||
           typeof body.listingCount !== 'number' ||
           typeof body.checkedAt !== 'string'
         )

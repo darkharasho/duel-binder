@@ -264,10 +264,39 @@ describe('graded copies sync', () => {
       fetch: old
     })
     await expect(syncOnce(a, user, client, NOW)).resolves.toBeDefined()
-    expect(calls).toEqual(['/api/sync/graded-pull'])
+    // The pull fails first; the prices are asked about too, and fail the same way.
+    expect(calls).toEqual(['/api/sync/graded-pull', '/api/sync/graded-prices'])
     expect(rows(a)).toEqual([expect.objectContaining({ dirty: 1 })])
     await sync(a)
     expect(server()).toHaveLength(1)
+  })
+
+  it('brings down the eBay price the server found for a slab, and asks again only later', async () => {
+    saveGraded(a, draft(p), T1)
+    await sync(a)
+    expect(listGraded(a)).toEqual([expect.objectContaining({ market: null })])
+    const pkey = (a.prepare('SELECT pkey FROM graded_copies').get() as { pkey: string }).pkey
+    const { company, grade } = draft(p)
+    portal.serverDb
+      .prepare(
+        `INSERT INTO graded_prices (pkey, company, grade, price, listing_count, checked_at)
+         VALUES (?, ?, ?, 410, 5, ?)`
+      )
+      .run(pkey, company, grade, NOW().toISOString())
+    // Asked about a moment ago and the slabs haven't changed: not asked again yet.
+    await sync(a)
+    expect(listGraded(a)[0].market).toBeNull()
+    const later = (): Date => new Date(NOW().getTime() + 31 * 60 * 1000)
+    await syncOnce(a, user, await clientFor(), later)
+    expect(listGraded(a)).toEqual([
+      expect.objectContaining({
+        market: { price: 410, listings: 5, checkedAt: NOW().toISOString() }
+      })
+    ])
+    // The web reads the server's own table.
+    expect(listGraded(portal.serverDb, userScope(user, 'ygo'))).toEqual([
+      expect.objectContaining({ market: expect.objectContaining({ price: 410 }) })
+    ])
   })
 
   it('the web (server scope) adds and removes slabs that sync to the desktop', async () => {

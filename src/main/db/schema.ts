@@ -739,6 +739,16 @@ CREATE INDEX ix_graded_dirty ON graded_copies(owner_id) WHERE dirty = 1;
 CREATE INDEX ix_graded_pkey ON graded_copies(pkey);
 `
 
+/**
+ * Graded prices: what eBay asks for one printing in one grader's slab at one grade, priced on the
+ * server for the slabs people own (workers/portal/src/gradedPrices.ts) and fetched by each device
+ * for its own slabs. The same table on both sides, so this step runs on the server too.
+ */
+export const SCHEMA_V50 = `
+CREATE TABLE graded_prices (pkey TEXT NOT NULL, company TEXT NOT NULL, grade TEXT NOT NULL, price REAL,
+  listing_count INTEGER NOT NULL DEFAULT 0, checked_at TEXT NOT NULL, PRIMARY KEY (pkey, company, grade));
+`
+
 export const MIGRATIONS: Migration[] = [
   { version: 1, sql: SCHEMA_V1 },
   { version: 2, sql: SCHEMA_V2 },
@@ -788,5 +798,6 @@ export const MIGRATIONS: Migration[] = [
   { version: 46, sql: SCHEMA_V46, server: false },
   { version: 47, sql: SCHEMA_V47, server: false },
   { version: 48, sql: SCHEMA_V48 },
-  { version: 49, sql: SCHEMA_V49, server: false }
+  { version: 49, sql: SCHEMA_V49, server: false },
+  { version: 50, sql: SCHEMA_V50 }
 ]

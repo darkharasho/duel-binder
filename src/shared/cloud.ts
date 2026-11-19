@@ -186,6 +186,27 @@ export interface GradedPullResponse {
   more: boolean
 }
 
+/** A slab's price key: one printing at one grader's grade (see graded_prices). */
+export interface GradedPriceKey {
+  pkey: string
+  company: string
+  grade: string
+}
+
+/** What a slab like this asks on eBay: the trimmed median of its listings, null when too few. */
+export interface WireGradedPrice extends GradedPriceKey {
+  price: number | null
+  listingCount: number
+  checkedAt: string
+}
+
+export interface GradedPricesResponse {
+  prices: WireGradedPrice[]
+}
+
+/** Most keys one POST /api/sync/graded-prices may ask about. */
+export const MAX_GRADED_PRICE_KEYS = 500
+
 /** One binder as the sync protocol carries it; `rules`, `goal` and `languages` are opaque JSON text to the server. */
 export interface WireBinder {
   uid: string

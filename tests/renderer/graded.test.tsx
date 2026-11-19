@@ -50,6 +50,7 @@ const slab = (uid: string, patch: Partial<GradedCopy> = {}): GradedCopy => ({
   paid: 200,
   notes: '',
   rawPrice: 40,
+  market: null,
   createdAt: '2026-11-01T00:00:00Z',
   ...patch
 })
@@ -152,6 +153,26 @@ describe('GradedCopies (card panel)', () => {
 })
 
 describe('GradedPage', () => {
+  it('counts eBay’s price for a slab with no value entered, marked as eBay’s', async () => {
+    const market = { price: 410, listings: 5, checkedAt: '2026-11-19T00:00:00Z' }
+    renderWithProviders(<GradedPage />, {
+      api: createMockApi({
+        graded: {
+          list: async () => [
+            slab('a', { value: 100 }),
+            slab('b', { value: null, market, card: card(2, 'Dark Magician') })
+          ]
+        }
+      })
+    })
+    expect(await screen.findByText('$510.00')).toBeInTheDocument()
+    expect(screen.getByText('$410.00')).toHaveTextContent('$410.00')
+    expect(screen.getByTitle(/median of 5 eBay listings of a PSA 10/)).toHaveTextContent(
+      '$410.00 eBay'
+    )
+    expect(screen.queryByText(/without a value/)).not.toBeInTheDocument()
+  })
+
   it('shows totals and sorts slabs by grade', async () => {
     const user = userEvent.setup()
     renderWithProviders(<GradedPage />, {
@@ -167,7 +188,7 @@ describe('GradedPage', () => {
     })
     expect(await screen.findByText('$1,000.00')).toBeInTheDocument()
     expect(screen.getByText('$350.00')).toBeInTheDocument()
-    expect(screen.getByText('1 without a value')).toBeInTheDocument()
+    expect(screen.getByText('1 without a value or eBay price')).toBeInTheDocument()
 
     await user.click(screen.getByRole('radio', { name: 'Grade' }))
     const names = screen

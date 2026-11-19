@@ -4,6 +4,8 @@ import { refreshIntlPrices } from '../../../src/main/prices/refresh'
 import { refreshSweepQueue, runSweep, type SweepClient } from './sweep'
 import { runPokemonSweep } from './pokemonSweep'
 import { runOnePieceSweep } from './onePieceSweep'
+import { runGradedPrices } from './gradedPrices'
+import type { GradedPriceClient } from '../../../src/main/prices/client'
 
 /** Lookups per alarm run. */
 export const PRICE_BATCH = 25
@@ -96,7 +98,13 @@ export async function runPriceAlarm(
   storage: AlarmStorage,
   now: () => Date,
   sweep: SweepClient | null = null,
-  opts: { limit?: number; pokemonDailyCalls?: number; onePieceDailyCalls?: number } = {}
+  opts: {
+    limit?: number
+    pokemonDailyCalls?: number
+    onePieceDailyCalls?: number
+    /** Prices the slabs people own (gradedPrices.ts); left out, none are priced. */
+    graded?: GradedPriceClient | null
+  } = {}
 ): Promise<void> {
   let delay = PRICE_IDLE_MS
   try {
@@ -107,6 +115,13 @@ export async function runPriceAlarm(
   } catch (e) {
     console.error('Price alarm failed', e)
     delay = PRICE_FAILED_MS
+  }
+  try {
+    // Owned slabs' graded prices: a few a run, within their own daily cap.
+    const r = await runGradedPrices(db, opts.graded ?? null, now())
+    if (r.more && r.priced > 0) delay = Math.min(delay, PRICE_MORE_MS)
+  } catch (e) {
+    console.error('Graded prices failed', e)
   }
   try {
     // The weekly set sweep; its failures never touch the per-card pacing above.

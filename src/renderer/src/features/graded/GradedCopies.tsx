@@ -8,9 +8,21 @@ import { formatUsd } from '@/lib/format'
 import { GradedForm, type GradedPrinting } from './GradedForm'
 import { SlabArt } from './SlabArt'
 
-/** A slab's price line: its value, else the raw card's price marked as such. */
+/**
+ * A slab's price line: its value, else what eBay asks for its grade (marked so), else the raw
+ * card's price marked as such.
+ */
 export function SlabPrice({ slab }: { slab: GradedCopy }): React.JSX.Element | null {
   if (slab.value !== null) return <span className="tabular-nums">{formatUsd(slab.value)}</span>
+  if (slab.market)
+    return (
+      <span
+        className="tabular-nums"
+        title={`No value entered: the median of ${slab.market.listings} eBay listings of a ${gradeTitle(slab)}`}
+      >
+        {formatUsd(slab.market.price)} <span className="text-muted-foreground">eBay</span>
+      </span>
+    )
   if (slab.rawPrice === null) return null
   return (
     <span

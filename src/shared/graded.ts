@@ -60,6 +60,11 @@ export interface GradedFields {
   label: string
   /** The certification number; '' when not entered. */
   cert: string
+  /**
+   * Beckett-style subgrades as "centering corners edges surface" ("9.5 10 10 9.5"), each a grade
+   * 1 to 10 in half steps; '' for none.
+   */
+  subgrades: string
   /** What the user says the slab is worth, in USD; null when not entered. */
   value: number | null
   /** What the user paid, in USD; null when not entered. */
@@ -117,6 +122,28 @@ function money(v: unknown, what: string): number | null {
   return Math.round(v * 100) / 100
 }
 
+/** The four subgrades, in the order a Beckett label lists them. */
+export const SUBGRADE_NAMES = ['Centering', 'Corners', 'Edges', 'Surface'] as const
+
+/** Grades a subgrade can be: 1 to 10 in half steps. */
+export const SUBGRADE_GRADES: readonly string[] = GRADES.filter((g) => g !== AUTHENTIC)
+
+/** Stored subgrades ('' or four grades) as their four values, or null for none. */
+export function parseSubgrades(s: string): string[] | null {
+  const parts = s.trim().split(/\s+/)
+  return parts.length === 4 && parts.every((p) => SUBGRADE_GRADES.includes(p)) ? parts : null
+}
+
+function checkSubgrades(v: unknown): string {
+  if (v === undefined || v === null) return ''
+  if (typeof v !== 'string') throw new GradedFieldError('Subgrades must be text')
+  const t = v.trim().replace(/\s+/g, ' ')
+  if (!t) return ''
+  if (!parseSubgrades(t))
+    throw new GradedFieldError('Subgrades must be four grades from 1 to 10 in half steps')
+  return t
+}
+
 /** Checks and tidies a slab's editable fields (trimmed text, cents); throws GradedFieldError. */
 export function checkGradedFields(o: Record<string, unknown>): GradedFields {
   const grade = text(o.grade, 'Grade', 16, true)
@@ -127,6 +154,7 @@ export function checkGradedFields(o: Record<string, unknown>): GradedFields {
     grade,
     label: text(o.label ?? '', 'Label', MAX_GRADE_LABEL),
     cert: text(o.cert ?? '', 'Cert number', MAX_CERT),
+    subgrades: checkSubgrades(o.subgrades),
     value: money(o.value, 'Value'),
     paid: money(o.paid, 'Price paid'),
     notes: text(o.notes ?? '', 'Notes', MAX_GRADED_NOTES)

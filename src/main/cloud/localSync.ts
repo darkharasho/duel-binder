@@ -730,6 +730,7 @@ interface GradedRow {
   grade: string
   label: string
   cert: string
+  subgrades: string
   value: number | null
   paid: number | null
   notes: string
@@ -740,7 +741,7 @@ interface GradedRow {
 }
 
 const GRADED_COLS =
-  'uid, game, pkey, image_id, company, grade, label, cert, value, paid, notes, created_at, updated_at, deleted_at, dirty'
+  'uid, game, pkey, image_id, company, grade, label, cert, subgrades, value, paid, notes, created_at, updated_at, deleted_at, dirty'
 
 const gradedToWire = (r: GradedRow): WireGraded => ({
   uid: r.uid,
@@ -751,6 +752,7 @@ const gradedToWire = (r: GradedRow): WireGraded => ({
   grade: r.grade,
   label: r.label,
   cert: r.cert,
+  subgrades: r.subgrades,
   value: r.value,
   paid: r.paid,
   notes: r.notes,
@@ -840,14 +842,16 @@ export function applyRemoteGraded(db: SqlDb, owner: number, g: WireGraded): bool
     if (local.dirty === 0 && JSON.stringify(wire) === JSON.stringify(g)) return false
     if (local.dirty === 1 && !replaces(g, wire)) return false
   }
+  const subgrades = g.subgrades ?? local?.subgrades ?? ''
   db.prepare(
-    `INSERT INTO graded_copies (owner_id, uid, game, pkey, image_id, company, grade, label, cert, value, paid,
-       notes, created_at, updated_at, deleted_at, dirty)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+    `INSERT INTO graded_copies (owner_id, uid, game, pkey, image_id, company, grade, label, cert, subgrades,
+       value, paid, notes, created_at, updated_at, deleted_at, dirty)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
      ON CONFLICT(owner_id, uid) DO UPDATE SET game = excluded.game, pkey = excluded.pkey,
        image_id = excluded.image_id, company = excluded.company, grade = excluded.grade,
-       label = excluded.label, cert = excluded.cert, value = excluded.value, paid = excluded.paid,
-       notes = excluded.notes, created_at = excluded.created_at, updated_at = excluded.updated_at,
+       label = excluded.label, cert = excluded.cert, subgrades = excluded.subgrades,
+       value = excluded.value, paid = excluded.paid, notes = excluded.notes,
+       created_at = excluded.created_at, updated_at = excluded.updated_at,
        deleted_at = excluded.deleted_at, dirty = 0`
   ).run(
     owner,
@@ -859,6 +863,7 @@ export function applyRemoteGraded(db: SqlDb, owner: number, g: WireGraded): bool
     g.grade,
     g.label,
     g.cert,
+    subgrades,
     g.value,
     g.paid,
     g.notes,

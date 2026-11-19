@@ -165,7 +165,9 @@ export interface FavouritePullResponse {
 }
 
 /** One graded copy (slab) as the sync protocol carries it; a user has one per uid, tombstones included. */
-export interface WireGraded extends GradedFields {
+export interface WireGraded extends Omit<GradedFields, 'subgrades'> {
+  /** Left out by apps from before subgrades; the server then keeps what it has. */
+  subgrades?: string
   uid: string
   game: GameId
   pkey: string

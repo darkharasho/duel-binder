@@ -35,12 +35,15 @@ export function checkGradedPush(body: unknown, now: Date): WireGraded[] {
       if (e instanceof GradedFieldError) throw new CollectionError(e.message)
       throw e
     }
+    // An app from before subgrades leaves them out: undefined keeps the server's.
+    const subgrades = o.subgrades === undefined ? undefined : fields.subgrades
     return {
       uid: o.uid,
       game: o.game,
       pkey: o.pkey,
       imageId: o.imageId,
       ...fields,
+      subgrades,
       createdAt: checkTime(o.createdAt, 'createdAt', now),
       updatedAt: checkTime(o.updatedAt, 'updatedAt', now),
       deletedAt: o.deletedAt === null ? null : checkTime(o.deletedAt, 'deletedAt', now)
@@ -57,6 +60,7 @@ interface GradedRow {
   grade: string
   label: string
   cert: string
+  subgrades: string
   value: number | null
   paid: number | null
   notes: string
@@ -75,6 +79,7 @@ const toWire = (r: GradedRow): WireGraded => ({
   grade: r.grade,
   label: r.label,
   cert: r.cert,
+  subgrades: r.subgrades,
   value: r.value,
   paid: r.paid,
   notes: r.notes,
@@ -96,18 +101,20 @@ export function applyGradedPush(
 ): GradedPushResult[] {
   const find = db.prepare('SELECT * FROM graded_copies WHERE user_id = ? AND uid = ?')
   const write = db.prepare(
-    `INSERT INTO graded_copies (user_id, uid, game, pkey, image_id, company, grade, label, cert, value, paid,
-       notes, created_at, updated_at, deleted_at, seq)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${NEXT_GRADED_SEQ})
+    `INSERT INTO graded_copies (user_id, uid, game, pkey, image_id, company, grade, label, cert, subgrades,
+       value, paid, notes, created_at, updated_at, deleted_at, seq)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${NEXT_GRADED_SEQ})
      ON CONFLICT(user_id, uid) DO UPDATE SET game = excluded.game, pkey = excluded.pkey,
        image_id = excluded.image_id, company = excluded.company, grade = excluded.grade,
-       label = excluded.label, cert = excluded.cert, value = excluded.value, paid = excluded.paid,
+       label = excluded.label, cert = excluded.cert, subgrades = excluded.subgrades,
+       value = excluded.value, paid = excluded.paid,
        notes = excluded.notes, created_at = excluded.created_at, updated_at = excluded.updated_at,
        deleted_at = excluded.deleted_at, seq = excluded.seq`
   )
   const applyOne = (g: WireGraded): GradedPushResult => {
     if (!games.includes(g.game)) return { uid: g.uid, status: 'skipped' }
     const existing = find.get(userId, g.uid) as GradedRow | undefined
+    if (g.subgrades === undefined) g = { ...g, subgrades: existing?.subgrades ?? '' }
     if (existing) {
       const current = toWire(existing)
       if (JSON.stringify(current) === JSON.stringify(g)) return { uid: g.uid, status: 'applied' }
@@ -126,6 +133,7 @@ export function applyGradedPush(
       g.grade,
       g.label,
       g.cert,
+      g.subgrades,
       g.value,
       g.paid,
       g.notes,

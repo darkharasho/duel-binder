@@ -26,7 +26,9 @@ function readGraded(db: SqlDb, scope: Scope, where: string, args: unknown[]): Gr
     .prepare(
       `SELECT g.uid AS g_uid, g.game AS g_game, g.pkey AS g_pkey, g.image_id AS g_image_id,
               g.company AS g_company, g.grade AS g_grade, g.label AS g_label, g.cert AS g_cert,
+              g.subgrades AS g_subgrades,
               g.value AS g_value, g.paid AS g_paid, g.notes AS g_notes, g.created_at AS g_created_at,
+              COALESCE(rs.tcg_date, res.tcg_date) AS g_release_date,
               gp.price AS gp_price, gp.listing_count AS gp_listings, gp.checked_at AS gp_checked,
               ${cardPriceColumns(scope)}
        FROM graded_copies g
@@ -34,6 +36,8 @@ function readGraded(db: SqlDb, scope: Scope, where: string, args: unknown[]): Gr
        JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
        LEFT JOIN pokemon_cards pc ON pc.card_id = c.id
        LEFT JOIN intl_prices ip ON ip.printing_id = p.id AND ${scope.ebayPrices}
+       LEFT JOIN sets rs ON rs.game = p.game AND rs.language = p.language AND rs.set_name = p.set_name
+       LEFT JOIN sets res ON res.game = p.game AND res.language = 'en' AND res.set_name = p.set_name
        LEFT JOIN graded_prices gp ON gp.pkey = g.pkey AND gp.company = g.company AND gp.grade = g.grade
        WHERE ${scope.where('g')} ${where}
        ORDER BY g.created_at DESC, g.uid`
@@ -42,7 +46,11 @@ function readGraded(db: SqlDb, scope: Scope, where: string, args: unknown[]): Gr
   const status = getMeta(db, 'price_service_status')
   return rows.map((r) => {
     const card = rowToCard(r as unknown as CardDbRow)
-    const printing = rowToPrinting({ ...(r as unknown as PrintingDbRow), id: r.p_id as number })
+    const printing = rowToPrinting({
+      ...(r as unknown as PrintingDbRow),
+      id: r.p_id as number,
+      release_date: r.g_release_date as string | null
+    })
     const { unitPrice } = entryPrice(r, card, printing, status)
     return {
       uid: r.g_uid as string,
@@ -56,6 +64,7 @@ function readGraded(db: SqlDb, scope: Scope, where: string, args: unknown[]): Gr
       grade: r.g_grade as string,
       label: r.g_label as string,
       cert: r.g_cert as string,
+      subgrades: r.g_subgrades as string,
       value: (r.g_value as number | null) ?? null,
       paid: (r.g_paid as number | null) ?? null,
       notes: r.g_notes as string,
@@ -155,6 +164,7 @@ export function saveGraded(
     fields.grade,
     fields.label,
     fields.cert,
+    fields.subgrades,
     fields.value,
     fields.paid,
     fields.notes
@@ -163,7 +173,7 @@ export function saveGraded(
     const info = db
       .prepare(
         `UPDATE graded_copies AS g SET pkey = ?, image_id = ?, company = ?, grade = ?, label = ?, cert = ?,
-           value = ?, paid = ?, notes = ?, updated_at = ?, ${touch}
+           subgrades = ?, value = ?, paid = ?, notes = ?, updated_at = ?, ${touch}
          WHERE g.uid = ? AND ${scope.where('g')}`
       )
       .run(...values, ts, d.uid)
@@ -172,9 +182,9 @@ export function saveGraded(
   }
   const uid = crypto.randomUUID()
   db.prepare(
-    `INSERT INTO graded_copies (${ownerCol}, uid, game, pkey, image_id, company, grade, label, cert, value, paid,
-       notes, created_at, updated_at, ${markerCol})
-     VALUES (${owner}, ?, ${scope.game}, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${marker})`
+    `INSERT INTO graded_copies (${ownerCol}, uid, game, pkey, image_id, company, grade, label, cert, subgrades, value,
+       paid, notes, created_at, updated_at, ${markerCol})
+     VALUES (${owner}, ?, ${scope.game}, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${marker})`
   ).run(uid, ...values, ts, ts)
   return uid
 }

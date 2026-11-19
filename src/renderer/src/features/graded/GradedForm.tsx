@@ -8,6 +8,9 @@ import {
   MAX_CERT,
   MAX_COMPANY,
   MAX_GRADE_LABEL,
+  SUBGRADE_GRADES,
+  SUBGRADE_NAMES,
+  parseSubgrades,
   type GradedCopy,
   type GradedDraft
 } from '@shared/graded'
@@ -57,6 +60,11 @@ function dollars(text: string): number | null | undefined {
   const n = Number(t)
   return Number.isFinite(n) && n >= 0 ? n : undefined
 }
+
+/** A subgrade picker's value for "none": Radix's Select can't hold ''. */
+const NONE = '-'
+/** Only Beckett's labels carry subgrades. */
+const SUBGRADED = 'BGS'
 
 const moneyText = (n: number | null): string => (n === null ? '' : String(n))
 
@@ -150,6 +158,9 @@ function Fields({
   const [value, setValue] = useState(moneyText(slab?.value ?? null))
   const [paid, setPaid] = useState(moneyText(slab?.paid ?? null))
   const [notes, setNotes] = useState(slab?.notes ?? '')
+  const [subs, setSubs] = useState<string[]>(
+    parseSubgrades(slab?.subgrades ?? '') ?? SUBGRADE_NAMES.map(() => NONE)
+  )
   const [confirming, setConfirming] = useState(false)
   const [scanning, setScanning] = useState(false)
 
@@ -177,8 +188,16 @@ function Fields({
   const report = slabReportUrl(companyName, cert)
   const valueNum = dollars(value)
   const paidNum = dollars(paid)
+  const subsShown = company === SUBGRADED
+  const subsSet = subs.filter((v) => v !== NONE).length
+  // All four or none: a label never shows some of them.
+  const subsValid = !subsShown || subsSet === 0 || subsSet === subs.length
   const valid =
-    printing !== '' && companyName !== '' && valueNum !== undefined && paidNum !== undefined
+    printing !== '' &&
+    companyName !== '' &&
+    valueNum !== undefined &&
+    paidNum !== undefined &&
+    subsValid
 
   const submit = (e: React.FormEvent): void => {
     e.preventDefault()
@@ -193,6 +212,7 @@ function Fields({
       grade,
       label: label.trim(),
       cert: cert.trim(),
+      subgrades: subsShown && subsSet === subs.length ? subs.join(' ') : '',
       value: valueNum ?? null,
       paid: paidNum ?? null,
       notes: notes.trim()
@@ -302,6 +322,41 @@ function Fields({
             />
           </Field>
         </div>
+        {subsShown && (
+          <Field label="Subgrades" hint="optional, all four">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {SUBGRADE_NAMES.map((name, i) => (
+                <div key={name} className="min-w-0 space-y-1">
+                  <div className="text-xs text-muted-foreground">{name}</div>
+                  <Select
+                    value={subs[i]}
+                    disabled={busy}
+                    onValueChange={(v) => setSubs((cur) => cur.map((x, j) => (j === i ? v : x)))}
+                  >
+                    <SelectTrigger
+                      aria-label={`${name} subgrade`}
+                      aria-invalid={!subsValid && subs[i] === NONE}
+                      className="w-full min-w-0"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NONE}>–</SelectItem>
+                      {SUBGRADE_GRADES.map((g) => (
+                        <SelectItem key={g} value={g}>
+                          {g}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ))}
+            </div>
+            {!subsValid && (
+              <p className="text-xs text-destructive">Pick all four subgrades, or none.</p>
+            )}
+          </Field>
+        )}
         {report && (
           <a
             href={report}

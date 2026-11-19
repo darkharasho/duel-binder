@@ -85,12 +85,15 @@ export function GradedForm({
   useBackHandler(open, onClose)
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-md">
-        <DialogHeader>
+      {/* One column the width of the dialog: a long printing name truncates, not widens it. */}
+      <DialogContent className="max-h-[90dvh] grid-cols-[minmax(0,1fr)] gap-5 overflow-y-auto overflow-x-hidden sm:max-w-lg">
+        <DialogHeader className="pr-6">
           <DialogTitle>{slab ? 'Edit graded copy' : 'Add graded copy'}</DialogTitle>
-          <DialogDescription>
-            {cardName}. Slabs are tracked one by one and don&apos;t count toward set or binder
-            progress.
+          <DialogDescription className="space-y-0.5">
+            <span className="block truncate text-foreground">{cardName}</span>
+            <span className="block text-xs">
+              Tracked one by one. Doesn&apos;t count toward set or binder progress.
+            </span>
           </DialogDescription>
         </DialogHeader>
         {open && (
@@ -192,14 +195,13 @@ function Fields({
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4">
+    <form onSubmit={submit} className="min-w-0 space-y-6">
       {choosable.length > 1 && (
-        <div className="space-y-1.5">
-          <div className="text-sm font-medium">Printing</div>
+        <Field label="Printing">
           <Select value={printing} disabled={busy} onValueChange={setPrinting}>
             <SelectTrigger
               aria-label="Printing"
-              className="w-full *:data-[slot=select-value]:min-w-0"
+              className="w-full min-w-0 *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:truncate"
             >
               <SelectValue />
             </SelectTrigger>
@@ -218,152 +220,187 @@ function Fields({
               })}
             </SelectContent>
           </Select>
-        </div>
+        </Field>
       )}
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <div className="text-sm font-medium">Grading company</div>
-          <Select value={company} disabled={busy} onValueChange={setCompany}>
-            <SelectTrigger aria-label="Grading company" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {[...GRADING_COMPANIES, OTHER].map((c) => (
-                <SelectItem key={c} value={c}>
-                  {c}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      <Section title="Grade">
+        <div className="grid grid-cols-[minmax(0,1fr)_7rem] gap-3">
+          <Field label="Company">
+            <Select value={company} disabled={busy} onValueChange={setCompany}>
+              <SelectTrigger aria-label="Grading company" className="w-full min-w-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[...GRADING_COMPANIES, OTHER].map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label="Grade">
+            <Select value={grade} disabled={busy} onValueChange={setGrade}>
+              <SelectTrigger aria-label="Grade" className="w-full min-w-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {GRADES.map((g) => (
+                  <SelectItem key={g} value={g}>
+                    {g}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
         </div>
-        <div className="space-y-1.5">
-          <div className="text-sm font-medium">Grade</div>
-          <Select value={grade} disabled={busy} onValueChange={setGrade}>
-            <SelectTrigger aria-label="Grade" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {GRADES.map((g) => (
-                <SelectItem key={g} value={g}>
-                  {g}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        {company === OTHER && (
+          <Field label="Company name" htmlFor="graded-other">
+            <Input
+              id="graded-other"
+              value={otherCompany}
+              maxLength={MAX_COMPANY}
+              onChange={(e) => setOtherCompany(e.target.value)}
+            />
+          </Field>
+        )}
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Cert number" htmlFor="graded-cert">
+            <Input
+              id="graded-cert"
+              inputMode="numeric"
+              value={cert}
+              maxLength={MAX_CERT}
+              onChange={(e) => setCert(e.target.value)}
+              className="font-mono"
+            />
+          </Field>
+          <Field label="Label" hint="optional" htmlFor="graded-label">
+            <Input
+              id="graded-label"
+              placeholder="Black Label…"
+              value={label}
+              maxLength={MAX_GRADE_LABEL}
+              onChange={(e) => setLabel(e.target.value)}
+            />
+          </Field>
         </div>
-      </div>
+      </Section>
 
-      {company === OTHER && (
-        <div className="space-y-1.5">
-          <label htmlFor="graded-other" className="block text-sm font-medium">
-            Company name
-          </label>
-          <Input
-            id="graded-other"
-            value={otherCompany}
-            maxLength={MAX_COMPANY}
-            onChange={(e) => setOtherCompany(e.target.value)}
-          />
+      <Section title="Price">
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Value (USD)" htmlFor="graded-value">
+            <Input
+              id="graded-value"
+              inputMode="decimal"
+              placeholder="0.00"
+              value={value}
+              aria-invalid={valueNum === undefined}
+              onChange={(e) => setValue(e.target.value)}
+              className="tabular-nums"
+            />
+          </Field>
+          <Field label="Price paid (USD)" htmlFor="graded-paid">
+            <Input
+              id="graded-paid"
+              inputMode="decimal"
+              placeholder="0.00"
+              value={paid}
+              aria-invalid={paidNum === undefined}
+              onChange={(e) => setPaid(e.target.value)}
+              className="tabular-nums"
+            />
+          </Field>
         </div>
-      )}
+        <p className="text-xs text-muted-foreground">
+          Left empty, the value shown is eBay&apos;s asking price for this grade once it&apos;s
+          known.
+        </p>
+      </Section>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <label htmlFor="graded-label" className="block text-sm font-medium">
-            Label <span className="font-normal text-muted-foreground">(optional)</span>
-          </label>
-          <Input
-            id="graded-label"
-            placeholder="Black Label, Pristine…"
-            value={label}
-            maxLength={MAX_GRADE_LABEL}
-            onChange={(e) => setLabel(e.target.value)}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <label htmlFor="graded-cert" className="block text-sm font-medium">
-            Cert number
-          </label>
-          <Input
-            id="graded-cert"
-            inputMode="numeric"
-            value={cert}
-            maxLength={MAX_CERT}
-            onChange={(e) => setCert(e.target.value)}
-            className="font-mono"
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <label htmlFor="graded-value" className="block text-sm font-medium">
-            Value (USD)
-          </label>
-          <Input
-            id="graded-value"
-            inputMode="decimal"
-            placeholder="0.00"
-            value={value}
-            aria-invalid={valueNum === undefined}
-            onChange={(e) => setValue(e.target.value)}
-            className="tabular-nums"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <label htmlFor="graded-paid" className="block text-sm font-medium">
-            Price paid (USD)
-          </label>
-          <Input
-            id="graded-paid"
-            inputMode="decimal"
-            placeholder="0.00"
-            value={paid}
-            aria-invalid={paidNum === undefined}
-            onChange={(e) => setPaid(e.target.value)}
-            className="tabular-nums"
-          />
-        </div>
-      </div>
-
-      <div className="space-y-1.5">
-        <label htmlFor="graded-notes" className="block text-sm font-medium">
-          Notes
-        </label>
+      <Field label="Notes" htmlFor="graded-notes">
         <Input id="graded-notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
-      </div>
+      </Field>
 
       <div className="flex flex-wrap items-center gap-2 border-t pt-4">
-        <Button type="submit" disabled={!valid || busy}>
-          {slab ? 'Save changes' : 'Add graded copy'}
-        </Button>
-        <Button type="button" variant="ghost" onClick={onClose}>
-          Cancel
-        </Button>
-        {slab && (
-          <div className="ml-auto flex items-center gap-2">
-            {confirming ? (
-              <>
-                <span className="text-sm">Remove?</span>
-                <Button
-                  type="button"
-                  variant="destructive"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => remove.mutate()}
-                >
-                  Confirm
-                </Button>
-              </>
-            ) : (
-              <Button type="button" variant="outline" size="sm" onClick={() => setConfirming(true)}>
-                Remove
+        {slab &&
+          (confirming ? (
+            <div className="flex items-center gap-2">
+              <span className="text-sm">Remove?</span>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                disabled={busy}
+                onClick={() => remove.mutate()}
+              >
+                Confirm
               </Button>
-            )}
-          </div>
-        )}
+            </div>
+          ) : (
+            <Button type="button" variant="outline" size="sm" onClick={() => setConfirming(true)}>
+              Remove
+            </Button>
+          ))}
+        <div className="ml-auto flex items-center gap-2">
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={!valid || busy}>
+            {slab ? 'Save changes' : 'Add graded copy'}
+          </Button>
+        </div>
       </div>
     </form>
+  )
+}
+
+/** A titled group of the form's fields. */
+function Section({
+  title,
+  children
+}: {
+  title: string
+  children: React.ReactNode
+}): React.JSX.Element {
+  return (
+    <fieldset className="min-w-0 space-y-3">
+      <legend className="mb-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+        {title}
+      </legend>
+      {children}
+    </fieldset>
+  )
+}
+
+/** One field: its label (and a quiet hint) over its control. */
+function Field({
+  label,
+  hint,
+  htmlFor,
+  children
+}: {
+  label: string
+  hint?: string
+  htmlFor?: string
+  children: React.ReactNode
+}): React.JSX.Element {
+  const text = (
+    <>
+      {label}
+      {hint && <span className="font-normal text-muted-foreground"> ({hint})</span>}
+    </>
+  )
+  return (
+    <div className="min-w-0 space-y-1.5">
+      {htmlFor ? (
+        <label htmlFor={htmlFor} className="block text-sm font-medium">
+          {text}
+        </label>
+      ) : (
+        <div className="text-sm font-medium">{text}</div>
+      )}
+      {children}
+    </div>
   )
 }

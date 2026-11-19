@@ -13,6 +13,8 @@ import type {
   BinderPushResult,
   FavouritePullResponse,
   FavouritePushResult,
+  GradedPriceKey,
+  GradedPricesResponse,
   GradedPullResponse,
   GradedPushResult,
   Me,
@@ -104,6 +106,8 @@ export interface CloudClient {
   gradedPush(entries: WireGraded[]): Promise<GradedPushResult[]>
   /** One page of the account's graded copies of `game` after `cursor`; as `gradedPush` on an old portal. */
   gradedPull(cursor: number, game: GameId): Promise<GradedPullResponse>
+  /** eBay's graded prices the server has for `keys`; as `gradedPush` on an old portal. */
+  gradedPrices(keys: GradedPriceKey[]): Promise<GradedPricesResponse>
   /** Pushes scan sessions; a portal without sessions rejects with CloudNotFoundError. */
   sessionsPush(entries: WireScanSession[]): Promise<ScanSessionPushResult[]>
   /** One page of the account's scan sessions of `game` after `cursor`; as `sessionsPush` on an old portal. */
@@ -319,6 +323,7 @@ export function createCloudClient(opts: {
         .results,
     gradedPull: (cursor, game) =>
       call<GradedPullResponse>(`/api/sync/graded-pull?cursor=${cursor}&game=${game}`, 'GET'),
+    gradedPrices: (keys) => call<GradedPricesResponse>('/api/sync/graded-prices', 'POST', { keys }),
     sessionsPush: async (entries) =>
       (
         await call<{ results: ScanSessionPushResult[] }>('/api/sync/sessions-push', 'POST', {

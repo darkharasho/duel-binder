@@ -38,6 +38,7 @@ import { applySessionPush, checkSessionPush, sessionPullSince } from './scanSess
 import { applyWishPush, checkWishPush, wishPullSince } from './wishlist'
 import { applyFavouritePush, checkFavouritePush, favouritePullSince } from './favourites'
 import { applyGradedPush, checkGradedPush, gradedPullSince } from './graded'
+import { checkGradedPriceKeys, gradedPricesFor } from './gradedPrices'
 import { NEXT_SEQ, userScope } from './scope'
 import { checkHistoryExchange, exchangeHistory } from './valueHistory'
 
@@ -365,6 +366,7 @@ const POST_PATHS: ReadonlySet<string> = new Set([
   'binder-edits-push',
   'favourites-push',
   'graded-push',
+  'graded-prices',
   'sessions-push',
   'history'
 ])
@@ -383,7 +385,7 @@ const GET_PATHS: ReadonlySet<string> = new Set([
  * POST /api/sync/push, GET /api/sync/pull, GET /api/sync/price-changes, POST /api/sync/prices,
  * POST /api/sync/price-requests, POST /api/sync/wishlist-push and GET /api/sync/wishlist-pull, and the same
  * pairs for binders (binders-push/-pull), their edits (binder-edits-push/-pull) and favourites
- * (favourites-push/-pull), graded copies (graded-push/-pull) and scan sessions (sessions-push/-pull), and POST /api/sync/history (value history);
+ * (favourites-push/-pull), graded copies (graded-push/-pull, and their prices: graded-prices) and scan sessions (sessions-push/-pull), and POST /api/sync/history (value history);
  * desktop tokens only (the phone app has one too).
  */
 export async function syncRoute(req: Request, deps: AppDeps, path: string): Promise<Response> {
@@ -468,8 +470,13 @@ export async function syncRoute(req: Request, deps: AppDeps, path: string): Prom
       const raw = (body as { entries?: unknown } | null)?.entries
       if (Array.isArray(raw) && raw.length > MAX_PUSH) return json({ error: 'too-many' }, 413)
       const entries = checkGradedPush(body, deps.now())
-      return json({ results: applyGradedPush(deps.db, user.id, entries, games()) })
+      const results = applyGradedPush(deps.db, user.id, entries, games())
+      // A new or changed slab may need a price: the alarm prices a few a run (gradedPrices.ts).
+      if (entries.some((g) => g.deletedAt === null)) await deps.prices.soon({ paced: true })
+      return json({ results })
     }
+
+    if (path === 'graded-prices') return json(gradedPricesFor(deps.db, checkGradedPriceKeys(body)))
 
     if (path === 'sessions-push') {
       const raw = (body as { entries?: unknown } | null)?.entries

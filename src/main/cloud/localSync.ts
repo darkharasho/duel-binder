@@ -9,6 +9,7 @@ import type { BinderEditAction, BinderEditLevel } from '../../shared/binders'
 import { mergeSessionCards, sameSessionCardList } from '../repo/scanSessions'
 import type { ScanSessionCard, WireScanSession } from '../../shared/scanSessions'
 import { isLanguage } from '../../shared/languages'
+import type { GradedPriceKey, WireGradedPrice } from '../../shared/cloud'
 import {
   MAX_NOTES,
   editTime,
@@ -757,6 +758,51 @@ const gradedToWire = (r: GradedRow): WireGraded => ({
   updatedAt: r.updated_at,
   deletedAt: r.deleted_at
 })
+
+/**
+ * The price keys (printing, grader, grade) of the owner's live slabs whose graded price is
+ * missing here or was checked before `staleBefore` (ISO), at most `limit`.
+ */
+export function gradedPriceKeys(
+  db: SqlDb,
+  owner: number,
+  staleBefore: string,
+  limit: number
+): GradedPriceKey[] {
+  return db
+    .prepare(
+      `SELECT DISTINCT g.pkey, g.company, g.grade FROM graded_copies g
+       LEFT JOIN graded_prices gp ON gp.pkey = g.pkey AND gp.company = g.company AND gp.grade = g.grade
+       WHERE g.owner_id = ? AND g.deleted_at IS NULL
+         AND (gp.checked_at IS NULL OR julianday(gp.checked_at) < julianday(?))
+       LIMIT ?`
+    )
+    .all(owner, staleBefore, limit) as GradedPriceKey[]
+}
+
+/**
+ * Takes the server's graded prices that are fresher than the ones here; a price the server no
+ * longer has (too few listings this week) never erases one. Returns rows written.
+ */
+export function applyGradedPrices(db: SqlDb, prices: WireGradedPrice[]): number {
+  const upsert = db.prepare(
+    `INSERT INTO graded_prices (pkey, company, grade, price, listing_count, checked_at)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(pkey, company, grade) DO UPDATE SET
+       price = COALESCE(excluded.price, graded_prices.price),
+       listing_count = CASE WHEN excluded.price IS NULL AND graded_prices.price IS NOT NULL
+         THEN graded_prices.listing_count ELSE excluded.listing_count END,
+       checked_at = excluded.checked_at
+     WHERE julianday(excluded.checked_at) > julianday(graded_prices.checked_at)`
+  )
+  return db.transaction(() =>
+    prices.reduce(
+      (n, p) =>
+        n + upsert.run(p.pkey, p.company, p.grade, p.price, p.listingCount, p.checkedAt).changes,
+      0
+    )
+  )()
+}
 
 /** Up to `limit` of the owner's unpushed graded copies, tombstones included, leaving out the uids in `skip`. */
 export function dirtyGraded(

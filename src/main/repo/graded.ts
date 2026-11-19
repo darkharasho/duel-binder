@@ -27,12 +27,14 @@ function readGraded(db: SqlDb, scope: Scope, where: string, args: unknown[]): Gr
       `SELECT g.uid AS g_uid, g.game AS g_game, g.pkey AS g_pkey, g.image_id AS g_image_id,
               g.company AS g_company, g.grade AS g_grade, g.label AS g_label, g.cert AS g_cert,
               g.value AS g_value, g.paid AS g_paid, g.notes AS g_notes, g.created_at AS g_created_at,
+              gp.price AS gp_price, gp.listing_count AS gp_listings, gp.checked_at AS gp_checked,
               ${cardPriceColumns(scope)}
        FROM graded_copies g
        JOIN card_printings p ON p.pkey = g.pkey AND +p.game = ${scope.game}
        JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
        LEFT JOIN pokemon_cards pc ON pc.card_id = c.id
        LEFT JOIN intl_prices ip ON ip.printing_id = p.id AND ${scope.ebayPrices}
+       LEFT JOIN graded_prices gp ON gp.pkey = g.pkey AND gp.company = g.company AND gp.grade = g.grade
        WHERE ${scope.where('g')} ${where}
        ORDER BY g.created_at DESC, g.uid`
     )
@@ -58,6 +60,14 @@ function readGraded(db: SqlDb, scope: Scope, where: string, args: unknown[]): Gr
       paid: (r.g_paid as number | null) ?? null,
       notes: r.g_notes as string,
       rawPrice: unitPrice,
+      market:
+        typeof r.gp_price === 'number'
+          ? {
+              price: r.gp_price,
+              listings: r.gp_listings as number,
+              checkedAt: r.gp_checked as string
+            }
+          : null,
       createdAt: r.g_created_at as string
     }
   })

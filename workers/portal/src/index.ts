@@ -22,6 +22,7 @@ import { catalogSnapshotRoute } from './catalogSnapshot'
 import { thumbsRoute } from './thumbs'
 import { alarmQueue, priceClientFor, runPriceAlarm, type PriceQueue } from './prices'
 import { sweepClientFor } from './sweep'
+import { gradedClientFor } from './gradedPrices'
 import { pokemonDailyCalls } from './pokemonSweep'
 import { onePieceDailyCalls } from './onePieceSweep'
 import { handleSite } from './site/handler'
@@ -86,7 +87,8 @@ export class Store extends DurableObject<WorkerEnv> {
       sweepClientFor(this.env),
       {
         pokemonDailyCalls: pokemonDailyCalls(this.env.POKEMON_SWEEP_DAILY_CALLS),
-        onePieceDailyCalls: onePieceDailyCalls(this.env.ONEPIECE_SWEEP_DAILY_CALLS)
+        onePieceDailyCalls: onePieceDailyCalls(this.env.ONEPIECE_SWEEP_DAILY_CALLS),
+        graded: gradedClientFor(this.env)
       }
     )
   }

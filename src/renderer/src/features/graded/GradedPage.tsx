@@ -26,7 +26,9 @@ const gradeRank = (g: GradedCopy): number => (g.grade === AUTHENTIC ? -1 : Numbe
 const SORTERS: Record<Sort, (a: GradedCopy, b: GradedCopy) => number> = {
   // The list comes newest first.
   added: () => 0,
-  value: (a, b) => (b.value ?? b.rawPrice ?? -1) - (a.value ?? a.rawPrice ?? -1),
+  value: (a, b) =>
+    (b.value ?? b.market?.price ?? b.rawPrice ?? -1) -
+    (a.value ?? a.market?.price ?? a.rawPrice ?? -1),
   grade: (a, b) => gradeRank(b) - gradeRank(a)
 }
 
@@ -109,7 +111,7 @@ export function GradedPage({ onNavigate }: { onNavigate?: NavigateFn } = {}): Re
     <div className="space-y-4 p-8 max-md:p-4">
       <PageHeader title="Graded" stats={slabs.length > 0 ? stats : undefined}>
         {totals.unvalued > 0 && (
-          <p className="text-sm tabular-nums">{totals.unvalued} without a value</p>
+          <p className="text-sm tabular-nums">{totals.unvalued} without a value or eBay price</p>
         )}
         {slabs.length > 0 && (
           <div className="flex flex-wrap items-center gap-3">

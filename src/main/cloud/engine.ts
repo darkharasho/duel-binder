@@ -6,6 +6,7 @@ import { settleWishlist } from '../repo/wishlist'
 import { localScope } from '../repo/scope'
 import {
   MAX_HISTORY,
+  MAX_GRADED_PRICE_KEYS,
   MAX_PULL,
   MAX_PUSH,
   binderEditKey,
@@ -24,6 +25,7 @@ import {
   applyRemoteBinder,
   applyRemoteBinderEdit,
   applyRemoteFavourite,
+  applyGradedPrices,
   applyRemoteGraded,
   applyRemoteSession,
   applyRemoteWish,
@@ -33,6 +35,7 @@ import {
   dirtyEntries,
   dirtyFavourites,
   dirtyGraded,
+  gradedPriceKeys,
   dirtySessions,
   dirtyWishes,
   gameCursor,
@@ -307,6 +310,45 @@ async function syncGraded(
       console.warn('Graded copies sync failed; they stay queued', e)
   }
   return changed
+}
+
+/** A slab's graded price is asked for again once the one here is this old. */
+const GRADED_PRICE_STALE_MS = 24 * 3600 * 1000
+/** Asking about the same keys again (ones the server hasn't priced yet) waits this long. */
+const GRADED_PRICE_ASK_MS = 30 * 60 * 1000
+/** When each database's owners' slab prices were last asked about, and which keys. */
+const gradedAsked = new WeakMap<SqlDb, Map<number, { at: number; keys: string }>>()
+
+/**
+ * Fetches eBay's graded prices for `owner`'s slabs whose price is missing or a day old. The
+ * server prices them a few at a time, so keys it hasn't priced yet are asked about again only
+ * after GRADED_PRICE_ASK_MS (or when the slabs change). Best effort, as syncGraded. Resolves
+ * whether anything changed.
+ */
+async function syncGradedPrices(
+  db: SqlDb,
+  owner: number,
+  client: CloudClient,
+  nowMs: number
+): Promise<boolean> {
+  try {
+    const stale = new Date(nowMs - GRADED_PRICE_STALE_MS).toISOString()
+    const keys = gradedPriceKeys(db, owner, stale, MAX_GRADED_PRICE_KEYS)
+    if (keys.length === 0) return false
+    const sig = keys.map((k) => `${k.pkey}\u0000${k.company}\u0000${k.grade}`).join('\u0001')
+    let asked = gradedAsked.get(db)
+    if (!asked) gradedAsked.set(db, (asked = new Map()))
+    const last = asked.get(owner)
+    if (last && last.keys === sig && nowMs - last.at < GRADED_PRICE_ASK_MS) return false
+    asked.set(owner, { at: nowMs, keys: sig })
+    const { prices } = await client.gradedPrices(keys)
+    return applyGradedPrices(db, prices) > 0
+  } catch (e) {
+    if (e instanceof CloudAuthError) throw e
+    if (!(e instanceof CloudNotFoundError) && !(e instanceof CloudOfflineError))
+      console.warn('Graded prices fetch failed', e)
+    return false
+  }
 }
 
 /**
@@ -632,6 +674,7 @@ export async function syncOnce(
 
   // 6a. Graded copies, on their own routes.
   if (await syncGraded(db, owner, client, games)) changed = true
+  if (await syncGradedPrices(db, owner, client, now().getTime())) changed = true
 
   // 6b. Scan sessions, on their own routes.
   if (await syncSessions(db, owner, client, games)) changed = true

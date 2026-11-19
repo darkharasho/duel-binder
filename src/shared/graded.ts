@@ -89,6 +89,11 @@ export interface GradedCopy extends GradedFields {
   photoPrintingId?: number | null
   /** The raw (ungraded) card's price, shown beside a slab with no value entered. */
   rawPrice: number | null
+  /**
+   * What eBay asks for this printing in this grader's slab at this grade (the median of its
+   * listings), priced on the server for slabs people own; null until known.
+   */
+  market: { price: number; listings: number; checkedAt: string } | null
   createdAt: string
 }
 
@@ -132,10 +137,17 @@ export function checkGradedFields(o: Record<string, unknown>): GradedFields {
 export const gradeTitle = (g: Pick<GradedFields, 'company' | 'grade' | 'label'>): string =>
   [g.company, g.grade, g.label].filter(Boolean).join(' ')
 
-/** A slab's worth for totals: the value entered, else nothing (a raw price undersells a slab). */
-export const gradedWorth = (g: Pick<GradedCopy, 'value'>): number => g.value ?? 0
+/**
+ * A slab's worth for totals: the value entered, else eBay's asking price for its grade, else
+ * nothing (a raw price undersells a slab).
+ */
+export const gradedWorth = (g: Pick<GradedCopy, 'value' | 'market'>): number =>
+  g.value ?? g.market?.price ?? 0
 
-/** Totals for a list of slabs: how many, the values entered, how many lack one, and what was paid. */
+/**
+ * Totals for a list of slabs: how many, their worth (gradedWorth), how many have neither a value
+ * nor an eBay price, and what was paid.
+ */
 export function gradedTotals(slabs: GradedCopy[]): {
   count: number
   value: number
@@ -145,7 +157,7 @@ export function gradedTotals(slabs: GradedCopy[]): {
   return {
     count: slabs.length,
     value: slabs.reduce((sum, s) => sum + gradedWorth(s), 0),
-    unvalued: slabs.filter((s) => s.value === null).length,
+    unvalued: slabs.filter((s) => s.value === null && !s.market).length,
     paid: slabs.reduce((sum, s) => sum + (s.paid ?? 0), 0)
   }
 }

@@ -37,6 +37,7 @@ import {
 import { applySessionPush, checkSessionPush, sessionPullSince } from './scanSessions'
 import { applyWishPush, checkWishPush, wishPullSince } from './wishlist'
 import { applyFavouritePush, checkFavouritePush, favouritePullSince } from './favourites'
+import { applyGradedPush, checkGradedPush, gradedPullSince } from './graded'
 import { NEXT_SEQ, userScope } from './scope'
 import { checkHistoryExchange, exchangeHistory } from './valueHistory'
 
@@ -363,6 +364,7 @@ const POST_PATHS: ReadonlySet<string> = new Set([
   'binders-push',
   'binder-edits-push',
   'favourites-push',
+  'graded-push',
   'sessions-push',
   'history'
 ])
@@ -373,6 +375,7 @@ const GET_PATHS: ReadonlySet<string> = new Set([
   'binders-pull',
   'binder-edits-pull',
   'favourites-pull',
+  'graded-pull',
   'sessions-pull'
 ])
 
@@ -380,7 +383,7 @@ const GET_PATHS: ReadonlySet<string> = new Set([
  * POST /api/sync/push, GET /api/sync/pull, GET /api/sync/price-changes, POST /api/sync/prices,
  * POST /api/sync/price-requests, POST /api/sync/wishlist-push and GET /api/sync/wishlist-pull, and the same
  * pairs for binders (binders-push/-pull), their edits (binder-edits-push/-pull) and favourites
- * (favourites-push/-pull) and scan sessions (sessions-push/-pull), and POST /api/sync/history (value history);
+ * (favourites-push/-pull), graded copies (graded-push/-pull) and scan sessions (sessions-push/-pull), and POST /api/sync/history (value history);
  * desktop tokens only (the phone app has one too).
  */
 export async function syncRoute(req: Request, deps: AppDeps, path: string): Promise<Response> {
@@ -415,7 +418,9 @@ export async function syncRoute(req: Request, deps: AppDeps, path: string): Prom
               ? binderPullSince
               : path === 'favourites-pull'
                 ? favouritePullSince
-                : binderEditPullSince
+                : path === 'graded-pull'
+                  ? gradedPullSince
+                  : binderEditPullSince
       return json(pull(deps.db, user.id, cursor, MAX_PULL, game))
     }
 
@@ -457,6 +462,13 @@ export async function syncRoute(req: Request, deps: AppDeps, path: string): Prom
       if (Array.isArray(raw) && raw.length > MAX_PUSH) return json({ error: 'too-many' }, 413)
       const entries = checkFavouritePush(body, deps.now())
       return json({ results: applyFavouritePush(deps.db, user.id, entries, games()) })
+    }
+
+    if (path === 'graded-push') {
+      const raw = (body as { entries?: unknown } | null)?.entries
+      if (Array.isArray(raw) && raw.length > MAX_PUSH) return json({ error: 'too-many' }, 413)
+      const entries = checkGradedPush(body, deps.now())
+      return json({ results: applyGradedPush(deps.db, user.id, entries, games()) })
     }
 
     if (path === 'sessions-push') {

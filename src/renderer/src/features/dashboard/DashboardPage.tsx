@@ -15,6 +15,7 @@ import { UnderlineTabs } from '@/components/UnderlineTabs'
 import { CardPanel } from '@/features/card/CardPanel'
 import { EntryValue, StaleBadge } from '@/features/collection/EntryValue'
 import { displayTotal } from '@/features/collection/displayTotal'
+import { gradedTotals } from '@shared/graded'
 import { api, queryKeys } from '@/lib/api'
 import { formatRelative, formatUsd } from '@/lib/format'
 import { isPhone } from '@/lib/platform'
@@ -175,8 +176,7 @@ const titleCase = (s: string): string =>
     .join(' ')
 
 /** A stat on one line; under 768 px, a tile in a 2-column grid. */
-const statTile =
-  'flex gap-1.5 max-md:flex-wrap'
+const statTile = 'flex gap-1.5 max-md:flex-wrap'
 
 const STALE_MS = 24 * 60 * 60 * 1000
 const isStale = (iso: string | null): boolean => {
@@ -350,6 +350,9 @@ function Content({
   // A card opens over Home, as on every other page, rather than taking you to the collection.
   const [open, setOpen] = useState<{ cardId: number; entryId: number } | null>(null)
   const openEntry = (e: EntryView): void => setOpen({ cardId: e.card.id, entryId: e.id })
+  // Slabs sit apart from the collection's totals: a tile of their own, shown once there are any.
+  const graded = useQuery({ queryKey: queryKeys.graded, queryFn: () => api.graded.list() })
+  const slabs = graded.data ? gradedTotals(graded.data) : null
   const close = (): void => setOpen(null)
   return (
     <>
@@ -369,11 +372,24 @@ function Content({
               <span className="font-semibold text-foreground">{stats.uniqueCards}</span>
               <span>Unique cards</span>
             </div>
+            {slabs && slabs.count > 0 && (
+              <button
+                type="button"
+                onClick={() => onNavigate('graded')}
+                className={cn(statTile, 'text-left hover:underline')}
+              >
+                <span className="font-semibold text-foreground">{slabs.count}</span>
+                <span>
+                  Graded
+                  {slabs.value > 0 && (
+                    <span className="tabular-nums"> · {formatUsd(slabs.value)}</span>
+                  )}
+                </span>
+              </button>
+            )}
             <div className={cn(statTile, 'items-baseline max-md:col-span-2')}>
               <span>Prices updated</span>
-              <span>
-                {formatRelative(stats.pricesUpdatedAt)}
-              </span>
+              <span>{formatRelative(stats.pricesUpdatedAt)}</span>
               {stale && (
                 <span className="rounded-full bg-popover px-2 text-[11px] text-amber-400">
                   stale

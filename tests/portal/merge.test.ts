@@ -407,6 +407,29 @@ describe('merging two accounts', () => {
     expect(count('SELECT count(*) AS n FROM binders WHERE user_id = ?', other)).toBe(4)
   })
 
+  it('graded copies are copied over, keeping uids; removed ones stay behind', async () => {
+    const { me, other } = discordAndApple()
+    const slab = db.prepare(
+      `INSERT INTO graded_copies (user_id, uid, game, pkey, image_id, company, grade, created_at, updated_at,
+         deleted_at, seq) VALUES (?, ?, 'ygo', 'p1', 1, 'PSA', ?, 'x', 'x', ?, ?)`
+    )
+    slab.run(me, 'g-me', '9', null, 1)
+    slab.run(other, 'g-1', '10', null, 2)
+    slab.run(other, 'g-gone', '8', 'x', 3)
+
+    const { ticket } = await appleTicket('mine')
+    await merged(await merge('mine', ticket))
+
+    expect(
+      db
+        .prepare('SELECT uid, grade FROM graded_copies WHERE user_id = ? ORDER BY uid')
+        .all(me)
+    ).toEqual([
+      { uid: 'g-1', grade: '10' },
+      { uid: 'g-me', grade: '9' }
+    ])
+  })
+
   it('friends: pending upgraded, the two accounts’ friendship dropped, block wins', async () => {
     const { me, other } = discordAndApple()
     const [x, y, z, w, v] = ['xx1', 'yy1', 'zz1', 'ww1', 'vv1'].map((n, i) =>

@@ -17,6 +17,7 @@ import { SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet
 import { EntryEditor } from '@/features/collection/EntryEditor'
 import { FriendCopies } from '@/features/friends/FriendCopies'
 import { FriendWants } from '@/features/friends/FriendWants'
+import { GradedCopies } from '@/features/graded/GradedCopies'
 import { api, queryKeys } from '@/lib/api'
 import { useGame } from '@/lib/game'
 import { isPhone } from '@/lib/platform'
@@ -288,6 +289,15 @@ export function CardPanel({
           printings={detail.data?.printings ?? []}
           onSelectEntry={selectEntry}
           onClose={onClose}
+        />
+      )}
+
+      {name && (
+        <GradedCopies
+          cardId={cardId}
+          cardName={name}
+          printings={detail.data?.printings ?? []}
+          printingId={shown?.id ?? moreFor ?? undefined}
         />
       )}
 

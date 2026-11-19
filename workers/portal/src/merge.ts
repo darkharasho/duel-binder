@@ -14,6 +14,7 @@ import {
   NEXT_BINDER_EDIT_SEQ,
   NEXT_BINDER_SEQ,
   NEXT_FAVOURITE_SEQ,
+  NEXT_GRADED_SEQ,
   NEXT_SESSION_SEQ,
   NEXT_SEQ,
   NEXT_WISH_SEQ,
@@ -208,6 +209,22 @@ function mergeSessions(db: SqlDb, a: MergeArgs, nowIso: string): void {
   for (const s of uids) copy.run(a.survivor, nowIso, a.closed, s.uid)
 }
 
+/** Copies `closed`'s live graded copies, keeping uids; one the survivor already has (live or not) stays as it is. */
+function mergeGraded(db: SqlDb, a: MergeArgs, nowIso: string): void {
+  const uids = db
+    .prepare('SELECT uid FROM graded_copies WHERE user_id = ? AND deleted_at IS NULL')
+    .all(a.closed) as { uid: string }[]
+  const copy = db.prepare(
+    `INSERT INTO graded_copies (user_id, uid, game, pkey, image_id, company, grade, label, cert, value, paid,
+       notes, created_at, updated_at, seq)
+     SELECT ?, uid, game, pkey, image_id, company, grade, label, cert, value, paid, notes, created_at, ?,
+       ${NEXT_GRADED_SEQ}
+       FROM graded_copies WHERE user_id = ? AND uid = ?
+     ON CONFLICT(user_id, uid) DO NOTHING`
+  )
+  for (const g of uids) copy.run(a.survivor, nowIso, a.closed, g.uid)
+}
+
 /**
  * Step 5: `closed`'s friendships, requests and blocks move to `survivor`. A friendship beats a
  * pending request, a block beats both, and anything between the two accounts disappears. Then
@@ -338,6 +355,7 @@ function applyMerge(db: SqlDb, a: MergeArgs): void {
   mergeFavourites(db, a, nowIso)
   mergeBinders(db, a, nowIso)
   mergeSessions(db, a, nowIso)
+  mergeGraded(db, a, nowIso)
   mergeFriends(db, a, nowIso)
   const { moved, appleToken } = moveSignIns(db, a, nowIso)
   mergeSupporter(db, a.survivor, a.closed)

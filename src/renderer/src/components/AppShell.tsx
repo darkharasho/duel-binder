@@ -23,6 +23,7 @@ import { TitleBar } from './TitleBar'
 export type Page =
   | 'dashboard'
   | 'collection'
+  | 'graded'
   | 'wishlist'
   | 'binders'
   | 'pokedex'
@@ -51,6 +52,7 @@ const NAV_GROUPS: readonly { heading?: string; pages: readonly { page: Page; lab
       heading: 'My cards',
       pages: [
         { page: 'collection', label: 'Collection' },
+        { page: 'graded', label: 'Graded' },
         { page: 'binders', label: 'Binders' },
         { page: 'pokedex', label: 'Pokédex' },
         { page: 'wishlist', label: 'Wishlist' }

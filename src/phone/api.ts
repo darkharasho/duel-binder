@@ -90,6 +90,8 @@ const EDITS: readonly DataChannel[] = [
   'sessions:delete',
   'sessions:removeCard',
   'favourites:set',
+  'graded:save',
+  'graded:remove',
   'binders:save',
   'binders:remove',
   'binders:edit'
@@ -299,6 +301,7 @@ export function createPhoneApi(deps: {
     wishlist: dataPart('wishlist'),
     sessions: dataPart('sessions'),
     favourites: dataPart('favourites'),
+    graded: dataPart('graded'),
     binders: dataPart('binders'),
     scan: {
       debugFrame: async () => undefined,

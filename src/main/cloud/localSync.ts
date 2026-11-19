@@ -18,6 +18,7 @@ import {
   type WireBinderEdit,
   type WireEntry,
   type WireFavourite,
+  type WireGraded,
   type WirePrice,
   type WireWish
 } from '../../shared/cloud'
@@ -85,6 +86,7 @@ export type SyncStream =
   | 'binders'
   | 'binderEdits'
   | 'favourites'
+  | 'graded'
   | 'sessions'
   | 'history'
 
@@ -133,6 +135,7 @@ export function hasLocalData(db: SqlDb): boolean {
     'binders',
     'binder_edits',
     'favourites',
+    'graded_copies',
     'scan_sessions'
   ].some(
     (table) => db.prepare(`SELECT 1 FROM ${table} WHERE owner_id = 0 LIMIT 1`).get() !== undefined
@@ -165,6 +168,10 @@ export function adoptLocalData(db: SqlDb, owner: number): number {
       owner
     )
     db.prepare('DELETE FROM favourites WHERE owner_id = 0').run()
+    db.prepare('UPDATE OR IGNORE graded_copies SET owner_id = ?, dirty = 1 WHERE owner_id = 0').run(
+      owner
+    )
+    db.prepare('DELETE FROM graded_copies WHERE owner_id = 0').run()
     db.prepare('UPDATE OR IGNORE scan_sessions SET owner_id = ?, dirty = 1 WHERE owner_id = 0').run(
       owner
     )
@@ -179,6 +186,7 @@ const OWNED_TABLES = [
   'binders',
   'binder_edits',
   'favourites',
+  'graded_copies',
   'scan_sessions',
   'value_snapshots',
   'sync_pending',
@@ -202,7 +210,7 @@ const holdKey = (from: number): `merge_hold:${number}` => `merge_hold:${from}`
  * - Collection: unsent live rows stay held under `from` (never pushed, never shown) until `to` has
  *   pulled the merge (`resolveMergeHolds`), so a carried count is compared with the merged one and
  *   never lowers it. Calling this again before then changes nothing.
- * - Wishes, favourites, binders, binder edits and scan sessions keep their keys, and replace `to`'s row on the same
+ * - Wishes, favourites, graded copies, binders, binder edits and scan sessions keep their keys, and replace `to`'s row on the same
  *   key. Their unsent tombstones move too, so a deletion still reaches the server.
  * Everything already sent is dropped, as is the old account's bookkeeping: the server's merged state
  * reaches this device through the normal cursor sync, and a stale row of `from` must never be pushed
@@ -224,6 +232,7 @@ export function adoptMergedData(db: SqlDb, from: number, to: number, now: string
       'binders',
       'binder_edits',
       'favourites',
+      'graded_copies',
       'scan_sessions'
     ]) {
       db.prepare(
@@ -708,6 +717,116 @@ export function applyRemoteFavourite(db: SqlDb, owner: number, f: WireFavourite)
 export function purgeCleanFavourites(db: SqlDb, owner: number): void {
   db.prepare(
     'DELETE FROM favourites WHERE owner_id = ? AND deleted_at IS NOT NULL AND dirty = 0'
+  ).run(owner)
+}
+
+interface GradedRow {
+  uid: string
+  game: GameId
+  pkey: string
+  image_id: number
+  company: string
+  grade: string
+  label: string
+  cert: string
+  value: number | null
+  paid: number | null
+  notes: string
+  created_at: string
+  updated_at: string
+  deleted_at: string | null
+  dirty: number
+}
+
+const GRADED_COLS =
+  'uid, game, pkey, image_id, company, grade, label, cert, value, paid, notes, created_at, updated_at, deleted_at, dirty'
+
+const gradedToWire = (r: GradedRow): WireGraded => ({
+  uid: r.uid,
+  game: r.game,
+  pkey: r.pkey,
+  imageId: r.image_id,
+  company: r.company,
+  grade: r.grade,
+  label: r.label,
+  cert: r.cert,
+  value: r.value,
+  paid: r.paid,
+  notes: r.notes,
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+  deletedAt: r.deleted_at
+})
+
+/** Up to `limit` of the owner's unpushed graded copies, tombstones included, leaving out the uids in `skip`. */
+export function dirtyGraded(
+  db: SqlDb,
+  owner: number,
+  limit: number,
+  skip: ReadonlySet<string>
+): WireGraded[] {
+  const rows = db
+    .prepare(
+      `SELECT ${GRADED_COLS} FROM graded_copies
+       WHERE owner_id = ? AND dirty = 1 AND uid NOT IN (SELECT value FROM json_each(?))
+       ORDER BY updated_at, uid LIMIT ?`
+    )
+    .all(owner, JSON.stringify([...skip]), limit) as GradedRow[]
+  return rows.map(gradedToWire)
+}
+
+/** Marks a pushed graded copy clean, unless it was edited again since `g` was read. */
+export function markGradedPushed(db: SqlDb, owner: number, g: WireGraded): void {
+  db.prepare(
+    `UPDATE graded_copies SET dirty = 0
+     WHERE owner_id = ? AND uid = ? AND updated_at = ? AND deleted_at IS ?`
+  ).run(owner, g.uid, g.updatedAt, g.deletedAt)
+}
+
+/** Applies one server graded copy, clean; a newer unpushed local edit is kept. Returns whether it wrote. */
+export function applyRemoteGraded(db: SqlDb, owner: number, g: WireGraded): boolean {
+  const local = db
+    .prepare(`SELECT ${GRADED_COLS} FROM graded_copies WHERE owner_id = ? AND uid = ?`)
+    .get(owner, g.uid) as GradedRow | undefined
+  if (!local && g.deletedAt !== null) return false
+  if (local) {
+    const wire = gradedToWire(local)
+    if (local.dirty === 0 && JSON.stringify(wire) === JSON.stringify(g)) return false
+    if (local.dirty === 1 && !replaces(g, wire)) return false
+  }
+  db.prepare(
+    `INSERT INTO graded_copies (owner_id, uid, game, pkey, image_id, company, grade, label, cert, value, paid,
+       notes, created_at, updated_at, deleted_at, dirty)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+     ON CONFLICT(owner_id, uid) DO UPDATE SET game = excluded.game, pkey = excluded.pkey,
+       image_id = excluded.image_id, company = excluded.company, grade = excluded.grade,
+       label = excluded.label, cert = excluded.cert, value = excluded.value, paid = excluded.paid,
+       notes = excluded.notes, created_at = excluded.created_at, updated_at = excluded.updated_at,
+       deleted_at = excluded.deleted_at, dirty = 0`
+  ).run(
+    owner,
+    g.uid,
+    g.game,
+    g.pkey,
+    g.imageId,
+    g.company,
+    g.grade,
+    g.label,
+    g.cert,
+    g.value,
+    g.paid,
+    g.notes,
+    g.createdAt,
+    g.updatedAt,
+    g.deletedAt
+  )
+  return true
+}
+
+/** Deletes the owner's graded-copy tombstones the server already has. */
+export function purgeCleanGraded(db: SqlDb, owner: number): void {
+  db.prepare(
+    'DELETE FROM graded_copies WHERE owner_id = ? AND deleted_at IS NOT NULL AND dirty = 0'
   ).run(owner)
 }
 

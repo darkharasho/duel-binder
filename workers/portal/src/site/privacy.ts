@@ -20,7 +20,7 @@ export function renderPrivacy(view: PrivacyView): string {
           p(
             'When you sign in with Discord, the portal stores your Discord id, username, display name and avatar. It asks Discord for the <code>identify</code> and <code>email</code> scopes, not your servers or your messages. When you sign in with Apple, in the iPhone app, it stores Apple’s id for your account and, if you share it, your name. The portal also asks Discord and Apple for your email, and keeps it, and any email you sign up with, only to sign you in, send you codes and offer to link your accounts. Nothing else.',
             'When you sign up with an email and a password, the password is kept only as a salted hash, never as the password itself, so not even the portal can read it back.',
-            'However you sign in, it also stores your collection, wishlist, notes, binders, favourites, scan sessions and value history; your friends and blocks; your sign-in sessions; when your account last used the portal, to the hour; and how many requests your account made each day, by kind, to see what the portal costs to run.',
+            'However you sign in, it also stores your collection, wishlist, notes, binders, favourites, graded copies, scan sessions and value history; your friends and blocks; your sign-in sessions; when your account last used the portal, to the hour; and how many requests your account made each day, by kind, to see what the portal costs to run.',
             'To stop people guessing passwords or flooding the beta form, sign-in and beta-form attempts are counted by IP address. Those counts are deleted after an hour, or a day for the beta form.'
           )
         ],

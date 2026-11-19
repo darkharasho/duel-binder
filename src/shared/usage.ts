@@ -10,6 +10,7 @@ export const USAGE_EVENTS = [
   'open',
   'page:dashboard',
   'page:collection',
+  'page:graded',
   'page:wishlist',
   'page:binders',
   'page:pokedex',

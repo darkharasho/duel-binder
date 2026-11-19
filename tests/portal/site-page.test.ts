@@ -279,7 +279,7 @@ describe('renderPrivacy', () => {
     expect(html).toContain('<h1>Privacy</h1>')
     for (const text of [
       'Discord id, username, display name and avatar',
-      'your collection, wishlist, notes, binders, favourites, scan sessions and value history',
+      'your collection, wishlist, notes, binders, favourites, graded copies, scan sessions and value history',
       'friends and blocks',
       'sign-in sessions',
       'to sync and show your collection',

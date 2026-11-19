@@ -50,6 +50,8 @@ import {
 import { ruleFieldValues } from '../repo/binderRules'
 import { listWishlist, removeWish, setWish, settleWishlist, wishesForCard } from '../repo/wishlist'
 import { listFavourites, setFavourite } from '../repo/favourites'
+import { gradedForCard, listGraded, removeGraded, saveGraded } from '../repo/graded'
+import type { GradedDraft } from '@shared/graded'
 import { activeOwner, listSyncIssues } from '../cloud/localSync'
 import {
   deleteScanSession,
@@ -92,6 +94,10 @@ export const DATA_CHANNELS = [
   'sessions:removeCard',
   'favourites:list',
   'favourites:set',
+  'graded:list',
+  'graded:forCard',
+  'graded:save',
+  'graded:remove',
   'binders:list',
   'binders:get',
   'binders:preview',
@@ -267,6 +273,10 @@ export function createDataHandlers({
     'favourites:list': async () => listFavourites(db),
     'favourites:set': async (cardId: number, on: boolean) =>
       edited(setFavourite(db, wholeNumber(cardId, 'cardId'), on)),
+    'graded:list': async () => listGraded(db),
+    'graded:forCard': async (cardId: number) => gradedForCard(db, wholeNumber(cardId, 'cardId')),
+    'graded:save': async (draft: GradedDraft) => edited(saveGraded(db, draft)),
+    'graded:remove': async (uid: string) => edited(removeGraded(db, uid)),
     'binders:list': async () => listBinders(db),
     'binders:get': async (uid: string) => getBinder(db, uid),
     'binders:preview': async (draft: BinderDraft) => previewBinder(db, draft),

@@ -79,6 +79,7 @@ import type { GameId } from './games'
 import type { Prefs } from './prefs'
 import type { SupporterPlan, SupporterStatus } from './supporter'
 import type { BinderDraft, BinderEditAction, BinderTarget, RuleField } from './binders'
+import type { GradedCopy, GradedDraft } from './graded'
 
 /** The API exposed to the renderer as `window.api`. */
 export interface Api {
@@ -190,6 +191,15 @@ export interface Api {
     list(): Promise<number[]>
     /** Hearts a card (`on`) or takes the heart off it. */
     set(cardId: number, on: boolean): Promise<void>
+  }
+  /** Graded copies (slabs), in the game shown; private, and never counted toward completion. */
+  graded: {
+    /** The slabs, newest first. */
+    list(): Promise<GradedCopy[]>
+    forCard(cardId: number): Promise<GradedCopy[]>
+    /** Adds a slab (no uid) or edits one; returns its uid. */
+    save(draft: GradedDraft): Promise<string>
+    remove(uid: string): Promise<void>
   }
   /** Named sets of cards defined by rules; progress counts what the collection holds. */
   binders: {
@@ -537,6 +547,10 @@ export const INVOKE_CHANNELS = [
   'sessions:removeCard',
   'favourites:list',
   'favourites:set',
+  'graded:list',
+  'graded:forCard',
+  'graded:save',
+  'graded:remove',
   'binders:list',
   'binders:get',
   'binders:preview',

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { ExternalLink, QrCode } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   GRADES,
@@ -12,6 +13,7 @@ import {
 } from '@shared/graded'
 import type { Language } from '@shared/languages'
 import type { SlabRead } from '@shared/scan/slabLabel'
+import { slabReportUrl } from '@shared/scan/slabQr'
 import { printingChip, printingParts } from '@shared/printingLabel'
 import { LanguageTag } from '@/components/LanguageTag'
 import { PrintingLabel } from '@/components/PrintingLabel'
@@ -33,6 +35,7 @@ import {
 } from '@/components/ui/select'
 import { api, invalidateAfterEdit } from '@/lib/api'
 import { useBackHandler } from '@/lib/backStack'
+import { QrScanDialog } from './QrScanDialog'
 
 export interface GradedPrinting {
   id: number
@@ -148,6 +151,7 @@ function Fields({
   const [paid, setPaid] = useState(moneyText(slab?.paid ?? null))
   const [notes, setNotes] = useState(slab?.notes ?? '')
   const [confirming, setConfirming] = useState(false)
+  const [scanning, setScanning] = useState(false)
 
   const done = async (message: string): Promise<void> => {
     await invalidateAfterEdit(qc)
@@ -170,6 +174,7 @@ function Fields({
   const busy = save.isPending || remove.isPending
 
   const companyName = company === OTHER ? otherCompany.trim() : company
+  const report = slabReportUrl(companyName, cert)
   const valueNum = dollars(value)
   const paidNum = dollars(paid)
   const valid =
@@ -266,14 +271,26 @@ function Fields({
         )}
         <div className="grid grid-cols-2 gap-3">
           <Field label="Cert number" htmlFor="graded-cert">
-            <Input
-              id="graded-cert"
-              inputMode="numeric"
-              value={cert}
-              maxLength={MAX_CERT}
-              onChange={(e) => setCert(e.target.value)}
-              className="font-mono"
-            />
+            <div className="flex gap-1.5">
+              <Input
+                id="graded-cert"
+                value={cert}
+                maxLength={MAX_CERT}
+                onChange={(e) => setCert(e.target.value)}
+                className="min-w-0 font-mono"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                disabled={busy}
+                aria-label="Scan the label's QR code"
+                title="Scan the label's QR code"
+                onClick={() => setScanning(true)}
+              >
+                <QrCode aria-hidden />
+              </Button>
+            </div>
           </Field>
           <Field label="Label" hint="optional" htmlFor="graded-label">
             <Input
@@ -285,6 +302,28 @@ function Fields({
             />
           </Field>
         </div>
+        {report && (
+          <a
+            href={report}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+          >
+            View {companyName} report
+            <ExternalLink aria-hidden className="size-3" />
+          </a>
+        )}
+        <QrScanDialog
+          open={scanning}
+          onClose={() => setScanning(false)}
+          onRead={(qr) => {
+            setCompany(isListed(qr.company) ? qr.company : OTHER)
+            if (!isListed(qr.company)) setOtherCompany(qr.company)
+            setCert(qr.cert)
+            setScanning(false)
+            toast.success(`Read ${qr.company} cert ${qr.cert}`)
+          }}
+        />
       </Section>
 
       <Section title="Price">

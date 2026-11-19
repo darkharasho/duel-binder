@@ -7,6 +7,9 @@ import { GradedPage } from '@/features/graded/GradedPage'
 import { createMockApi, renderWithProviders } from './mockApi'
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() }, Toaster: () => null }))
+vi.mock('@/features/graded/qrDecode', () => ({
+  decodeQr: vi.fn(async () => 'https://tagd.co/Y1267951')
+}))
 
 const card = (id: number, name: string): CardRow => ({
   id,
@@ -90,6 +93,41 @@ describe('GradedCopies (card panel)', () => {
     )
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(api.graded.forCard).toHaveBeenCalledWith(1)
+  })
+
+  it('fills in the grader and cert from a photo of the label’s QR code', async () => {
+    const user = userEvent.setup()
+    // No camera here: the photo is the way in.
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: { getUserMedia: vi.fn(async () => Promise.reject(new Error('NotFoundError'))) }
+    })
+    vi.stubGlobal(
+      'createImageBitmap',
+      vi.fn(async () => ({ width: 100, height: 100, close: vi.fn() }))
+    )
+    renderWithProviders(
+      <GradedCopies cardId={1} cardName="X" printings={[printing(11, 1)]} printingId={11} />
+    )
+    await user.click(screen.getByRole('button', { name: 'Add graded copy' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).queryByRole('link', { name: /report/ })).not.toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: "Scan the label's QR code" }))
+    const scan = await screen.findByRole('dialog', { name: 'Scan the label’s QR code' })
+    expect(await within(scan).findByText(/No camera to use/)).toBeInTheDocument()
+    const photo = new File(['x'], 'label.jpg', { type: 'image/jpeg' })
+    await user.upload(scan.querySelector('input[type=file]') as HTMLInputElement, photo)
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Scan the label’s QR code' })).toBeNull()
+    )
+    const form = screen.getByRole('dialog')
+    expect(within(form).getByLabelText('Cert number')).toHaveValue('Y1267951')
+    expect(within(form).getByRole('combobox', { name: 'Grading company' })).toHaveTextContent('TAG')
+    expect(within(form).getByRole('link', { name: 'View TAG report' })).toHaveAttribute(
+      'href',
+      'https://tagd.co/Y1267951'
+    )
+    vi.unstubAllGlobals()
   })
 
   it('blocks a bad dollar amount', async () => {

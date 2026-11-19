@@ -151,6 +151,12 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
       list: vi.fn(async () => []),
       set: vi.fn(async () => undefined)
     },
+    graded: {
+      list: vi.fn(async () => []),
+      forCard: vi.fn(async () => []),
+      save: vi.fn(async () => 'uid-1'),
+      remove: vi.fn(async () => undefined)
+    },
     scan: {
       printingsByCode: vi.fn(async () => []),
       printingsByNumber: vi.fn(async () => []),

@@ -723,6 +723,22 @@ DELETE FROM intl_prices WHERE printing_id IN (SELECT id FROM card_printings
   WHERE set_rarity LIKE '%(Overframe)' OR variant = 'Overframe');
 `
 
+/**
+ * Graded copies (slabs): one row per slab, keyed by a uid, as binders are. The printing is named by
+ * `pkey` with no foreign key, as the wishlist's are, so a slab outlives a catalog reset and shows
+ * again when its printing does. Kept apart from the collection's entries: slabs never count
+ * toward completion. The server has its own shape, so this step is desktop-only (see server-49).
+ */
+export const SCHEMA_V49 = `
+CREATE TABLE graded_copies (owner_id INTEGER NOT NULL DEFAULT 0, uid TEXT NOT NULL, game TEXT NOT NULL,
+  pkey TEXT NOT NULL, image_id INTEGER NOT NULL, company TEXT NOT NULL, grade TEXT NOT NULL,
+  label TEXT NOT NULL DEFAULT '', cert TEXT NOT NULL DEFAULT '', value REAL, paid REAL,
+  notes TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT,
+  dirty INTEGER NOT NULL DEFAULT 1, PRIMARY KEY (owner_id, uid));
+CREATE INDEX ix_graded_dirty ON graded_copies(owner_id) WHERE dirty = 1;
+CREATE INDEX ix_graded_pkey ON graded_copies(pkey);
+`
+
 export const MIGRATIONS: Migration[] = [
   { version: 1, sql: SCHEMA_V1 },
   { version: 2, sql: SCHEMA_V2 },
@@ -771,5 +787,6 @@ export const MIGRATIONS: Migration[] = [
   { version: 45, sql: SCHEMA_V45, server: false },
   { version: 46, sql: SCHEMA_V46, server: false },
   { version: 47, sql: SCHEMA_V47, server: false },
-  { version: 48, sql: SCHEMA_V48 }
+  { version: 48, sql: SCHEMA_V48 },
+  { version: 49, sql: SCHEMA_V49, server: false }
 ]

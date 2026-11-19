@@ -59,6 +59,7 @@ import {
   wishesForCard
 } from '../../../src/main/repo/wishlist'
 import { listFavourites, setFavourite } from '../../../src/main/repo/favourites'
+import { gradedForCard, listGraded, removeGraded, saveGraded } from '../../../src/main/repo/graded'
 import type { AppDeps } from './app'
 import { currentUser, gamesFor } from './auth'
 import { EmailAuthError } from './emailAuth'
@@ -287,6 +288,10 @@ const HANDLERS: { [C in Exclude<PortalChannel, AccountLinkChannel>]: Handler<C> 
   'favourites:list': ({ db }, scope) => listFavourites(db, scope),
   'favourites:set': ({ db, now }, scope, cardId, on) =>
     setFavourite(db, checkId(cardId, 'cardId'), on, now(), scope),
+  'graded:list': ({ db }, scope) => listGraded(db, scope),
+  'graded:forCard': ({ db }, scope, cardId) => gradedForCard(db, checkId(cardId, 'cardId'), scope),
+  'graded:save': ({ db, now }, scope, draft) => saveGraded(db, draft, now(), scope),
+  'graded:remove': ({ db, now }, scope, uid) => removeGraded(db, uid, now(), scope),
   'binders:list': ({ db }, scope) => listBinders(db, scope),
   'binders:get': ({ db }, scope, uid) => getBinder(db, checkBounded(uid, 'uid', MAX_UID), scope),
   'binders:preview': ({ db }, scope, draft) => previewBinder(db, checkDraft(draft), scope),

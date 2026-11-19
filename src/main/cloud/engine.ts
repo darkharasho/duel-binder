@@ -24,6 +24,7 @@ import {
   applyRemoteBinder,
   applyRemoteBinderEdit,
   applyRemoteFavourite,
+  applyRemoteGraded,
   applyRemoteSession,
   applyRemoteWish,
   contributionGroups,
@@ -31,6 +32,7 @@ import {
   dirtyBinders,
   dirtyEntries,
   dirtyFavourites,
+  dirtyGraded,
   dirtySessions,
   dirtyWishes,
   gameCursor,
@@ -39,6 +41,7 @@ import {
   markBinderEditPushed,
   markBinderPushed,
   markFavouritePushed,
+  markGradedPushed,
   markSessionsPushed,
   markPushed,
   markWishPushed,
@@ -49,6 +52,7 @@ import {
   purgeCleanBinderEdits,
   purgeCleanBinders,
   purgeCleanFavourites,
+  purgeCleanGraded,
   purgeCleanSessions,
   purgeCleanTombstones,
   purgeCleanWishes,
@@ -251,6 +255,56 @@ async function syncFavourites(
     if (e instanceof CloudAuthError) throw e
     if (!(e instanceof CloudNotFoundError) && !(e instanceof CloudOfflineError))
       console.warn('Favourites sync failed; they stay queued', e)
+  }
+  return changed
+}
+
+/**
+ * Syncs `owner`'s graded copies on their own routes, as syncFavourites does favourites: pull each
+ * game from its own cursor, then push. Best effort: a portal without them (404) or a failure
+ * leaves them dirty for the next run. Resolves whether anything changed.
+ */
+async function syncGraded(
+  db: SqlDb,
+  owner: number,
+  client: CloudClient,
+  games: GameId[]
+): Promise<boolean> {
+  let changed = false
+  try {
+    for (const game of games) {
+      let cursor = gameCursor(db, owner, game, 'graded')
+      for (;;) {
+        const page = await client.gradedPull(cursor, game)
+        db.transaction(() => {
+          for (const g of page.entries) if (applyRemoteGraded(db, owner, g)) changed = true
+          saveGameCursor(db, owner, game, 'graded', page.cursor)
+        })()
+        cursor = page.cursor
+        if (!page.more || page.entries.length === 0) break
+      }
+    }
+
+    const sent = new Set<string>()
+    for (;;) {
+      const batch = dirtyGraded(db, owner, MAX_PUSH, sent)
+      if (batch.length === 0) break
+      for (const g of batch) sent.add(g.uid)
+      const results = await client.gradedPush(batch)
+      const byUid = new Map(batch.map((g) => [g.uid, g]))
+      db.transaction(() => {
+        for (const r of results) {
+          const g = byUid.get(r.uid)
+          if (!g || r.status === 'skipped') continue
+          markGradedPushed(db, owner, g)
+          if (r.status === 'stale' && applyRemoteGraded(db, owner, r.current)) changed = true
+        }
+      })()
+    }
+  } catch (e) {
+    if (e instanceof CloudAuthError) throw e
+    if (!(e instanceof CloudNotFoundError) && !(e instanceof CloudOfflineError))
+      console.warn('Graded copies sync failed; they stay queued', e)
   }
   return changed
 }
@@ -576,6 +630,9 @@ export async function syncOnce(
   // 6. Favourites, on their own routes as well.
   if (await syncFavourites(db, owner, client, games)) changed = true
 
+  // 6a. Graded copies, on their own routes.
+  if (await syncGraded(db, owner, client, games)) changed = true
+
   // 6b. Scan sessions, on their own routes.
   if (await syncSessions(db, owner, client, games)) changed = true
 
@@ -586,6 +643,7 @@ export async function syncOnce(
     purgeCleanBinders(db, owner)
     purgeCleanBinderEdits(db, owner)
     purgeCleanFavourites(db, owner)
+    purgeCleanGraded(db, owner)
     purgeCleanSessions(db, owner)
     saveAccountState(db, owner, { syncedAt: now().toISOString() })
     // recordSnapshot writes the active owner's (LOCAL) snapshot.

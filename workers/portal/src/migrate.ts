@@ -971,6 +971,20 @@ CREATE TABLE supporters (user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DEL
   cancel_at_period_end INTEGER NOT NULL DEFAULT 0, since TEXT,
   show_on_site INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL);
 `
+  },
+  // Graded copies (slabs), numbered by their own clock (`seq`), as favourites are in server-29.
+  {
+    name: 'server-49',
+    sql: `
+CREATE TABLE graded_copies (user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, uid TEXT NOT NULL,
+  game TEXT NOT NULL, pkey TEXT NOT NULL, image_id INTEGER NOT NULL, company TEXT NOT NULL, grade TEXT NOT NULL,
+  label TEXT NOT NULL DEFAULT '', cert TEXT NOT NULL DEFAULT '', value REAL, paid REAL,
+  notes TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT,
+  seq INTEGER NOT NULL, PRIMARY KEY (user_id, uid));
+CREATE UNIQUE INDEX ux_graded_seq ON graded_copies(seq);
+CREATE INDEX ix_graded_user_seq ON graded_copies(user_id, seq);
+CREATE INDEX ix_graded_pkey ON graded_copies(pkey);
+`
   }
 ]
 

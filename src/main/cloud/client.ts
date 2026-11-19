@@ -13,6 +13,8 @@ import type {
   BinderPushResult,
   FavouritePullResponse,
   FavouritePushResult,
+  GradedPullResponse,
+  GradedPushResult,
   Me,
   PriceChangesResponse,
   PriceRequestResponse,
@@ -24,6 +26,7 @@ import type {
   WireBinderEdit,
   WireEntry,
   WireFavourite,
+  WireGraded,
   WireWish,
   WishPullResponse,
   WishPushResult,
@@ -97,6 +100,10 @@ export interface CloudClient {
   favouritesPush(entries: WireFavourite[]): Promise<FavouritePushResult[]>
   /** One page of the account's favourites of `game` after `cursor`; as `favouritesPush` on an old portal. */
   favouritesPull(cursor: number, game: GameId): Promise<FavouritePullResponse>
+  /** Pushes graded copies; a portal without them rejects with CloudNotFoundError. */
+  gradedPush(entries: WireGraded[]): Promise<GradedPushResult[]>
+  /** One page of the account's graded copies of `game` after `cursor`; as `gradedPush` on an old portal. */
+  gradedPull(cursor: number, game: GameId): Promise<GradedPullResponse>
   /** Pushes scan sessions; a portal without sessions rejects with CloudNotFoundError. */
   sessionsPush(entries: WireScanSession[]): Promise<ScanSessionPushResult[]>
   /** One page of the account's scan sessions of `game` after `cursor`; as `sessionsPush` on an old portal. */
@@ -307,6 +314,11 @@ export function createCloudClient(opts: {
       ).results,
     favouritesPull: (cursor, game) =>
       call<FavouritePullResponse>(`/api/sync/favourites-pull?cursor=${cursor}&game=${game}`, 'GET'),
+    gradedPush: async (entries) =>
+      (await call<{ results: GradedPushResult[] }>('/api/sync/graded-push', 'POST', { entries }))
+        .results,
+    gradedPull: (cursor, game) =>
+      call<GradedPullResponse>(`/api/sync/graded-pull?cursor=${cursor}&game=${game}`, 'GET'),
     sessionsPush: async (entries) =>
       (
         await call<{ results: ScanSessionPushResult[] }>('/api/sync/sessions-push', 'POST', {

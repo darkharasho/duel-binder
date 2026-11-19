@@ -1,5 +1,6 @@
 import type { BinderEditAction, BinderEditLevel } from './binders'
 import { isGameId, type GameId } from './games'
+import type { GradedFields } from './graded'
 
 /** Limits shared by the desktop sync client and the server's sync endpoints. */
 
@@ -159,6 +160,28 @@ export type FavouritePushResult =
 
 export interface FavouritePullResponse {
   entries: WireFavourite[]
+  cursor: number
+  more: boolean
+}
+
+/** One graded copy (slab) as the sync protocol carries it; a user has one per uid, tombstones included. */
+export interface WireGraded extends GradedFields {
+  uid: string
+  game: GameId
+  pkey: string
+  imageId: number
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+export type GradedPushResult =
+  | { uid: string; status: 'applied' | 'skipped' }
+  /** The server kept its newer row for this uid. */
+  | { uid: string; status: 'stale'; current: WireGraded }
+
+export interface GradedPullResponse {
+  entries: WireGraded[]
   cursor: number
   more: boolean
 }

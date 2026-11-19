@@ -243,6 +243,12 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       list: call('favourites:list'),
       set: call('favourites:set')
     },
+    graded: {
+      list: call('graded:list'),
+      forCard: call('graded:forCard'),
+      save: call('graded:save'),
+      remove: call('graded:remove')
+    },
     binders: {
       list: call('binders:list'),
       get: call('binders:get'),

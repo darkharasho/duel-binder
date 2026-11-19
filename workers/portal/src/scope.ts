@@ -19,6 +19,9 @@ export const NEXT_SESSION_SEQ = '(SELECT COALESCE(MAX(seq), 0) + 1 FROM scan_ses
 /** SQL for the next favourites seq: one past the highest in use (the column is unique). */
 export const NEXT_FAVOURITE_SEQ = '(SELECT COALESCE(MAX(seq), 0) + 1 FROM favourites)'
 
+/** SQL for the next graded_copies seq: one past the highest in use (the column is unique). */
+export const NEXT_GRADED_SEQ = '(SELECT COALESCE(MAX(seq), 0) + 1 FROM graded_copies)'
+
 /** One user's live (non-deleted) rows of one game on the server. */
 export function userScope(userId: number, game: GameId): Scope {
   if (!Number.isSafeInteger(userId)) throw new Error(`Invalid user id: ${userId}`)
@@ -78,6 +81,13 @@ export function userScope(userId: number, game: GameId): Scope {
       markerCol: 'seq',
       marker: NEXT_FAVOURITE_SEQ,
       touch: `seq = ${NEXT_FAVOURITE_SEQ}`
+    },
+    graded: {
+      ownerCol: 'user_id',
+      owner: String(userId),
+      markerCol: 'seq',
+      marker: NEXT_GRADED_SEQ,
+      touch: `seq = ${NEXT_GRADED_SEQ}`
     },
     snapshotTable: {
       insertCols: 'user_id, game, ',

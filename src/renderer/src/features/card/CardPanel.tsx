@@ -10,7 +10,7 @@ import { CardDrawer } from '@/components/CardDrawer'
 import { PanelCardArt } from '@/components/PanelCardArt'
 import type { PanelNav } from '@/components/panelNav'
 import { BuyLinks } from '@/components/BuyLinks'
-import { PanelPrice } from '@/components/PanelPrice'
+import { PanelPrice, SlabPanelPrice } from '@/components/PanelPrice'
 import { scanFor } from '@/components/scanFor'
 import { Button } from '@/components/ui/button'
 import { LoadingState } from '@/components/ui/loading'
@@ -56,7 +56,7 @@ interface CardPanelProps {
   /** Lists only preferSet's printings. */
   onlySet?: boolean
   nav?: PanelNav
-  /** A graded copy the panel was opened on: drawn in its case while its printing is shown. */
+  /** A graded copy the panel was opened on: drawn in its case and priced by its grade while its printing is shown. */
   slab?: GradedCopy
 }
 
@@ -193,6 +193,10 @@ export function CardPanel({
         ? 'cheapest printing'
         : shown?.setRarity
 
+  // The slab the panel opened on, while its printing is the one shown: drawn in its case and
+  // priced by its grader and grade.
+  const slabShown = slab && (shown?.id ?? opened) === slab.printing.id ? slab : undefined
+
   // The caption names the set the panel opened from, which a row of another set isn't in.
   const inPreferredSet =
     !shown ||
@@ -249,11 +253,7 @@ export function CardPanel({
         panelArt?.imageId !== undefined && (
           <PanelCardArt
             imageId={panelArt.imageId}
-            slab={
-              slab && (shown?.id ?? opened) === slab.printing.id ? (
-                <SlabArt slab={slab} size="full" />
-              ) : undefined
-            }
+            slab={slabShown && <SlabArt slab={slabShown} size="full" />}
             printingId={panelArt.printingId}
             alt={name ?? ''}
             nav={nav}
@@ -284,7 +284,11 @@ export function CardPanel({
         {caption && inPreferredSet && (
           <p className="font-mono text-[13px] text-muted-foreground">{caption}</p>
         )}
-        <PanelPrice entry={entry} price={price} label={priceLabel} plain={!!pokemonVersion} />
+        {slabShown ? (
+          <SlabPanelPrice slab={slabShown} />
+        ) : (
+          <PanelPrice entry={entry} price={price} label={priceLabel} plain={!!pokemonVersion} />
+        )}
         {name && <BuyLinks card={{ id: cardId, name }} printing={shown} />}
       </div>
 

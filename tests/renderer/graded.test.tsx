@@ -309,6 +309,43 @@ describe('GradedPage', () => {
     expect(screen.getAllByText('9.5').length).toBeGreaterThan(1)
   })
 
+  it("prices the panel by the slab's grader and grade, not the raw card", async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<GradedPage />, {
+      api: createMockApi({
+        graded: {
+          list: async () => [
+            slab('a', {
+              company: 'BGS',
+              grade: '9.5',
+              value: null,
+              rawPrice: 40,
+              market: { price: 1234, listings: 7, checkedAt: '2026-11-18T00:00:00Z' }
+            })
+          ]
+        }
+      })
+    })
+    await user.click(await screen.findByRole('button', { name: 'Blue-Eyes White Dragon, BGS 9.5' }))
+    expect(await screen.findByText('eBay asking price · BGS 9.5')).toBeInTheDocument()
+    expect(screen.getAllByText('$1,234.00').length).toBeGreaterThan(0)
+    expect(screen.getByText('Median of 7 listings')).toBeInTheDocument()
+    expect(screen.queryByText(/^Market price/)).not.toBeInTheDocument()
+  })
+
+  it("says a slab has no graded price yet, with the raw card's for scale", async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<GradedPage />, {
+      api: createMockApi({
+        graded: { list: async () => [slab('a', { value: null, rawPrice: 40, market: null })] }
+      })
+    })
+    await user.click(await screen.findByRole('button', { name: 'Blue-Eyes White Dragon, PSA 10' }))
+    expect(await screen.findByText('Graded price · PSA 10')).toBeInTheDocument()
+    expect(screen.getByText('No graded price yet')).toBeInTheDocument()
+    expect(screen.getByText('Raw card: $40.00')).toBeInTheDocument()
+  })
+
   it('shows how to start with no slabs', async () => {
     renderWithProviders(<GradedPage />)
     expect(await screen.findByText('No graded cards yet')).toBeInTheDocument()

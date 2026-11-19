@@ -19,7 +19,7 @@ describe('catalog snapshot keys', () => {
     )
   })
 
-  it('snapshots cover Pokémon, One Piece and Magic only', () => {
-    expect(SNAPSHOT_GAMES).toEqual(['pkm', 'op', 'mtg'])
+  it('snapshots cover every game', () => {
+    expect(SNAPSHOT_GAMES).toEqual(['ygo', 'pkm', 'op', 'mtg'])
   })
 })

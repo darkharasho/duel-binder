@@ -959,8 +959,9 @@ const LIVE_REGIONS = 1
  * when the frame holds no card-shaped outline. The art is looked for in profile's art boxes.
  * With profile's holderSearch, a frame none of whose quads matched is looked at again
  * (lookAgain) unless holderPass is false (the live scanner skips it on some frames), and via is
- * 'holder' when that is what matched. So does the inner frame search of a profile with a holder
- * search, which costs as much. held is an earlier frame's outline: when art matches there, or at
+ * 'holder' when that is what matched. So do the inner frame search and the nudges of a profile
+ * with a holder search, which cost as much: on a busy playmat with no card held up, every frame
+ * misses, and paying for them on each one held the next card back by seconds. held is an earlier frame's outline: when art matches there, or at
  * the outline finder's pick over it, the frame isn't searched at all. thorough false is a live frame's short holder search: see
  * LIVE_OUTLINES. For a game with card backs (cardBacks.ts), back is how close the card, or any
  * candidate outline over it, came to one: a back is often outlined with the desk around it, its
@@ -1109,8 +1110,13 @@ export function recognizeArt(
       }
     }
     // Still no sure match: the closest few outlines may sit a few percent off the card's edge, and
-    // the largest may be the card's own, cut short at one end (nudgeStarts).
-    if (final && topDistance(final) > NUDGE_MAX_DISTANCE)
+    // the largest may be the card's own, cut short at one end (nudgeStarts). Paced like the holder
+    // search, for a profile with one: a card held up is nudged a frame or two later at most.
+    if (
+      (holderPass || !profile.holderSearch) &&
+      final &&
+      topDistance(final) > NUDGE_MAX_DISTANCE
+    )
       for (const [outline, thorough] of [
         ...outlines.closest.map((o) => [o, profile.holderSearch] as const),
         ...(outlines.outer ? [[outlines.outer, true] as const] : [])

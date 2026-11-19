@@ -1,6 +1,7 @@
-// How often the live scanner pays for the holder search (candidates.ts lookAgain). It adds
-// several hundred ms to a frame whose art matched nothing, and a camera shows such frames
-// continually while no card is held up, so only every HOLDER_EVERY'th one in a row gets it.
+// How often the live scanner pays for the holder search (candidates.ts lookAgain), and for a
+// Pokémon frame the inner frame search and the nudges too. They add seconds to a frame whose
+// art matched nothing, and a camera shows such frames continually while no card is held up, so
+// only every HOLDER_EVERY'th one in a row gets them.
 import { ART_MAX_DISTANCE } from '@shared/scan/thresholds'
 
 export const HOLDER_EVERY = 3

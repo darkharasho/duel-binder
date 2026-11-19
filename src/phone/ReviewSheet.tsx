@@ -16,7 +16,8 @@ import { useScanHub } from '@/features/scan/ScanHub'
 import { choicesFor, flagText, pickerLabel, setLabelFor } from '@/features/scan/ScanRowItem'
 import { OptionLabel } from '@/features/scan/SearchPicker'
 import type { ScanRow } from '@/features/scan/session'
-import { ClearSessionDialog, useSessionCommit } from '@/features/scan/SessionList'
+import { ClearSessionDialog, SlabsHeldNote, useSessionCommit } from '@/features/scan/SessionList'
+import { SlabRowActions } from '@/features/scan/SlabRowActions'
 import { plural } from '@/features/scan/scanText'
 import { formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -127,6 +128,7 @@ function ReviewRow({ row, disabled }: { row: ScanRow; disabled: boolean }): Reac
         'flex gap-3 rounded-[20px] p-2.5',
         GLASS,
         (row.flag || row.guess) && 'border-amber-400/45',
+        row.slab && 'border-sky-400/45',
         row.key === flashed && 'scan-reread'
       )}
     >
@@ -182,6 +184,14 @@ function ReviewRow({ row, disabled }: { row: ScanRow; disabled: boolean }): Reac
             <TriangleAlertIcon aria-hidden className="size-3.5 shrink-0" />
             {flag}
           </p>
+        )}
+        {row.slab && (
+          <SlabRowActions
+            row={row}
+            disabled={disabled}
+            onAdded={() => session.takeOne(row.key)}
+            onNotSlab={() => session.setSlab(row.key, false)}
+          />
         )}
         {row.error && <p className="mt-1 text-xs text-destructive">{row.error}</p>}
       </div>
@@ -241,10 +251,11 @@ export function ReviewSheet({
 }): React.JSX.Element {
   useBackHandler(true, onClose)
   const { session } = useScanHub()
-  const { addable, commit } = useSessionCommit()
-  const [checkOnly, setCheckOnly] = useState(() => session.rows.some((r) => flagText(r) !== null))
-  const shown =
-    stream && checkOnly ? session.rows.filter((r) => flagText(r) !== null) : session.rows
+  const { addable, slabs, commit } = useSessionCommit()
+  // A slab waits on the user as a flag does: it is one to check.
+  const toCheck = (r: ScanRow): boolean => flagText(r) !== null || r.slab === true
+  const [checkOnly, setCheckOnly] = useState(() => session.rows.some(toCheck))
+  const shown = stream && checkOnly ? session.rows.filter(toCheck) : session.rows
   const [clearing, setClearing] = useState(false)
   const [dy, setDy] = useState(0)
   const start = useRef<number | null>(null)
@@ -390,6 +401,7 @@ export function ReviewSheet({
             </ul>
           )}
         </div>
+        <SlabsHeldNote slabs={slabs} />
         <footer className="flex shrink-0 gap-2.5 px-3.5 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <button
             type="button"

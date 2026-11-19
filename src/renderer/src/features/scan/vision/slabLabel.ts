@@ -5,9 +5,11 @@ import type { OcrBand } from '@shared/scan/types'
 import type { CV } from './cv'
 import type { Point, Quad } from './detect'
 
-/** The label's box in the card's own coordinates (u across, v down, the card 0..1 each way). */
+/** The label's box across, in the card's widths (u; the card is 0..1). */
 const LABEL_U = [-0.02, 1.02] as const
-const LABEL_V = [-0.3, -0.03] as const
+/** How far the band reaches past the label window the slab was found by, up and down (v). */
+const LABEL_ABOVE = 0.06
+const LABEL_BELOW = 0.04
 /** The band's width in pixels: the label scaled so its text is tall enough for tesseract. */
 const BAND_W = 1000
 /** A card narrower than this in the frame has a label too small to read. */
@@ -15,19 +17,25 @@ const MIN_CARD_PX = 140
 
 /**
  * The label above the card at quad (corners clockwise from top-left, the label above the top
- * edge: see slabQuad), as a grayscale band straightened and scaled to BAND_W across, contrast
+ * edge: see slabQuad), around the window `labelV` it was found in, as a grayscale band straightened and scaled to BAND_W across, contrast
  * stretched. One perspective warp in OpenCV, the card's own perspective carried up to the label,
  * so it costs a millisecond or two a frame. Null when the card is too small in the frame or the
  * label runs off it.
  */
-export function slabLabelBand(cv: CV, frame: Mat, quad: Quad): OcrBand | null {
+export function slabLabelBand(
+  cv: CV,
+  frame: Mat,
+  quad: Quad,
+  labelV: readonly [number, number]
+): OcrBand | null {
   const p = quad
   const across: Point = [p[1][0] - p[0][0], p[1][1] - p[0][1]]
   const down: Point = [p[3][0] - p[0][0], p[3][1] - p[0][1]]
   const cardPx = Math.hypot(across[0], across[1])
   if (cardPx < MIN_CARD_PX) return null
   const [u0, u1] = LABEL_U
-  const [v0, v1] = LABEL_V
+  const v0 = labelV[0] - LABEL_ABOVE
+  const v1 = Math.min(-0.01, labelV[1] + LABEL_BELOW)
   // The label's corners in the frame, near enough (the card's sides carried straight on): off
   // the frame by more than a little, and there's no label to read.
   const slack = 0.05 * cardPx

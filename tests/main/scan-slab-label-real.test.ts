@@ -98,14 +98,14 @@ describe.skipIf(!READY)('reading slab labels on real photos', () => {
       const bands: OcrBand[] = []
       let detected: boolean
       try {
-        const turned = slabQuad(frame, signals.quad)
-        detected = turned !== null
+        const found = slabQuad(frame, signals.quad)
+        detected = found !== null
         // A photo cropped to the slab leaves no desk round the label, so the slab check misses it
         // (the app reads only labels it found): then both ways up are read, to score the reading.
         const q = signals.quad
-        const ways = turned ? [turned] : [q, [q[2], q[3], q[0], q[1]] as typeof q]
+        const ways = found ? [found.quad] : [q, [q[2], q[3], q[0], q[1]] as typeof q]
         for (const w of ways) {
-          const b = slabLabelBand(cv, frame, w)
+          const b = slabLabelBand(cv, frame, w, found?.labelV ?? [-0.26, -0.06])
           if (b) bands.push(b)
         }
       } finally {

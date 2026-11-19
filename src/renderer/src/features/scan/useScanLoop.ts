@@ -88,6 +88,8 @@ const LANGUAGE_TIMEOUT_MS = 20_000
 const SLAB_LABEL_EVERY_MS = 600
 /** A label cut this long ago still goes with a slab counted now (the same slab, still held). */
 const SLAB_LABEL_KEPT_MS = 3000
+/** A card whose art was seen in a slab this lately counts as one (SLAB_SEEN_MS). */
+const SLAB_SEEN_MS = 3000
 /**
  * A shown camera whose picture hasn't moved for this long is taken as frozen (a stream the
  * system muted in the background, or one that died without ending) and handed to onStalled.
@@ -491,6 +493,9 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     // cut, for the slab counted next.
     slabAskedAt: -Infinity,
     slabBand: null as { band: OcrBand; at: number } | null,
+    // When each artwork was last seen in a slab: a slab's label is told on some frames and not
+    // others (glare, a thumb), so a card counted on a frame that missed it is still one.
+    slabArt: new Map<number, number>(),
     shown: null as number | null,
     absentSince: null as number | null,
     // When the video's picture last moved, to tell a frozen camera.
@@ -755,10 +760,10 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
 
     /**
      * Whether a live frame grabbed at `at` cuts a slab's label: one every SLAB_LABEL_EVERY_MS at
-     * most (it costs about 10 ms a frame), and only for Pokémon, whose slabs are told.
+     * most (it costs about 10 ms a frame).
      */
     const wantSlabLabel = (at: number): boolean => {
-      if (latest.current.game !== 'pkm' || at - l.slabAskedAt < SLAB_LABEL_EVERY_MS) return false
+      if (at - l.slabAskedAt < SLAB_LABEL_EVERY_MS) return false
       l.slabAskedAt = at
       return true
     }
@@ -796,6 +801,9 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
       slabBand?: OcrBand
     ): void => {
       endRead()
+      // Its art seen in a slab lately: a slab, though this frame missed the label.
+      const seenInSlab = performance.now() - (l.slabArt.get(draft.imageId) ?? -Infinity)
+      if (!draft.slab && seenInSlab < SLAB_SEEN_MS) draft = { ...draft, slab: true }
       showCounted(draft)
       const rowId = latest.current.onDraft(draft)
       if (typeof rowId === 'string' && draft.slab && slabBand) {
@@ -1188,8 +1196,8 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
             (raw) => {
               analyzed = performance.now()
               // A frame with a card and no slab: the label kept was another card's.
+              if (raw.slab && raw.art[0]) l.slabArt.set(raw.art[0].imageId, analyzed)
               if (raw.slabBand) l.slabBand = { band: raw.slabBand, at: analyzed }
-              else if (raw.found && raw.slab === false) l.slabBand = null
               // The worker's whole frame comes back (timings and all), as the read and readout use.
               return raw as RawSignals & FrameSignals
             },

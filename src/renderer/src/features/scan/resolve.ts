@@ -359,6 +359,14 @@ export function cardBackInView(raw: RawSignals): boolean {
  * resolveOnePieceSignals'.
  */
 export async function resolveSignals(raw: RawSignals, ctx: ResolveContext): Promise<ScanOutcome> {
+  const outcome = await resolveGame(raw, ctx)
+  // A card counted in a graded slab, in any game, says so (Pokémon's resolver already does).
+  return raw.slab && outcome.kind === 'recognized' && !outcome.item.slab
+    ? { ...outcome, item: { ...outcome.item, slab: true } }
+    : outcome
+}
+
+async function resolveGame(raw: RawSignals, ctx: ResolveContext): Promise<ScanOutcome> {
   if (raw.found && cardBackInView(raw)) return { kind: 'none' }
   if (ctx.game === 'pkm') return resolvePokemonSignals(raw, ctx)
   if (ctx.game === 'op') return resolveOnePieceSignals(raw, ctx)

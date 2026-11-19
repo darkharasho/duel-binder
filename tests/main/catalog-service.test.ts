@@ -1,11 +1,16 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { gzipSync } from 'node:zlib'
 import type Database from 'better-sqlite3'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createCatalogService, type CatalogService } from '../../src/main/catalog/service'
 import { CloudOfflineError, createCloudClient, type CloudClient } from '../../src/main/cloud/client'
 import { deleteMeta, getMeta, setMeta } from '../../src/main/db/meta'
+import { openDatabase } from '../../src/main/db/database'
+import { exportSnapshot } from '../../src/main/catalog/snapshot'
+import { catalogShape, snapshotFileKey } from '../../src/shared/catalogSnapshot'
 import type { SyncStatus } from '../../src/shared/types'
 import { seededDb } from './helpers'
 import { inProcessPortal, PORTAL } from './cloudHelpers'
@@ -39,9 +44,10 @@ const offline: () => CloudClient = () => ({
 const cardName = (d: Database.Database, id: number): string =>
   (d.prepare('SELECT name FROM cards WHERE id = ?').get(id) as { name: string }).name
 
-function makeService(launchedAt = LAUNCHED): CatalogService {
+function makeService(launchedAt = LAUNCHED, snapshotDir?: string): CatalogService {
   return createCatalogService({
     db,
+    snapshotDir,
     backupPath: (now) =>
       join(dir, 'backups', `${now.toISOString().slice(0, 10)}-pre-server-catalog.sqlite`),
     emit: (s) => emitted.push(s),
@@ -91,6 +97,65 @@ describe('catalog service', () => {
     expect(second).toEqual({ changed: true, imagesChanged: true })
     expect(getMeta(db, 'catalog_switched_at')).toBe(NOW.toISOString())
     expect(service.status()).toMatchObject({ state: 'idle', blocked: null, error: null })
+  })
+
+  it('a fresh install skips the switch and imports the Yu-Gi-Oh! snapshot', async () => {
+    // The server's catalog, exported as tonight's snapshot at the feed's latest cursor.
+    const latest = (await client.catalogChanges(0, 1, undefined, 'ygo')).latest
+    const work = mkdtempSync(join(dir, 'snap-src-'))
+    exportSnapshot(db, 'ygo', join(work, 'ygo.sqlite'), { cursor: latest, dbVersion: 'v7' })
+    const gz = gzipSync(readFileSync(join(work, 'ygo.sqlite')))
+    const snapshotCalls: string[] = []
+    const sinces: number[] = []
+    const withSnapshot: CloudClient = {
+      ...client,
+      catalogChanges: (since, limit, tables, game) => {
+        if (game === 'ygo') sinces.push(since)
+        return client.catalogChanges(since, limit, tables, game)
+      },
+      catalogSnapshot: async (game) => {
+        snapshotCalls.push(game)
+        if (game !== 'ygo') return null
+        return {
+          game: 'ygo',
+          shape: catalogShape(),
+          cursor: latest,
+          dbVersion: 'v7',
+          bytes: gz.byteLength,
+          sha256: createHash('sha256').update(gz).digest('hex'),
+          builtAt: '2026-11-19T00:00:00.000Z',
+          key: snapshotFileKey('ygo', catalogShape(), latest),
+          url: 'https://portal.test/api/catalog/snapshot-file/x?exp=1&sig=s'
+        }
+      },
+      download: async () => new Response(new Uint8Array(gz), { status: 200 })
+    }
+    db.close()
+    db = openDatabase(':memory:')
+    const service = makeService(LAUNCHED, join(dir, 'snap-dl'))
+
+    expect(await service.update(withSnapshot, { force: true })).toEqual({
+      changed: true,
+      imagesChanged: true
+    })
+
+    expect(snapshotCalls).toContain('ygo')
+    // The feed only from the snapshot's cursor, never from 0; no switch backup.
+    expect(sinces).toEqual([latest])
+    expect(existsSync(join(dir, 'backups'))).toBe(false)
+    expect(cardName(db, DM)).toBe('Dark Magician')
+    expect(getMeta(db, 'catalog_cursor')).toBe(String(latest))
+    expect(getMeta(db, 'catalog_switched_at')).toBe(NOW.toISOString())
+    expect(service.status()).toMatchObject({ state: 'idle', blocked: null, error: null })
+  })
+
+  it('an install with its own Yu-Gi-Oh! catalog still switches', async () => {
+    const snapshot = vi.fn(async () => null)
+    const service = makeService(LAUNCHED, join(dir, 'snap-dl'))
+    await service.update({ ...client, catalogSnapshot: snapshot }, { force: true })
+    expect(snapshot).not.toHaveBeenCalledWith('ygo', expect.anything())
+    expect(existsSync(join(dir, 'backups'))).toBe(true)
+    expect(getMeta(db, 'catalog_switched_at')).toBe(NOW.toISOString())
   })
 
   it('pulls only deltas after the switch', async () => {

@@ -3,10 +3,10 @@ import type { GameId } from './games'
 
 /**
  * Prebuilt catalog snapshots: one compressed SQLite file per game in R2, which a device pulling
- * the game for the first time imports instead of reading the whole change feed. Yu-Gi-Oh! has
- * none (a fresh install's switch sets its cursor before any pull).
+ * the game for the first time imports instead of reading the whole change feed. Yu-Gi-Oh!'s
+ * serves fresh installs, which skip the one-time switch (see the catalog service).
  */
-export const SNAPSHOT_GAMES: readonly GameId[] = ['pkm', 'op', 'mtg']
+export const SNAPSHOT_GAMES: readonly GameId[] = ['ygo', 'pkm', 'op', 'mtg']
 
 /** The extra columns the feed sends for `card_printings` (see the portal's feedColumns). */
 const PRINTING_FEED_EXTRAS = ['id', 'pkey', 'contributed']

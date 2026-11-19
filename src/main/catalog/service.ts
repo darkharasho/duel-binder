@@ -7,7 +7,7 @@ import type { SyncStatus } from '../../shared/types'
 import { isGameId, type GameId } from '../../shared/games'
 import { inProcessApplier, type CatalogApplier } from '../catalogApplier'
 import { catalogCursorKey } from './apply'
-import { pullGame } from './pull'
+import { firstPull, pullGame } from './pull'
 import { snapshotKey } from './snapshot'
 import { backfillArtTwins } from './artTwinBackfill'
 import { backfillSetSeries } from './seriesBackfill'
@@ -138,6 +138,15 @@ export function createCatalogService(deps: CatalogServiceDeps): CatalogService {
     if (!force && fresh()) return announce()
     set('checking')
     try {
+      // A fresh install has no catalog of its own to move over: it skips the switch, and its
+      // Yu-Gi-Oh! pull below starts from the snapshot like any other game's first pull.
+      if (!switched() && firstPull(deps.db, 'ygo')) {
+        const at = now().toISOString()
+        db.transaction(() => {
+          setMeta(db, 'catalog_switched_at', at)
+          deleteMeta(db, 'catalog_switch_failed')
+        })()
+      }
       if (!switched()) {
         if (waitingForNextLaunch()) {
           set('idle')

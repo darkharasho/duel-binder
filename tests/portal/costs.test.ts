@@ -114,6 +114,11 @@ describe('request costs', () => {
       ['alice', 4000],
       ['bob', 2000]
     ])
+    // Each user's own split, dearest area first.
+    expect(c.byUser[0].areas?.map((x) => [x.area, x.rowsRead])).toEqual([
+      ['rpc sets:list', 3000],
+      ['api/sync', 1000]
+    ])
     expect(c.byArea[0]).toMatchObject({ area: 'admin/catalog', rowsRead: 9000 })
     expect(c.byDay.map((d) => d.day)).toEqual(['2026-11-15', '2026-11-16'])
     expect(c.projections.map((p) => p.users)).toEqual([2, 100, 500, 5000])

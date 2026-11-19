@@ -30,6 +30,13 @@ export interface CostProjection {
 }
 
 /** GET /admin/costs. Totals are for the window (`since` onward); `perUserMonth` scales them to 30 days. */
+/** One area of one user's requests, in the Costs tab's per-user split. */
+export interface UserArea {
+  area: string
+  requests: number
+  rowsRead: number
+}
+
 export interface AdminCosts {
   at: string
   since: string
@@ -42,7 +49,8 @@ export interface AdminCosts {
   system: CostTotals
   perUserMonth: CostTotals | null
   systemMonth: CostTotals
-  byUser: ({ userId: number; username: string } & CostTotals)[]
+  /** `areas`: the user's dearest areas by rows read (older portals leave it out). */
+  byUser: ({ userId: number; username: string; areas?: UserArea[] } & CostTotals)[]
   byArea: ({ area: string } & CostTotals)[]
   byDay: ({ day: string } & CostTotals)[]
   projections: CostProjection[]

@@ -24,7 +24,7 @@ export interface PullGameDeps {
 }
 
 /** A game never pulled here, with nothing staged and no cards: a snapshot may fill it. */
-function firstPull(db: Database.Database, game: GameId): boolean {
+export function firstPull(db: Database.Database, game: GameId): boolean {
   return (
     getMeta(db, catalogCursorKey(game)) === null &&
     getMeta(db, catalogStagingKey(game)) === null &&

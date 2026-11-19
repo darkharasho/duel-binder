@@ -58,7 +58,8 @@ const moneyText = (n: number | null): string => (n === null ? '' : String(n))
 
 /**
  * Adds a graded copy of a card, or edits or removes one (`slab`). Opens on `printingId` for a new
- * slab: the printing the panel shows.
+ * slab: the printing the panel shows. `onAdded` hears a new slab saved (the scanner's hand-off
+ * takes its row off the list).
  */
 export function GradedForm({
   open,
@@ -66,7 +67,8 @@ export function GradedForm({
   cardName,
   printings,
   printingId,
-  slab
+  slab,
+  onAdded
 }: {
   open: boolean
   onClose: () => void
@@ -74,6 +76,7 @@ export function GradedForm({
   printings: GradedPrinting[]
   printingId: number | undefined
   slab?: GradedCopy
+  onAdded?: () => void
 }): React.JSX.Element {
   useBackHandler(open, onClose)
   return (
@@ -93,6 +96,7 @@ export function GradedForm({
             printings={printings}
             printingId={printingId}
             slab={slab}
+            onAdded={onAdded}
           />
         )}
       </DialogContent>
@@ -104,12 +108,14 @@ function Fields({
   onClose,
   printings,
   printingId,
-  slab
+  slab,
+  onAdded
 }: {
   onClose: () => void
   printings: GradedPrinting[]
   printingId: number | undefined
   slab?: GradedCopy
+  onAdded?: () => void
 }): React.JSX.Element {
   const qc = useQueryClient()
   // A slab's own printing is listed even when the card's list leaves it out (contributed).
@@ -138,7 +144,10 @@ function Fields({
   }
   const save = useMutation({
     mutationFn: (draft: GradedDraft) => api.graded.save(draft),
-    onSuccess: () => done(slab ? 'Saved' : 'Graded copy added'),
+    onSuccess: () => {
+      if (!slab) onAdded?.()
+      return done(slab ? 'Saved' : 'Graded copy added')
+    },
     onError: (e) => toast.error(e instanceof Error ? e.message : 'Could not save')
   })
   const remove = useMutation({

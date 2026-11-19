@@ -343,6 +343,40 @@ describe('useScanSession', () => {
     expect(add).toHaveBeenCalledWith(expect.objectContaining({ printingId: 102 }))
   })
 
+  it('a slab is held out of Add until it is marked as not one', async () => {
+    const { result, add } = setup()
+    act(() => result.current.add(draft({ slab: true, flag: null })))
+    act(() => result.current.add(draft({ cardId: 2, printingId: 201, imageId: 20, flag: null })))
+    let out = { added: 0, failed: 0 }
+    await act(async () => {
+      out = await result.current.commit()
+    })
+    expect(out).toEqual({ added: 1, failed: 0, cards: 1 })
+    expect(add).toHaveBeenCalledTimes(1)
+    expect(add).toHaveBeenCalledWith(expect.objectContaining({ printingId: 201 }))
+    // The slab stays on the list, waiting.
+    expect(result.current.rows).toHaveLength(1)
+    expect(result.current.rows[0]).toMatchObject({ printingId: 101, slab: true })
+    act(() => result.current.setSlab(result.current.rows[0].key, false))
+    expect(result.current.rows[0].slab).toBeUndefined()
+    await act(async () => {
+      out = await result.current.commit()
+    })
+    expect(add).toHaveBeenLastCalledWith(expect.objectContaining({ printingId: 101 }))
+    expect(result.current.rows).toEqual([])
+  })
+
+  it('takeOne takes a copy added as a graded copy off its row', () => {
+    const { result } = setup()
+    act(() => result.current.add(draft({ slab: true })))
+    const key = result.current.rows[0].key
+    act(() => result.current.setQuantity(key, 2))
+    act(() => result.current.takeOne(key))
+    expect(result.current.rows[0].quantity).toBe(1)
+    act(() => result.current.takeOne(key))
+    expect(result.current.rows).toEqual([])
+  })
+
   it('a second commit while one runs is a no-op', async () => {
     let release!: () => void
     const add = vi.fn(() => new Promise<never>((res) => (release = () => res({} as never))))

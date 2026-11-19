@@ -6,7 +6,13 @@ import { createMockApi, renderWithProviders } from './mockApi'
 import type { Api } from '@shared/ipc'
 import { printing } from './scanFakes'
 
-const actions: ScanRowActions = { setPrinting: () => {}, setQuantity: () => {}, remove: () => {} }
+const actions: ScanRowActions = {
+  setPrinting: () => {},
+  setQuantity: () => {},
+  setSlab: () => {},
+  takeOne: () => {},
+  remove: () => {}
+}
 
 // Buster Blader's Manga-Style printing in the Original Artwork Collection, which has no code.
 const manga = printing({
@@ -86,7 +92,10 @@ describe('ScanRowItem', () => {
 
   it("shows the printing's own photo when the row keeps the card's first artwork", () => {
     renderWithProviders(<ScanRowItem row={row()} actions={actions} language={null} scanned={1} />)
-    expect(screen.getByTestId('printing-scan')).toHaveAttribute('src', 'ygo-img://printing-small/61362')
+    expect(screen.getByTestId('printing-scan')).toHaveAttribute(
+      'src',
+      'ygo-img://printing-small/61362'
+    )
   })
 
   it('keeps an alternate artwork the art match picked', () => {

@@ -20,11 +20,17 @@ import { ScanRowItem } from './ScanRowItem'
 
 /** The copies Add would add, and Add itself with its toasts; shared with the phone's review. */
 // eslint-disable-next-line react-refresh/only-export-components -- shared with the phone's review
-export function useSessionCommit(): { addable: number; commit: () => Promise<void> } {
+export function useSessionCommit(): {
+  addable: number
+  /** Copies scanned in slabs: held out of Add until each is added as a graded copy. */
+  slabs: number
+  commit: () => Promise<void>
+} {
   const { session } = useScanHub()
   const addable = session.rows
-    .filter((r) => printingOf(r) !== null)
+    .filter((r) => printingOf(r) !== null && !r.slab)
     .reduce((n, r) => n + r.quantity, 0)
+  const slabs = session.rows.filter((r) => r.slab).reduce((n, r) => n + r.quantity, 0)
 
   const commit = async (): Promise<void> => {
     const { cards, failed } = await session.commit()
@@ -32,7 +38,19 @@ export function useSessionCommit(): { addable: number; commit: () => Promise<voi
     if (failed > 0)
       toast.error(`${plural(failed, 'entry', 'entries')} couldn't be added; see the list`)
   }
-  return { addable, commit }
+  return { addable, slabs, commit }
+}
+
+/** The footer's note on slabs held out of Add; nothing when there are none. */
+export function SlabsHeldNote({ slabs }: { slabs: number }): React.JSX.Element | null {
+  if (slabs === 0) return null
+  return (
+    <p className="px-4 pt-2 text-xs text-sky-300">
+      {slabs === 1
+        ? '1 slab isn’t added with the cards: add it as a graded copy on its row.'
+        : `${slabs} slabs aren’t added with the cards: add each as a graded copy on its row.`}
+    </p>
+  )
 }
 
 /** Asks before clearing the list. */
@@ -79,14 +97,14 @@ export function ClearSessionDialog({
 export function SessionList({ className }: { className?: string }): React.JSX.Element {
   const { session, fresh, flashed } = useScanHub()
   const [clearing, setClearing] = useState(false)
-  const { addable, commit } = useSessionCommit()
+  const { addable, slabs, commit } = useSessionCommit()
   const language = useScanLanguage()
 
-  const { setPrinting, setQuantity, remove } = session
+  const { setPrinting, setQuantity, setSlab, takeOne, remove } = session
   // Stable, so rows (memoized) don't re-render on every pull.
   const rowActions = useMemo(
-    () => ({ setPrinting, setQuantity, remove }),
-    [setPrinting, setQuantity, remove]
+    () => ({ setPrinting, setQuantity, setSlab, takeOne, remove }),
+    [setPrinting, setQuantity, setSlab, takeOne, remove]
   )
   const { value, priced, unpriced } = listValue(session.rows)
 
@@ -148,6 +166,7 @@ export function SessionList({ className }: { className?: string }): React.JSX.El
             </ul>
           )}
         </div>
+        <SlabsHeldNote slabs={slabs} />
         <footer className="flex gap-2.5 border-t border-white/[0.06] p-3.5">
           <button
             type="button"

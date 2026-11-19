@@ -42,7 +42,13 @@ const row = (o: Partial<ScanRow> = {}): ScanRow => ({
 describe('the Magic foil toggle', () => {
   it('switches a Magic row to its foil printing and back', () => {
     const setPrinting = vi.fn()
-    const actions: ScanRowActions = { setPrinting, setQuantity: () => {}, remove: () => {} }
+    const actions: ScanRowActions = {
+      setPrinting,
+      setQuantity: () => {},
+      setSlab: () => {},
+      takeOne: () => {},
+      remove: () => {}
+    }
     const { rerender } = renderWithProviders(
       <ScanRowItem row={row()} actions={actions} language={null} scanned={1} />
     )
@@ -70,6 +76,8 @@ describe('the Magic foil toggle', () => {
     const actions: ScanRowActions = {
       setPrinting: () => {},
       setQuantity: () => {},
+      setSlab: () => {},
+      takeOne: () => {},
       remove: () => {}
     }
     renderWithProviders(
@@ -107,6 +115,8 @@ describe('the session finish lock', () => {
     const actions: ScanRowActions = {
       setPrinting: () => {},
       setQuantity: () => {},
+      setSlab: () => {},
+      takeOne: () => {},
       remove: () => {}
     }
     renderWithProviders(

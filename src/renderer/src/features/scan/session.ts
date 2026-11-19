@@ -110,6 +110,13 @@ export function useScanSession(game: GameId = 'ygo'): {
   applyRead(key: string, next: ScanDraft): boolean
   setPrinting(key: string, printingId: number): void
   setQuantity(key: string, q: number): void
+  /**
+   * Marks a row as a graded slab or not. A slab row is held out of Add (a slab is a graded copy,
+   * never a collection entry) until it is added as a graded copy (takeOne) or marked as not one.
+   */
+  setSlab(key: string, on: boolean): void
+  /** Takes one copy off a row (the whole row at one), as when it was added as a graded copy. */
+  takeOne(key: string): void
   remove(key: string): void
   clear(): void
   /**
@@ -239,6 +246,30 @@ export function useScanSession(game: GameId = 'ygo'): {
     [update]
   )
 
+  const setSlab = useCallback(
+    (key: string, on: boolean): void =>
+      update((list) =>
+        list.map((r) => {
+          if (r.key !== key || (r.slab === true) === on) return r
+          const next: ScanRow = { ...r, error: undefined }
+          if (on) next.slab = true
+          else delete next.slab
+          return next
+        })
+      ),
+    [update]
+  )
+
+  const takeOne = useCallback(
+    (key: string): void =>
+      update((list) =>
+        list.flatMap((r) =>
+          r.key !== key ? [r] : r.quantity > 1 ? [{ ...r, quantity: r.quantity - 1 }] : []
+        )
+      ),
+    [update]
+  )
+
   const remove = useCallback(
     (key: string): void => update((list) => list.filter((r) => r.key !== key)),
     [update]
@@ -296,8 +327,9 @@ export function useScanSession(game: GameId = 'ygo'): {
     let failed = 0
     let cards = 0
     const saved: ScanSessionCardDraft[] = []
-    // A row with no printing, or a Pokémon version still to pick, waits for one.
-    const batch = ref.current.filter((r) => inGame(r, game))
+    // A row with no printing, or a Pokémon version still to pick, waits for one. A slab waits to
+    // be added as a graded copy, or marked as not one: it never goes in as a raw card.
+    const batch = ref.current.filter((r) => inGame(r, game) && !r.slab)
     const unaddable = new Set(batch.filter((r) => printingOf(r) === null).map((r) => r.key))
     try {
       for (const row of batch.filter((r) => printingOf(r) !== null)) {
@@ -372,6 +404,8 @@ export function useScanSession(game: GameId = 'ygo'): {
     applyRead,
     setPrinting,
     setQuantity,
+    setSlab,
+    takeOne,
     remove,
     clear,
     refreshPrices,

@@ -22,6 +22,7 @@ import type { ScanDraft } from './resolve'
 import { GLASS, photoFor, priceOf, priceRange, printingOf, versionToPick } from './scanLook'
 import { FoilToggle } from './FoilToggle'
 import { PrintingPicker } from './PrintingPicker'
+import { SlabRowActions } from './SlabRowActions'
 import { OptionLabel, type PickerOption } from './SearchPicker'
 import type { ScanRow } from './session'
 
@@ -127,6 +128,8 @@ export function setLabelFor(row: ScanRow): string | null {
 export interface ScanRowActions {
   setPrinting(key: string, printingId: number): void
   setQuantity(key: string, q: number): void
+  setSlab(key: string, on: boolean): void
+  takeOne(key: string): void
   remove(key: string): void
 }
 
@@ -173,6 +176,7 @@ export const ScanRowItem = memo(function ScanRowItem({
         'flex gap-3 rounded-[20px] p-2.5 transition-colors duration-700',
         GLASS,
         (row.flag || row.guess) && 'border-amber-400/45',
+        row.slab && 'border-sky-400/45',
         highlighted && 'bg-emerald-400/10',
         flashed && 'scan-reread'
       )}
@@ -242,6 +246,14 @@ export const ScanRowItem = memo(function ScanRowItem({
             <TriangleAlertIcon aria-hidden className="size-3.5 shrink-0" />
             {flag}
           </p>
+        )}
+        {row.slab && (
+          <SlabRowActions
+            row={row}
+            disabled={disabled}
+            onAdded={() => actions.takeOne(row.key)}
+            onNotSlab={() => actions.setSlab(row.key, false)}
+          />
         )}
         {row.error && <p className="mt-1 text-xs text-destructive">{row.error}</p>}
       </div>

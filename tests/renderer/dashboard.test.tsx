@@ -1,5 +1,6 @@
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { GradedCopy } from '@shared/graded'
 import type { CollectionStats, EntryView, SetSummary } from '@shared/types'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { createMockApi, renderWithProviders } from './mockApi'
@@ -197,6 +198,55 @@ describe('DashboardPage', () => {
     const unpriced = screen.getByRole('button', { name: /Blue-Eyes White Dragon/ })
     expect(within(unpriced).getByText('No price')).toBeInTheDocument()
     expect(within(unpriced).queryByText('—')).not.toBeInTheDocument()
+  })
+
+  it('ranks priced slabs among the most valuable and opens them in their case', async () => {
+    const base = entry(3, 'Exodia the Forbidden One')
+    const slab = (uid: string, patch: Partial<GradedCopy>): GradedCopy => ({
+      uid,
+      game: 'ygo',
+      pkey: `pk-${uid}`,
+      card: base.card,
+      printing: base.printing,
+      imageId: 5,
+      printingScan: true,
+      company: 'PSA',
+      grade: '10',
+      label: '',
+      cert: '',
+      subgrades: '',
+      value: null,
+      paid: null,
+      notes: '',
+      rawPrice: 15,
+      market: null,
+      createdAt: '2026-11-01T00:00:00Z',
+      ...patch
+    })
+    renderWithProviders(<DashboardPage onNavigate={vi.fn()} />, {
+      api: createMockApi({
+        stats: { get: async () => stats() },
+        graded: {
+          list: async () => [
+            slab('a', { market: { price: 500, listings: 4, checkedAt: '2026-11-18T00:00:00Z' } }),
+            slab('b', { company: 'CGC', grade: '8' })
+          ]
+        }
+      })
+    })
+    const section = (await screen.findByRole('heading', { name: 'Most valuable' })).closest(
+      'section'
+    )!
+    const tile = await within(section).findByRole('button', {
+      name: 'Exodia the Forbidden One, PSA 10'
+    })
+    // Dearest first; the slab with no graded price stays out.
+    expect(within(section).getAllByRole('listitem')[0]).toContainElement(tile)
+    expect(within(tile).getByText('$500.00')).toBeInTheDocument()
+    expect(within(section).queryByRole('button', { name: /CGC 8/ })).not.toBeInTheDocument()
+
+    await userEvent.click(tile)
+    expect(await screen.findByText('eBay asking price · PSA 10')).toBeInTheDocument()
   })
 
   it('most valuable switches to the dearest single copies and remembers it', async () => {

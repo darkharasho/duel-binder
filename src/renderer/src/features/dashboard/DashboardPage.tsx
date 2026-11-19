@@ -15,7 +15,9 @@ import { UnderlineTabs } from '@/components/UnderlineTabs'
 import { CardPanel } from '@/features/card/CardPanel'
 import { EntryValue, StaleBadge } from '@/features/collection/EntryValue'
 import { displayTotal } from '@/features/collection/displayTotal'
-import { gradedTotals } from '@shared/graded'
+import { gradedTotals, gradedWorth, gradeTitle, type GradedCopy } from '@shared/graded'
+import { SlabPrice } from '@/features/graded/GradedCopies'
+import { SlabArt } from '@/features/graded/SlabArt'
 import { api, queryKeys } from '@/lib/api'
 import { formatRelative, formatUsd } from '@/lib/format'
 import { isPhone } from '@/lib/platform'
@@ -224,11 +226,16 @@ export function PriceNotes({ stats }: { stats: CollectionStats }): React.JSX.Ele
 export function MostValuable({
   stats,
   onOpen,
-  onSeeAll
+  onSeeAll,
+  slabs = [],
+  onOpenSlab
 }: {
   stats: CollectionStats
   onOpen: (entry: EntryView) => void
   onSeeAll: () => void
+  /** Graded copies, ranked among the cards by their graded worth (one copy either way). */
+  slabs?: GradedCopy[]
+  onOpenSlab?: (slab: GradedCopy) => void
 }): React.JSX.Element | null {
   // Most valuable by an entry's total (price × copies) or by one copy's price.
   const [mostBy, setMostByState] = useState<MostBy>(readMostBy)
@@ -240,8 +247,15 @@ export function MostValuable({
       /* storage unavailable: the choice just isn't remembered */
     }
   }
-  const top = mostBy === 'single' ? stats.topSingles : stats.topEntries
-  if (stats.topEntries.length === 0) return null
+  const entries = mostBy === 'single' ? stats.topSingles : stats.topEntries
+  const amountOf = (e: EntryView): number | null =>
+    mostBy === 'single' ? e.unitPrice : displayTotal(e)
+  // A slab is one copy, so it ranks the same by total or single; unpriced slabs stay out.
+  const top: ({ entry: EntryView } | { slab: GradedCopy })[] = [
+    ...entries.map((entry) => ({ entry, worth: amountOf(entry) ?? 0 })),
+    ...slabs.filter((s) => gradedWorth(s) > 0).map((slab) => ({ slab, worth: gradedWorth(slab) }))
+  ].sort((a, b) => b.worth - a.worth)
+  if (top.length === 0) return null
   return (
     <section>
       <div className="mb-3 flex items-baseline justify-between">
@@ -266,42 +280,84 @@ export function MostValuable({
       {/* One row of as many as fit, stretched to the full width; the rest sit in zero-height rows, clipped.
           On a phone, all ten in a row that swipes sideways, edge to edge. */}
       <ul className="-mx-1 grid auto-rows-[0] grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] grid-rows-[auto] gap-x-2 overflow-hidden max-md:-mx-4 max-md:flex max-md:snap-x max-md:snap-mandatory max-md:scroll-px-3 max-md:overflow-x-auto max-md:overscroll-x-contain max-md:px-3 max-md:[scrollbar-width:none]">
-        {top.slice(0, 10).map((e) => (
-          <li key={e.id} className="min-w-0 max-md:w-28 max-md:shrink-0 max-md:snap-start">
-            <button
-              type="button"
-              onClick={() => onOpen(e)}
-              className="group flex w-full flex-col gap-2 rounded-md p-1 text-left focus-visible:outline-2 focus-visible:outline-ring"
+        {top.slice(0, 10).map((item) =>
+          'slab' in item ? (
+            <li
+              key={`slab-${item.slab.uid}`}
+              className="min-w-0 max-md:w-28 max-md:shrink-0 max-md:snap-start"
             >
-              <TiltCard>
-                <CardArt
-                  imageId={e.imageId}
-                  printingId={scanFor(e)}
-                  size="small"
-                  alt=""
-                  className="w-full rounded-[4px] shadow-[0_8px_20px_rgb(0_0_0/0.5)]"
-                  reverse={printingReverseLook(e.printing, e.card)}
-                />
-              </TiltCard>
-              <span className="min-w-0 text-xs leading-snug">
-                <span className="line-clamp-2">{e.card.name}</span>
-                <span className="block truncate font-mono text-[11px] text-muted-foreground">
-                  {e.printing.setCode}
-                  {e.quantity > 1 && ` ×${e.quantity}`}
+              <button
+                type="button"
+                onClick={() => onOpenSlab?.(item.slab)}
+                aria-label={`${item.slab.card.name}, ${gradeTitle(item.slab)}`}
+                className="group flex w-full flex-col gap-2 rounded-md p-1 text-left focus-visible:outline-2 focus-visible:outline-ring"
+              >
+                <SlabArt slab={item.slab} />
+                <span className="min-w-0 text-xs leading-snug">
+                  <span className="line-clamp-2">{item.slab.card.name}</span>
+                  <span className="block truncate font-mono text-[11px] text-muted-foreground">
+                    {item.slab.printing.setCode} · {gradeTitle(item.slab)}
+                  </span>
+                  <span className="block font-mono text-[11px]">
+                    <SlabPrice slab={item.slab} />
+                  </span>
                 </span>
-                <span className="block font-mono text-[11px]">
-                  <EntryValue
-                    entry={e}
-                    amount={mostBy === 'single' ? e.unitPrice : displayTotal(e)}
-                  />
-                </span>
-                <StaleBadge entry={e} />
-              </span>
-            </button>
-          </li>
-        ))}
+              </button>
+            </li>
+          ) : (
+            <EntryTile
+              key={item.entry.id}
+              e={item.entry}
+              amount={amountOf(item.entry)}
+              onOpen={onOpen}
+            />
+          )
+        )}
       </ul>
     </section>
+  )
+}
+
+/** One card of the Most valuable row. */
+function EntryTile({
+  e,
+  amount,
+  onOpen
+}: {
+  e: EntryView
+  amount: number | null
+  onOpen: (entry: EntryView) => void
+}): React.JSX.Element {
+  return (
+    <li className="min-w-0 max-md:w-28 max-md:shrink-0 max-md:snap-start">
+      <button
+        type="button"
+        onClick={() => onOpen(e)}
+        className="group flex w-full flex-col gap-2 rounded-md p-1 text-left focus-visible:outline-2 focus-visible:outline-ring"
+      >
+        <TiltCard>
+          <CardArt
+            imageId={e.imageId}
+            printingId={scanFor(e)}
+            size="small"
+            alt=""
+            className="w-full rounded-[4px] shadow-[0_8px_20px_rgb(0_0_0/0.5)]"
+            reverse={printingReverseLook(e.printing, e.card)}
+          />
+        </TiltCard>
+        <span className="min-w-0 text-xs leading-snug">
+          <span className="line-clamp-2">{e.card.name}</span>
+          <span className="block truncate font-mono text-[11px] text-muted-foreground">
+            {e.printing.setCode}
+            {e.quantity > 1 && ` ×${e.quantity}`}
+          </span>
+          <span className="block font-mono text-[11px]">
+            <EntryValue entry={e} amount={amount} />
+          </span>
+          <StaleBadge entry={e} />
+        </span>
+      </button>
+    </li>
   )
 }
 
@@ -349,6 +405,7 @@ function Content({
   const stale = isStale(stats.pricesUpdatedAt)
   // A card opens over Home, as on every other page, rather than taking you to the collection.
   const [open, setOpen] = useState<{ cardId: number; entryId: number } | null>(null)
+  const [openSlab, setOpenSlab] = useState<GradedCopy | null>(null)
   const openEntry = (e: EntryView): void => setOpen({ cardId: e.card.id, entryId: e.id })
   // Slabs sit apart from the collection's totals: a tile of their own, shown once there are any.
   const graded = useQuery({ queryKey: queryKeys.graded, queryFn: () => api.graded.list() })
@@ -401,7 +458,13 @@ function Content({
         <ValueChart history={stats.valueHistory} />
       </div>
 
-      <MostValuable stats={stats} onOpen={openEntry} onSeeAll={() => onNavigate('collection')} />
+      <MostValuable
+        stats={stats}
+        onOpen={openEntry}
+        onSeeAll={() => onNavigate('collection')}
+        slabs={graded.data}
+        onOpenSlab={setOpenSlab}
+      />
 
       <Breakdowns stats={stats} onOpen={openEntry} />
       {open && (
@@ -411,6 +474,23 @@ function Content({
             entryId={open.entryId}
             onSelectEntry={(entryId) => setOpen({ cardId: open.cardId, entryId })}
             onClose={close}
+          />
+        </CardSheet>
+      )}
+      {openSlab && (
+        <CardSheet onClose={() => setOpenSlab(null)}>
+          <CardPanel
+            cardId={openSlab.card.id}
+            printingId={openSlab.printing.id}
+            seed={{
+              name: openSlab.card.name,
+              type: openSlab.card.type,
+              imageId: openSlab.imageId,
+              price: openSlab.rawPrice,
+              defaultPrintingId: openSlab.printing.id
+            }}
+            onClose={() => setOpenSlab(null)}
+            slab={openSlab}
           />
         </CardSheet>
       )}

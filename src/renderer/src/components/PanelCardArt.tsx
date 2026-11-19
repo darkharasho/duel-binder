@@ -20,7 +20,12 @@ interface PanelCardArtProps {
   flip?: { back: boolean; onFlip: () => void }
   /** A Pokémon Reverse Holofoil printing's look, drawn over the card (not its glow). */
   reverse?: ReverseLook | null
+  /** Drawn instead of the card: a graded copy in its case. No flip or reverse look then. */
+  slab?: React.ReactNode
 }
+
+/** A slab's case and label make it taller than its card: its width is about this much less. */
+const SLAB_NARROWER = 0.87
 
 function NavArrow({
   dir,
@@ -86,8 +91,9 @@ export function PanelCardArt({
   printingId,
   alt,
   nav,
-  flip,
-  reverse
+  flip: flipProp,
+  reverse,
+  slab
 }: PanelCardArtProps): React.JSX.Element {
   usePanelNavKeys(nav)
   useSwipeNav(nav)
@@ -98,7 +104,12 @@ export function PanelCardArt({
   const phone = isPhone()
   const arrows = phone ? undefined : nav
   // The large card's width is capped by the window's height at the card's own aspect.
-  const aspectVar = { '--card-aspect': `calc(${cssAspect(aspect)})` } as React.CSSProperties
+  const aspectVar = {
+    '--card-aspect': slab
+      ? `calc(${cssAspect(aspect)} * ${SLAB_NARROWER})`
+      : `calc(${cssAspect(aspect)})`
+  } as React.CSSProperties
+  const flip = slab ? undefined : flipProp
   return (
     <>
       {phone && nav && (
@@ -133,15 +144,17 @@ export function PanelCardArt({
           touch={phone}
           className={phone ? 'w-[min(100%,calc((100dvh-13rem)*var(--card-aspect)))]' : 'w-48'}
         >
-          <CardArt
-            imageId={imageId}
-            printingId={printingId}
-            size="full"
-            priority
-            alt={alt}
-            className="w-full"
-            reverse={reverse}
-          />
+          {slab ?? (
+            <CardArt
+              imageId={imageId}
+              printingId={printingId}
+              size="full"
+              priority
+              alt={alt}
+              className="w-full"
+              reverse={reverse}
+            />
+          )}
           {flip && <FlipButton flip={flip} />}
         </TiltCard>
         {arrows && <NavArrow dir="next" step={arrows.next} />}
@@ -157,18 +170,22 @@ export function PanelCardArt({
             {arrows && <NavArrow dir="prev" step={arrows.prev} large />}
             <TiltCard
               maxTilt={10}
-              glareClassName="rounded-[14px]"
+              glareClassName={slab ? 'rounded-[4%]' : 'rounded-[14px]'}
               className="pointer-events-auto w-[min(26rem,calc((100vh-6rem)*var(--card-aspect)))] min-w-0 [perspective:1400px]"
             >
-              <CardArt
-                imageId={imageId}
-                printingId={printingId}
-                size="full"
-                priority
-                alt=""
-                className="w-full rounded-[14px] shadow-[0_30px_80px_rgb(0_0_0/0.65)]"
-                reverse={reverse}
-              />
+              {slab ? (
+                <div className="drop-shadow-[0_30px_40px_rgb(0_0_0/0.6)]">{slab}</div>
+              ) : (
+                <CardArt
+                  imageId={imageId}
+                  printingId={printingId}
+                  size="full"
+                  priority
+                  alt=""
+                  className="w-full rounded-[14px] shadow-[0_30px_80px_rgb(0_0_0/0.65)]"
+                  reverse={reverse}
+                />
+              )}
               {flip && <FlipButton flip={flip} large />}
             </TiltCard>
             {arrows && <NavArrow dir="next" step={arrows.next} large />}

@@ -1,3 +1,4 @@
+import { gradeTitle, type GradedCopy } from '@shared/graded'
 import type { EntryView } from '@shared/types'
 import { EbayPriceLine, EntryValue } from '@/features/collection/EntryValue'
 import { formatUsd } from '@/lib/format'
@@ -48,5 +49,48 @@ export function PanelPrice({
         <span className={FIGURE}>{formatUsd(price)}</span>
       )}
     </p>
+  )
+}
+
+/**
+ * The headline price of a panel opened on a slab: its grader and grade's price, not the raw
+ * card's. The value entered, else eBay's asking price for that grade, else "No graded price" with
+ * the raw card's price under it for scale.
+ */
+export function SlabPanelPrice({ slab }: { slab: GradedCopy }): React.JSX.Element {
+  const title = gradeTitle(slab)
+  if (slab.value !== null)
+    return (
+      <p>
+        <span className={LABEL}>Your value · {title}</span>{' '}
+        <span className={FIGURE}>{formatUsd(slab.value)}</span>
+      </p>
+    )
+  if (slab.market)
+    return (
+      <div className="space-y-0.5">
+        <p>
+          <span className={LABEL}>eBay asking price · {title}</span>{' '}
+          <span className={FIGURE}>{formatUsd(slab.market.price)}</span>
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Median of {slab.market.listings} {slab.market.listings === 1 ? 'listing' : 'listings'}
+        </p>
+      </div>
+    )
+  return (
+    <div className="space-y-0.5">
+      <p>
+        <span className={LABEL}>Graded price · {title}</span>{' '}
+        <span className="block text-lg leading-tight text-muted-foreground">
+          No graded price yet
+        </span>
+      </p>
+      {slab.rawPrice !== null && (
+        <p className="text-xs text-muted-foreground tabular-nums">
+          Raw card: {formatUsd(slab.rawPrice)}
+        </p>
+      )}
+    </div>
   )
 }

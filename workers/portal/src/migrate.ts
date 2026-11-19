@@ -8,6 +8,7 @@ import {
   SCHEMA_V43,
   SCHEMA_V45,
   SCHEMA_V36,
+  SCHEMA_V51,
   type Migration
 } from '../../../src/main/db/schema'
 import type { SqlDb } from '../../../src/main/db/sql'
@@ -985,7 +986,9 @@ CREATE UNIQUE INDEX ux_graded_seq ON graded_copies(seq);
 CREATE INDEX ix_graded_user_seq ON graded_copies(user_id, seq);
 CREATE INDEX ix_graded_pkey ON graded_copies(pkey);
 `
-  }
+  },
+  // Subgrades on graded copies, as desktop 51.
+  { name: 'server-50', sql: SCHEMA_V51 }
 ]
 
 /**

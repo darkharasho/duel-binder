@@ -215,9 +215,10 @@ function mergeGraded(db: SqlDb, a: MergeArgs, nowIso: string): void {
     .prepare('SELECT uid FROM graded_copies WHERE user_id = ? AND deleted_at IS NULL')
     .all(a.closed) as { uid: string }[]
   const copy = db.prepare(
-    `INSERT INTO graded_copies (user_id, uid, game, pkey, image_id, company, grade, label, cert, value, paid,
-       notes, created_at, updated_at, seq)
-     SELECT ?, uid, game, pkey, image_id, company, grade, label, cert, value, paid, notes, created_at, ?,
+    `INSERT INTO graded_copies (user_id, uid, game, pkey, image_id, company, grade, label, cert, subgrades,
+       value, paid, notes, created_at, updated_at, seq)
+     SELECT ?, uid, game, pkey, image_id, company, grade, label, cert, subgrades, value, paid, notes,
+       created_at, ?,
        ${NEXT_GRADED_SEQ}
        FROM graded_copies WHERE user_id = ? AND uid = ?
      ON CONFLICT(user_id, uid) DO NOTHING`

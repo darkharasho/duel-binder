@@ -11,6 +11,7 @@ import {
 import { MIGRATIONS } from '../../src/main/db/schema'
 import { listEntries } from '../../src/main/repo/collection'
 import { gradedForCard, listGraded, removeGraded, saveGraded } from '../../src/main/repo/graded'
+import { applyGradedPush, checkGradedPush } from '../../workers/portal/src/graded'
 import type { GradedDraft } from '../../src/shared/graded'
 import { userScope } from '../../workers/portal/src/scope'
 import { inProcessPortal, PORTAL } from './cloudHelpers'
@@ -51,6 +52,7 @@ const draft = (p: PrintingRow, patch: Partial<GradedDraft> = {}): GradedDraft =>
   grade: '10',
   label: '',
   cert: '12345678',
+  subgrades: '',
   value: 250,
   paid: 120,
   notes: '',
@@ -129,6 +131,28 @@ describe('graded copies repo', () => {
     expect(() => saveGraded(db, draft(a, { imageId: b.image_id }))).toThrow(/Image/)
     expect(() => saveGraded(db, { ...draft(a), printingId: 999_999_999 })).toThrow(/not found/)
     expect(saveGraded(db, draft(a, { grade: 'Authentic', value: null, paid: null }))).toBeTruthy()
+  })
+
+  it('keeps all four subgrades tidied, or none, and rejects anything else', () => {
+    const uid = saveGraded(db, draft(a, { company: 'BGS', subgrades: ' 9.5  10 10 9.5 ' }), T1)
+    expect(listGraded(db)).toEqual([expect.objectContaining({ uid, subgrades: '9.5 10 10 9.5' })])
+    expect(saveGraded(db, draft(a))).toBeTruthy()
+    expect(listGraded(db)[0]).toMatchObject({ subgrades: '' })
+    expect(() => saveGraded(db, draft(a, { subgrades: '9.5 10 10' }))).toThrow(/Subgrades/)
+    expect(() => saveGraded(db, draft(a, { subgrades: '9.5 10 10 11' }))).toThrow(/Subgrades/)
+    expect(() => saveGraded(db, draft(a, { subgrades: '10 10 10 Authentic' }))).toThrow(/Subgrades/)
+  })
+
+  it('reads the set’s release date for the label’s year', () => {
+    saveGraded(db, draft(a), T1)
+    const [slab] = listGraded(db)
+    const date = db
+      .prepare(
+        `SELECT s.tcg_date FROM card_printings p JOIN sets s ON s.game = p.game
+           AND s.language = p.language AND s.set_name = p.set_name WHERE p.id = ?`
+      )
+      .get(a.id) as { tcg_date: string | null } | undefined
+    expect(slab.printing.releaseDate).toBe(date?.tcg_date ?? undefined)
   })
 
   it('never-signed-in slabs are deleted outright; signed-in ones leave a tombstone', () => {
@@ -227,6 +251,48 @@ describe('graded copies sync', () => {
     expect(server()).toEqual([expect.objectContaining({ deleted_at: T3.toISOString() })])
     expect(rows(a)).toEqual([])
     expect(rows(b)).toEqual([])
+  })
+
+  it('subgrades reach the other device, and an older app’s push leaves them be', async () => {
+    const uid = saveGraded(a, draft(p, { company: 'BGS', subgrades: '10 9.5 10 10' }), T1)
+    await sync(a)
+    const b = await device()
+    await sync(b)
+    expect(listGraded(b)).toEqual([expect.objectContaining({ uid, subgrades: '10 9.5 10 10' })])
+
+    // An app from before subgrades pushes an edit with no subgrades field.
+    const [wire] = checkGradedPush(
+      {
+        entries: [
+          {
+            uid,
+            game: 'ygo',
+            pkey: listGraded(a)[0].pkey,
+            imageId: p.image_id,
+            company: 'BGS',
+            grade: '9.5',
+            label: '',
+            cert: '12345678',
+            value: 250,
+            paid: 120,
+            notes: '',
+            createdAt: T1.toISOString(),
+            updatedAt: T2.toISOString(),
+            deletedAt: null
+          }
+        ]
+      },
+      NOW()
+    )
+    expect(wire.subgrades).toBeUndefined()
+    expect(applyGradedPush(portal.serverDb, user, [wire], ['ygo'])).toEqual([
+      { uid, status: 'applied' }
+    ])
+    expect(
+      portal.serverDb
+        .prepare('SELECT grade, subgrades FROM graded_copies WHERE user_id = ? AND uid = ?')
+        .get(user, uid)
+    ).toEqual({ grade: '9.5', subgrades: '10 9.5 10 10' })
   })
 
   it('the latest edit wins between two devices', async () => {

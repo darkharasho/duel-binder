@@ -1,0 +1,564 @@
+/*
+ * Slabs drawn after each grader's real case and label (see SlabArt.tsx). Sizes are in container
+ * units so one look serves the Graded page's tiles and the card panel: --c for the case, --u for
+ * the label's small print. The label is about a sixth of the card's height, as on a real slab.
+ * Wordmarks are plain type, not the graders' logos.
+ */
+
+.slab {
+  --c: 0.488cqw;
+  --u: 0.36cqw;
+  position: relative;
+  padding: calc(7 * var(--c));
+  border-radius: calc(8 * var(--c));
+  background: linear-gradient(
+    135deg,
+    rgb(255 255 255 / 0.18),
+    rgb(255 255 255 / 0.05) 45%,
+    rgb(255 255 255 / 0.12)
+  );
+  border: 1px solid rgb(255 255 255 / 0.33);
+  box-shadow:
+    0 6px 18px rgb(0 0 0 / 0.4),
+    inset 0 0 0 calc(4 * var(--c)) rgb(255 255 255 / 0.06),
+    inset 0 0 0 calc(5 * var(--c)) rgb(255 255 255 / 0.13);
+  font-family: Arial, 'Liberation Sans', 'Helvetica Neue', sans-serif;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+/* The acrylic's sheen. */
+.slab::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    118deg,
+    transparent 38%,
+    rgb(255 255 255 / 0.09) 46%,
+    transparent 54%
+  );
+  pointer-events: none;
+}
+.slab-well {
+  margin-top: calc(5 * var(--c));
+  padding: calc(5 * var(--c));
+  border-radius: calc(3 * var(--c));
+  background: rgb(0 0 0 / 0.4);
+}
+.slab-well > * {
+  border-radius: calc(3 * var(--c));
+}
+.slab-emboss {
+  margin-top: calc(3 * var(--c));
+  text-align: center;
+  font:
+    700 calc(6 * var(--c)) / 1 Georgia,
+    'Times New Roman',
+    serif;
+  letter-spacing: calc(2 * var(--c));
+  color: rgb(255 255 255 / 0.25);
+}
+.slab-line {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.slab-mono {
+  font-family: 'Geist Mono', ui-monospace, monospace;
+  font-weight: 400;
+}
+.slab-bar {
+  height: calc(8 * var(--u));
+  background: repeating-linear-gradient(
+    90deg,
+    #111 0 1px,
+    transparent 1px 2px,
+    #111 2px 3.5px,
+    transparent 3.5px 5px,
+    #111 5px 5.6px,
+    transparent 5.6px 7px,
+    #111 7px 9px,
+    transparent 9px 10px
+  );
+}
+.slab-gold {
+  color: #1a1200;
+  background: linear-gradient(120deg, #b8902e, #f2d77c 28%, #d1a845 52%, #f6e3a0 74%, #b48a2c);
+}
+.slab-silver {
+  color: #111;
+  background: linear-gradient(120deg, #9ea3a8, #eef0f2 30%, #b8bdc2 55%, #f4f5f6 75%, #9ea3a8);
+}
+.slab-black {
+  color: #e8c96a;
+  background: linear-gradient(120deg, #060606, #1d1d1d 40%, #050505);
+}
+
+/* ---- PSA: red frame round a white label ---- */
+.slab-psa .slab-label {
+  background: #fff;
+  border: calc(3.5 * var(--u)) solid #e0242f;
+  padding: calc(4 * var(--u)) calc(5 * var(--u)) calc(3 * var(--u));
+  color: #111;
+  font-weight: 700;
+  font-size: calc(7.4 * var(--u));
+}
+.slab-psa .slab-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: calc(5 * var(--u));
+}
+.slab-psa .slab-r {
+  text-align: right;
+}
+.slab-psa .slab-foot {
+  display: grid;
+  grid-template-columns: calc(62 * var(--u)) 1fr auto;
+  align-items: center;
+  gap: calc(4 * var(--u));
+  margin-top: calc(2 * var(--u));
+}
+.slab-psa .slab-mark {
+  justify-self: center;
+  font:
+    italic 900 calc(8.5 * var(--u)) / 1 Arial,
+    sans-serif;
+  color: #1d3f9a;
+  border-bottom: calc(1.5 * var(--u)) solid #e0242f;
+  padding: 0 1px;
+}
+.slab-psa .slab-well {
+  background: linear-gradient(rgb(255 255 255 / 0.22), rgb(255 255 255 / 0.12));
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.25);
+}
+
+/* ---- BGS: crest beside a metal label with subgrades; black insert ---- */
+.slab-bgs .slab-top {
+  display: grid;
+  grid-template-columns: calc(30 * var(--u)) minmax(0, 1fr);
+  gap: calc(4 * var(--u));
+  align-items: center;
+}
+.slab-bgs .slab-crest {
+  text-align: center;
+  color: rgb(255 255 255 / 0.8);
+}
+.slab-bgs .slab-crest b {
+  display: block;
+  width: calc(22 * var(--u));
+  height: calc(22 * var(--u));
+  margin: 0 auto;
+  border-radius: 50%;
+  border: calc(1.5 * var(--u)) solid currentColor;
+  font:
+    700 calc(13 * var(--u)) / calc(19 * var(--u)) Georgia,
+    serif;
+}
+.slab-bgs .slab-crest small {
+  display: block;
+  margin-top: calc(3 * var(--u));
+  font:
+    700 calc(5.6 * var(--u)) Georgia,
+    serif;
+  letter-spacing: calc(0.6 * var(--u));
+}
+.slab-bgs .slab-label {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: calc(4 * var(--u));
+  padding: calc(4 * var(--u)) calc(5 * var(--u));
+  font-weight: 700;
+  font-size: calc(6.4 * var(--u));
+  font-stretch: condensed;
+}
+.slab-bgs .slab-subs {
+  display: grid;
+  grid-template-columns: auto calc(13 * var(--u)) auto calc(13 * var(--u));
+  column-gap: calc(3 * var(--u));
+  justify-content: start;
+  margin-top: calc(2 * var(--u));
+}
+.slab-bgs .slab-subs b {
+  margin-right: calc(4 * var(--u));
+  text-align: right;
+}
+.slab-bgs .slab-overall {
+  text-align: right;
+  line-height: 1;
+}
+.slab-bgs .slab-overall .slab-n {
+  font:
+    700 calc(19 * var(--u)) Arial,
+    sans-serif;
+  letter-spacing: -0.02em;
+}
+.slab-bgs .slab-overall small {
+  display: block;
+  margin-top: calc(1 * var(--u));
+  font-size: calc(5.8 * var(--u));
+}
+.slab-bgs .slab-well,
+.slab-cgc .slab-well {
+  background: #0a0a0a;
+}
+
+/* ---- CGC: black header with a silver plate, grade box at the right ---- */
+.slab-cgc .slab-label {
+  background: #fff;
+  overflow: hidden;
+  color: #111;
+}
+.slab-cgc .slab-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(4 * var(--u));
+  padding: calc(3 * var(--u)) calc(4 * var(--u));
+  background: #0b0b0b;
+}
+.slab-cgc .slab-plate {
+  padding: 0 calc(4 * var(--u));
+  border-radius: 1px;
+  background: linear-gradient(120deg, #8d939b, #f0f2f4 45%, #9aa0a7);
+  color: #111;
+  font:
+    900 calc(7.5 * var(--u)) / 1.3 Arial,
+    sans-serif;
+}
+.slab-cgc .slab-co {
+  overflow: hidden;
+  white-space: nowrap;
+  font:
+    700 calc(5.2 * var(--u)) Arial,
+    sans-serif;
+  color: #ddd;
+}
+.slab-cgc .slab-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: calc(4 * var(--u));
+  padding: calc(4 * var(--u)) calc(4 * var(--u)) calc(3 * var(--u)) calc(5 * var(--u));
+  font-size: calc(6.6 * var(--u));
+  text-transform: none;
+}
+.slab-cgc .slab-box {
+  display: flex;
+  min-width: calc(38 * var(--u));
+  flex-direction: column;
+  justify-content: center;
+  padding: calc(2 * var(--u)) calc(4 * var(--u));
+  border-left: 1px solid #ddd;
+  text-align: center;
+}
+.slab-cgc .slab-box.slab-gold {
+  border-left: 0;
+}
+.slab-cgc .slab-box small {
+  font:
+    700 calc(5.6 * var(--u)) Arial,
+    sans-serif;
+}
+.slab-cgc .slab-box .slab-n {
+  font:
+    700 calc(20 * var(--u)) / 1 Arial,
+    sans-serif;
+}
+.slab-cgc .slab-foot {
+  display: flex;
+  align-items: center;
+  gap: calc(5 * var(--u));
+  padding: 0 calc(5 * var(--u)) calc(3 * var(--u));
+  font-size: calc(6 * var(--u));
+}
+
+/* ---- SGC: the black "tuxedo" insert round a white label ---- */
+.slab-sgc .slab-tux {
+  padding: calc(7 * var(--c)) calc(7 * var(--c)) calc(8 * var(--c));
+  border-radius: calc(3 * var(--c));
+  background: #0c0c0c;
+}
+.slab-sgc .slab-label {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: calc(2 * var(--u)) calc(4 * var(--u));
+  align-items: center;
+  padding: calc(3 * var(--u)) calc(5 * var(--u));
+  background: #fff
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='14'%3E%3Cpath d='M6 1l5 3v6l-5 3-5-3V4z' fill='none' stroke='%23e3e3e8' stroke-width='.8'/%3E%3C/svg%3E");
+  background-size: calc(12 * var(--u)) calc(14 * var(--u));
+  color: #111;
+}
+.slab-sgc .slab-mark {
+  grid-column: 1 / 3;
+  font:
+    900 calc(5.5 * var(--u)) Arial,
+    sans-serif;
+}
+.slab-sgc .slab-info {
+  font-weight: 700;
+  font-size: calc(7.4 * var(--u));
+  font-stretch: condensed;
+  line-height: 1.25;
+}
+.slab-sgc .slab-grade {
+  display: flex;
+  align-items: center;
+  gap: calc(2 * var(--u));
+}
+.slab-sgc .slab-n {
+  font:
+    900 calc(22 * var(--u)) / 1 Arial,
+    sans-serif;
+  font-stretch: condensed;
+  letter-spacing: -0.04em;
+}
+.slab-sgc .slab-badge {
+  display: grid;
+  place-items: center;
+  min-width: calc(11 * var(--u));
+  height: calc(11 * var(--u));
+  padding: 0 calc(1.5 * var(--u));
+  border-radius: 999px;
+  background: #111;
+  color: #fff;
+  font:
+    700 calc(4.6 * var(--u)) Arial,
+    sans-serif;
+}
+.slab-sgc .slab-cert {
+  grid-column: 2;
+  margin-top: calc(-2 * var(--u));
+  text-align: right;
+  font-size: calc(6 * var(--u));
+}
+.slab-sgc .slab-well {
+  margin-top: calc(6 * var(--c));
+  padding: 0;
+  background: none;
+}
+
+/* ---- TAG: white print on the clear case, outline box, QR with the score ---- */
+.slab-tag .slab-label {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: calc(4 * var(--u));
+  align-items: center;
+  margin-top: calc(8 * var(--u));
+  padding: calc(9 * var(--u)) calc(5 * var(--u)) calc(5 * var(--u));
+  border: 1px solid rgb(255 255 255 / 0.8);
+  color: #fff;
+}
+.slab-tag .slab-mark {
+  position: absolute;
+  top: calc(-6 * var(--u));
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0 calc(4 * var(--u));
+  border: 1px solid #fff;
+  background: #272b33;
+  font:
+    900 calc(8 * var(--u)) / calc(10 * var(--u)) Georgia,
+    serif;
+  letter-spacing: calc(0.8 * var(--u));
+}
+.slab-tag .slab-info {
+  font-weight: 600;
+  font-size: calc(5.8 * var(--u));
+  line-height: 1.4;
+}
+.slab-tag .slab-qr {
+  width: calc(24 * var(--u));
+  height: calc(24 * var(--u));
+  padding: calc(1.5 * var(--u));
+  background: #fff;
+}
+.slab-tag .slab-qr svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.slab-tag .slab-grade {
+  display: flex;
+  align-items: center;
+  gap: calc(3 * var(--u));
+}
+.slab-tag .slab-cert {
+  writing-mode: vertical-rl;
+  font-size: calc(5 * var(--u));
+  opacity: 0.85;
+}
+.slab-tag .slab-g {
+  text-align: center;
+  line-height: 1;
+}
+.slab-tag .slab-n {
+  font:
+    300 calc(20 * var(--u)) Arial,
+    sans-serif;
+}
+.slab-tag .slab-g small {
+  display: block;
+  margin-top: calc(1 * var(--u));
+  font:
+    700 calc(4.8 * var(--u)) Arial,
+    sans-serif;
+}
+.slab-tag .slab-g.slab-pristine .slab-n {
+  color: #f2d77c;
+}
+
+/* ---- ACE: the card's own art behind outlined type, barcode strip below ---- */
+.slab-ace .slab-label {
+  overflow: hidden;
+  border-radius: calc(2 * var(--u));
+  background: #fff;
+}
+.slab-ace .slab-scene {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  height: calc(50 * var(--u));
+  padding: calc(4 * var(--u)) calc(5 * var(--u));
+  overflow: hidden;
+  background: #222;
+}
+/* The card's art, blown up so its middle fills the strip. */
+.slab-ace .slab-scene-art {
+  position: absolute;
+  inset: auto 0;
+  top: 50%;
+  width: 100%;
+  transform: translateY(-38%) scale(1.5);
+}
+.slab-ace .slab-scene::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(90deg, rgb(0 0 0 / 0.3), rgb(0 0 0 / 0.08));
+}
+.slab-ace .slab-scene > :not(.slab-scene-art) {
+  position: relative;
+  z-index: 2;
+  color: #fff;
+  text-shadow:
+    0 1px 0 #000,
+    1px 0 0 #000,
+    -1px 0 0 #000,
+    0 -1px 0 #000;
+}
+.slab-ace .slab-info {
+  font-weight: 900;
+  font-size: calc(7.2 * var(--u));
+  font-stretch: condensed;
+  line-height: 1.15;
+}
+.slab-ace .slab-y {
+  color: #ffd43b;
+}
+.slab-ace .slab-g {
+  text-align: center;
+  font:
+    900 calc(23 * var(--u)) / 0.9 Arial,
+    sans-serif;
+}
+.slab-ace .slab-g small {
+  display: block;
+  margin-top: calc(2 * var(--u));
+  font-size: calc(6.2 * var(--u));
+}
+.slab-ace .slab-foot {
+  display: grid;
+  grid-template-columns: calc(60 * var(--u)) 1fr auto;
+  align-items: center;
+  padding: calc(2 * var(--u)) calc(5 * var(--u));
+  color: #111;
+  font-size: calc(6.4 * var(--u));
+}
+.slab-ace .slab-mark {
+  justify-self: center;
+  font:
+    italic 900 calc(7 * var(--u)) Arial,
+    sans-serif;
+  color: #999;
+}
+.slab-ace .slab-well {
+  background: rgb(255 255 255 / 0.1);
+}
+
+/* ---- Any other grader: a plain white label with the grade in a dark box ---- */
+.slab-plain .slab-label {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  overflow: hidden;
+  border-radius: calc(2 * var(--u));
+  background: #fafafa;
+  color: #18181b;
+}
+.slab-plain .slab-info {
+  padding: calc(4 * var(--u)) calc(5 * var(--u));
+  font-weight: 700;
+  font-size: calc(7 * var(--u));
+}
+.slab-plain .slab-box {
+  display: grid;
+  place-items: center;
+  min-width: calc(34 * var(--u));
+  padding: 0 calc(4 * var(--u));
+  background: #3f3f46;
+  color: #fff;
+  font:
+    700 calc(19 * var(--u)) / 1 Arial,
+    sans-serif;
+}
+
+/* ---- Thumbnails: too small to read, so a strip in the grader's colours with the grade ---- */
+.slab-thumb {
+  --c: 0.9cqw;
+}
+.slab-thumb .slab-strip {
+  display: grid;
+  place-items: center;
+  height: 30cqw;
+  border-radius: 3cqw;
+  font:
+    700 20cqw / 1 Arial,
+    sans-serif;
+  letter-spacing: -0.03em;
+}
+.slab-thumb.slab-psa .slab-strip {
+  background: #fff;
+  color: #111;
+  box-shadow: inset 0 0 0 5cqw #e0242f;
+}
+.slab-thumb.slab-cgc .slab-strip {
+  background: linear-gradient(#0b0b0b 0 32%, #fff 32%);
+  color: #111;
+  padding-top: 8cqw;
+}
+.slab-thumb.slab-sgc .slab-strip {
+  background: #fff;
+  color: #111;
+  box-shadow: 0 0 0 4cqw #0c0c0c;
+}
+.slab-thumb.slab-tag .slab-strip {
+  color: #fff;
+  font-weight: 300;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.8);
+}
+.slab-thumb.slab-ace .slab-strip {
+  background: linear-gradient(135deg, #ef4444, #f59e0b);
+  color: #fff;
+  text-shadow: 0 1px 0 #000;
+}
+.slab-thumb.slab-plain .slab-strip {
+  background: #3f3f46;
+  color: #fff;
+}
+.slab-thumb .slab-well {
+  margin-top: 5cqw;
+  padding: 4cqw;
+}

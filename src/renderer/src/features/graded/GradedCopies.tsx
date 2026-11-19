@@ -76,7 +76,7 @@ export function GradedCopies({
                 aria-label={`${gradeTitle(s)} ${s.printing.setCode}, edit`}
                 className="flex w-full items-center gap-3 rounded-md px-1.5 py-1 text-left text-xs hover:bg-accent/50 focus-visible:outline-2 focus-visible:outline-ring"
               >
-                <SlabArt slab={s} className="w-12 shrink-0" />
+                <SlabArt slab={s} thumb className="w-12 shrink-0" />
                 <div className="min-w-0 flex-1 space-y-0.5">
                   <div className="font-medium">{gradeTitle(s)}</div>
                   <div className="truncate text-muted-foreground">

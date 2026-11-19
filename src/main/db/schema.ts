@@ -749,6 +749,14 @@ CREATE TABLE graded_prices (pkey TEXT NOT NULL, company TEXT NOT NULL, grade TEX
   listing_count INTEGER NOT NULL DEFAULT 0, checked_at TEXT NOT NULL, PRIMARY KEY (pkey, company, grade));
 `
 
+/**
+ * Subgrades on graded copies (Beckett's centering, corners, edges and surface). Desktop-only here,
+ * since a fresh server makes graded_copies after the desktop steps (see server-50).
+ */
+export const SCHEMA_V51 = `
+ALTER TABLE graded_copies ADD COLUMN subgrades TEXT NOT NULL DEFAULT '';
+`
+
 export const MIGRATIONS: Migration[] = [
   { version: 1, sql: SCHEMA_V1 },
   { version: 2, sql: SCHEMA_V2 },
@@ -799,5 +807,6 @@ export const MIGRATIONS: Migration[] = [
   { version: 47, sql: SCHEMA_V47, server: false },
   { version: 48, sql: SCHEMA_V48 },
   { version: 49, sql: SCHEMA_V49, server: false },
-  { version: 50, sql: SCHEMA_V50 }
+  { version: 50, sql: SCHEMA_V50 },
+  { version: 51, sql: SCHEMA_V51, server: false }
 ]

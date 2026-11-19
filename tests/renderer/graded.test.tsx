@@ -49,6 +49,7 @@ const slab = (uid: string, patch: Partial<GradedCopy> = {}): GradedCopy => ({
   grade: '10',
   label: '',
   cert: '84512277',
+  subgrades: '',
   value: 500,
   paid: 200,
   notes: '',
@@ -86,6 +87,7 @@ describe('GradedCopies (card panel)', () => {
         grade: '10',
         label: '',
         cert: '123',
+        subgrades: '',
         value: 1250.5,
         paid: null,
         notes: ''
@@ -128,6 +130,56 @@ describe('GradedCopies (card panel)', () => {
       'https://tagd.co/Y1267951'
     )
     vi.unstubAllGlobals()
+  })
+
+  it('offers Beckett subgrades, all four or none', async () => {
+    const user = userEvent.setup()
+    const save = vi.fn(async () => 'new-uid')
+    renderWithProviders(
+      <GradedCopies cardId={1} cardName="X" printings={[printing(11, 1)]} printingId={11} />,
+      { api: createMockApi({ graded: { save } }) }
+    )
+    await user.click(screen.getByRole('button', { name: 'Add graded copy' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).queryByLabelText('Centering subgrade')).not.toBeInTheDocument()
+    await user.click(within(dialog).getByLabelText('Grading company'))
+    await user.click(await screen.findByRole('option', { name: 'BGS' }))
+    const pick = async (name: string, value: string): Promise<void> => {
+      await user.click(within(dialog).getByLabelText(`${name} subgrade`))
+      await user.click(await screen.findByRole('option', { name: value }))
+    }
+    await pick('Centering', '9.5')
+    const add = within(dialog).getByRole('button', { name: 'Add graded copy' })
+    expect(add).toBeDisabled()
+    expect(within(dialog).getByText('Pick all four subgrades, or none.')).toBeInTheDocument()
+    await pick('Corners', '10')
+    await pick('Edges', '10')
+    await pick('Surface', '9')
+    await user.click(add)
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(
+        expect.objectContaining({ company: 'BGS', subgrades: '9.5 10 10 9' })
+      )
+    )
+  })
+
+  it('draws each grader’s own slab, and a plain one for others', async () => {
+    renderWithProviders(<GradedPage />, {
+      api: createMockApi({
+        graded: {
+          list: async () =>
+            ['PSA', 'BGS', 'CGC', 'SGC', 'TAG', 'ACE', 'ARS'].map((company, i) =>
+              slab(String(i), { company, subgrades: company === 'BGS' ? '10 10 10 10' : '' })
+            )
+        }
+      })
+    })
+    await screen.findAllByTestId('slab')
+    expect(screen.getAllByTestId('slab').map((el) => el.dataset.grader)).toEqual(
+      expect.arrayContaining(['PSA', 'BGS', 'CGC', 'SGC', 'TAG', 'ACE', 'plain'])
+    )
+    expect(screen.getByText('Centering')).toBeInTheDocument()
+    expect(screen.getAllByText('GEM MT').length).toBeGreaterThan(0)
   })
 
   it('blocks a bad dollar amount', async () => {

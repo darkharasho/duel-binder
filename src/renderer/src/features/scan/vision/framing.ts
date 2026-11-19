@@ -96,25 +96,27 @@ const topOf = (f: Framed): number => f.art[0]?.distance ?? Infinity
  * to try first, and kept when its art came as close or closer. Only that frame: the next starts at the crop
  * again, so the cost is one outline search per frame that matched nothing, and a second read only
  * while a card is held across the crop's side (a sticky switch to the whole frame, v0.63.2, made
- * scanning choppy). read is given the pixels and the outline to try first. The whole frame is read
+ * scanning choppy). read is given the pixels, the outline to try first, and again: true for the
+ * second read, which has the cut-off card's outline and can skip the slow searches for a card it
+ * didn't find (a busy desk's edges set it off on frame after frame). The whole frame is read
  * when region is null (the phone, aimed at the card). The quad comes back in the whole frame's
  * pixels either way.
  */
 export function readFramed<T extends Framed>(
   frame: RgbaImage,
   region: CropRect | null,
-  read: (img: RgbaImage, first: Quad | null) => T,
+  read: (img: RgbaImage, first: Quad | null, again: boolean) => T,
   outlines: (img: RgbaImage) => Quad[],
   held: Quad | null = null
 ): T {
-  if (!region) return read(frame, held)
+  if (!region) return read(frame, held, false)
   const placed = (f: T, at: CropRect): T =>
     f.quad ? { ...f, quad: shiftQuad(f.quad, at.x, at.y) } : f
-  const first = read(cropRect(frame, region), held ? quadInRegion(held, region) : null)
+  const first = read(cropRect(frame, region), held ? quadInRegion(held, region) : null, false)
   if (first.found && topOf(first) <= ART_MAX_DISTANCE) return placed(first, region)
   const cut = cutOffRegion(outlines(frame), region, frame.width, frame.height)
   if (!cut) return placed(first, region)
-  const again = read(cropRect(frame, cut.rect), shiftQuad(cut.quad, -cut.rect.x, -cut.rect.y))
+  const again = read(cropRect(frame, cut.rect), shiftQuad(cut.quad, -cut.rect.x, -cut.rect.y), true)
   // As close or closer: the whole card is likelier the card than the part the crop shows.
   return again.found && topOf(again) <= topOf(first)
     ? placed(again, cut.rect)

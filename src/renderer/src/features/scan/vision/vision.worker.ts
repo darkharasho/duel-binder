@@ -128,15 +128,17 @@ async function handle(msg: WorkerRequest): Promise<void> {
     // other. Games matched by art keep the outline it matched on (keepsOutline).
     const keep = keepsOutline(profile, !!msg.tilt)
     // Read at the centre crop, and wider when the card runs off it (framing.ts); the quad is told
-    // in whole-frame pixels.
+    // in whole-frame pixels. For Pokémon the wider read skips the holder search and the rest of its
+    // pass. The nudges get a frame of their own, the one after the holder search's (holderBudget).
     const holderPass = budget.allow()
+    const nudgePass = budget.nudge()
     const from = performance.now()
     const image = pixels(msg.image)
     const read = performance.now()
     const { upright, ...signals } = readFramed(
       image,
       msg.region ?? null,
-      (img, first) =>
+      (img, first, again) =>
         analyze(
           cv,
           img,
@@ -145,10 +147,11 @@ async function handle(msg: WorkerRequest): Promise<void> {
           msg.wantBands,
           msg.wantLook,
           profile,
-          holderPass,
+          holderPass && !(again && profile.holderSearch),
           first,
           false,
-          !!msg.tilt
+          !!msg.tilt,
+          nudgePass && !(again && profile.holderSearch)
         ),
       (img) => findCandidates(cv, img, profile),
       keep ? held : null

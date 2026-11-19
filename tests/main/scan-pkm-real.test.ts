@@ -230,7 +230,7 @@ describe.skipIf(!READY)('the Pokémon scanner on real photos', () => {
       const signals = readFramed(
         img,
         region,
-        (im, first) =>
+        (im, first, again) =>
           analyze(
             cv,
             im,
@@ -239,7 +239,7 @@ describe.skipIf(!READY)('the Pokémon scanner on real photos', () => {
             true,
             false,
             profile,
-            true,
+            !(LIVE && again),
             first,
             !LIVE
           ),

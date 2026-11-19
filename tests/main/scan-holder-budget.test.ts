@@ -15,6 +15,16 @@ describe('holderBudget', () => {
     expect(allowed).toEqual([true, false, false, true, false, false, true])
   })
 
+  it('lets the frame after each search nudge, and no other', () => {
+    const b = holderBudget()
+    const nudged: boolean[] = []
+    for (let i = 0; i < 2 * HOLDER_EVERY + 1; i++) {
+      nudged.push(b.nudge())
+      b.record(null)
+    }
+    expect(nudged).toEqual([false, true, false, false, true, false, false])
+  })
+
   it('starts over once a frame matches, and a far match counts as unmatched', () => {
     const b = holderBudget()
     b.record(null)

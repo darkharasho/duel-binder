@@ -69,6 +69,11 @@ export interface ScanWindowSettings {
    * saved: every session starts at 'auto'.
    */
   finishLock?: FinishLock
+  /**
+   * Every card counted is taken as a graded slab, for a slab the scanner doesn't see as one (a
+   * clear label, an odd case). Never saved: every session starts with it off.
+   */
+  assumeSlab?: boolean
 }
 
 /** The frame rates the scanner offers, slowest first. */

@@ -35,6 +35,7 @@ import { ScanTraceToggle } from './ScanTraceToggle'
 import { SessionList } from './SessionList'
 import { MultiSearchPicker, SearchPicker } from './SearchPicker'
 import { ScanFinishPicker } from './FinishPicker'
+import { AssumeSlabToggle } from './AssumeSlabToggle'
 import { PhotoButton } from './PhotoButton'
 import { useScanPickers } from './pickerOptions'
 import { useGame } from '@/lib/game'
@@ -279,6 +280,7 @@ export function ScanPage({
         <span className="ml-auto flex items-center gap-2">
           {newScansAs}
           <ScanFinishPicker />
+          <AssumeSlabToggle />
           {options}
         </span>
       </div>

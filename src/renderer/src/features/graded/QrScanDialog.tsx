@@ -10,7 +10,7 @@ import {
   DialogTitle
 } from '@/components/ui/dialog'
 import { useBackHandler } from '@/lib/backStack'
-import { rememberedCamera } from '@/features/scan/useCamera'
+import { useScanCamera } from '@/features/scan/ScanHub'
 import { decodeQr } from './qrDecode'
 
 /** How often a camera frame is looked at for a QR code. */
@@ -57,6 +57,11 @@ function Scanner({ onRead }: { onRead: (qr: SlabQr) => void }): React.JSX.Elemen
   const video = useRef<HTMLVideoElement>(null)
   const file = useRef<HTMLInputElement>(null)
   const [status, setStatus] = useState<Status>('starting')
+  // What the last QR code that wasn't a grader's link said, shown so an unknown grader's can be told.
+  const [unknown, setUnknown] = useState<string | null>(null)
+  // The Scan tab's camera, so a desk with two webcams reads the one aimed at the cards.
+  const camera = useScanCamera()
+  const cameraRef = useRef(camera)
   const done = useRef(false)
   const reading = useRef(onRead)
   useEffect(() => {
@@ -84,21 +89,34 @@ function Scanner({ onRead }: { onRead: (qr: SlabQr) => void }): React.JSX.Elemen
       if (v.readyState >= 2) {
         const text = await decodeQr(v, v.videoWidth, v.videoHeight)
         if (gone || done.current) return
-        if (text && !take(text)) setStatus('not-a-slab')
+        if (text && !take(text)) {
+          setStatus('not-a-slab')
+          setUnknown(text)
+        }
       }
       timer = setTimeout(() => void look(), EVERY_MS)
     }
     void (async () => {
       try {
-        const camera = rememberedCamera()
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: false,
-          video: {
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-            ...(camera ? { deviceId: { ideal: camera } } : { facingMode: { ideal: 'environment' } })
-          }
-        })
+        const camera = cameraRef.current
+        const open = (exact: string | null): Promise<MediaStream> =>
+          navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: {
+              // 4K where the camera has it: a slab's QR code is small.
+              width: { ideal: 3840 },
+              height: { ideal: 2160 },
+              // Exact: an ideal deviceId loses to another camera nearer the size asked for.
+              ...(exact ? { deviceId: { exact } } : { facingMode: { ideal: 'environment' } })
+            }
+          })
+        try {
+          stream = await open(camera)
+        } catch (e) {
+          // The Scan tab's camera is gone (unplugged): any camera will do.
+          if (!camera || !(e instanceof DOMException) || e.name !== 'OverconstrainedError') throw e
+          stream = await open(null)
+        }
         if (gone || !v) return
         v.srcObject = stream
         await v.play().catch(() => undefined)
@@ -123,7 +141,10 @@ function Scanner({ onRead }: { onRead: (qr: SlabQr) => void }): React.JSX.Elemen
       try {
         const text = await decodeQr(bitmap, bitmap.width, bitmap.height)
         if (!text) setStatus('none-in-photo')
-        else if (!take(text)) setStatus('not-a-slab')
+        else if (!take(text)) {
+          setStatus('not-a-slab')
+          setUnknown(text)
+        }
       } finally {
         bitmap.close()
       }
@@ -147,6 +168,11 @@ function Scanner({ onRead }: { onRead: (qr: SlabQr) => void }): React.JSX.Elemen
       <p role="status" className="text-sm text-muted-foreground">
         {MESSAGES[status]}
       </p>
+      {status === 'not-a-slab' && unknown && (
+        <p className="break-all text-xs text-muted-foreground">
+          It says: <span className="font-mono">{unknown.slice(0, 200)}</span>
+        </p>
+      )}
       <input
         ref={file}
         type="file"

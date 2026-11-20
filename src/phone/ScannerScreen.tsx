@@ -10,6 +10,7 @@ import {
   RadioIcon,
   ScanTextIcon,
   SettingsIcon,
+  ShieldCheckIcon,
   ShuffleIcon,
   SparklesIcon,
   StarIcon,
@@ -253,7 +254,8 @@ export function ScannerScreen({
   onClose: () => void
   onOpenSettings: () => void
 }): React.JSX.Element {
-  const { session } = useScanHub()
+  const { session, settings, setSettings } = useScanHub()
+  const allSlabs = settings.assumeSlab === true
   const pickers = useScanPickers()
   // A game priced by version rather than Yu-Gi-Oh!'s rarities has no rarity for new scans.
   const { game } = useGame()
@@ -391,6 +393,24 @@ export function ScannerScreen({
             Code
           </button>
         )}
+        <button
+          type="button"
+          aria-label="All slabs"
+          aria-pressed={allSlabs}
+          onClick={() => setSettings({ assumeSlab: !allSlabs })}
+          className={cn(
+            'flex h-[38px] shrink-0 items-center gap-1.5 rounded-full px-3.5 text-sm font-medium',
+            allSlabs
+              ? 'bg-white text-black active:bg-white/80'
+              : cn(GLASS, 'active:bg-white/[0.12]')
+          )}
+        >
+          <ShieldCheckIcon
+            aria-hidden
+            className={cn('size-4 shrink-0', !allSlabs && 'text-white/55')}
+          />
+          Slabs
+        </button>
         <Chip
           label="Language"
           name="Language"

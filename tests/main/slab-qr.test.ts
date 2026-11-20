@@ -22,6 +22,10 @@ describe('parseSlabQr', () => {
     expect(
       parseSlabQr('https://www.beckett.com/grading/card-lookup?item_type=BGS&item_id=0012345678')
     ).toEqual({ company: 'BGS', cert: '0012345678' })
+    expect(parseSlabQr('https://www.agscard.com/report/10293847')).toEqual({
+      company: 'AGS',
+      cert: '10293847'
+    })
   })
 
   it('passes over links that aren’t a grader’s, or hold no cert', () => {

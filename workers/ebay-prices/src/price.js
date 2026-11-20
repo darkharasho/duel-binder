@@ -222,6 +222,7 @@ const GRADER_NAMES = Object.freeze({
   SGC: 'sgc',
   TAG: 'tag',
   ACE: 'ace',
+  AGS: 'ags',
   ARS: 'ars',
   PCG: 'pcg',
   CCIC: 'ccic'

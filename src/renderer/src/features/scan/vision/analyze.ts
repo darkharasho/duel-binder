@@ -206,12 +206,15 @@ function analyzeFrame(
   const pokemon = profile.game === 'pkm'
   const version = pokemon && upright ? pokemonVersionCues(upright, profile) : null
   // Any game's card may be in a graded slab: tracked apart from the collection.
-  const slabUp = slabQuad(img, quad)
+  const slabUp = slabQuad(img, quad, upsideDown)
   const slab = slabUp !== null
   // A slab's label, cut out for reading its grade after the card is counted (useScanLoop).
   const slabBand =
     slabUp && wantSlabLabel ? slabLabelBand(cv, img, slabUp.quad, slabUp.labelV) : null
-  const label = slabBand ? { slabBand } : {}
+  const label = {
+    ...(slabBand ? { slabBand } : {}),
+    ...(slabUp?.company ? { slabCompany: slabUp.company } : {})
+  }
   const kept = wantUpright && upright ? { upright } : {}
   if (!wantBands)
     return {

@@ -496,6 +496,8 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     // When each artwork was last seen in a slab: a slab's label is told on some frames and not
     // others (glare, a thumb), so a card counted on a frame that missed it is still one.
     slabArt: new Map<number, number>(),
+    /** When each card's art was last seen in a TAG slab (its clear label's frame), by imageId. */
+    slabTag: new Map<number, number>(),
     shown: null as number | null,
     absentSince: null as number | null,
     // When the video's picture last moved, to tell a frozen camera.
@@ -777,11 +779,14 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
      * Reads a counted slab's label in the background (it never holds up the count) and hands
      * what it says to onSlabRead. A failed or empty read says nothing: the user fills in the form.
      */
-    const readSlab = (rowId: string, band: OcrBand): void => {
+    const readSlab = (rowId: string, band: OcrBand, company?: 'TAG'): void => {
       void within(api.scan.readText([band], 'eng'), LANGUAGE_TIMEOUT_MS)
         .then(([text = '']) => {
-          const read = parseSlabLabel(text)
-          if (live && Object.keys(read).length > 0) latest.current.onSlabRead?.(rowId, read)
+          const parsed = parseSlabLabel(text)
+          if (Object.keys(parsed).length === 0) return
+          // The grader its label's look gave away, unless the text names one.
+          const read = company && !parsed.company ? { ...parsed, company } : parsed
+          if (live) latest.current.onSlabRead?.(rowId, read)
         })
         .catch(() => undefined)
     }
@@ -804,10 +809,14 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
       // Its art seen in a slab lately: a slab, though this frame missed the label.
       const seenInSlab = performance.now() - (l.slabArt.get(draft.imageId) ?? -Infinity)
       if (!draft.slab && seenInSlab < SLAB_SEEN_MS) draft = { ...draft, slab: true }
+      // Its art seen lately in a clear label's frame: a TAG slab, said before its label is read.
+      const seenInTag = performance.now() - (l.slabTag.get(draft.imageId) ?? -Infinity)
+      const company = draft.slab && seenInTag < SLAB_SEEN_MS ? ('TAG' as const) : undefined
       showCounted(draft)
       const rowId = latest.current.onDraft(draft)
+      if (typeof rowId === 'string' && company) latest.current.onSlabRead?.(rowId, { company })
       if (typeof rowId === 'string' && draft.slab && slabBand) {
-        readSlab(rowId, slabBand)
+        readSlab(rowId, slabBand, company)
         // Read once: the next slab counted waits for a label of its own.
         l.slabBand = null
       }
@@ -1050,6 +1059,8 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
           })
           .catch(() => null)
         if (!raw || stale()) continue
+        if (raw.slabCompany === 'TAG' && raw.art[0])
+          l.slabTag.set(raw.art[0].imageId, performance.now())
         const outcome = await within(
           resolveSignals(raw, {
             game: o.game,
@@ -1197,6 +1208,8 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
               analyzed = performance.now()
               // A frame with a card and no slab: the label kept was another card's.
               if (raw.slab && raw.art[0]) l.slabArt.set(raw.art[0].imageId, analyzed)
+              if (raw.slabCompany === 'TAG' && raw.art[0])
+                l.slabTag.set(raw.art[0].imageId, analyzed)
               if (raw.slabBand) l.slabBand = { band: raw.slabBand, at: analyzed }
               // The worker's whole frame comes back (timings and all), as the read and readout use.
               return raw as RawSignals & FrameSignals

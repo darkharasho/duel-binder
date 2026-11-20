@@ -14,6 +14,7 @@ export const GRADING_COMPANIES = [
   'SGC',
   'TAG',
   'ACE',
+  'AGS',
   'ARS',
   'PCG',
   'CCIC'

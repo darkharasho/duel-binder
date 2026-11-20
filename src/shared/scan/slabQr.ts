@@ -14,7 +14,8 @@ const HOSTS: [RegExp, string][] = [
   [/(^|\.)psacard\.com$/, 'PSA'],
   [/(^|\.)cgccards\.com$/, 'CGC'],
   [/(^|\.)beckett\.com$/, 'BGS'],
-  [/(^|\.)gosgc\.com$/, 'SGC']
+  [/(^|\.)gosgc\.com$/, 'SGC'],
+  [/(^|\.)agscard\.com$/, 'AGS']
 ]
 
 /** A cert number: digits, with a leading letter or two on some graders' (TAG's "Y1267951"). */

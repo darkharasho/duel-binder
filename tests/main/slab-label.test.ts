@@ -7,6 +7,11 @@ describe('parseSlabLabel', () => {
     expect(parseSlabLabel(text)).toEqual({ company: 'PSA', grade: '7', cert: '124302770' })
   })
 
+  it('reads an AGS label', () => {
+    const text = '2023 POKEMON SV151 #199\nCHARIZARD EX\nAGS 9.5 GEM MINT\n10293847'
+    expect(parseSlabLabel(text)).toMatchObject({ company: 'AGS', cert: '10293847' })
+  })
+
   it('tells a PSA label by its words when the logo does not read', () => {
     const text = '2016 POKEMON XY EVOLUTIONS #11\nCHARIZARD-HOLO GEM MT\n10\n12345678'
     expect(parseSlabLabel(text)).toEqual({ company: 'PSA', grade: '10', cert: '12345678' })

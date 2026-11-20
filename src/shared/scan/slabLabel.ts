@@ -21,6 +21,7 @@ const COMPANIES: [string, RegExp][] = [
   // Not a card named "TAG TEAM".
   ['TAG', /\bTAG\b(?!\s*-?\s*TEAM)/],
   ['ACE', /\bACE\b(?! ?SPEC)/],
+  ['AGS', /\bAGS\b/],
   ['ARS', /\bARS\b/],
   ['PCG', /\bPCG\b/],
   ['CCIC', /\bCCIC\b/]

@@ -49,6 +49,8 @@ describe('gradedTitleMatches', () => {
     expect(ok('Dragonite #5 Beckett 9.5', { ...pkm, company: 'BGS', grade: '9.5' })).toBe(true)
     expect(ok('Dragonite #5 PSA Authentic', { ...pkm, grade: 'Authentic' })).toBe(true)
     expect(ok('Dragonite #5 CGC 7', pkm)).toBe(false)
+    expect(ok('Dragonite 5/20 AGS 7', { ...pkm, company: 'AGS' })).toBe(true)
+    expect(ok('Dragonite 5/20 PSA 7', { ...pkm, company: 'AGS' })).toBe(false)
   })
 
   it('matches a Yu-Gi-Oh! slab by its code', () => {

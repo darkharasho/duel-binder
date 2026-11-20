@@ -1,0 +1,193 @@
+name: OTA
+
+# Live (over-the-air) update for the phone apps without a store build: the web code at this commit
+# goes to the native releases already on phones, through the same portal pipeline as a v* tag's
+# "Go live" (scripts/live-update/publish.ts; the app's src/phone/liveUpdate.ts picks it up).
+# Changes to native code, capacitor.config.ts or Capacitor plugins can't go out this way: each
+# target checks its shell against the native release's tag and stops ("ship a native release").
+#
+#   gh workflow run ota.yml [-f platforms=ios] [-f release_version=0.112.0+190] [-f version=0.112.1] [-f dry_run=true]
+#
+# Targets: each platform's newest native release that reached TestFlight / Play (tags
+# native/<platform>/<NAME+NUMBER>, pushed by ios.yml / android.yml) and, on iOS, also the version the
+# App Store has live while it's older (scripts/native-release-targets.sh). Android publishes both
+# bundle targets (android-apk, android-play), built as android.yml builds them.
+#
+# Version: the update carries its own x.y.z (the portal only offers a newer version), by default the
+# patch after the newest v* tag that no bundle target has used yet. Afterwards bring desktop to the
+# same code and version with `gh workflow run release.yml -f desktop_release=<that version>`; the
+# next full release takes a later version.
+#
+# Secrets: PORTAL_ADMIN_TOKEN, LIVE_UPDATE_SIGNING_KEY (as ios.yml / android.yml).
+
+on:
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: 'Comma-separated subset of ios,android'
+        default: 'ios,android'
+      release_version:
+        description: "Native release to update (NAME+NUMBER, e.g. 0.112.0+190), or latest for each platform's shipped ones"
+        default: 'latest'
+      version:
+        description: 'Version the update carries (x.y.z); empty = next unused patch after the newest v* tag'
+        default: ''
+      dry_run:
+        description: 'Check and build only; publish nothing'
+        type: boolean
+        default: false
+
+concurrency:
+  group: ota
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  BUNDLE_ID: com.darkharasho.duelbinder
+  PORTAL_URL: https://app.duelbinder.com
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      matrix: ${{ steps.targets.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Version
+        id: version
+        env:
+          WANT: ${{ inputs.version }}
+          PLATFORMS: ${{ inputs.platforms }}
+          PORTAL_ADMIN_TOKEN: ${{ secrets.PORTAL_ADMIN_TOKEN }}
+        run: |
+          newest="$(git tag -l 'v*' | sed 's/^v//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)"
+          [ -n "$newest" ] || { echo "::error::No v* tag yet."; exit 1; }
+          targets=()
+          [[ "$PLATFORMS" == *ios* ]] && targets+=(ios)
+          [[ "$PLATFORMS" == *android* ]] && targets+=(android-apk android-play)
+          # A version any bundle target already used (a release or a built-in shell) can't be reused:
+          # phones that took it would never take the new code.
+          used() {
+            git ls-remote --exit-code --tags origin "refs/tags/v$1" >/dev/null && return 0
+            [ -n "$PORTAL_ADMIN_TOKEN" ] || return 1
+            for t in "${targets[@]}"; do
+              code="$(curl -s -o /dev/null -w '%{http_code}' -H "authorization: Bearer $PORTAL_ADMIN_TOKEN" \
+                "$PORTAL_URL/api/admin/app-bundles/$t/builtins/$1")"
+              [ "$code" = 404 ] || return 0
+            done
+            return 1
+          }
+          if [ -n "$WANT" ]; then
+            v="${WANT#v}"
+            [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Version '$v' isn't x.y.z"; exit 1; }
+            [ "$(printf '%s\n%s\n' "$v" "$newest" | sort -V | tail -1)" = "$v" ] && [ "$v" != "$newest" ] \
+              || { echo "::error::$v isn't newer than v$newest."; exit 1; }
+            ! used "$v" || { echo "::error::$v is already used (a v$v tag or a published bundle); pick a later version."; exit 1; }
+          else
+            IFS=. read -r major minor patch <<<"$newest"
+            v="$major.$minor.$((patch + 1))"
+            while used "$v"; do IFS=. read -r major minor patch <<<"$v"; v="$major.$minor.$((patch + 1))"; done
+          fi
+          [ -n "$PORTAL_ADMIN_TOKEN" ] || echo "::warning::PORTAL_ADMIN_TOKEN isn't set: couldn't check that $v is unused on the portal."
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "Live update $v from $GITHUB_REF_NAME ($(git rev-parse --short HEAD))" >> "$GITHUB_STEP_SUMMARY"
+      - name: Native releases to update
+        id: targets
+        env:
+          PLATFORMS: ${{ inputs.platforms }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          rows=()
+          for platform in ios android; do
+            [[ "$PLATFORMS" == *"$platform"* ]] || continue
+            if [ "$RELEASE_VERSION" != latest ]; then
+              releases="$RELEASE_VERSION"
+            elif [ "$platform" = ios ]; then
+              releases="$(scripts/native-release-targets.sh ios "$BUNDLE_ID" | xargs)"
+            else
+              releases="$(scripts/native-release-targets.sh android | xargs)"
+            fi
+            if [ "$platform" = ios ]; then bundles=(ios); else bundles=(android-apk android-play); fi
+            for b in "${bundles[@]}"; do
+              channel=""; [ "$b" = android-play ] && channel=play
+              rows+=("{\"target\":\"$b\",\"platform\":\"$platform\",\"channel\":\"$channel\",\"releases\":\"$releases\"}")
+            done
+            echo "$platform native releases to update: $releases" >> "$GITHUB_STEP_SUMMARY"
+          done
+          [ "${#rows[@]}" -gt 0 ] || { echo "::error::No platform picked (platforms=$PLATFORMS)."; exit 1; }
+          echo "matrix={\"include\":[$(IFS=,; echo "${rows[*]}")]}" >> "$GITHUB_OUTPUT"
+
+  # Same checks a release runs before its bundles go live (release.yml's test job).
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  publish:
+    needs: [prepare, test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    name: publish (${{ matrix.target }})
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # The phone builds need no Electron or native Node modules, which postinstall fetches.
+      - run: npm ci --ignore-scripts
+      # publish.ts and the app (__APP_VERSION__) read the version from package.json.
+      - name: Set the update's version
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: npm version "$VERSION" --no-git-tag-version --allow-same-version
+      # As ios.yml / android.yml build it (ANDROID_CHANNEL=play for the Play bundle).
+      - name: Build the web bundle
+        env:
+          ANDROID_CHANNEL: ${{ matrix.channel }}
+        run: npm run "build:${{ matrix.platform }}"
+      - name: Publish
+        env:
+          TARGET: ${{ matrix.target }}
+          PLATFORM: ${{ matrix.platform }}
+          RELEASES: ${{ matrix.releases }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          PORTAL_ADMIN_TOKEN: ${{ secrets.PORTAL_ADMIN_TOKEN }}
+          LIVE_UPDATE_SIGNING_KEY: ${{ secrets.LIVE_UPDATE_SIGNING_KEY }}
+        run: |
+          args=("$TARGET" "out/$PLATFORM-web")
+          read -ra rel <<<"$RELEASES"
+          args+=("${rel[@]}")
+          [ "$DRY_RUN" = true ] && args+=(--dry-run)
+          scripts/live-update/ota-publish.sh "${args[@]}" 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+          exit "${PIPESTATUS[0]}"
+
+  next-step:
+    needs: [prepare, publish]
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Bring desktop up to the same version
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          echo "Phones got $VERSION. Bring desktop up to it: \`gh workflow run release.yml -f desktop_release=$VERSION\`" \
+            | tee -a "$GITHUB_STEP_SUMMARY"

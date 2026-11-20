@@ -7,6 +7,8 @@ name: Android
 # is 'true' (set after the APK was checked on a real phone), and sends the bundle to Play's
 # internal testing track once the secret PLAY_SERVICE_ACCOUNT_JSON is set (a Google Cloud service
 # account's JSON key, invited in Play Console with release-to-testing-tracks access to the app).
+# A bundle that reached Play is tagged native/android/<version>+<versionCode>, which ota.yml updates
+# over the air (tags pushed with GITHUB_TOKEN start no workflows).
 #
 # Secrets (the key is ~/.android-keys/duel-binder-release.jks on the owner's machine; never
 # replace it, or installed APKs can't update): ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD,
@@ -42,6 +44,15 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      # The version is package.json's, which release.yml also requires the tag to match.
+      - name: Check the tag matches package.json
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [ "v$VERSION" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version v$VERSION"
+            exit 1
+          fi
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -119,6 +130,7 @@ jobs:
             exit 1
           }
           echo "NAME=$NAME" >> "$GITHUB_ENV"
+          echo "CODE=$CODE" >> "$GITHUB_ENV"
 
       - uses: actions/upload-artifact@v4
         if: steps.secrets.outputs.sign == 'true'
@@ -129,6 +141,7 @@ jobs:
 
       # Play refuses a version code it already has, so only release tags upload (not manual runs).
       - name: Send the bundle to Play internal testing
+        id: play
         if: steps.secrets.outputs.sign == 'true' && steps.secrets.outputs.play == 'true' && startsWith(github.ref, 'refs/tags/v')
         uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
         with:
@@ -138,6 +151,21 @@ jobs:
           releaseName: ${{ env.NAME }}
           tracks: internal
           status: completed
+
+      # The bundle reached Play: tag it native/android/<NAME+versionCode> (the build number the
+      # installed app reports, App.getInfo().build) for ota.yml.
+      - name: Tag the native release
+        if: steps.play.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ref="refs/tags/native/android/$NAME+$CODE"
+          if gh api "repos/$GITHUB_REPOSITORY/git/$ref" --silent 2>/dev/null; then
+            echo "$ref already exists"
+          else
+            gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="$ref" -f sha="$GITHUB_SHA" --silent
+            echo "Tagged $ref" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
 
       # Runs even when the Play upload failed: the bundles work for apps already installed.
       - name: Go live

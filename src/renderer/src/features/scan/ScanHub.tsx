@@ -248,7 +248,12 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
   )
 
   const count = useCallback(
-    (draft: ScanDraft): string => {
+    (scanned: ScanDraft): string => {
+      // "Assume slab": every card counted is a slab, seen as one or not.
+      const draft =
+        settingsRef.current.assumeSlab && !scanned.slab
+          ? { ...scanned, slab: true as const }
+          : scanned
       const key = add(draft)
       setFresh(key)
       clearTimeout(highlightTimer.current)
@@ -441,4 +446,14 @@ export function useScanHub(): ScanHub {
   const hub = useContext(HubContext)
   if (!hub) throw new Error('useScanHub needs a ScanHubProvider')
   return hub
+}
+
+/**
+ * The camera the Scan tab picked (null: the system default), or the one remembered from the last
+ * scan outside a ScanHubProvider. For other camera users (the slab QR scanner) to open the same one.
+ */
+// eslint-disable-next-line react-refresh/only-export-components -- the hook belongs with its provider
+export function useScanCamera(): string | null {
+  const hub = useContext(HubContext)
+  return hub ? hub.settings.deviceId : rememberedCamera()
 }

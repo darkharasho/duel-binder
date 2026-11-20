@@ -32,15 +32,26 @@ function nativeDetector(): Promise<Detector | null> {
   return native
 }
 
-/** The picture's region (sx, sy, sw, sh) drawn at no more than MAX_SIDE on its longer side. */
+/**
+ * A small region is drawn up to this many times its size: jsQR needs about 3 px a module, and a
+ * TAG label's small code held at a webcam's distance has 1 to 2.
+ */
+const MAX_UPSCALE = 3
+
+/**
+ * The picture's region (sx, sy, sw, sh) drawn at no more than MAX_SIDE on its longer side, and,
+ * when `grow`, enlarged up to it (MAX_UPSCALE at most).
+ */
 function pixels(
   source: CanvasImageSource,
   sx: number,
   sy: number,
   sw: number,
-  sh: number
+  sh: number,
+  grow = false
 ): ImageData | null {
-  const k = Math.min(1, MAX_SIDE / Math.max(sw, sh))
+  const fit = MAX_SIDE / Math.max(sw, sh)
+  const k = grow ? Math.min(MAX_UPSCALE, fit) : Math.min(1, fit)
   const w = Math.max(1, Math.round(sw * k))
   const h = Math.max(1, Math.round(sh * k))
   const canvas = document.createElement('canvas')
@@ -48,13 +59,15 @@ function pixels(
   canvas.height = h
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   if (!ctx) return null
+  ctx.imageSmoothingQuality = 'high'
   ctx.drawImage(source, sx, sy, sw, sh, 0, 0, w, h)
   return ctx.getImageData(0, 0, w, h)
 }
 
 /**
  * The text of a QR code in `source` (width × height), or null when none reads. jsQR looks at the
- * middle first, at full detail (where a label held up to the camera is), then the whole picture.
+ * middle first, enlarged then at full detail (where a label held up to the camera is), then the
+ * whole picture.
  */
 export async function decodeQr(
   source: CanvasImageSource,
@@ -71,13 +84,19 @@ export async function decodeQr(
       // Fall through to jsQR.
     }
   }
-  const side = Math.min(width, height) * 0.6
-  const regions: [number, number, number, number][] = [
-    [(width - side) / 2, (height - side) / 2, side, side],
-    [0, 0, width, height]
+  // The middle third enlarged (a small code held up to the camera), then the middle at full
+  // detail, then the whole picture.
+  const box = (share: number): [number, number, number, number, boolean] => {
+    const side = Math.min(width, height) * share
+    return [(width - side) / 2, (height - side) / 2, side, side, share < 0.5]
+  }
+  const regions: [number, number, number, number, boolean][] = [
+    box(0.35),
+    box(0.6),
+    [0, 0, width, height, false]
   ]
-  for (const [sx, sy, sw, sh] of regions) {
-    const img = pixels(source, sx, sy, sw, sh)
+  for (const [sx, sy, sw, sh, grow] of regions) {
+    const img = pixels(source, sx, sy, sw, sh, grow)
     if (!img) return null
     const hit = jsQR(img.data, img.width, img.height, { inversionAttempts: 'attemptBoth' })
     if (hit?.data) return hit.data

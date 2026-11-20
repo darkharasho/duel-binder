@@ -179,6 +179,17 @@ describe('a TAG slab (clear label, white frame)', () => {
     }
   })
 
+  it('says a framed clear label is TAG, and a paper label names no grader', () => {
+    const company = (img: RgbaImage, quad: Quad): string | undefined => {
+      const m = toMat(cv, img)
+      return using([m], () => slabQuad(m, quad)?.company)
+    }
+    for (const s of some) {
+      expect(company(inTagSlab(load(s.file), s.quad), s.quad), s.file).toBe('TAG')
+      expect(company(inSlab(load(s.file), s.quad), s.quad), s.file).toBeUndefined()
+    }
+  })
+
   it('reads two lines across with no sides as not a label', () => {
     for (const s of some)
       expect(found(inTagSlab(load(s.file), s.quad, false), s.quad), s.file).toBe(false)

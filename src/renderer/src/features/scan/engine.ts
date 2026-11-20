@@ -37,6 +37,8 @@ export interface FrameSignals {
   slab?: boolean
   /** A slab's label, straightened, for reading its grade (slabLabelBand); only when `slab`. */
   slabBand?: OcrBand
+  /** A slab's grader told by its label's look (TAG's clear label); only when `slab`. */
+  slabCompany?: 'TAG'
   /**
    * 'holder' when the art matched only on the second look of a profile's holderSearch, which
    * must then clear the art margin against every other name (resolvePokemon).
@@ -131,6 +133,8 @@ export interface RawSignals {
   slab?: boolean
   /** As FrameSignals.slabBand. */
   slabBand?: OcrBand
+  /** As FrameSignals.slabCompany. */
+  slabCompany?: 'TAG'
   /** As FrameSignals.artVia. */
   artVia?: 'holder'
   /** As FrameSignals.artBack. */
@@ -508,6 +512,7 @@ export function createScanEngine(deps: {
         ...(signals.artBack !== undefined ? { artBack: signals.artBack } : {}),
         ...(signals.tiltKept ? { tiltKept: true } : {}),
         ...(signals.slabBand ? { slabBand: signals.slabBand } : {}),
+        ...(signals.slabCompany ? { slabCompany: signals.slabCompany } : {}),
         ...(signals.ms ? { ms: signals.ms } : {})
       }
       if (!wantText || !found)

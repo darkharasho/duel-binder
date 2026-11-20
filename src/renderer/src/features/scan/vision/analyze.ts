@@ -211,7 +211,10 @@ function analyzeFrame(
   // A slab's label, cut out for reading its grade after the card is counted (useScanLoop).
   const slabBand =
     slabUp && wantSlabLabel ? slabLabelBand(cv, img, slabUp.quad, slabUp.labelV) : null
-  const label = slabBand ? { slabBand } : {}
+  const label = {
+    ...(slabBand ? { slabBand } : {}),
+    ...(slabUp?.company ? { slabCompany: slabUp.company } : {})
+  }
   const kept = wantUpright && upright ? { upright } : {}
   if (!wantBands)
     return {

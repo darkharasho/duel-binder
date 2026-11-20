@@ -145,6 +145,8 @@ export interface SlabFound {
   quad: Quad
   /** The label window found, [v0, v1] in the card's heights above its top edge (negative). */
   labelV: readonly [number, number]
+  /** The grader the label's look gives away: TAG for a clear label found by its frame. */
+  company?: 'TAG'
 }
 
 /**
@@ -166,7 +168,7 @@ export function slabQuad(
   if (down) return { quad: turned, labelV: down }
   for (const q of upsideDown === null ? [quad, turned] : [upsideDown ? turned : quad]) {
     const framed = labelFrameAbove(frame, q)
-    if (framed) return { quad: q, labelV: framed }
+    if (framed) return { quad: q, labelV: framed, company: 'TAG' }
   }
   return null
 }

@@ -262,6 +262,9 @@ function Label({
             </div>
           </div>
           <span className="slab-mark">AGS</span>
+          <div className="slab-qr" aria-hidden>
+            <FakeQr seed={slab.cert || slab.card.name} />
+          </div>
         </div>
       )
     default:

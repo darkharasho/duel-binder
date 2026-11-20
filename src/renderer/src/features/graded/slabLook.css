@@ -516,6 +516,20 @@
   font-size: calc(16 * var(--u));
   line-height: 1.05;
 }
+.slab-ags .slab-qr {
+  position: absolute;
+  left: calc(5 * var(--u));
+  bottom: calc(1 * var(--u));
+  width: calc(10 * var(--u));
+  height: calc(10 * var(--u));
+  padding: calc(0.8 * var(--u));
+  background: #fff;
+}
+.slab-ags .slab-qr svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
 .slab-ags .slab-mark {
   position: absolute;
   left: 50%;

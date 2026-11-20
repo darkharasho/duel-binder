@@ -1,6 +1,7 @@
 // @vitest-environment node
 // Graded-slab detection on synthetic frames: the fixture shots bare, in a toploader-like case
-// (tests/main/scanCase.ts), and with a label block drawn above the card inside a wider outline.
+// (tests/main/scanCase.ts), and with a label block drawn above the card inside a wider outline:
+// white paper (PSA, BGS, CGC...) or TAG's clear label, a thin white frame with white print.
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { decode } from 'jpeg-js'
@@ -10,7 +11,7 @@ import { loadCv, type CV } from '../../src/renderer/src/features/scan/vision/cv'
 import { toMat, using, type Quad } from '../../src/renderer/src/features/scan/vision/detect'
 import { analyze } from '../../src/renderer/src/features/scan/vision/analyze'
 import { scanProfile } from '../../src/shared/scan/profiles'
-import { isSlab } from '../../src/renderer/src/features/scan/vision/holder'
+import { isSlab, slabQuad } from '../../src/renderer/src/features/scan/vision/holder'
 import { inCase, TIGHT_CASE, WIDE_CASE } from './scanCase'
 
 vi.mock('@techstark/opencv-js', async () => {
@@ -71,6 +72,49 @@ function inSlab(img: RgbaImage, quad: Quad, up = 0.34, labelWidth = 0.84): RgbaI
   return { width, height, data: out }
 }
 
+/**
+ * img with a TAG slab round the card at quad: a clear holder outline, and above the card a clear
+ * label (the background shows through) with a thin white frame round it, its top line broken
+ * by the TAG plaque, and rows of white print inside. `sides` false leaves the frame's sides out.
+ */
+function inTagSlab(img: RgbaImage, quad: Quad, sides = true): RgbaImage {
+  const { width, height } = img
+  const out = new Uint8ClampedArray(img.data)
+  const [p0, p1, , p3] = quad
+  const a = [p1[0] - p0[0], p1[1] - p0[1]]
+  const b = [p3[0] - p0[0], p3[1] - p0[1]]
+  const det = a[0] * b[1] - a[1] * b[0]
+  const [top, bottom, left, right] = [-0.3, -0.06, -0.02, 1.02]
+  // The frame's lines, about as thin as a real TAG label's: a few thousandths of the card across.
+  const thick = Math.max(0.003, 1 / Math.hypot(b[0], b[1]))
+  const thickU = Math.max(0.003, 1 / Math.hypot(a[0], a[1]))
+  const reach = Math.hypot(a[0], a[1]) + Math.hypot(b[0], b[1])
+  const [cx, cy] = [p0[0] + (a[0] + b[0]) / 2, p0[1] + (a[1] + b[1]) / 2]
+  for (let y = Math.max(0, Math.floor(cy - reach)); y < Math.min(height, cy + reach); y++) {
+    for (let x = Math.max(0, Math.floor(cx - reach)); x < Math.min(width, cx + reach); x++) {
+      const [dx, dy] = [x - p0[0], y - p0[1]]
+      const u = (dx * b[1] - dy * b[0]) / det
+      const v = (a[0] * dy - a[1] * dx) / det
+      if (u < -0.1 || u > 1.1 || v < -0.4 || v > 1.05) continue
+      const i = (y * width + x) * 4
+      const inside = u > left && u < right && v > top && v < bottom
+      const across =
+        u >= left &&
+        u <= right &&
+        (Math.abs(v - bottom) < thick || (Math.abs(v - top) < thick && Math.abs(u - 0.5) > 0.1))
+      const down =
+        sides &&
+        v >= top &&
+        v <= bottom &&
+        (Math.abs(u - left) < thickU || Math.abs(u - right) < thickU)
+      const row = Math.floor(((v - top) / (bottom - top)) * 9)
+      const print = inside && row % 2 === 1 && u > 0.05 && u < 0.6 && (u * 60) % 3 < 2
+      if (across || down || print) out[i] = out[i + 1] = out[i + 2] = 240
+    }
+  }
+  return { width, height, data: out }
+}
+
 let cv: CV
 beforeAll(async () => {
   cv = await loadCv()
@@ -112,6 +156,32 @@ describe('isSlab', () => {
       const turned: Quad = [s.quad[2], s.quad[3], s.quad[0], s.quad[1]]
       expect(slab(inSlab(load(s.file), s.quad), turned), s.file).toBe(true)
     }
+  })
+})
+
+describe('a TAG slab (clear label, white frame)', () => {
+  const found = (img: RgbaImage, quad: Quad, upsideDown: boolean | null = null): boolean => {
+    const m = toMat(cv, img)
+    return using([m], () => slabQuad(m, quad, upsideDown) !== null)
+  }
+
+  it('reads a card with a framed clear label above it as a slab', () => {
+    for (const s of some) expect(found(inTagSlab(load(s.file), s.quad), s.quad), s.file).toBe(true)
+  })
+
+  it('finds it below a card read upside down, unless the art says it is upright', () => {
+    for (const s of some) {
+      const img = inTagSlab(load(s.file), s.quad)
+      const turned: Quad = [s.quad[2], s.quad[3], s.quad[0], s.quad[1]]
+      expect(found(img, turned), s.file).toBe(true)
+      expect(found(img, turned, true), s.file).toBe(true)
+      expect(found(img, turned, false), s.file).toBe(false)
+    }
+  })
+
+  it('reads two lines across with no sides as not a label', () => {
+    for (const s of some)
+      expect(found(inTagSlab(load(s.file), s.quad, false), s.quad), s.file).toBe(false)
   })
 })
 

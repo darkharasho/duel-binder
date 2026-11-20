@@ -13,6 +13,7 @@ import type {
 } from '@shared/types'
 import { MAX_DEX_ROWS, type DexRow } from '@shared/dex/parse'
 import { checkPlaceholderRequest } from '@shared/placeholders'
+import type { GradedCopy } from '@shared/graded'
 import type { ScanSession } from '@shared/scanSessions'
 import {
   friendBinder,
@@ -253,6 +254,11 @@ export function createHandlers({
       const sessions = await account.portal<ScanSession[]>('friends:sessions', [friendId])
       const ids = local(serverIdsOf.sessions(sessions))
       return sessions.map((s) => friendSession(s, ids))
+    },
+    'friends:graded': async (friendId: number) => {
+      const slabs = await account.portal<GradedCopy[]>('friends:graded', [friendId])
+      const ids = local(serverIdsOf.graded(slabs))
+      return slabs.map((s) => friendItem(s, ids))
     },
     'friends:binder': async (userId: number, uid: string) => {
       const b = await account.portal<BinderDetail | null>('friends:binder', [userId, uid])

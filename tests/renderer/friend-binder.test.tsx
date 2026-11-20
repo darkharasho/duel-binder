@@ -10,6 +10,7 @@ import type {
   Printing,
   CardRow
 } from '@shared/types'
+import type { GradedCopy } from '@shared/graded'
 import type { ScanSession } from '@shared/scanSessions'
 import { FriendBinder } from '@/features/friends/FriendBinder'
 import { createMockApi, renderWithProviders } from './mockApi'
@@ -344,6 +345,69 @@ describe("a friend's sessions tab", () => {
     })
     await waitFor(() => expect(api.friends.sessions).toHaveBeenCalled())
     expect(screen.queryByRole('radio', { name: 'Sessions' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+})
+
+describe("a friend's graded tab", () => {
+  const slab: GradedCopy = {
+    uid: 'g1',
+    game: 'ygo',
+    pkey: 'pk-g1',
+    card: {
+      id: 1001,
+      name: 'Alpha Dragon',
+      type: 'Normal Monster',
+      frameType: 'normal'
+    } as CardRow,
+    printing: {
+      id: 7,
+      cardId: 1001,
+      setName: 'Metal Raiders',
+      setCode: 'MRD-001',
+      setRarity: 'Ultra Rare',
+      language: 'en'
+    } as Printing,
+    imageId: 1001,
+    printingScan: false,
+    company: 'PSA',
+    grade: '10',
+    label: '',
+    cert: '84512277',
+    subgrades: '',
+    value: 500,
+    paid: null,
+    notes: '',
+    rawPrice: 40,
+    market: null,
+    createdAt: '2026-11-01T00:00:00Z'
+  }
+
+  it('lists their slabs and opens one with its value and cert, read-only', async () => {
+    const { api } = open({ graded: vi.fn(async () => [slab]) })
+    await userEvent.click(await screen.findByRole('radio', { name: 'Graded' }))
+    expect(api.friends.graded).toHaveBeenCalledWith(7)
+    expect(api.graded.list).not.toHaveBeenCalled()
+    await userEvent.click(await screen.findByRole('button', { name: 'Alpha Dragon, PSA 10' }))
+    const sheet = await screen.findByRole('dialog')
+    expect(within(sheet).getByText('Their value · PSA 10')).toBeInTheDocument()
+    expect(within(sheet).getByText('#84512277')).toBeInTheDocument()
+    expect(within(sheet).getByRole('link', { name: /View PSA report/ })).toHaveAttribute(
+      'href',
+      expect.stringContaining('84512277')
+    )
+    expect(within(sheet).queryByRole('button', { name: /Add graded copy/ })).not.toBeInTheDocument()
+    expect(screen.queryByText('Paid')).not.toBeInTheDocument()
+  })
+
+  it('is hidden when they have none, or the portal cannot answer', async () => {
+    const { api } = open({
+      graded: vi.fn(async () => {
+        throw new Error('404')
+      })
+    })
+    await waitFor(() => expect(api.friends.graded).toHaveBeenCalled())
+    expect(screen.queryByRole('radio', { name: 'Graded' })).not.toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })

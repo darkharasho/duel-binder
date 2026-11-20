@@ -100,6 +100,7 @@ import { dismissLinkHint, listSignIns, removeSignIn, setUsername } from './accou
 import { linkApple, linkCode } from './link'
 import { mergeWithTicket } from './merge'
 import { GAME_HEADER } from '../../../src/shared/cloud'
+import { slabForFriends } from '../../../src/shared/graded'
 import type { GameId } from '../../../src/shared/games'
 
 type Params<T> = T extends (...args: infer A) => unknown ? A : never
@@ -285,6 +286,9 @@ const HANDLERS: { [C in Exclude<PortalChannel, AccountLinkChannel>]: Handler<C> 
     friendBinder(db, friendId(db, userId, id), game, checkBounded(uid, 'uid', MAX_UID)),
   'friends:sessions': ({ db, userId, game }, _s, id) =>
     friendSessions(db, friendId(db, userId, id), game),
+  // A friend's slabs of the caller's game; what they paid and their notes stay private.
+  'friends:graded': ({ db, userId, game }, _s, id) =>
+    listGraded(db, userScope(friendId(db, userId, id), game)).map(slabForFriends),
   'favourites:list': ({ db }, scope) => listFavourites(db, scope),
   'favourites:set': ({ db, now }, scope, cardId, on) =>
     setFavourite(db, checkId(cardId, 'cardId'), on, now(), scope),

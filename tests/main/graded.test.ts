@@ -12,7 +12,8 @@ import { MIGRATIONS } from '../../src/main/db/schema'
 import { listEntries } from '../../src/main/repo/collection'
 import { gradedForCard, listGraded, removeGraded, saveGraded } from '../../src/main/repo/graded'
 import { applyGradedPush, checkGradedPush } from '../../workers/portal/src/graded'
-import type { GradedDraft } from '../../src/shared/graded'
+import type { GradedCopy, GradedDraft } from '../../src/shared/graded'
+import { acceptFriend, requestFriend } from '../../workers/portal/src/friends'
 import { userScope } from '../../workers/portal/src/scope'
 import { inProcessPortal, PORTAL } from './cloudHelpers'
 import { seededDb } from './helpers'
@@ -386,5 +387,25 @@ describe('graded copies sync', () => {
     removeGraded(portal.serverDb, uid, T2, scope)
     await sync(a)
     expect(listGraded(a)).toEqual([])
+  })
+
+  it('friends:graded shows a friend their slabs without what was paid or notes', async () => {
+    saveGraded(a, draft(p, { notes: 'from a card show' }), T1)
+    await sync(a)
+    const friend = portal.addUser('friend')
+    const asFriend = createCloudClient({
+      baseUrl: PORTAL,
+      token: await portal.desktopToken(friend),
+      fetch: portal.fetch
+    })
+    await expect(asFriend.rpc('friends:graded', [user], 'ygo')).rejects.toThrow()
+    requestFriend(portal.serverDb, friend, 'owner', T1)
+    acceptFriend(portal.serverDb, user, friend, T2)
+    const seen = await asFriend.rpc<GradedCopy[]>('friends:graded', [user], 'ygo')
+    expect(seen).toEqual([
+      expect.objectContaining({ company: 'PSA', grade: '10', cert: '12345678', value: 250 })
+    ])
+    expect(seen[0]).toMatchObject({ paid: null, notes: '' })
+    expect(await asFriend.rpc('friends:graded', [user], 'pkm')).toEqual([])
   })
 })

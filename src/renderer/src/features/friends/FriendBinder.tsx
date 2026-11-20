@@ -16,6 +16,7 @@ import { FriendDashboard } from './FriendDashboard'
 import { FriendCardSheet } from './FriendCardSheet'
 import { FriendHeader, type BinderTab } from './FriendHeader'
 import { FriendSets } from './FriendSets'
+import { GradedPage } from '../graded/GradedPage'
 
 /** A friend's binder, read-only: their header above whichever tab is open. */
 export function FriendBinder({
@@ -41,8 +42,16 @@ export function FriendBinder({
     retry: false
   })
   const showSessions = (sessions.data?.length ?? 0) > 0
+  const graded = useQuery({
+    queryKey: queryKeys.friendGraded(friend.id, game),
+    queryFn: () => api.friends.graded(friend.id),
+    retry: false
+  })
+  const showGraded = (graded.data?.length ?? 0) > 0
   const tab =
-    (chosen === 'binders' && !showBinders) || (chosen === 'sessions' && !showSessions)
+    (chosen === 'binders' && !showBinders) ||
+    (chosen === 'sessions' && !showSessions) ||
+    (chosen === 'graded' && !showGraded)
       ? 'dashboard'
       : chosen
   const setTab = setTabState
@@ -55,6 +64,7 @@ export function FriendBinder({
       trailing={trailing}
       showBinders={showBinders}
       showSessions={showSessions}
+      showGraded={showGraded}
     />
   )
   switch (tab) {
@@ -68,6 +78,8 @@ export function FriendBinder({
       return <FriendSets friend={friend} header={header()} />
     case 'wishlist':
       return <FriendWishlist friend={friend} header={header()} />
+    case 'graded':
+      return <GradedPage friend={friend} friendHeader={header()} />
     case 'binders':
       return <FriendBinders friend={friend} binders={binders.data ?? []} header={header()} />
     case 'sessions':

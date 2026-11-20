@@ -143,6 +143,8 @@ export interface Api {
     binder(userId: number, uid: string): Promise<BinderDetail | null>
     /** An accepted friend's scan sessions they show, newest first (active game). */
     sessions(friendId: number): Promise<ScanSession[]>
+    /** An accepted friend's slabs (active game), newest first, without what they paid or notes; a portal without it answers 404. */
+    graded(friendId: number): Promise<GradedCopy[]>
     /** Friends who want this card and don't hide their wishlist. */
     wanting(cardId: number): Promise<FriendWantsCard[]>
     /** Which friends own these printings (sync keys), in one call; only those some friend owns. */
@@ -526,6 +528,7 @@ export const INVOKE_CHANNELS = [
   'friends:binders',
   'friends:binder',
   'friends:sessions',
+  'friends:graded',
   'friends:wanting',
   'friends:owning',
   'friends:wishlistVisible',

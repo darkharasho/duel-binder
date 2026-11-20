@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Award, DollarSign, Search } from 'lucide-react'
 import { AUTHENTIC, gradeTitle, gradedTotals, type GradedCopy } from '@shared/graded'
+import type { Friend } from '@shared/types'
 import type { NavigateFn } from '@/components/AppShell'
 import { useArtWash } from '@/components/artWashContext'
 import { CardSheet } from '@/components/CardSheet'
@@ -15,6 +16,7 @@ import { CardPanel } from '@/features/card/CardPanel'
 import { api, queryKeys } from '@/lib/api'
 import { formatUsd } from '@/lib/format'
 import { pageInGame, useGame } from '@/lib/game'
+import { FriendSlabPanel } from '../friends/FriendSlabPanel'
 import { SlabPrice } from './GradedCopies'
 import { SlabArt } from './SlabArt'
 
@@ -83,9 +85,25 @@ function NoSlabs({ onNavigate }: { onNavigate?: NavigateFn }): React.JSX.Element
   )
 }
 
-/** Every slab of the game shown, as slabs. */
-export function GradedPage({ onNavigate }: { onNavigate?: NavigateFn } = {}): React.JSX.Element {
-  const graded = useQuery({ queryKey: queryKeys.graded, queryFn: () => api.graded.list() })
+/**
+ * Every slab of the game shown, as slabs. With `friend`, theirs, read-only, under their binder's
+ * header: a slab opens on its grade and cert, not one's own copies.
+ */
+export function GradedPage({
+  onNavigate,
+  friend,
+  friendHeader
+}: {
+  onNavigate?: NavigateFn
+  friend?: Friend
+  friendHeader?: React.ReactNode
+} = {}): React.JSX.Element {
+  const { game } = useGame()
+  const graded = useQuery({
+    queryKey: friend ? queryKeys.friendGraded(friend.id, game) : queryKeys.graded,
+    queryFn: () => (friend ? api.friends.graded(friend.id) : api.graded.list()),
+    retry: friend ? false : undefined
+  })
   const slabs = useMemo(() => graded.data ?? [], [graded.data])
   const [q, setQ] = useState('')
   const [sort, setSort] = useState<Sort>('added')
@@ -104,12 +122,16 @@ export function GradedPage({ onNavigate }: { onNavigate?: NavigateFn } = {}): Re
   const stats: PageStat[] = [
     { label: totals.count === 1 ? 'Slab' : 'Slabs', value: totals.count.toLocaleString('en-US') },
     { label: 'Value', value: formatUsd(totals.value) },
-    ...(totals.paid > 0 ? [{ label: 'Paid', value: formatUsd(totals.paid) }] : [])
+    ...(totals.paid > 0 && !friend ? [{ label: 'Paid', value: formatUsd(totals.paid) }] : [])
   ]
 
   return (
     <div className="space-y-4 p-8 max-md:p-4">
-      <PageHeader title="Graded" stats={slabs.length > 0 ? stats : undefined}>
+      <PageHeader
+        title={friend ? undefined : 'Graded'}
+        stats={slabs.length > 0 ? stats : undefined}
+      >
+        {friendHeader}
         {totals.unvalued > 0 && (
           <p className="text-sm tabular-nums">{totals.unvalued} without a value or eBay price</p>
         )}
@@ -136,7 +158,13 @@ export function GradedPage({ onNavigate }: { onNavigate?: NavigateFn } = {}): Re
         )}
       </PageHeader>
       {graded.isSuccess && slabs.length === 0 ? (
-        <NoSlabs onNavigate={onNavigate} />
+        friend ? (
+          <p className="text-sm text-muted-foreground">
+            {friend.displayName ?? friend.username} has no graded cards in this game.
+          </p>
+        ) : (
+          <NoSlabs onNavigate={onNavigate} />
+        )
       ) : graded.isPending ? (
         <CardGridSkeleton />
       ) : shown.length === 0 ? (
@@ -163,7 +191,12 @@ export function GradedPage({ onNavigate }: { onNavigate?: NavigateFn } = {}): Re
           ))}
         </ul>
       )}
-      {open && (
+      {open && friend && (
+        <CardSheet onClose={() => setOpen(null)}>
+          <FriendSlabPanel slab={open} />
+        </CardSheet>
+      )}
+      {open && !friend && (
         <CardSheet onClose={() => setOpen(null)}>
           <CardPanel
             cardId={open.card.id}

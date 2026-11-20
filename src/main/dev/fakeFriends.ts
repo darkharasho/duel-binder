@@ -1,6 +1,8 @@
 import type Database from 'better-sqlite3'
 import { RARITY_LABEL } from '../db/schema'
 import { getBinder, listBinders, saveBinder } from '../repo/binders'
+import { listGraded, saveGraded } from '../repo/graded'
+import { slabForFriends } from '../../shared/graded'
 import { getFacets, listEntries } from '../repo/collection'
 import { listScanSessions } from '../repo/scanSessions'
 import { LOCAL, localScope, scopeGame, type Scope } from '../repo/scope'
@@ -166,6 +168,7 @@ export function seedFakeFriends(db: Database.Database, now = new Date()): number
         seedSessionsFor(db, p.user.id, game, p.sessions, rand, now)
         seedWants(db, scope, own, pool, rand, now)
         if (p.binders && game === 'ygo') seedBinders(db, scope, now)
+        if (p.binders) seedGraded(db, scope, [...picks.values()], rand, now)
       })
     }
     for (const t of [
@@ -173,7 +176,8 @@ export function seedFakeFriends(db: Database.Database, now = new Date()): number
       'wishlist_entries',
       'binders',
       'binder_edits',
-      'scan_sessions'
+      'scan_sessions',
+      'graded_copies'
     ])
       db.prepare(`UPDATE ${t} SET dirty = 0 WHERE owner_id < 0 AND dirty = 1`).run()
   })()
@@ -194,6 +198,40 @@ function seedWants(
     ...Array.from({ length: 4 }, () => pool[Math.floor(rand() * pool.length)])
   ].map((c) => c.id)
   for (const id of new Set(ids)) setWish(db, id, rand() < 0.3 ? 2 : null, now, scope)
+}
+
+/** A few slabs, one per look, with a paid price and notes friends must not see. */
+function seedGraded(
+  db: Database.Database,
+  scope: Scope,
+  owned: { id: number }[],
+  rand: () => number,
+  now: Date
+): void {
+  const slabs = [
+    { company: 'PSA', grade: '10' },
+    { company: 'BGS', grade: '9.5', subgrades: '9.5 9.5 10 9' },
+    { company: 'CGC', grade: '9' },
+    { company: 'TAG', grade: '10' },
+    { company: 'AGS', grade: '9.5' }
+  ]
+  shuffle([...owned], rand)
+    .slice(0, slabs.length)
+    .forEach((c, i) =>
+      saveGraded(
+        db,
+        {
+          printingId: c.id,
+          ...slabs[i],
+          cert: String(10_000_000 + Math.floor(rand() * 89_999_999)),
+          value: i % 2 ? Math.round(20 + rand() * 300) : null,
+          paid: 15,
+          notes: 'private note'
+        },
+        now,
+        scope
+      )
+    )
 }
 
 /** One binder friends can see and one they can't. */
@@ -392,6 +430,7 @@ export function createFakeFriends(
     },
     'friends:sessions': (id) =>
       listScanSessions(db, game(), scopeOf(id)).filter((s) => s.friendsVisible),
+    'friends:graded': (id) => listGraded(db, scopeOf(id)).map(slabForFriends),
     'friends:wanting': (cardId): FriendWantsCard[] =>
       friendList()
         .filter((u) => wishVisible.get(u.id))

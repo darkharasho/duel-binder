@@ -1,3 +1,4 @@
+import type { GradedCopy } from './graded'
 import type { ScanSession } from './scanSessions'
 import type { BinderDetail, BinderSummary, EntryView, FriendStats, SetChecklist } from './types'
 
@@ -89,6 +90,7 @@ export const serverIdsOf = {
     ss
       .flatMap((s) => s.cards.flatMap((c) => [c.printingId, c.photoId]))
       .filter((id): id is number => id !== null),
+  graded: (gs: GradedCopy[]): number[] => serverIdsOf.items(gs),
   stats: (s: FriendStats): number[] =>
     serverIdsOf.items([...s.topEntries, ...s.topSingles, ...s.recentEntries])
 }

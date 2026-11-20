@@ -22,9 +22,9 @@ describe('parseSlabQr', () => {
     expect(
       parseSlabQr('https://www.beckett.com/grading/card-lookup?item_type=BGS&item_id=0012345678')
     ).toEqual({ company: 'BGS', cert: '0012345678' })
-    expect(parseSlabQr('https://www.agscard.com/report/10293847')).toEqual({
+    expect(parseSlabQr('https://robograding.com/card/00952021')).toEqual({
       company: 'AGS',
-      cert: '10293847'
+      cert: '00952021'
     })
   })
 
@@ -44,6 +44,7 @@ describe('slabReportUrl', () => {
     expect(slabReportUrl('CGC', '4123456001')).toBe(
       'https://www.cgccards.com/certlookup/4123456001/'
     )
+    expect(slabReportUrl('AGS', '00952021')).toBe('https://robograding.com/card/00952021')
   })
 
   it('links nothing for other graders or a cert that isn’t one', () => {

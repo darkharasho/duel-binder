@@ -15,7 +15,7 @@ const HOSTS: [RegExp, string][] = [
   [/(^|\.)cgccards\.com$/, 'CGC'],
   [/(^|\.)beckett\.com$/, 'BGS'],
   [/(^|\.)gosgc\.com$/, 'SGC'],
-  [/(^|\.)agscard\.com$/, 'AGS']
+  [/(^|\.)robograding\.com$/, 'AGS']
 ]
 
 /** A cert number: digits, with a leading letter or two on some graders' (TAG's "Y1267951"). */
@@ -52,7 +52,8 @@ export function parseSlabQr(text: string): SlabQr | null {
 const REPORTS: Partial<Record<string, (cert: string) => string>> = {
   TAG: (c) => `https://tagd.co/${c}`,
   PSA: (c) => `https://www.psacard.com/cert/${c}`,
-  CGC: (c) => `https://www.cgccards.com/certlookup/${c}/`
+  CGC: (c) => `https://www.cgccards.com/certlookup/${c}/`,
+  AGS: (c) => `https://robograding.com/card/${c}`
 }
 
 /** The grader's public page for a slab's cert, or null for a grader or cert we can't link. */

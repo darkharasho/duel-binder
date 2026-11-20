@@ -489,6 +489,61 @@
   background: rgb(255 255 255 / 0.1);
 }
 
+/* ---- AGS: white label in a gold frame (9.5 and up) or navy, the wordmark on a dark plate ---- */
+.slab-ags .slab-label {
+  position: relative;
+  background:
+    repeating-linear-gradient(135deg, rgb(0 0 0 / 0.035) 0 2px, transparent 2px 6px), #fbfbfb;
+  border: calc(3 * var(--u)) solid #c9a24a;
+  padding: calc(4 * var(--u)) calc(5 * var(--u)) calc(12 * var(--u));
+  color: #2b2b2b;
+  font-weight: 400;
+  font-size: calc(7.2 * var(--u));
+}
+.slab-ags.slab-navy .slab-label {
+  border-color: #23266b;
+}
+.slab-ags .slab-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: calc(5 * var(--u));
+  align-items: center;
+}
+.slab-ags .slab-r {
+  text-align: right;
+}
+.slab-ags .slab-n {
+  font-size: calc(16 * var(--u));
+  line-height: 1.05;
+}
+.slab-ags .slab-qr {
+  position: absolute;
+  left: calc(5 * var(--u));
+  bottom: calc(1 * var(--u));
+  width: calc(10 * var(--u));
+  height: calc(10 * var(--u));
+  padding: calc(0.8 * var(--u));
+  background: #fff;
+}
+.slab-ags .slab-qr svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.slab-ags .slab-mark {
+  position: absolute;
+  left: 50%;
+  bottom: calc(1.5 * var(--u));
+  transform: translateX(-50%);
+  padding: calc(1.5 * var(--u)) calc(6 * var(--u));
+  background: linear-gradient(#5a5d63, #2e3034);
+  color: #fff;
+  font:
+    italic 900 calc(7.5 * var(--u)) / 1 Arial,
+    sans-serif;
+  letter-spacing: calc(0.4 * var(--u));
+}
+
 /* ---- Any other grader: a plain white label with the grade in a dark box ---- */
 .slab-plain .slab-label {
   display: grid;
@@ -553,6 +608,14 @@
   background: linear-gradient(135deg, #ef4444, #f59e0b);
   color: #fff;
   text-shadow: 0 1px 0 #000;
+}
+.slab-thumb.slab-ags .slab-strip {
+  background: #fbfbfb;
+  color: #2b2b2b;
+  box-shadow: inset 0 0 0 4cqw #c9a24a;
+}
+.slab-thumb.slab-ags.slab-navy .slab-strip {
+  box-shadow: inset 0 0 0 4cqw #23266b;
 }
 .slab-thumb.slab-plain .slab-strip {
   background: #3f3f46;

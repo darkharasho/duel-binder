@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  agsGold,
   bgsMetal,
   gradeWord,
   isPristine,
@@ -11,15 +12,16 @@ import {
 const g = (grade: string, label = '', subgrades = '') => ({ grade, label, subgrades })
 
 describe('slab look', () => {
-  it('knows the six graders, Beckett by name too, and plain for the rest', () => {
-    expect(['psa', 'BGS', 'Beckett', 'cgc', 'SGC', 'TAG', 'ACE'].map(slabKind)).toEqual([
+  it('knows the seven graders, Beckett by name too, and plain for the rest', () => {
+    expect(['psa', 'BGS', 'Beckett', 'cgc', 'SGC', 'TAG', 'ACE', 'ags'].map(slabKind)).toEqual([
       'PSA',
       'BGS',
       'BGS',
       'CGC',
       'SGC',
       'TAG',
-      'ACE'
+      'ACE',
+      'AGS'
     ])
     expect(slabKind('ARS')).toBe('plain')
     expect(slabKind('My Grader')).toBe('plain')
@@ -36,6 +38,9 @@ describe('slab look', () => {
     expect(gradeWord('CGC', g('8'))).toBe('NM/MINT')
     expect(gradeWord('TAG', g('9'))).toBe('MINT')
     expect(gradeWord('ACE', g('Authentic'))).toBe('AUTHENTIC')
+    expect(gradeWord('AGS', g('10'))).toBe('GEM-MT')
+    expect(gradeWord('AGS', g('9.5'))).toBe('MINT+')
+    expect(gradeWord('AGS', g('9'))).toBe('MINT')
   })
 
   it('a label the user typed wins over the table, but Black Label is only a colour', () => {
@@ -49,6 +54,13 @@ describe('slab look', () => {
     expect(bgsMetal(g('10', '', '10 9.5 10 10'))).toBe('gold')
     expect(bgsMetal(g('9.5'))).toBe('gold')
     expect(bgsMetal(g('9'))).toBe('silver')
+  })
+
+  it('frames AGS in gold from 9.5, navy below', () => {
+    expect(agsGold(g('10'))).toBe(true)
+    expect(agsGold(g('9.5'))).toBe(true)
+    expect(agsGold(g('9'))).toBe(false)
+    expect(agsGold(g('Authentic'))).toBe(false)
   })
 
   it('Pristine only on a 10; SGC’s badge is short', () => {

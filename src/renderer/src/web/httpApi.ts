@@ -214,6 +214,7 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       binders: call('friends:binders'),
       binder: call('friends:binder'),
       sessions: (friendId: number) => call('friends:sessions')(friendId),
+      graded: call('friends:graded'),
       wanting: call('friends:wanting'),
       owning: call('friends:owning'),
       wishlistVisible: call('friends:wishlistVisible'),

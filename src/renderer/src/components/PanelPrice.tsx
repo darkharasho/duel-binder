@@ -57,12 +57,21 @@ export function PanelPrice({
  * card's. The value entered, else eBay's asking price for that grade, else "No graded price" with
  * the raw card's price under it for scale.
  */
-export function SlabPanelPrice({ slab }: { slab: GradedCopy }): React.JSX.Element {
+export function SlabPanelPrice({
+  slab,
+  whose = 'Your'
+}: {
+  slab: GradedCopy
+  /** Whose value an entered one is: a friend's slab says "Their". */
+  whose?: 'Your' | 'Their'
+}): React.JSX.Element {
   const title = gradeTitle(slab)
   if (slab.value !== null)
     return (
       <p>
-        <span className={LABEL}>Your value · {title}</span>{' '}
+        <span className={LABEL}>
+          {whose} value · {title}
+        </span>{' '}
         <span className={FIGURE}>{formatUsd(slab.value)}</span>
       </p>
     )

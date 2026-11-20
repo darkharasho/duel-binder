@@ -19,6 +19,7 @@ import type {
   UpdateStatus,
   WishlistItem
 } from '../shared/types'
+import type { GradedCopy } from '../shared/graded'
 import type { ScanSession } from '../shared/scanSessions'
 import type { Language } from '../shared/languages'
 import {
@@ -281,6 +282,11 @@ export function createPhoneApi(deps: {
         const sessions = await store.portal<ScanSession[]>('friends:sessions', [friendId])
         const ids = await local(serverIdsOf.sessions(sessions))
         return sessions.map((s) => friendSession(s, ids))
+      },
+      graded: async (friendId: number) => {
+        const slabs = await store.portal<GradedCopy[]>('friends:graded', [friendId])
+        const ids = await local(serverIdsOf.graded(slabs))
+        return slabs.map((s) => friendItem(s, ids))
       },
       binder: async (userId: number, uid: string) => {
         const b = await store.portal<BinderDetail | null>('friends:binder', [userId, uid])

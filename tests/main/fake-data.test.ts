@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest'
+import type { GradedCopy } from '../../src/shared/graded'
 import { openDatabase } from '../../src/main/db/database'
 import { seedFakeCollection, seedFakeSessions } from '../../src/main/dev/fakeData'
-import { createFakeFriends, seedFakeFriends, type FakeFriends } from '../../src/main/dev/fakeFriends'
+import {
+  createFakeFriends,
+  seedFakeFriends,
+  type FakeFriends
+} from '../../src/main/dev/fakeFriends'
 import { listScanSessions } from '../../src/main/repo/scanSessions'
 import { getStats } from '../../src/main/repo/stats'
 import type { ScanSession } from '../../src/shared/scanSessions'
-import type {
-  BinderSummary,
-  EntryView,
-  FriendsOverview,
-  FriendStats
-} from '../../src/shared/types'
+import type { BinderSummary, EntryView, FriendsOverview, FriendStats } from '../../src/shared/types'
 import { seededDb } from './helpers'
 
 const NOW = new Date(2026, 9, 23, 12)
@@ -94,7 +94,9 @@ describe('seedFakeFriends', () => {
     expect(getStats(db).totalCards).toBe(own)
     expect(listScanSessions(db, 'ygo')).toHaveLength(sessions)
     for (const t of ['collection_entries', 'wishlist_entries', 'binders', 'scan_sessions'])
-      expect(db.prepare(`SELECT COUNT(*) AS n FROM ${t} WHERE owner_id < 0 AND dirty = 1`).get()).toEqual({ n: 0 })
+      expect(
+        db.prepare(`SELECT COUNT(*) AS n FROM ${t} WHERE owner_id < 0 AND dirty = 1`).get()
+      ).toEqual({ n: 0 })
     expect(seedFakeFriends(db, NOW)).toBe(0)
   })
 
@@ -112,9 +114,14 @@ describe('seedFakeFriends', () => {
     expect(sessions.every((s) => s.friendsVisible)).toBe(true)
     const binders = await f.portal<BinderSummary[]>(real, 'friends:binders', [river])
     expect(binders.map((b) => b.name)).toEqual(['Metal Raiders'])
+    const slabs = await f.portal<GradedCopy[]>(real, 'friends:graded', [river])
+    expect(slabs.length).toBeGreaterThan(0)
+    expect(slabs.every((g) => g.paid === null && g.notes === '')).toBe(true)
     const entries = await f.portal<EntryView[]>(real, 'friends:collection', [river, {}])
     expect(entries.length).toBeGreaterThan(0)
-    expect((await f.portal<FriendStats>(real, 'friends:stats', [river])).sharedCards).toBeGreaterThan(0)
+    expect(
+      (await f.portal<FriendStats>(real, 'friends:stats', [river])).sharedCards
+    ).toBeGreaterThan(0)
 
     // Mika hides their wants.
     const mika = o.friends.find((x) => x.username === 'mika.tcg')!.id

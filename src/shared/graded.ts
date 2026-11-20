@@ -190,3 +190,6 @@ export function gradedTotals(slabs: GradedCopy[]): {
     paid: slabs.reduce((sum, s) => sum + (s.paid ?? 0), 0)
   }
 }
+
+/** A slab as a friend sees it: what was paid and the notes stay private. */
+export const slabForFriends = (s: GradedCopy): GradedCopy => ({ ...s, paid: null, notes: '' })

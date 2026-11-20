@@ -33,6 +33,7 @@ export const PORTAL_CHANNELS = [
   'friends:binders',
   'friends:binder',
   'friends:sessions',
+  'friends:graded',
   'friends:wanting',
   'friends:owning',
   'friends:wishlistVisible',
@@ -89,7 +90,11 @@ export const PORTAL_CHANNELS = [
  *   answering the signed-in account's `Me`. It is `Api.account.merge`, which only the phone app
  *   implements; the desktop app and the web reject it.
  */
-export const ACCOUNT_LINK_CHANNELS = ['account:linkCode', 'account:linkApple', 'account:merge'] as const
+export const ACCOUNT_LINK_CHANNELS = [
+  'account:linkCode',
+  'account:linkApple',
+  'account:merge'
+] as const
 
 export type AccountLinkChannel = (typeof ACCOUNT_LINK_CHANNELS)[number]
 

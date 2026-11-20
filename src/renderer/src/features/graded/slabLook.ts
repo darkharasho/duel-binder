@@ -4,9 +4,9 @@ import { AUTHENTIC, parseSubgrades, type GradedCopy } from '@shared/graded'
 import { gameDef } from '@shared/games'
 
 /** Graders with a label of their own; any other company gets the plain slab. */
-export type SlabKind = 'PSA' | 'BGS' | 'CGC' | 'SGC' | 'TAG' | 'ACE' | 'plain'
+export type SlabKind = 'PSA' | 'BGS' | 'CGC' | 'SGC' | 'TAG' | 'ACE' | 'AGS' | 'plain'
 
-const KINDS: readonly SlabKind[] = ['PSA', 'BGS', 'CGC', 'SGC', 'TAG', 'ACE']
+const KINDS: readonly SlabKind[] = ['PSA', 'BGS', 'CGC', 'SGC', 'TAG', 'ACE', 'AGS']
 
 export const slabKind = (company: string): SlabKind => {
   const c = company.trim().toUpperCase()
@@ -35,7 +35,8 @@ const OWN: Partial<Record<SlabKind, Record<string, string>>> = {
   BGS: { '9.5': 'GEM MINT', '10': 'PRISTINE', '6': 'EX-NM' },
   CGC: { '9.5': 'MINT+', '8': 'NM/MINT', '7': 'NEAR MINT', '6': 'EX/NM', '4': 'VG/EX' },
   TAG: { '9.5': 'MINT+', '8': 'NM MINT', '7': 'NEAR MINT', '6': 'EX NM' },
-  SGC: { '9.5': 'MINT+', '6': 'EX-NM' }
+  SGC: { '9.5': 'MINT+', '6': 'EX-NM' },
+  AGS: { '10': 'GEM-MT', '9.5': 'MINT+' }
 }
 
 /** Shorter words for SGC's round badge. */
@@ -80,6 +81,9 @@ export function bgsMetal(
   if (s.grade === '10' && (blackLabel(s.label) || subs?.every((x) => x === '10'))) return 'black'
   return Number(s.grade) >= 9.5 ? 'gold' : 'silver'
 }
+
+/** AGS frames its label in gold from 9.5 up, navy below. */
+export const agsGold = (s: Pick<GradedCopy, 'grade'>): boolean => Number(s.grade) >= 9.5
 
 /** Whether a CGC, SGC or TAG 10 is a Pristine one, which gets gold. */
 export const isPristine = (s: Pick<GradedCopy, 'grade' | 'label'>): boolean =>

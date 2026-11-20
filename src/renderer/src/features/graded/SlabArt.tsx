@@ -4,6 +4,7 @@ import { CardArt } from '@/components/CardArt'
 import { scanFor } from '@/components/scanFor'
 import { cn } from '@/lib/utils'
 import {
+  agsGold,
   bgsMetal,
   isPristine,
   labelText,
@@ -23,7 +24,7 @@ type Slab = Pick<
 /**
  * A slab drawn after its grader's real case and label: PSA's red frame, Beckett's crest and metal
  * label with subgrades, CGC's black header, SGC's tuxedo, TAG's print on clear plastic, ACE's art
- * label; any other grader gets a plain one. CSS only, in container units, so it scales with its
+ * label, AGS's gold or navy frame; any other grader gets a plain one. CSS only, in container units, so it scales with its
  * width. `thumb` is for sizes too small to read: the grader's colours and the grade.
  */
 export function SlabArt({
@@ -50,7 +51,12 @@ export function SlabArt({
   )
   const well = <div className="slab-well">{art}</div>
   const metal = kind === 'BGS' ? bgsMetal(slab) : null
-  const look = cn('slab', `slab-${kind.toLowerCase()}`, thumb && 'slab-thumb')
+  const look = cn(
+    'slab',
+    `slab-${kind.toLowerCase()}`,
+    kind === 'AGS' && !agsGold(slab) && 'slab-navy',
+    thumb && 'slab-thumb'
+  )
 
   if (thumb)
     return (
@@ -67,8 +73,10 @@ export function SlabArt({
       <div className={look}>
         <Label kind={kind} t={t} slab={slab} metal={metal} well={well} />
         {kind === 'SGC' ? null : well}
-        {(kind === 'BGS' || kind === 'TAG') && (
-          <div className="slab-emboss">{kind === 'BGS' ? 'BECKETT' : 'TAG'}</div>
+        {(kind === 'BGS' || kind === 'TAG' || kind === 'AGS') && (
+          <div className={cn('slab-emboss', kind === 'AGS' && 'text-right')}>
+            {kind === 'BGS' ? 'BECKETT' : kind}
+          </div>
         )}
       </div>
     </div>
@@ -235,6 +243,25 @@ function Label({
             <span className="slab-mark">ACE</span>
             <span className="slab-mono">{slab.cert}</span>
           </div>
+        </div>
+      )
+    case 'AGS':
+      return (
+        <div className="slab-label">
+          <div className="slab-grid">
+            <div className="min-w-0">
+              {line(`${t.yearGame} ${t.setName}`)}
+              {line(t.name)}
+              {line(t.rarity)}
+              {line(t.number)}
+            </div>
+            <div className="slab-r">
+              <div>{t.word}</div>
+              <div className="slab-n">{t.grade}</div>
+              <div>{slab.cert}</div>
+            </div>
+          </div>
+          <span className="slab-mark">AGS</span>
         </div>
       )
     default:

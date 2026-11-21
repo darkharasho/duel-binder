@@ -158,6 +158,85 @@ describe('community search terms', () => {
       phrase: 'One'
     })
     expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({ error: 'duplicate-pending' })
+  })
+
+  it('a pending row never reaches the feed, not even as deleted', async () => {
+    await propose('one', 'two')
+    const rows = await pending()
+    const one = rows.find((r) => r.phrase === 'one')
+    await call('POST', '/admin/terms/decide', OWNER, { id: one.id, status: 'rejected' })
+    const f = await feed(0)
+    expect(f.terms).toEqual([])
+    // "one" was decided, so it is listed; "two" is still pending and is not.
+    expect(f.deleted).toEqual([one.id])
+  })
+
+  it("keeps only the target kind's list and refuses an empty one", async () => {
+    const add = (phrase: string, targetKind: string, target: unknown): Promise<Response> =>
+      call('POST', '/admin/terms/add', OWNER, {
+        game: 'ygo',
+        phrase,
+        kind: 'nickname',
+        targetKind,
+        target
+      })
+    const stray = { cardIds: [1], pkeys: ['en|1|LOB-001|Ultra Rare'], rarities: ['Ultra Rare'] }
+    expect((await add('bewd', 'card', stray)).status).toBe(200)
+    expect((await feed(0)).terms[0].target).toEqual({ cardIds: [1] })
+    expect((await add('lob', 'set', stray)).status).toBe(400)
+    expect((await add('ur', 'rarity', { rarities: [] })).status).toBe(400)
+    expect(
+      (
+        await call('POST', '/admin/terms/propose', ADMIN, {
+          proposals: [proposal('x', { targetKind: 'printing', target: { cardIds: [1] } })]
+        })
+      ).status
+    ).toBe(400)
+    // An edit that moves the kind keeps only the new kind's list.
+    await call('POST', '/admin/terms/propose', ADMIN, {
+      proposals: [proposal('mixed', { target: stray })]
+    })
+    const [p] = await pending()
+    expect(p.target).toEqual({ cardIds: [1] })
+    expect(
+      (
+        await call('POST', '/admin/terms/decide', OWNER, {
+          id: p.id,
+          status: 'approved',
+          targetKind: 'rarity',
+          target: stray
+        })
+      ).status
+    ).toBe(200)
+    const approved = (await feed(0)).terms.find((t: any) => t.id === p.id)
+    expect(approved).toMatchObject({ targetKind: 'rarity', target: { rarities: ['Ultra Rare'] } })
+  })
+
+  it("names the clashing term's status on 409, and a rejected term can be restored", async () => {
+    await propose('blue eyes')
+    const [{ id }] = await pending()
+    const add = (): Promise<Response> =>
+      call('POST', '/admin/terms/add', OWNER, {
+        game: 'ygo',
+        phrase: 'Blue Eyes',
+        kind: 'nickname',
+        targetKind: 'card',
+        target: { cardIds: [1] }
+      })
+    let res = await add()
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({ error: 'duplicate-pending' })
+    await call('POST', '/admin/terms/decide', OWNER, { id, status: 'rejected' })
+    res = await add()
+    expect(await res.json()).toEqual({ error: 'duplicate-rejected' })
+    const listed = await (await call('GET', '/admin/terms?status=rejected&game=ygo', OWNER)).json()
+    expect((listed as any).terms.map((t: any) => t.id)).toEqual([id])
+    expect(
+      (await call('POST', '/admin/terms/decide', OWNER, { id, status: 'approved' })).status
+    ).toBe(200)
+    expect((await feed(0)).terms.map((t: any) => t.id)).toEqual([id])
+    expect(await (await add()).json()).toEqual({ error: 'duplicate-approved' })
   })
 
   it('edits recompute the key', async () => {

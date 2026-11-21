@@ -287,7 +287,7 @@ export function searchCards(
     for (const m of matches) {
       const room = Math.min(TERM_ROWS, termRoom - termRows.length)
       if (room <= 0) break
-      const ids = termIds(db, scope, m.term.target, narrow, room + versionIds.size)
+      const ids = termIds(db, scope, m.term, narrow, room + versionIds.size)
       termRows.push(...versionRows(db, take(ids, room), scope, m.term.phrase))
     }
   }

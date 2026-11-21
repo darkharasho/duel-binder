@@ -1,6 +1,7 @@
 import type { SqlDb } from '../db/sql'
 import type { GameId } from '../../shared/games/types'
 import { termKey, termWords } from '../../shared/search/terms'
+import { inRarities, inSets, type Cond } from './fieldSql'
 import { buildFtsQuery } from './fts'
 import { scopeGame, type Scope } from './scope'
 
@@ -47,6 +48,36 @@ interface FieldLists {
 
 const cache = new WeakMap<SqlDb, Map<GameId, FieldLists>>()
 
+/**
+ * The rarity labels of a game's catalog printings. `set_rarity` is read by a loose index scan over
+ * ix_printings_rarity (each step seeks the next distinct value), not `SELECT DISTINCT`, which walks
+ * every printing row: 0.5–1.5 s cold on the desktop, and the same read on the portal's one shared
+ * Durable Object. Pokémon also has its cards' rarities (`pokemon_cards.rarity`, a few dozen
+ * values); its `set_rarity` is the finish.
+ */
+export function catalogRarities(db: SqlDb, game: GameId): string[] {
+  const rows = db
+    .prepare(
+      `WITH RECURSIVE r(v) AS (
+         SELECT (SELECT min(set_rarity) FROM card_printings)
+         UNION ALL
+         SELECT (SELECT min(set_rarity) FROM card_printings WHERE set_rarity > r.v) FROM r
+         WHERE r.v IS NOT NULL)
+       SELECT v FROM r WHERE v IS NOT NULL AND EXISTS (
+         SELECT 1 FROM card_printings INDEXED BY ix_printings_rarity
+         WHERE set_rarity = r.v AND game = ? AND contributed = 0)`
+    )
+    .all(game) as { v: string }[]
+  const labels = new Set(rows.map((r) => r.v))
+  if (game === 'pkm') {
+    const cardRarities = db
+      .prepare('SELECT DISTINCT rarity FROM pokemon_cards WHERE rarity IS NOT NULL')
+      .all() as { rarity: string }[]
+    for (const { rarity } of cardRarities) labels.add(rarity)
+  }
+  return [...labels]
+}
+
 /** The sets, rarity labels and code prefixes of a game, loaded once until the set list changes. */
 function fieldLists(db: SqlDb, scope: Scope, game: GameId): FieldLists {
   const stamp = (db.prepare('SELECT COUNT(*) AS n FROM sets').get() as { n: number }).n
@@ -65,17 +96,16 @@ function fieldLists(db: SqlDb, scope: Scope, game: GameId): FieldLists {
     codes.add(head)
   }
   const rarities = new Map<string, string[]>()
-  const labels = db
-    .prepare(
-      `SELECT DISTINCT set_rarity FROM card_printings WHERE +game = ${scope.game} AND contributed = 0`
-    )
-    .all() as { set_rarity: string }[]
-  for (const { set_rarity } of labels) {
-    const key = termKey(set_rarity)
-    if (!key) continue
+  const addLabel = (key: string, label: string): void => {
+    if (!key) return
     const list = rarities.get(key)
-    if (list) list.push(set_rarity)
-    else rarities.set(key, [set_rarity])
+    if (!list) rarities.set(key, [label])
+    else if (!list.includes(label)) list.push(label)
+  }
+  for (const label of catalogRarities(db, game)) {
+    addLabel(termKey(label), label)
+    // Magic keeps the finish in the label ("Rare (Foil)"): "rare" also means every finish of it.
+    if (game === 'mtg') addLabel(termKey(label.replace(/\s*\([^)]*\)\s*$/, '')), label)
   }
   const lists: FieldLists = {
     stamp,
@@ -194,6 +224,12 @@ export function parseFields(
     }
   }
 
+  // A set code that is also the only name word ("151 sir mew": MEW is 151's code) stays a name
+  // word unless a number goes with it ("mew 205").
+  if (codePrefix !== null && number === null && used.every(Boolean)) {
+    used[words.indexOf(codePrefix)] = false
+    codePrefix = null
+  }
   const nameWords = words.filter((_, i) => !used[i])
   const found = sets !== null || rarityLabels.size > 0 || codePrefix !== null || number !== null
   // A set code with a number ("lor tg03") names a printing on its own.
@@ -227,14 +263,12 @@ export function fieldPrintingIds(
     params.push(JSON.stringify(within))
   }
   const fts = buildFtsQuery(fq.nameWords.join(' '))
-  if (fq.sets && fq.sets.length > 0) {
-    conds.push(`(p.language, p.set_name) IN (VALUES ${fq.sets.map(() => '(?, ?)').join(', ')})`)
-    for (const s of fq.sets) params.push(s.language, s.setName)
+  const add = (c: Cond): void => {
+    conds.push(c.sql)
+    params.push(...c.params)
   }
-  if (fq.rarities && fq.rarities.length > 0) {
-    conds.push(`p.set_rarity IN (${fq.rarities.map(() => '?').join(',')})`)
-    params.push(...fq.rarities)
-  }
+  if (fq.sets && fq.sets.length > 0) add(inSets('p', fq.sets))
+  if (fq.rarities && fq.rarities.length > 0) add(inRarities('p', scopeGame(db, scope), fq.rarities))
   if (fq.codePrefix) {
     conds.push(`(p.set_code LIKE ? OR p.set_code LIKE ? OR p.set_code LIKE ?)`)
     params.push(`${fq.codePrefix} %`, `${fq.codePrefix}-%`, `${fq.codePrefix}:%`)

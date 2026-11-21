@@ -72,3 +72,34 @@ export interface TermFeed {
   cursor: number
   more: boolean
 }
+
+export const TERM_KINDS: readonly TermKind[] = [
+  'nickname',
+  'abbreviation',
+  'subset',
+  'rarity',
+  'cards'
+]
+export const TERM_TARGET_KINDS: readonly TermTargetKind[] = [
+  'printing',
+  'card',
+  'set',
+  'rarity',
+  'cards'
+]
+
+/** The one target list each target kind reads; the other lists of a target mean nothing for it. */
+export const TARGET_LIST = {
+  printing: 'pkeys',
+  card: 'cardIds',
+  cards: 'cardIds',
+  set: 'sets',
+  rarity: 'rarities'
+} as const satisfies Record<TermTargetKind, keyof TermTarget>
+
+/** `target` with only its kind's list kept (absent when that list is empty or missing). */
+export function confineTarget(kind: TermTargetKind, target: TermTarget): TermTarget {
+  const key = TARGET_LIST[kind]
+  const list = target[key]
+  return list && list.length > 0 ? ({ [key]: list } as TermTarget) : {}
+}

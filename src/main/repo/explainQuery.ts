@@ -31,7 +31,7 @@ export function labelOf(db: SqlDb, scope: Scope, term: SearchTerm): string | nul
   const t = term.target
   switch (term.targetKind) {
     case 'printing': {
-      const [id] = termPrintingIds(db, scope, t, 1)
+      const [id] = termPrintingIds(db, scope, term, 1)
       return id === undefined ? null : printingLabel(db, scope, id)
     }
     case 'card':
@@ -53,7 +53,7 @@ export function labelOf(db: SqlDb, scope: Scope, term: SearchTerm): string | nul
       return found.length === 1 ? found[0].setName : `${found[0].setName} +${found.length - 1} more`
     }
     case 'rarity':
-      return termPrintingIds(db, scope, t, 1).length === 0 ? null : (t.rarities ?? []).join(', ')
+      return termPrintingIds(db, scope, term, 1).length === 0 ? null : (t.rarities ?? []).join(', ')
     default:
       return null
   }

@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/select'
 import { api } from '@/lib/api'
 import { ADMIN_QUERY, adminKeys, errorText } from './adminTabs'
-import { Failed, Note, Panel } from './parts'
+import { ConfirmButton, Failed, Note, Panel } from './parts'
 
 const TERMS_WORKFLOW = 'https://github.com/darkharasho/duel-binder/actions/workflows/terms.yml'
 const KINDS: TermKind[] = ['nickname', 'abbreviation', 'subset', 'rarity', 'cards']
@@ -167,11 +167,9 @@ function TermForm({
 
 function TermCard({
   term,
-  pending,
   onDecide
 }: {
   term: AdminTerm
-  pending: boolean
   onDecide: (status: 'approved' | 'rejected', edit?: AdminTermFields) => Promise<void>
 }): React.JSX.Element {
   const [editing, setEditing] = useState(false)
@@ -181,6 +179,7 @@ function TermCard({
     onDecide(status).catch((e: unknown) => setError(errorText(e)))
   }
   const { evidence, preview } = term
+  const pending = term.status === 'pending'
   return (
     <li className="flex gap-3 border-t border-white/[0.06] py-3 first:border-t-0">
       {preview?.imageId != null && (
@@ -225,13 +224,24 @@ function TermCard({
               <Button size="sm" variant="outline" onClick={() => setEditing(!editing)}>
                 Edit
               </Button>
-              <Button size="sm" variant="outline" onClick={() => decide('rejected')}>
-                Reject
-              </Button>
+              <ConfirmButton
+                label="Reject"
+                title={`Reject "${term.phrase}"?`}
+                description="It leaves the Pending list. You can restore it from the Rejected list."
+                action={() => onDecide('rejected')}
+              />
             </>
+          ) : term.status === 'approved' ? (
+            <ConfirmButton
+              label="Remove"
+              title={`Remove "${term.phrase}"?`}
+              description="Searches stop using it. You can restore it from the Rejected list."
+              confirmLabel="Remove"
+              action={() => onDecide('rejected')}
+            />
           ) : (
-            <Button size="sm" variant="outline" onClick={() => decide('rejected')}>
-              Remove
+            <Button size="sm" variant="outline" onClick={() => decide('approved')}>
+              Restore
             </Button>
           )}
         </div>
@@ -253,20 +263,24 @@ function TermCard({
   )
 }
 
-/** The community search terms: pending proposals to approve, edit or reject, and the approved list. */
+/** The community search terms: pending proposals to approve, edit or reject, the approved list, and rejected ones to restore. */
 export function TermsTab(): React.JSX.Element {
   const qc = useQueryClient()
   const [game, setGame] = useState<GameId>('ygo')
-  const pendingKey = adminKeys.terms(game, 'pending')
-  const approvedKey = adminKeys.terms(game, 'approved')
+  const keyOf = (status: AdminTerm['status']): readonly unknown[] => adminKeys.terms(game, status)
   const pending = useQuery({
-    queryKey: pendingKey,
+    queryKey: keyOf('pending'),
     queryFn: () => admin().terms(game, 'pending'),
     ...ADMIN_QUERY
   })
   const approved = useQuery({
-    queryKey: approvedKey,
+    queryKey: keyOf('approved'),
     queryFn: () => admin().terms(game, 'approved'),
+    ...ADMIN_QUERY
+  })
+  const rejected = useQuery({
+    queryKey: keyOf('rejected'),
+    queryFn: () => admin().terms(game, 'rejected'),
     ...ADMIN_QUERY
   })
   const without = (key: readonly unknown[], id: number): void =>
@@ -277,9 +291,23 @@ export function TermsTab(): React.JSX.Element {
     edit?: AdminTermFields
   ): Promise<void> => {
     await admin().decideTerm(term.id, status, edit)
-    without(term.status === 'pending' ? pendingKey : approvedKey, term.id)
-    if (status === 'approved') await qc.invalidateQueries({ queryKey: approvedKey })
+    without(keyOf(term.status), term.id)
+    await qc.invalidateQueries({ queryKey: keyOf(status) })
   }
+  const list = (q: typeof pending, empty: string): React.JSX.Element =>
+    q.isError ? (
+      <Failed error={q.error} />
+    ) : !q.isSuccess ? (
+      <Note>Loading…</Note>
+    ) : q.data.length === 0 ? (
+      <Note>{empty}</Note>
+    ) : (
+      <ul>
+        {q.data.map((t) => (
+          <TermCard key={t.id} term={t} onDecide={(s, e) => decide(t, s, e)} />
+        ))}
+      </ul>
+    )
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
@@ -304,36 +332,9 @@ export function TermsTab(): React.JSX.Element {
           Run harvest
         </a>
       </div>
-      <Panel title="Pending">
-        {pending.isError ? (
-          <Failed error={pending.error} />
-        ) : !pending.isSuccess ? (
-          <Note>Loading…</Note>
-        ) : pending.data.length === 0 ? (
-          <Note>Nothing waiting.</Note>
-        ) : (
-          <ul>
-            {pending.data.map((t) => (
-              <TermCard key={t.id} term={t} pending onDecide={(s, e) => decide(t, s, e)} />
-            ))}
-          </ul>
-        )}
-      </Panel>
-      <Panel title="Approved">
-        {approved.isError ? (
-          <Failed error={approved.error} />
-        ) : !approved.isSuccess ? (
-          <Note>Loading…</Note>
-        ) : approved.data.length === 0 ? (
-          <Note>No approved terms yet.</Note>
-        ) : (
-          <ul>
-            {approved.data.map((t) => (
-              <TermCard key={t.id} term={t} pending={false} onDecide={(s, e) => decide(t, s, e)} />
-            ))}
-          </ul>
-        )}
-      </Panel>
+      <Panel title="Pending">{list(pending, 'Nothing waiting.')}</Panel>
+      <Panel title="Approved">{list(approved, 'No approved terms yet.')}</Panel>
+      <Panel title="Rejected">{list(rejected, 'Nothing rejected or removed.')}</Panel>
       <Panel title="Add term">
         <TermForm
           initial={EMPTY}
@@ -341,7 +342,7 @@ export function TermsTab(): React.JSX.Element {
           onSubmit={async (fields) => {
             await admin().addTerm(game, fields)
             toast.success(`Added "${fields.phrase.trim()}"`)
-            await qc.invalidateQueries({ queryKey: approvedKey })
+            await qc.invalidateQueries({ queryKey: keyOf('approved') })
           }}
         />
       </Panel>

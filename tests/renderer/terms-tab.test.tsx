@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { vi } from 'vitest'
 import type { AdminTerm } from '@shared/admin'
@@ -30,10 +30,10 @@ const term = (over: Partial<AdminTerm> = {}): AdminTerm => ({
   ...over
 })
 
-function setup(pending: AdminTerm[], approved: AdminTerm[] = []) {
+function setup(pending: AdminTerm[], approved: AdminTerm[] = [], rejected: AdminTerm[] = []) {
   const admin = {
     terms: vi.fn(async (_game: string, status: string) =>
-      status === 'pending' ? pending : approved
+      status === 'pending' ? pending : status === 'approved' ? approved : rejected
     ),
     decideTerm: vi.fn(async () => {}),
     addTerm: vi.fn(async () => {})
@@ -69,6 +69,11 @@ describe('TermsTab', () => {
   it('removes an approved term and adds a new one', async () => {
     const admin = setup([], [term({ status: 'approved' })])
     await userEvent.click(await screen.findByRole('button', { name: 'Remove' }))
+    // Remove asks first.
+    expect(admin.decideTerm).not.toHaveBeenCalled()
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent('Remove "blue eyes"?')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Remove' }))
     await waitFor(() => expect(admin.decideTerm).toHaveBeenCalledWith(7, 'rejected', undefined))
     await userEvent.type(screen.getAllByLabelText('Phrase')[0], 'dark mage')
     await userEvent.type(screen.getAllByLabelText('Card ids')[0], '4, 5')
@@ -81,6 +86,28 @@ describe('TermsTab', () => {
         target: { cardIds: [4, 5] }
       })
     )
+  })
+
+  it('asks before rejecting, and Cancel keeps the term', async () => {
+    const admin = setup([term()])
+    await userEvent.click(await screen.findByRole('button', { name: 'Reject' }))
+    const dialog = await screen.findByRole('dialog')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    expect(admin.decideTerm).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Reject' }))
+    await userEvent.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Reject' })
+    )
+    await waitFor(() => expect(admin.decideTerm).toHaveBeenCalledWith(7, 'rejected', undefined))
+  })
+
+  it('lists rejected terms and restores one', async () => {
+    const admin = setup([], [], [term({ id: 9, phrase: 'old name', status: 'rejected' })])
+    expect(await screen.findByText('old name')).toBeInTheDocument()
+    expect(screen.getByText('Rejected')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Restore' }))
+    await waitFor(() => expect(admin.decideTerm).toHaveBeenCalledWith(9, 'approved', undefined))
+    await waitFor(() => expect(screen.queryByText('old name')).not.toBeInTheDocument())
   })
 
   it('refuses a set without a language, on edit and on add', async () => {

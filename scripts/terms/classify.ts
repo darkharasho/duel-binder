@@ -2,7 +2,7 @@ import type Anthropic from '@anthropic-ai/sdk'
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
 import { z } from 'zod'
 import type { GameId } from '../../src/shared/games/types'
-import { MAX_TERM_WORDS, termWords, type TermEvidence, type TermKind, type TermTarget, type TermTargetKind } from '../../src/shared/search/terms'
+import { MAX_TERM_WORDS, TARGET_LIST, confineTarget, termWords, type TermEvidence, type TermKind, type TermTarget, type TermTargetKind } from '../../src/shared/search/terms'
 import type { Candidate } from './mine'
 
 export const MODEL = 'claude-opus-5-5'
@@ -108,21 +108,17 @@ export async function classify(
     for (const r of res.parsed_output.results) {
       const c = byId.get(r.id)
       if (!c || r.verdict !== 'term' || !phraseOk(r.phrase)) continue
-      const t = r.target
-      if (
-        t.pkeys.length + t.cardIds.length + t.sets.length + t.rarities.length === 0 ||
-        !within(t.pkeys, c.pkeys) ||
-        !within(t.cardIds, c.cardIds) ||
-        !within(t.sets, c.sets) ||
-        !within(t.rarities, c.rarities)
-      )
-        continue
+      // Only the list the target kind names counts (the schema makes the model fill all four):
+      // searches read only that list, so a stray one would narrow the term out of sight.
+      const key = TARGET_LIST[r.targetKind]
+      const picked: unknown[] = r.target[key]
+      if (picked.length === 0 || !within(picked, c[key])) continue
       out.push({
         game,
         phrase: r.phrase,
         kind: r.kind,
         targetKind: r.targetKind,
-        target: { pkeys: t.pkeys, cardIds: t.cardIds, sets: t.sets, rarities: t.rarities },
+        target: confineTarget(r.targetKind, r.target),
         evidence: { titles: c.sampleTitles.slice(0, 5), count: c.count, sellers: c.sellers, reason: r.reason }
       })
     }

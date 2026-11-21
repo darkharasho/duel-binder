@@ -39,6 +39,14 @@ describe('admin page', () => {
     expect(html).toContain("'/admin/terms/add'")
     expect(html).toContain('actions/workflows/terms.yml')
     expect(html).toContain('Sets need language:Set name')
+    // A Rejected list with Restore, a confirm on Reject and Remove, and clash text naming the status.
+    expect(html).toContain("['rejected', 'Rejected']")
+    expect(html).toContain("el('button', 'Restore')")
+    expect(html).toContain("confirm('Reject \"' + t.phrase")
+    expect(html).toContain("confirm('Remove \"' + t.phrase")
+    expect(html).toContain(
+      'already used by a rejected term in this game. Restore it from the Rejected list.'
+    )
     // Phrases and eBay titles are set as text only.
     expect(html).not.toMatch(/innerHTML/)
   })

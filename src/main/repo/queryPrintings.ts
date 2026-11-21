@@ -1,5 +1,5 @@
 import type { SqlDb } from '../db/sql'
-import type { TermTarget } from '../../shared/search/terms'
+import type { SearchTerm } from '../../shared/search/terms'
 import { termWords } from '../../shared/search/terms'
 import { buildFtsQuery } from './fts'
 import { fieldPrintingIds, parseFields, type FieldQuery } from './queryFields'
@@ -35,12 +35,12 @@ export function termNarrowing(db: SqlDb, scope: Scope, rest: string[]): FieldQue
 export function termIds(
   db: SqlDb,
   scope: Scope,
-  target: TermTarget,
+  term: Pick<SearchTerm, 'targetKind' | 'target'>,
   narrow: FieldQuery | null,
   limit: number,
   within?: number[]
 ): number[] {
-  const ids = termPrintingIds(db, scope, target, narrow ? TERM_POOL : limit, within)
+  const ids = termPrintingIds(db, scope, term, narrow ? TERM_POOL : limit, within)
   if (!narrow) return ids
   const narrowed = new Set(fieldPrintingIds(db, scope, narrow, TERM_POOL, ids))
   return ids.filter((id) => narrowed.has(id))
@@ -98,7 +98,7 @@ export function queryPrintingIds(
   }
   if (matches.length > 0) {
     const narrow = termNarrowing(db, scope, rest)
-    for (const m of matches) add(termIds(db, scope, m.term.target, narrow, limit, within()))
+    for (const m of matches) add(termIds(db, scope, m.term, narrow, limit, within()))
   }
   const fromTerms = ids.size
   const fq = withFields && ids.size < limit ? parseFields(db, scope, words) : null

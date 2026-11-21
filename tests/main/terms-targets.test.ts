@@ -71,6 +71,28 @@ describe('pickPrintings', () => {
   })
 })
 
+describe('Pokémon rarity', () => {
+  it('offers the card rarity (pokemon_cards), not the printing finish', () => {
+    db = openDatabase(':memory:')
+    seed([
+      { game: 'pkm', name: 'Mew ex', set: '151', code: 'MEW 205/165', date: '2020-01-01', price: 40 },
+      { game: 'pkm', name: 'NoRow', set: '151', code: 'MEW 001/165', date: '2020-01-01', price: 1 },
+      { game: 'ygo', name: 'Y', set: 'S', code: 'S-EN001', date: '2020-01-01', price: 5 }
+    ])
+    db.prepare("UPDATE card_printings SET set_rarity = 'Holofoil' WHERE game = 'pkm'").run()
+    db.prepare(
+      "INSERT INTO pokemon_cards (card_id, category, rarity, source_id) VALUES (1, 'Pokemon', 'Special Illustration Rare', 'sv3pt5-205')"
+    ).run()
+    const got = pickPrintings(db, { mode: 'backfill', from: 0, count: 10, now: NOW })
+    expect(got.map((p) => [p.name, p.rarity])).toEqual([
+      ['Y', 'Rare'],
+      ['Mew ex', 'Special Illustration Rare'],
+      // No pokemon_cards row: the finish is all there is.
+      ['NoRow', 'Holofoil']
+    ])
+  })
+})
+
 describe('recent window dates', () => {
   it('reads slash dates (TCGdex) and dates with a time as well as plain ISO ones', () => {
     db = openDatabase(':memory:')

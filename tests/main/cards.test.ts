@@ -167,12 +167,21 @@ describe('version rows', () => {
       .run(name, code, date)
   }
   function term(phrase: string, target: object, game = 'pkm'): void {
+    // The target kind names the one list a search reads.
+    const kind =
+      'cardIds' in target
+        ? 'card'
+        : 'sets' in target
+          ? 'set'
+          : 'rarities' in target
+            ? 'rarity'
+            : 'printing'
     vdb
       .prepare(
         `INSERT INTO search_terms (game, phrase, phrase_key, kind, target_kind, target, status, source, created_at)
-         VALUES (?, ?, ?, 'nickname', 'printing', ?, 'approved', 'owner', '2026-11-21')`
+         VALUES (?, ?, ?, 'nickname', ?, ?, 'approved', 'owner', '2026-11-21')`
       )
-      .run(game, phrase, phrase, JSON.stringify(target))
+      .run(game, phrase, phrase, kind, JSON.stringify(target))
     forgetSearchTerms(vdb)
   }
   const pk = (id: number): string =>

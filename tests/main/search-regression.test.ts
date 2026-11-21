@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type Database from 'better-sqlite3'
 import { searchCards } from '../../src/main/repo/cards'
@@ -184,7 +184,8 @@ function runAll(): Record<string, CardSearchResult[]> {
   return out
 }
 
-if (process.env.FREEZE_SEARCH === '1' || !existsSync(SNAPSHOT)) {
+// Only FREEZE_SEARCH=1 writes the snapshot: a missing file fails below instead of passing on whatever the code returns.
+if (process.env.FREEZE_SEARCH === '1') {
   test('freeze today’s search rows', () => {
     writeFileSync(SNAPSHOT, `${JSON.stringify(runAll(), null, 1)}\n`)
   })

@@ -61,9 +61,12 @@ export function pickPrintings(
   const perGame = GAME_IDS.map((game) => {
     const rows = db
       .prepare(
-        `SELECT p.pkey, p.card_id, c.name, p.set_name, p.set_code, p.set_rarity, p.language
+        // A Pokémon printing's set_rarity is its finish; the card's rarity is pokemon_cards.rarity.
+        `SELECT p.pkey, p.card_id, c.name, p.set_name, p.set_code,
+           ${game === 'pkm' ? 'COALESCE(pc.rarity, p.set_rarity)' : 'p.set_rarity'} AS set_rarity, p.language
          FROM card_printings p
          JOIN cards c ON c.id = p.card_id
+         ${game === 'pkm' ? 'LEFT JOIN pokemon_cards pc ON pc.card_id = p.card_id' : ''}
          ${recent ? 'JOIN sets s ON +s.game = ? AND s.language = p.language AND s.set_name = p.set_name' : ''}
          WHERE +p.game = ? AND +c.game = ? AND p.language = 'en' AND p.contributed = 0
            AND p.market_price IS NOT NULL

@@ -64,11 +64,30 @@ describe('classify', () => {
         phrase: 'Bubble Mew',
         kind: 'nickname',
         targetKind: 'printing',
-        target: { pkeys: ['en|1|PAF 232|SIR'], cardIds: [], sets: [], rarities: [] },
+        target: { pkeys: ['en|1|PAF 232|SIR'] },
         evidence: { titles: ['a', 'b', 'c', 'd', 'e'], count: 7, sellers: 5, reason: 'Collectors call it that.' }
       }
     ])
     expect(usage).toEqual({ input: 100, output: 10 })
+  })
+
+  it("keeps only the target kind's list and drops a result whose list is empty", async () => {
+    const stray = { pkeys: ['en|1|PAF 232|SIR'], cardIds: [1], sets: [], rarities: ['Special Illustration Rare'] }
+    const out = await classify(
+      fake([
+        result({ targetKind: 'card', target: stray }),
+        result({ phrase: 'mew sets', targetKind: 'set', target: stray }),
+        // The kind's own list outside the options still drops it; a stray one outside them doesn't matter.
+        result({ phrase: 'mew rar', targetKind: 'rarity', target: { ...stray, rarities: ['Holofoil'] } }),
+        result({ phrase: 'mew card', targetKind: 'card', target: { ...stray, pkeys: ['en|9|ZZZ|R'] } })
+      ]),
+      'pkm',
+      [cand]
+    )
+    expect(out.map((p) => [p.phrase, p.targetKind, p.target])).toEqual([
+      ['Bubble Mew', 'card', { cardIds: [1] }],
+      ['mew card', 'card', { cardIds: [1] }]
+    ])
   })
 
   it('skips a refused batch and one the model left unparsed', async () => {

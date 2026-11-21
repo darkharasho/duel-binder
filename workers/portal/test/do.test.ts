@@ -125,6 +125,66 @@ describe('Store Durable Object SQLite', () => {
     expect(out).toEqual({ tiles: ['SDK-001'], total: 1, copies: ['SDK-001'] })
   })
 
+  it('a multi-word query matching 60+ sets and a 60-set term stay under the 100-parameter limit', async () => {
+    const out = await inStore('many-sets', (db) => {
+      insertCard(db, 89631139, 'Blue-Eyes White Dragon')
+      db.exec("INSERT INTO cards_fts(cards_fts) VALUES('rebuild')")
+      const set = db.prepare(
+        "INSERT INTO sets (game, language, set_name, set_code) VALUES ('ygo', 'en', ?, ?)"
+      )
+      for (let i = 0; i < 65; i++) set.run(`Promo Deck ${i}`, `PD${i}`)
+      db.prepare(
+        `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, language) VALUES (89631139, 'Promo Deck 3', 'PD3-001', 'Ultra Rare', 'en')`
+      ).run()
+      const sets = Array.from({ length: 60 }, (_, i) => ({
+        language: 'en',
+        setName: `Promo Deck ${i}`
+      }))
+      db.prepare(
+        `INSERT INTO search_terms (game, phrase, phrase_key, kind, target_kind, target, status, source, created_at)
+         VALUES ('ygo', 'pdx', 'pdx', 'subset', 'set', ?, 'approved', 'owner', '2026-11-21')`
+      ).run(JSON.stringify({ sets }))
+      const scope = userScope(1, 'ygo')
+      const brief = (q: string): string[] =>
+        searchCards(db, q, 20, scope).map((r) =>
+          r.printingId ? `${r.term ?? ''}:${r.setCode}` : r.name
+        )
+      return { field: brief('blue eyes promo'), term: brief('pdx blue') }
+    })
+    expect(out.field).toEqual([':PD3-001'])
+    expect(out.term).toEqual(['pdx:PD3-001'])
+  })
+
+  it('Pokémon rarity words read pokemon_cards on DO SQLite (loose rarity scan)', async () => {
+    const out = await inStore('pkm-rarity', (db) => {
+      const card = db.prepare(
+        `INSERT INTO cards (id, game, name, type, frame_type, race, "desc", updated_at)
+         VALUES (?, 'pkm', 'Mew ex', 'Pokemon', 'pokemon', '', '', '2026-11-21')`
+      )
+      const pc = db.prepare(
+        "INSERT INTO pokemon_cards (card_id, category, rarity, source_id) VALUES (?, 'Pokemon', ?, ?)"
+      )
+      const printing = db.prepare(
+        `INSERT INTO card_printings (game, card_id, set_name, set_code, set_rarity, language)
+         VALUES ('pkm', ?, '151', ?, 'Holofoil', 'en')`
+      )
+      card.run(1)
+      pc.run(1, 'Special Illustration Rare', 'sv3pt5-205')
+      printing.run(1, 'MEW 205/165')
+      card.run(2)
+      pc.run(2, 'Double Rare', 'sv3pt5-151')
+      printing.run(2, 'MEW 151/165')
+      db.exec("INSERT INTO cards_fts(cards_fts) VALUES('rebuild')")
+      db.prepare(
+        "INSERT INTO sets (game, language, set_name, set_code) VALUES ('pkm', 'en', '151', 'MEW')"
+      ).run()
+      return searchCards(db, '151 sir mew', 20, userScope(1, 'pkm'))
+        .filter((r) => r.printingId)
+        .map((r) => r.setCode)
+    })
+    expect(out).toEqual(['MEW 205/165'])
+  })
+
   it('nested transaction rolls back as one unit', async () => {
     const ids = await inStore('nested', (db) => {
       const outer = db.transaction(() => {

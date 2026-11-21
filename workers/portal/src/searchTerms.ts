@@ -4,6 +4,9 @@ import { forgetSearchTerms, termPrintingIds } from '../../../src/main/repo/searc
 import { isGameId, type GameId } from '../../../src/shared/games'
 import {
   MAX_TERM_WORDS,
+  TERM_KINDS,
+  TERM_TARGET_KINDS,
+  confineTarget,
   termKey,
   termWords,
   type SearchTerm,
@@ -22,8 +25,8 @@ import { adminAuthorized } from './thumbs'
 const PAGE = 500
 const MAX_PROPOSALS = 100
 const MAX_PHRASE = 80
-const KINDS: readonly string[] = ['nickname', 'abbreviation', 'subset', 'rarity', 'cards']
-const TARGET_KINDS: readonly string[] = ['printing', 'card', 'set', 'rarity', 'cards']
+const KINDS: readonly string[] = TERM_KINDS
+const TARGET_KINDS: readonly string[] = TERM_TARGET_KINDS
 
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
@@ -41,6 +44,7 @@ interface Row {
   source: string
   evidence: string
   seq: number
+  decided_at?: string | null
 }
 
 const NEXT_SEQ = '(SELECT COALESCE(MAX(seq), 0) + 1 FROM search_terms)'
@@ -58,7 +62,7 @@ function parse<T>(text: string, fallback: T): T {
 export function termFeed(db: SqlDb, game: GameId, since: number): TermFeed {
   const rows = db
     .prepare(
-      `SELECT id, game, phrase, phrase_key, kind, target_kind, target, status, seq
+      `SELECT id, game, phrase, phrase_key, kind, target_kind, target, status, seq, decided_at
        FROM search_terms WHERE game = ? AND seq > ? ORDER BY seq ASC LIMIT ?`
     )
     .all(game, since, PAGE + 1) as Row[]
@@ -78,7 +82,8 @@ export function termFeed(db: SqlDb, game: GameId, since: number): TermFeed {
         target: parse<TermTarget>(r.target, {}),
         seq: r.seq
       })
-    else deleted.push(r.id)
+    // A row never decided (pending) was never sent, so a device has nothing to delete.
+    else if (r.decided_at) deleted.push(r.id)
   }
   return { terms, deleted, cursor: page.length ? page[page.length - 1].seq : since, more }
 }
@@ -131,6 +136,11 @@ function checkPhrase(p: unknown): string | null {
   return n >= 1 && n <= MAX_TERM_WORDS ? p.trim() : null
 }
 
+/**
+ * The one gate for propose, add and decide. The target keeps only the list its kind names (searches
+ * read only that one, so another would narrow the term where the review list can't show it), and
+ * that list must not be empty.
+ */
 function checkFields(b: Record<string, unknown>): Fields | null {
   const phrase = checkPhrase(b.phrase)
   const target = checkTarget(b.target)
@@ -143,7 +153,10 @@ function checkFields(b: Record<string, unknown>): Fields | null {
     !TARGET_KINDS.includes(b.targetKind)
   )
     return null
-  return { phrase, kind: b.kind as TermKind, targetKind: b.targetKind as TermTargetKind, target }
+  const targetKind = b.targetKind as TermTargetKind
+  const confined = confineTarget(targetKind, target)
+  if (Object.keys(confined).length === 0) return null
+  return { phrase, kind: b.kind as TermKind, targetKind, target: confined }
 }
 
 function checkEvidence(e: unknown): TermEvidence | null {
@@ -190,7 +203,7 @@ function preview(
   let cardId: number | undefined
   if (term.targetKind === 'card' || term.targetKind === 'cards') cardId = term.target.cardIds?.[0]
   else {
-    const [pid] = termPrintingIds(db, scope, term.target, 1)
+    const [pid] = termPrintingIds(db, scope, term, 1)
     if (pid !== undefined)
       cardId = (
         db.prepare('SELECT card_id FROM card_printings WHERE id = ?').get(pid) as
@@ -209,6 +222,17 @@ function preview(
           .prepare('SELECT image_id FROM card_images WHERE card_id = ? ORDER BY sort_order LIMIT 1')
           .get(cardId) as { image_id: number } | undefined)
   return { cardName: card?.name ?? label, imageId: image?.image_id ?? null, label }
+}
+
+/**
+ * 409 for a phrase another term of the game already uses; the error names that term's status
+ * (`duplicate-rejected`, say) so the admin pages can say where to find it.
+ */
+function duplicate(db: SqlDb, game: string, key: string, notId = -1): Response {
+  const other = db
+    .prepare('SELECT status FROM search_terms WHERE game = ? AND phrase_key = ? AND id != ?')
+    .get(game, key, notId) as { status: string } | undefined
+  return json({ error: other ? `duplicate-${other.status}` : 'duplicate' }, 409)
 }
 
 const SELECT = `SELECT id, game, phrase, phrase_key, kind, target_kind, target, status, source,
@@ -322,7 +346,7 @@ export async function adminTermsRoute(req: Request, deps: AppDeps): Promise<Resp
     if (!f || !isGameId(body.game)) return bad()
     const changes = insert(db, body.game, f, 'approved', 'owner', null, now)
     forgetSearchTerms(db)
-    return changes === 1 ? json({ ok: true }) : json({ error: 'duplicate' }, 409)
+    return changes === 1 ? json({ ok: true }) : duplicate(db, body.game, termKey(f.phrase))
   }
 
   const { id, status } = body
@@ -341,7 +365,7 @@ export async function adminTermsRoute(req: Request, deps: AppDeps): Promise<Resp
   const clash = db
     .prepare('SELECT id FROM search_terms WHERE game = ? AND phrase_key = ? AND id != ?')
     .get(row.game, key, row.id)
-  if (clash) return json({ error: 'duplicate' }, 409)
+  if (clash) return duplicate(db, row.game, key, row.id)
   db.prepare(
     `UPDATE search_terms SET phrase = ?, phrase_key = ?, kind = ?, target_kind = ?, target = ?,
        status = ?, decided_at = ?, seq = ${NEXT_SEQ} WHERE id = ?`

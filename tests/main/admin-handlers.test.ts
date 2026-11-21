@@ -73,7 +73,13 @@ describe('admin handlers: search terms', () => {
   it('says why a phrase clash or a refused body failed', async () => {
     const { h, admin } = make()
     admin.mockRejectedValueOnce(new Error('duplicate'))
-    await expect(h['admin:addTerm']('pkm', FIELDS)).rejects.toThrow('already uses that phrase')
+    await expect(h['admin:addTerm']('pkm', FIELDS)).rejects.toThrow('already used by another term')
+    admin.mockRejectedValueOnce(new Error('duplicate-rejected'))
+    await expect(h['admin:addTerm']('pkm', FIELDS)).rejects.toThrow(
+      'already used by a rejected term in this game. Restore it from the Rejected list.'
+    )
+    admin.mockRejectedValueOnce(new Error('duplicate-pending'))
+    await expect(h['admin:addTerm']('pkm', FIELDS)).rejects.toThrow('a pending term')
     admin.mockRejectedValueOnce(new Error('Bad request'))
     await expect(h['admin:decideTerm'](1, 'approved', FIELDS)).rejects.toThrow('refused')
   })

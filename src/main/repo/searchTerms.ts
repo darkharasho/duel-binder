@@ -6,6 +6,7 @@ import {
   type SearchTerm,
   type TermTarget
 } from '../../shared/search/terms'
+import { inRarities, inSets, inValues, type Cond } from './fieldSql'
 import { scopeGame, type Scope } from './scope'
 
 interface TermDbRow {
@@ -101,35 +102,44 @@ export function matchTerms(
 }
 
 /**
- * Local printing ids a term target names, English printings first then by id, cut at `limit`.
- * Kinds with entries are ANDed; empty or missing kinds are ignored; a target with none gives [].
- * `within` keeps only those ids (a collection's owned printings).
+ * Local printing ids a term names, English printings first then by id, cut at `limit`. Only the list
+ * its target kind names is read (pkeys, card ids, sets or rarities); an empty or missing one gives
+ * []. `within` keeps only those ids (a collection's owned printings). Every list goes in as one JSON
+ * parameter: the portal's DO SQLite refuses more than 100 bound parameters.
  */
 export function termPrintingIds(
   db: SqlDb,
   scope: Scope,
-  target: TermTarget,
+  term: Pick<SearchTerm, 'targetKind' | 'target'>,
   limit: number,
   within?: number[]
 ): number[] {
-  const conds: string[] = []
-  const params: unknown[] = []
-  // An empty list is the same as a missing one: unset kinds are skipped, not ANDed.
-  const inList = (col: string, values: unknown[] | undefined): void => {
-    if (!values || values.length === 0) return
-    conds.push(`${col} IN (${values.map(() => '?').join(',')})`)
-    params.push(...values)
+  const { target, targetKind } = term
+  let cond: Cond
+  switch (targetKind) {
+    case 'printing':
+      if (!target.pkeys?.length) return []
+      cond = inValues('p.pkey', target.pkeys)
+      break
+    case 'card':
+    case 'cards':
+      if (!target.cardIds?.length) return []
+      cond = inValues('p.card_id', target.cardIds)
+      break
+    case 'set':
+      if (!target.sets?.length) return []
+      cond = inSets('p', target.sets)
+      break
+    case 'rarity':
+      if (!target.rarities?.length) return []
+      cond = inRarities('p', scopeGame(db, scope), target.rarities)
+      break
+    default:
+      return []
   }
-  inList('p.pkey', target.pkeys)
-  inList('p.card_id', target.cardIds)
-  inList('p.set_rarity', target.rarities)
-  if (target.sets && target.sets.length > 0) {
-    conds.push(`(${target.sets.map(() => '(p.language = ? AND p.set_name = ?)').join(' OR ')})`)
-    for (const s of target.sets) params.push(s.language, s.setName)
-  }
-  if (conds.length === 0) return []
+  const conds = [cond.sql]
+  const params = [...cond.params]
   if (within) {
-    // One JSON parameter, not one per id: the portal's SQLite caps bound parameters.
     conds.push('p.id IN (SELECT value FROM json_each(?))')
     params.push(JSON.stringify(within))
   }

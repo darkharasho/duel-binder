@@ -2,8 +2,9 @@ import type Database from 'better-sqlite3'
 import { openDatabase } from '../../src/main/db/database'
 import { LOCAL } from '../../src/main/repo/scope'
 import { forgetSearchTerms, matchTerms, termPrintingIds } from '../../src/main/repo/searchTerms'
-import { seedPokemon } from '../fixtures/pokemon'
-import type { TermTarget } from '../../src/shared/search/terms'
+import { SHARED_SET_NAME, seedPokemon } from '../fixtures/pokemon'
+import type { TermTarget, TermTargetKind } from '../../src/shared/search/terms'
+import { capParams, DO_MAX_PARAMS } from '../helpers/paramCap'
 
 let db: Database.Database
 beforeEach(() => {
@@ -60,9 +61,11 @@ test('a new approved row matches after forgetSearchTerms', () => {
   expect(matchTerms(db, LOCAL, 'tg').matches).toHaveLength(1)
 })
 
+const of = (targetKind: TermTargetKind, target: TermTarget) => ({ targetKind, target })
+
 test('termPrintingIds', () => {
-  expect(termPrintingIds(db, LOCAL, { pkeys: ['nope'] }, 10)).toEqual([])
-  expect(termPrintingIds(db, LOCAL, {}, 10)).toEqual([])
+  expect(termPrintingIds(db, LOCAL, of('printing', { pkeys: ['nope'] }), 10)).toEqual([])
+  expect(termPrintingIds(db, LOCAL, of('card', {}), 10)).toEqual([])
   const rows = db
     .prepare(
       'SELECT id, card_id, pkey, language, set_name, set_rarity FROM card_printings ORDER BY id'
@@ -75,33 +78,89 @@ test('termPrintingIds', () => {
     set_name: string
     set_rarity: string
   }[]
-  expect(termPrintingIds(db, LOCAL, { pkeys: [rows[1].pkey] }, 10)).toEqual([rows[1].id])
+  expect(termPrintingIds(db, LOCAL, of('printing', { pkeys: [rows[1].pkey] }), 10)).toEqual([
+    rows[1].id
+  ])
   expect(
-    termPrintingIds(db, LOCAL, { sets: [{ language: 'ja', setName: rows[3].set_name }] }, 10)
+    termPrintingIds(
+      db,
+      LOCAL,
+      of('set', { sets: [{ language: 'ja', setName: rows[3].set_name }] }),
+      10
+    )
   ).toEqual(rows.filter((r) => r.language === 'ja').map((r) => r.id))
-  expect(termPrintingIds(db, LOCAL, { rarities: ['Reverse Holo'] }, 10)).toEqual([
+  // A Pokémon finish (set_rarity) and a Pokémon card rarity (pokemon_cards.rarity) both count.
+  expect(termPrintingIds(db, LOCAL, of('rarity', { rarities: ['Reverse Holo'] }), 10)).toEqual([
     rows[1].id,
     rows[3].id
   ])
-  // Kinds are ANDed.
-  const both: TermTarget = { rarities: ['Reverse Holo'], cardIds: [rows[0].card_id] }
-  expect(termPrintingIds(db, LOCAL, both, 10)).toEqual([rows[1].id])
-  expect(termPrintingIds(db, LOCAL, { cardIds: [rows[0].card_id] }, 1)).toEqual([rows[0].id])
+  expect(termPrintingIds(db, LOCAL, of('rarity', { rarities: ['Common'] }), 10)).toEqual(
+    rows.map((r) => r.id)
+  )
+  expect(termPrintingIds(db, LOCAL, of('cards', { cardIds: [rows[0].card_id] }), 1)).toEqual([
+    rows[0].id
+  ])
   // Contributed printings never count.
   db.prepare('UPDATE card_printings SET contributed = 1 WHERE id = ?').run(rows[0].id)
-  expect(termPrintingIds(db, LOCAL, { cardIds: [rows[0].card_id] }, 10)).toEqual([rows[1].id])
+  expect(termPrintingIds(db, LOCAL, of('card', { cardIds: [rows[0].card_id] }), 10)).toEqual([
+    rows[1].id
+  ])
 })
 
-test('empty lists mean unset', () => {
-  const row = db.prepare('SELECT id, pkey FROM card_printings ORDER BY id').get() as {
+test('only the list the target kind names is read', () => {
+  const rows = db.prepare('SELECT id, card_id, pkey FROM card_printings ORDER BY id').all() as {
     id: number
+    card_id: number
     pkey: string
+  }[]
+  // A card term that also carries a stray printing key and rarity still names every printing.
+  const card = { cardIds: [rows[0].card_id], pkeys: [rows[1].pkey], rarities: ['Reverse Holo'] }
+  expect(termPrintingIds(db, LOCAL, of('card', card), 10)).toEqual([rows[0].id, rows[1].id])
+  expect(termPrintingIds(db, LOCAL, of('printing', card), 10)).toEqual([rows[1].id])
+  // The kind's own list empty: nothing, whatever the other lists hold.
+  const target = { pkeys: [rows[0].pkey], cardIds: [], sets: [], rarities: [] }
+  expect(termPrintingIds(db, LOCAL, of('card', target), 10)).toEqual([])
+  expect(termPrintingIds(db, LOCAL, of('printing', target), 10)).toEqual([rows[0].id])
+})
+
+test('big targets stay within the portal limit of 100 bound parameters', () => {
+  const rows = db.prepare('SELECT id, card_id, pkey FROM card_printings ORDER BY id').all() as {
+    id: number
+    card_id: number
+    pkey: string
+  }[]
+  const many = <T>(first: T, n: number, fill: (i: number) => T): T[] => [
+    first,
+    ...Array.from({ length: n - 1 }, (_, i) => fill(i))
+  ]
+  const cap = capParams(db)
+  try {
+    const sets = many({ language: 'en', setName: SHARED_SET_NAME }, 60, (i) => ({
+      language: 'en',
+      setName: `Set ${i}`
+    }))
+    expect(termPrintingIds(db, LOCAL, of('set', { sets }), 10)).toEqual([rows[0].id, rows[1].id])
+    const pkeys = many(rows[0].pkey, 150, (i) => `en|0|X|${i}`)
+    expect(termPrintingIds(db, LOCAL, of('printing', { pkeys }), 10)).toEqual([rows[0].id])
+    const cardIds = many(rows[0].card_id, 150, (i) => 1_000_000 + i)
+    expect(termPrintingIds(db, LOCAL, of('cards', { cardIds }), 10)).toEqual([
+      rows[0].id,
+      rows[1].id
+    ])
+    const rarities = many('Reverse Holo', 120, (i) => `Rarity ${i}`)
+    expect(
+      termPrintingIds(
+        db,
+        LOCAL,
+        of('rarity', { rarities }),
+        10,
+        rows.map((r) => r.id)
+      )
+    ).toEqual([rows[1].id, rows[3].id])
+    expect(cap.max()).toBeLessThanOrEqual(DO_MAX_PARAMS)
+  } finally {
+    cap.restore()
   }
-  const target = { pkeys: [row.pkey], cardIds: [], sets: [], rarities: [] }
-  expect(termPrintingIds(db, LOCAL, target, 10)).toEqual([row.id])
-  expect(
-    termPrintingIds(db, LOCAL, { pkeys: [], cardIds: [], sets: [], rarities: [] }, 10)
-  ).toEqual([])
 })
 
 test('a card with English and Japanese printings returns the English id first', () => {
@@ -114,7 +173,7 @@ test('a card with English and Japanese printings returns the English id first', 
   )
   const ja = Number(add.run(card, 'ja', 'JA Set').lastInsertRowid)
   const en = Number(add.run(card, 'en', 'EN Set').lastInsertRowid)
-  const ids = termPrintingIds(db, LOCAL, { cardIds: [card] }, 100)
+  const ids = termPrintingIds(db, LOCAL, of('card', { cardIds: [card] }), 100)
   expect(ids.indexOf(en)).toBeLessThan(ids.indexOf(ja))
   expect(ids.slice(-1)).toEqual([ja])
 })

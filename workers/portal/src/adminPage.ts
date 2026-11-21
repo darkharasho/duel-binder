@@ -663,7 +663,7 @@ async function loadBeta() {
   $('beta').replaceChildren(p)
 }
 
-/** Community search terms: pending proposals to approve, edit or reject, the approved list, and an add form. Phrases, titles and reasons come from eBay and AI output, so they only ever go in as text. */
+/** Community search terms: pending proposals to approve, edit or reject, the approved list, rejected terms to restore, and an add form. Phrases, titles and reasons come from eBay and AI output, so they only ever go in as text. */
 const TERM_KINDS = ['nickname', 'abbreviation', 'subset', 'rarity', 'cards']
 const TERM_TARGET_KINDS = ['printing', 'card', 'set', 'rarity', 'cards']
 let termsGame = ${JSON.stringify(GAME_IDS[0])}
@@ -686,9 +686,14 @@ const termTargetFrom = (f) => {
   if (rarities.length) target.rarities = rarities
   return target
 }
-const termError = (status, body) => body.error === 'duplicate'
-  ? 'Another term in this game already uses that phrase.'
-  : status === 400 ? 'The portal refused those values. Check the phrase (up to 4 words), kind and target.'
+const TERM_CLASH = {
+  rejected: 'That phrase is already used by a rejected term in this game. Restore it from the Rejected list.',
+  pending: 'That phrase is already used by a pending term in this game. Approve or edit it there.',
+  approved: 'That phrase is already used by an approved term in this game.'
+}
+const termError = (status, body) => typeof body.error === 'string' && /^duplicate(-|$)/.test(body.error)
+  ? (TERM_CLASH[body.error.slice('duplicate-'.length)] || 'That phrase is already used by another term in this game.')
+  : status === 400 ? 'The portal refused those values. Check the phrase (up to 4 words), the kind, and the list its target kind uses (card ids for card or cards, printing keys, sets or rarities).'
   : 'Failed: ' + (body.error ?? 'HTTP ' + status)
 async function termPost(path, payload) {
   const res = await fetch(path, {
@@ -756,7 +761,8 @@ function termForm(t, label, onSubmit) {
   })
   return form
 }
-function termCard(t, pending) {
+function termCard(t) {
+  const pending = t.status === 'pending'
   const card = el('div', null, 'term')
   const head = el('p')
   head.append(el('strong', t.phrase), el('span', ' ' + t.kind + ' / ' + t.targetKind, 'note'))
@@ -789,13 +795,22 @@ function termCard(t, pending) {
     })
     const reject = el('button', 'Reject')
     reject.type = 'button'
-    reject.addEventListener('click', () => decide('rejected'))
+    reject.addEventListener('click', () => {
+      if (confirm('Reject "' + t.phrase + '"? You can restore it from the Rejected list.')) decide('rejected')
+    })
     row.append(approve, edit, reject)
-  } else {
+  } else if (t.status === 'approved') {
     const remove = el('button', 'Remove')
     remove.type = 'button'
-    remove.addEventListener('click', () => decide('rejected'))
+    remove.addEventListener('click', () => {
+      if (confirm('Remove "' + t.phrase + '"? Searches stop using it. You can restore it from the Rejected list.')) decide('rejected')
+    })
     row.append(remove)
+  } else {
+    const restore = el('button', 'Restore')
+    restore.type = 'button'
+    restore.addEventListener('click', () => decide('approved'))
+    row.append(restore)
   }
   card.append(row, msg)
   return card
@@ -820,13 +835,14 @@ async function loadTerms() {
     harvest.rel = 'noreferrer'
     bar.append(game, harvest)
     p.append(bar)
-    for (const [status, title] of [['pending', 'Pending'], ['approved', 'Approved']]) {
+    const empty = { pending: 'Nothing waiting.', approved: 'No approved terms yet.', rejected: 'Nothing rejected or removed.' }
+    for (const [status, title] of [['pending', 'Pending'], ['approved', 'Approved'], ['rejected', 'Rejected']]) {
       const res = await fetch('/admin/terms?status=' + status + '&game=' + encodeURIComponent(termsGame), { credentials: 'same-origin' })
       if (!res.ok) throw new Error('HTTP ' + res.status)
       const data = await res.json()
       p.append(el('h3', title + ' (' + data.terms.length + ')'))
-      if (!data.terms.length) p.append(el('p', status === 'pending' ? 'Nothing waiting.' : 'No approved terms yet.', 'note'))
-      for (const t of data.terms) p.append(termCard(t, status === 'pending'))
+      if (!data.terms.length) p.append(el('p', empty[status], 'note'))
+      for (const t of data.terms) p.append(termCard(t))
     }
     p.append(el('h3', 'Add term'))
     p.append(termForm(null, 'Add term', async (fields) => {

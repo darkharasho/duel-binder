@@ -59,16 +59,26 @@ function termFields(v: unknown): AdminTermFields {
 }
 
 /** The portal's 409 and 400 on a term, as a sentence for the page. */
+/** The 409 text: which list already has the phrase, when the portal says. */
+export function duplicateText(status: string | undefined): string {
+  if (status === 'rejected')
+    return 'That phrase is already used by a rejected term in this game. Restore it from the Rejected list.'
+  if (status === 'pending')
+    return 'That phrase is already used by a pending term in this game. Approve or edit it there.'
+  if (status === 'approved') return 'That phrase is already used by an approved term in this game.'
+  return 'That phrase is already used by another term in this game.'
+}
+
 async function termWrite(call: () => Promise<unknown>): Promise<void> {
   try {
     await call()
   } catch (e) {
     const message = e instanceof Error ? e.message : ''
-    if (message === 'duplicate')
-      throw new Error('Another term in this game already uses that phrase.', { cause: e })
+    const dup = /^duplicate(?:-(pending|approved|rejected))?$/.exec(message)
+    if (dup) throw new Error(duplicateText(dup[1]), { cause: e })
     if (message === 'Bad request')
       throw new Error(
-        'The portal refused those values. Check the phrase (up to 4 words), kind and target.',
+        'The portal refused those values. Check the phrase (up to 4 words), the kind, and the list its target kind uses (card ids for card or cards, printing keys, sets or rarities).',
         { cause: e }
       )
     throw e

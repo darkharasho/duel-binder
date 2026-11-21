@@ -92,6 +92,18 @@ test('termPrintingIds', () => {
   expect(termPrintingIds(db, LOCAL, { cardIds: [rows[0].card_id] }, 10)).toEqual([rows[1].id])
 })
 
+test('empty lists mean unset', () => {
+  const row = db.prepare('SELECT id, pkey FROM card_printings ORDER BY id').get() as {
+    id: number
+    pkey: string
+  }
+  const target = { pkeys: [row.pkey], cardIds: [], sets: [], rarities: [] }
+  expect(termPrintingIds(db, LOCAL, target, 10)).toEqual([row.id])
+  expect(
+    termPrintingIds(db, LOCAL, { pkeys: [], cardIds: [], sets: [], rarities: [] }, 10)
+  ).toEqual([])
+})
+
 test('a card with English and Japanese printings returns the English id first', () => {
   const card = (
     db.prepare('SELECT card_id FROM card_printings LIMIT 1').get() as { card_id: number }

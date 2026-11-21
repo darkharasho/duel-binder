@@ -102,7 +102,7 @@ export function matchTerms(
 
 /**
  * Local printing ids a term target names, English printings first then by id, cut at `limit`.
- * Kinds present in the target are ANDed; an empty target gives [].
+ * Kinds with entries are ANDed; empty or missing kinds are ignored; a target with none gives [].
  */
 export function termPrintingIds(
   db: SqlDb,
@@ -112,27 +112,20 @@ export function termPrintingIds(
 ): number[] {
   const conds: string[] = []
   const params: unknown[] = []
-  const inList = (col: string, values: unknown[]): boolean => {
-    if (values.length === 0) return false
+  // An empty list is the same as a missing one: unset kinds are skipped, not ANDed.
+  const inList = (col: string, values: unknown[] | undefined): void => {
+    if (!values || values.length === 0) return
     conds.push(`${col} IN (${values.map(() => '?').join(',')})`)
     params.push(...values)
-    return true
   }
-  const present = [
-    target.pkeys && inList('p.pkey', target.pkeys),
-    target.cardIds && inList('p.card_id', target.cardIds),
-    target.rarities && inList('p.set_rarity', target.rarities)
-  ]
-  if (target.sets) {
-    if (target.sets.length > 0) {
-      conds.push(`(${target.sets.map(() => '(p.language = ? AND p.set_name = ?)').join(' OR ')})`)
-      for (const s of target.sets) params.push(s.language, s.setName)
-      present.push(true)
-    } else present.push(false)
+  inList('p.pkey', target.pkeys)
+  inList('p.card_id', target.cardIds)
+  inList('p.set_rarity', target.rarities)
+  if (target.sets && target.sets.length > 0) {
+    conds.push(`(${target.sets.map(() => '(p.language = ? AND p.set_name = ?)').join(' OR ')})`)
+    for (const s of target.sets) params.push(s.language, s.setName)
   }
-  // A kind that is listed but empty names nothing; with none listed there is nothing to match.
-  const listed = [target.pkeys, target.cardIds, target.rarities, target.sets].filter(Boolean)
-  if (listed.length === 0 || present.some((p) => p === false)) return []
+  if (conds.length === 0) return []
   return (
     db
       .prepare(

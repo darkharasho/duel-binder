@@ -337,13 +337,23 @@ export function browseCards(db: SqlDb, f: BrowseFilters, scope: Scope = LOCAL): 
          LIMIT ? OFFSET ?) page`
       )
       .all(...rarities, ...whereParams, take, skip) as BrowseRow[]
-  // Versions the query's terms and set, rarity or number words name go first, one tile each, then
-  // the card search as it has always been; the page runs across both.
+  const { n } = db
+    .prepare(
+      `SELECT count(*) AS n FROM cards c
+       LEFT JOIN (SELECT p.card_id, SUM(e.quantity) AS n FROM collection_entries e
+         JOIN card_printings p ON p.id = e.printing_id AND +p.game = ${scope.game} WHERE ${scope.where('e')}
+         GROUP BY p.card_id) o ON o.card_id = c.id${sql}`
+    )
+    .get(...params) as { n: number }
+  // Versions an approved term names go first, one tile each, then the card search as it has always
+  // been; the page runs across both. Versions the set, rarity or number words name are only listed
+  // when the card search finds nothing: they never go ahead of its cards.
   const text = f.q?.trim()
   const named = text ? queryPrintingIds(db, scope, text) : null
+  const focusIds = named ? (n === 0 ? named.ids : named.ids.slice(0, named.fromTerms)) : []
   // The other filters, without the text: a version tile's card is found by its printing.
-  const nt = named?.ids.length ? whereClause(db, f, scope, false) : null
-  const focus = named && nt ? focusPrintings(db, named.ids, nt, scope, language) : []
+  const nt = focusIds.length ? whereClause(db, f, scope, false) : null
+  const focus = nt ? focusPrintings(db, focusIds, nt, scope, language) : []
   const focusPage = focus.slice(offset, offset + limit)
   const room = limit - focusPage.length
   const rows = room > 0 ? pageRows(sql, params, room, Math.max(0, offset - focus.length)) : []
@@ -358,14 +368,6 @@ export function browseCards(db: SqlDb, f: BrowseFilters, scope: Scope = LOCAL): 
     ))
       focusCards.set(r.id, r)
   }
-  const { n } = db
-    .prepare(
-      `SELECT count(*) AS n FROM cards c
-       LEFT JOIN (SELECT p.card_id, SUM(e.quantity) AS n FROM collection_entries e
-         JOIN card_printings p ON p.id = e.printing_id AND +p.game = ${scope.game} WHERE ${scope.where('e')}
-         GROUP BY p.card_id) o ON o.card_id = c.id${sql}`
-    )
-    .get(...params) as { n: number }
   const magic =
     game === 'mtg'
       ? magicLanguages(db, [...new Set([...focusCards.keys(), ...rows.map((r) => r.id)])])

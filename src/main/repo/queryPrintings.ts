@@ -68,14 +68,15 @@ function nameSpelled(db: SqlDb, scope: Scope, words: string[]): boolean {
  * The printings a query's approved terms and set, rarity, code and number words name, the way
  * searchCards finds its version rows: each term's printings (narrowed by the words beside it),
  * then the field words' printings, unless a card's name spells the whole query ("dark magician").
- * `term` is the matched phrases. Null when the query has neither.
+ * `term` is the matched phrases; the first `fromTerms` ids came from terms, the rest from field
+ * words. Null when the query has neither.
  */
 export function queryPrintingIds(
   db: SqlDb,
   scope: Scope,
   text: string,
   limit = 2000
-): { ids: number[]; term: string | null } | null {
+): { ids: number[]; term: string | null; fromTerms: number } | null {
   const words = termWords(text)
   if (words.length === 0) return null
   const { matches, rest } = matchTerms(db, scope, text)
@@ -87,12 +88,14 @@ export function queryPrintingIds(
     const narrow = termNarrowing(db, scope, rest)
     for (const m of matches) add(termIds(db, scope, m.term.target, narrow, limit))
   }
+  const fromTerms = ids.size
   const fq = ids.size < limit ? parseFields(db, scope, words) : null
   const fields = fq !== null && !nameSpelled(db, scope, words)
   if (fields) add(fieldPrintingIds(db, scope, fq, limit))
   if (matches.length === 0 && !fields) return null
   return {
     ids: [...ids],
-    term: matches.length > 0 ? matches.map((m) => m.term.phrase).join(' ') : null
+    term: matches.length > 0 ? matches.map((m) => m.term.phrase).join(' ') : null,
+    fromTerms
   }
 }

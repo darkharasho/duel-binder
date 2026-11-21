@@ -5,6 +5,7 @@ import { addEntry } from '../../src/main/repo/collection'
 import { pokemonId } from '../../src/shared/games'
 import { seedPokemon } from '../fixtures/pokemon'
 import { seededDb } from './helpers'
+import { forgetSearchTerms } from '../../src/main/repo/searchTerms'
 
 const names = (p: { cards: { name: string }[] }): string[] => p.cards.map((c) => c.name)
 
@@ -326,18 +327,31 @@ describe('browseCards with set, rarity and code words', () => {
     expect(page.cards[0]).not.toHaveProperty('focusLabel')
   })
 
-  it('counts version tiles in the total and pages through them before the card tiles', async () => {
-    const { db, lor } = await lostOriginDb()
-    // "lor 020" names LOR 020 by code and number; its set code also matches the card search.
+  it('adds no field-word tiles when the card search finds cards', async () => {
+    const { db } = await lostOriginDb()
+    // "lor 020" names LOR 020 by code and number, but its set code already finds the card.
+    const page = browseCards(db, { ...BY_NAME, q: 'lor 020' })
+    expect(page.total).toBe(1)
+    expect(page.cards.map((c) => c.focusPrintingId ?? c.name)).toEqual(['Charizard'])
+  })
+
+  it('counts term tiles in the total and pages through them before the card tiles', async () => {
+    const { db, lor, tg } = await lostOriginDb()
+    db.prepare(
+      `INSERT INTO search_terms (game, phrase, phrase_key, kind, target_kind, target, status, source, created_at)
+       VALUES ('pkm', 'charizard', 'charizard', 'nickname', 'card', ?, 'approved', 'owner', '2026-11-21')`
+    ).run(JSON.stringify({ cardIds: [charizard] }))
+    forgetSearchTerms(db)
     const tiles = (offset: number, limit: number) =>
-      browseCards(db, { ...BY_NAME, q: 'lor 020', offset, limit }).cards.map(
+      browseCards(db, { ...BY_NAME, q: 'charizard', offset, limit }).cards.map(
         (c) => c.focusPrintingId ?? c.name
       )
-    expect(browseCards(db, { ...BY_NAME, q: 'lor 020' }).total).toBe(2)
-    expect(tiles(0, 10)).toEqual([lor, 'Charizard'])
-    expect(tiles(0, 1)).toEqual([lor])
-    expect(tiles(1, 1)).toEqual(['Charizard'])
-    expect(tiles(2, 1)).toEqual([])
+    expect(browseCards(db, { ...BY_NAME, q: 'charizard' }).total).toBe(3)
+    expect(tiles(0, 10)).toEqual([lor, tg, 'Charizard'])
+    expect(tiles(0, 2)).toEqual([lor, tg])
+    expect(tiles(1, 2)).toEqual([tg, 'Charizard'])
+    expect(tiles(2, 1)).toEqual(['Charizard'])
+    expect(tiles(3, 1)).toEqual([])
   })
 
   it('keeps other filters on version tiles', async () => {

@@ -6,6 +6,7 @@ import type {
 } from '../../shared/catalogFeed'
 import type { ErrorReport } from '../../shared/errorReports'
 import type { UsageReport } from '../../shared/usage'
+import type { TermFeed } from '../../shared/search/terms'
 import type {
   BinderEditPullResponse,
   BinderEditPushResult,
@@ -115,6 +116,7 @@ export interface CloudClient {
   prices(pkeys: string[]): Promise<PricesResponse>
   /** One page of server price changes of `game` (default Yu-Gi-Oh!) after `since` (the price change feed). */
   priceChanges(since: number, game?: GameId): Promise<PriceChangesResponse>
+  searchTerms(since: number, game: GameId): Promise<TermFeed>
   /** Asks the server to price these printings (at most MAX_PRICE_REQUEST); see requestPrices. */
   requestPrices(pkeys: string[]): Promise<PriceRequestResponse>
   /**
@@ -333,6 +335,8 @@ export function createCloudClient(opts: {
     sessionsPull: (cursor, game) =>
       call<ScanSessionPullResponse>(`/api/sync/sessions-pull?cursor=${cursor}&game=${game}`, 'GET'),
     prices: (pkeys) => call<PricesResponse>('/api/sync/prices', 'POST', { pkeys }),
+    searchTerms: (since, game) =>
+      call<TermFeed>(`/api/sync/search-terms?game=${game}&since=${since}`, 'GET'),
     priceChanges: (since, game = 'ygo') =>
       call<PriceChangesResponse>(`/api/sync/price-changes?since=${since}&game=${game}`, 'GET'),
     requestPrices: (pkeys) =>

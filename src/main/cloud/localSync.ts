@@ -6,6 +6,8 @@ import type { ContributedPrinting } from '../../shared/catalogFeed'
 import type { UnsyncedEntry } from '../../shared/types'
 import type { GameId } from '../../shared/games'
 import type { BinderEditAction, BinderEditLevel } from '../../shared/binders'
+import { forgetSearchTerms } from '../repo/searchTerms'
+import type { WireTerm } from '../../shared/search/terms'
 import { mergeSessionCards, sameSessionCardList } from '../repo/scanSessions'
 import type { ScanSessionCard, WireScanSession } from '../../shared/scanSessions'
 import { isLanguage } from '../../shared/languages'
@@ -90,6 +92,7 @@ export type SyncStream =
   | 'graded'
   | 'sessions'
   | 'history'
+  | 'terms'
 
 const hasLegacyCursor = (game: GameId, stream: SyncStream): boolean =>
   game === 'ygo' && (stream === 'entries' || stream === 'prices')
@@ -1129,6 +1132,67 @@ export async function pullPriceChanges(
     if (!page.more || page.prices.length === 0) break
   }
   return applied
+}
+
+/**
+ * Applies one page of the approved search terms: `deleted` ids first, then each term upserted by id as
+ * `approved`. A local row holding the same (game, phrase_key) under another id goes first so the
+ * UNIQUE can't fail. Returns rows changed (an id never stored changes nothing).
+ */
+function applyTerms(db: SqlDb, terms: WireTerm[], deleted: number[]): number {
+  const del = db.prepare('DELETE FROM search_terms WHERE id = ?')
+  const clash = db.prepare('DELETE FROM search_terms WHERE game = ? AND phrase_key = ? AND id <> ?')
+  const upsert = db.prepare(
+    `INSERT INTO search_terms (id, game, phrase, phrase_key, kind, target_kind, target, status, source,
+       evidence, seq, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'approved', 'portal', '{}', ?, ?)
+     ON CONFLICT(id) DO UPDATE SET game = excluded.game, phrase = excluded.phrase,
+       phrase_key = excluded.phrase_key, kind = excluded.kind, target_kind = excluded.target_kind,
+       target = excluded.target, status = 'approved', seq = excluded.seq`
+  )
+  const now = new Date().toISOString()
+  let changed = 0
+  for (const id of deleted) changed += del.run(id).changes
+  for (const t of terms) {
+    changed += clash.run(t.game, t.phraseKey, t.id).changes
+    changed += upsert.run(
+      t.id,
+      t.game,
+      t.phrase,
+      t.phraseKey,
+      t.kind,
+      t.targetKind,
+      JSON.stringify(t.target),
+      t.seq,
+      now
+    ).changes
+  }
+  return changed
+}
+
+/**
+ * Applies the portal's approved search terms of `game` from the saved cursor, page by page; each page
+ * and its cursor commit together. Returns rows changed.
+ */
+export async function pullSearchTerms(
+  db: SqlDb,
+  client: Pick<CloudClient, 'searchTerms'>,
+  owner: number,
+  game: GameId
+): Promise<number> {
+  let cursor = gameCursor(db, owner, game, 'terms')
+  let changed = 0
+  for (;;) {
+    const page = await client.searchTerms(cursor, game)
+    db.transaction(() => {
+      changed += applyTerms(db, page.terms, page.deleted)
+      saveGameCursor(db, owner, game, 'terms', page.cursor)
+    })()
+    forgetSearchTerms(db)
+    cursor = page.cursor
+    if (!page.more || (page.terms.length === 0 && page.deleted.length === 0)) break
+  }
+  return changed
 }
 
 /** A printing to offer the server and the entries (uids) that sit on it. */

@@ -40,6 +40,7 @@ import {
   dirtyWishes,
   gameCursor,
   pullPriceChanges,
+  pullSearchTerms,
   dropEntry,
   markBinderEditPushed,
   markBinderPushed,
@@ -656,6 +657,8 @@ export async function syncOnce(
   // price is missing or stale (a printing the server hasn't priced yet).
   for (const game of games)
     if ((await pullPriceChanges(db, client, owner, game)) > 0) changed = true
+  // The community's approved search terms, per game.
+  for (const game of games) if ((await pullSearchTerms(db, client, owner, game)) > 0) changed = true
   // Asked even with no keys, to keep price_service_status current.
   const { prices, status } = await client.prices(stalePricePkeys(db, now(), MAX_PULL))
   db.transaction(() => {

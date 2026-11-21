@@ -2,7 +2,7 @@ import type { SqlDb } from '../db/sql'
 import type { SearchTerm } from '../../shared/search/terms'
 import { termWords } from '../../shared/search/terms'
 import { buildFtsQuery } from './fts'
-import { fieldPrintingIds, parseFields, type FieldQuery } from './queryFields'
+import { fieldPrintingIds, fieldSearch, parseFields, type FieldQuery } from './queryFields'
 import { matchTerms, termPrintingIds } from './searchTerms'
 import type { Scope } from './scope'
 
@@ -101,9 +101,13 @@ export function queryPrintingIds(
     for (const m of matches) add(termIds(db, scope, m.term, narrow, limit, within()))
   }
   const fromTerms = ids.size
-  const fq = withFields && ids.size < limit ? parseFields(db, scope, words) : null
-  const fields = fq !== null && !nameSpelled(db, scope, words)
-  if (fields) add(fieldPrintingIds(db, scope, fq, limit, within()))
+  // nameSpelled runs only once a reading has field words (parseFields is cheap; the name check isn't).
+  const fields =
+    withFields &&
+    ids.size < limit &&
+    parseFields(db, scope, words) !== null &&
+    !nameSpelled(db, scope, words)
+  if (fields) add(fieldSearch(db, scope, words, limit, within)?.ids ?? [])
   if (matches.length === 0 && !fields) return null
   return {
     ids: [...ids],

@@ -11,6 +11,8 @@ export interface FieldQuery {
   codePrefix: string | null
   number: string | null
   nameWords: string[]
+  /** Query word indexes the set words came from, when sets were read. */
+  setWords?: number[]
 }
 
 /** Short rarity words players type, mapped to the rarity label as printings carry it. */
@@ -149,7 +151,8 @@ export function parseFields(
   db: SqlDb,
   scope: Scope,
   words: string[],
-  termsConstrain = false
+  termsConstrain = false,
+  notSetWords: ReadonlySet<number> = new Set()
 ): FieldQuery | null {
   // One bare word can't be a field plus something else: skip loading the lists (the per-keystroke path).
   if (words.length < 2 && !termsConstrain) return null
@@ -157,20 +160,23 @@ export function parseFields(
   const lists = fieldLists(db, scope, game)
   const used = new Array<boolean>(words.length).fill(false)
 
-  // A last word that is a rarity word ("str", "rare") only ever matches a set name exactly.
+  // Only a run ending on the query's last word (the one still being typed) may end in a partial
+  // set-name word: "mew sir" is not the Mewtwo sets. A rarity word ("str", "rare") never does.
   const abbreviations = RARITY_ABBREVIATIONS[game]
   const isRarityWord = (w: string): boolean =>
     lists.rarities.has(w) || (!!abbreviations[w] && lists.rarities.has(termKey(abbreviations[w])))
-  const setMatches = (run: string[], name: string[]): boolean =>
-    runMatches(run, name, !isRarityWord(run[run.length - 1]))
+  const setMatches = (run: string[], name: string[], endsLast: boolean): boolean =>
+    runMatches(run, name, endsLast && !isRarityWord(run[run.length - 1]))
 
   // The longest run of words that is a word-prefix of one or more set names.
   let sets: FieldQuery['sets'] = null
   let best = { start: -1, len: 0 }
   for (let i = 0; i < words.length; i++) {
     for (let n = Math.min(MAX_SET_WORDS, words.length - i); n > best.len; n--) {
+      if (Array.from({ length: n }, (_, k) => i + k).some((k) => notSetWords.has(k))) continue
       const run = words.slice(i, i + n)
-      if (lists.sets.some((s) => setMatches(run, s.words))) {
+      const endsLast = i + n === words.length
+      if (lists.sets.some((s) => setMatches(run, s.words, endsLast))) {
         best = { start: i, len: n }
         break
       }
@@ -178,8 +184,9 @@ export function parseFields(
   }
   if (best.len > 0) {
     const run = words.slice(best.start, best.start + best.len)
+    const endsLast = best.start + best.len === words.length
     sets = lists.sets
-      .filter((s) => setMatches(run, s.words))
+      .filter((s) => setMatches(run, s.words, endsLast))
       .map((s) => ({ language: s.language, setName: s.setName }))
     for (let k = 0; k < best.len; k++) used[best.start + k] = true
   }
@@ -205,12 +212,14 @@ export function parseFields(
   }
 
   let codePrefix: string | null = null
+  let codeAt = -1
   let number: string | null = null
   for (let i = 0; i < words.length; i++) {
     if (used[i]) continue
     const w = words[i]
     if (codePrefix === null && /^[a-z]{2,5}\d{0,3}$/.test(w) && lists.codes.has(w)) {
       codePrefix = w
+      codeAt = i
       used[i] = true
     } else if (hasDigit(w)) {
       // A number is a run of digit-bearing words: "232", "tg03", "232 091".
@@ -225,9 +234,9 @@ export function parseFields(
   }
 
   // A set code that is also the only name word ("151 sir mew": MEW is 151's code) stays a name
-  // word unless a number goes with it ("mew 205").
-  if (codePrefix !== null && number === null && used.every(Boolean)) {
-    used[words.indexOf(codePrefix)] = false
+  // word unless a number goes with it ("mew 205") or a matched term is the name ("tg lor").
+  if (!termsConstrain && codePrefix !== null && number === null && used.every(Boolean)) {
+    used[codeAt] = false
     codePrefix = null
   }
   const nameWords = words.filter((_, i) => !used[i])
@@ -240,8 +249,42 @@ export function parseFields(
     rarities: rarityLabels.size > 0 ? [...rarityLabels] : null,
     codePrefix,
     number,
-    nameWords
+    nameWords,
+    ...(best.len > 0
+      ? { setWords: Array.from({ length: best.len }, (_, k) => best.start + k) }
+      : {})
   }
+}
+
+/** How many readings of a query's set words `fieldSearch` tries. */
+const MAX_READINGS = 3
+
+/**
+ * The field words' printings, cut at `limit`. When the first reading finds nothing and took some
+ * words as a set, those words are read as name words instead and the next set run is tried: "blue
+ * eyes deck" is Blue-Eyes cards in Deck sets, not a card named "deck" in Blue-Eyes sets; "lightning
+ * bolt promo" is Lightning Bolt in a Promo set, not "bolt promo" in Fire and Lightning. Null when
+ * no reading has field words.
+ */
+export function fieldSearch(
+  db: SqlDb,
+  scope: Scope,
+  words: string[],
+  limit: number,
+  within?: () => number[] | undefined
+): { fq: FieldQuery; ids: number[] } | null {
+  const notSetWords = new Set<number>()
+  let first: { fq: FieldQuery; ids: number[] } | null = null
+  for (let k = 0; k < MAX_READINGS; k++) {
+    const fq = parseFields(db, scope, words, false, notSetWords)
+    if (!fq) break
+    const ids = fieldPrintingIds(db, scope, fq, limit, within?.())
+    if (ids.length > 0) return { fq, ids }
+    first ??= { fq, ids }
+    if (!fq.setWords) break
+    for (const i of fq.setWords) notSetWords.add(i)
+  }
+  return first
 }
 
 /**

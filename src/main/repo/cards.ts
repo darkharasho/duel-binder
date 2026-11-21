@@ -21,7 +21,7 @@ import { pokemonNamedNumber, pokemonNumberMatch } from './pkmFilters'
 import { buildFtsQuery } from './fts'
 import { matchTerms } from './searchTerms'
 import { spellsName, termIds, termNarrowing } from './queryPrintings'
-import { fieldPrintingIds, parseFields } from './queryFields'
+import { fieldSearch } from './queryFields'
 import { termWords } from '../../shared/search/terms'
 import { nearNameWords } from './nearNames'
 
@@ -297,17 +297,10 @@ export function searchCards(
   let fieldRows: CardSearchResult[] = []
   const words = termWords(text)
   // A card row already spelling the whole query ("dark magician") is what was meant: no field rows.
-  const fq =
-    used < limit && !cardRows.some((r) => spellsName(words, r.name))
-      ? parseFields(db, scope, words)
-      : null
-  if (fq) {
+  if (used < limit && !cardRows.some((r) => spellsName(words, r.name))) {
     const room = limit - used
-    fieldRows = versionRows(
-      db,
-      take(fieldPrintingIds(db, scope, fq, room + versionIds.size), room),
-      scope
-    )
+    const hit = fieldSearch(db, scope, words, room + versionIds.size)
+    if (hit) fieldRows = versionRows(db, take(hit.ids, room), scope)
   }
   const found = [...termRows, ...cardRows, ...fieldRows]
   return found.length > 0 ? found : nearMissRows(db, text, limit, scope)

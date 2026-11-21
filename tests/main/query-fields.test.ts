@@ -1,8 +1,10 @@
 import type Database from 'better-sqlite3'
 import { openDatabase } from '../../src/main/db/database'
 import { LOCAL } from '../../src/main/repo/scope'
-import { fieldPrintingIds, parseFields } from '../../src/main/repo/queryFields'
+import { fieldPrintingIds, fieldSearch, parseFields } from '../../src/main/repo/queryFields'
 import { capParams, DO_MAX_PARAMS } from '../helpers/paramCap'
+import { queryPrintingIds } from '../../src/main/repo/queryPrintings'
+import { forgetSearchTerms } from '../../src/main/repo/searchTerms'
 
 let db: Database.Database
 const ids: Record<string, number> = {}
@@ -207,5 +209,68 @@ describe('the portal limit of 100 bound parameters', () => {
     } finally {
       cap.restore()
     }
+  })
+})
+
+describe('a set-name prefix counts only on the last word', () => {
+  test('"mew sir" is not the Mewtwo sets', () => {
+    set('Mewtwo Strikes Back', 'MSB', '1999-01-01')
+    const { fq, ids: got } = run(['mew', 'sir'])
+    expect(fq?.sets).toBeNull()
+    expect(got).toEqual([ids.paf232, ids.mew205])
+  })
+
+  test('a whole set word anywhere and a prefix at the end still count', () => {
+    expect(run(['trainer', 'gallery', 'charizard']).ids).toEqual([ids.tg])
+    expect(run(['charizard', 'trainer', 'gal']).ids).toEqual([ids.tg])
+    expect(parseFields(db, LOCAL, ['gal', 'charizard'])).toBeNull()
+  })
+})
+
+describe('a term beside a set code', () => {
+  const addTerm = (phrase: string, cardIds: number[]): void => {
+    db.prepare(
+      `INSERT INTO search_terms (game, phrase, phrase_key, kind, target_kind, target, status, source, created_at)
+       VALUES ('pkm', ?, ?, 'nickname', 'cards', ?, 'approved', 'owner', '2026-11-21')`
+    ).run(phrase, phrase, JSON.stringify({ cardIds }))
+    forgetSearchTerms(db)
+  }
+
+  test('"zard lor" narrows the term to that set code', () => {
+    printing('fst', 1, 'Fusion Strike', 'FST 009/264', 'Normal')
+    addTerm('zard', [1, 5])
+    expect(parseFields(db, LOCAL, ['lor'], true)?.codePrefix).toBe('lor')
+    expect(queryPrintingIds(db, LOCAL, 'zard lor')?.ids).toEqual([ids.lor, ids.tg])
+  })
+
+  test('"zard lor holofoil" narrows by code and rarity', () => {
+    printing('fst', 1, 'Fusion Strike', 'FST 009/264', 'Holofoil')
+    addTerm('zard', [1, 5])
+    expect(queryPrintingIds(db, LOCAL, 'zard lor holofoil')?.ids).toEqual([ids.tg])
+  })
+})
+
+describe('fieldSearch reads the set words again when the first reading finds nothing', () => {
+  test('"fusion gate strike": the Fusion Gate deck has no Fusion Gate, so Fusion Strike is the set', () => {
+    set('Fusion Gate Battle Deck', 'FGD', '2025-01-01')
+    const words = ['fusion', 'gate', 'strike']
+    expect(parseFields(db, LOCAL, words)?.sets).toEqual([
+      { language: 'en', setName: 'Fusion Gate Battle Deck' }
+    ])
+    const hit = fieldSearch(db, LOCAL, words, 10)
+    expect(hit?.fq.sets).toEqual([{ language: 'en', setName: 'Fusion Strike' }])
+    expect(hit?.fq.nameWords).toEqual(['fusion', 'gate'])
+    expect(hit?.ids).toEqual([ids.gate, ids.gateRh])
+  })
+
+  test('a first reading that finds rows is kept, and no field words give null', () => {
+    expect(fieldSearch(db, LOCAL, ['trainer', 'gallery', 'charizard'], 10)?.ids).toEqual([ids.tg])
+    expect(fieldSearch(db, LOCAL, ['dark', 'magician'], 10)).toBeNull()
+  })
+
+  test('nothing in any reading keeps the first, empty', () => {
+    const hit = fieldSearch(db, LOCAL, ['pikachu', 'fusion'], 10)
+    expect(hit?.fq.sets).toEqual([{ language: 'en', setName: 'Fusion Strike' }])
+    expect(hit?.ids).toEqual([])
   })
 })

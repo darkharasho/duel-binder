@@ -24,7 +24,7 @@ export const RARITY_ABBREVIATIONS: Record<GameId, Record<string, string>> = {
     qcse: 'Quarter Century Secret Rare',
     scr: 'Secret Rare',
     ur: 'Ultra Rare',
-    stpr: 'Starlight Rare'
+    str: 'Starlight Rare'
   },
   op: { sp: 'SP', sec: 'SEC' },
   mtg: {}

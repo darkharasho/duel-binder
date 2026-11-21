@@ -103,3 +103,18 @@ test('a set added later is recognised', () => {
   set('Crown Zenith', 'CRZ', '2023-01-20')
   expect(parseFields(db, LOCAL, ['crown', 'mew'])?.sets).toHaveLength(1)
 })
+
+test('ygo str means Starlight Rare and stpr means nothing', () => {
+  db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('active_game', 'ygo')").run()
+  db.prepare(
+    `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at, game)
+     VALUES (10, 'Dark Magician', 'Normal Monster', 'normal', 'Spellcaster', '', '2026-01-01', 'ygo')`
+  ).run()
+  db.prepare("INSERT INTO cards_fts (rowid, name) VALUES (10, 'Dark Magician')").run()
+  db.prepare(
+    `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, language, game)
+     VALUES (10, 'Some Set', 'SOME-EN001', 'Starlight Rare', 'en', 'ygo')`
+  ).run()
+  expect(parseFields(db, LOCAL, ['magician', 'str'])?.rarities).toEqual(['Starlight Rare'])
+  expect(parseFields(db, LOCAL, ['magician', 'stpr'])).toBeNull()
+})

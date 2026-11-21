@@ -2,7 +2,9 @@ import type { SqlDb } from '../db/sql'
 import type { BrowseCard, BrowseFacets, BrowseFilters, BrowsePage } from '../../shared/types'
 import { isLanguage, LANGUAGES, type Language } from '../../shared/languages'
 import { byGame, type GameId } from '../../shared/games'
-import { buildFtsQuery, escapeLike } from './cards'
+import { buildFtsQuery, escapeLike, printingArtImageId } from './cards'
+import { queryPrintingIds } from './queryPrintings'
+import { shownPrinting } from './shownPrinting'
 import { LOCAL, favouriteSql, scopeGame, type Scope } from './scope'
 import { pokemonFacets, pokemonSearch, pokemonWhere } from './pkmFilters'
 import { onePieceFacets, onePieceWhere, opRarityWhere, opVersionWhere } from './opFilters'
@@ -143,10 +145,12 @@ function cardPriceSql(
 const languageOf = (f: BrowseFilters): Language | undefined =>
   isLanguage(f.language) ? f.language : undefined
 
+/** The filters' WHERE; `withText` false leaves out the search text (version tiles match it apart). */
 function whereClause(
   db: SqlDb,
   f: BrowseFilters,
-  scope: Scope
+  scope: Scope,
+  withText = true
 ): { sql: string; params: unknown[] } {
   const where: string[] = [`+c.game = ${scope.game}`]
   const lang = inLanguage(languageOf(f), 'card_printings')
@@ -159,7 +163,7 @@ function whereClause(
   }
   const game = scopeGame(db, scope)
   const pkm = game === 'pkm'
-  const text = f.q?.trim()
+  const text = withText ? f.q?.trim() : undefined
   if (text) {
     const own = pkm ? pokemonSearch(text, { game: scope.game }) : null
     const parts: string[] = own ? [...own.parts] : []
@@ -307,9 +311,15 @@ export function browseCards(db: SqlDb, f: BrowseFilters, scope: Scope = LOCAL): 
   // Art and the default printing are looked up only for the page, after sorting and limiting. With
   // every language, an English printing is preselected over the rest. Only a flagged Pokémon
   // printing goes after the others; One Piece and Magic ones are listed like any (see shownPrinting).
-  const rows = db
-    .prepare(
-      `SELECT page.*,${pagePriced ? `\n         ${cardPriceSql(game, scope, language, 'page')} AS page_price,` : ''}
+  const pageRows = (
+    where: string,
+    whereParams: unknown[],
+    take: number,
+    skip: number
+  ): BrowseRow[] =>
+    db
+      .prepare(
+        `SELECT page.*,${pagePriced ? `\n         ${cardPriceSql(game, scope, language, 'page')} AS page_price,` : ''}
          COALESCE((SELECT image_id FROM card_images WHERE card_id = page.id AND +game = ${scope.game}
            ORDER BY sort_order, image_id LIMIT 1), page.id) AS image_id,
          (SELECT MIN(${SET_DATE}) FROM card_printings p
@@ -323,10 +333,31 @@ export function browseCards(db: SqlDb, f: BrowseFilters, scope: Scope = LOCAL): 
            WHERE p.card_id = page.id AND +p.game = ${scope.game}${inLanguage(language)} AND p.contributed = 0
            ORDER BY ${ofRarity}p.language <> 'en', p.game = 'pkm' AND p.missing_from_api = 1, ${SET_DATE} IS NULL, ${SET_DATE}, p.id
            LIMIT 1) AS default_printing_id
-       FROM (${base(scope, sortCol === SORT_SQL.released, language, basePrice)}${sql} ORDER BY ${sortCol} IS NULL, ${sortCol} ${dir}, c.name COLLATE NOCASE, c.id
+       FROM (${base(scope, sortCol === SORT_SQL.released, language, basePrice)}${where} ORDER BY ${sortCol} IS NULL, ${sortCol} ${dir}, c.name COLLATE NOCASE, c.id
          LIMIT ? OFFSET ?) page`
-    )
-    .all(...rarities, ...params, limit, offset) as BrowseRow[]
+      )
+      .all(...rarities, ...whereParams, take, skip) as BrowseRow[]
+  // Versions the query's terms and set, rarity or number words name go first, one tile each, then
+  // the card search as it has always been; the page runs across both.
+  const text = f.q?.trim()
+  const named = text ? queryPrintingIds(db, scope, text) : null
+  // The other filters, without the text: a version tile's card is found by its printing.
+  const nt = named?.ids.length ? whereClause(db, f, scope, false) : null
+  const focus = named && nt ? focusPrintings(db, named.ids, nt, scope, language) : []
+  const focusPage = focus.slice(offset, offset + limit)
+  const room = limit - focusPage.length
+  const rows = room > 0 ? pageRows(sql, params, room, Math.max(0, offset - focus.length)) : []
+  const focusCards = new Map<number, BrowseRow>()
+  if (focusPage.length > 0 && nt) {
+    const ids = [...new Set(focusPage.map((p) => p.card_id))]
+    for (const r of pageRows(
+      `${nt.sql} AND c.id IN (SELECT value FROM json_each(?))`,
+      [...nt.params, JSON.stringify(ids)],
+      ids.length,
+      0
+    ))
+      focusCards.set(r.id, r)
+  }
   const { n } = db
     .prepare(
       `SELECT count(*) AS n FROM cards c
@@ -337,32 +368,76 @@ export function browseCards(db: SqlDb, f: BrowseFilters, scope: Scope = LOCAL): 
     .get(...params) as { n: number }
   const magic =
     game === 'mtg'
-      ? magicLanguages(
-          db,
-          rows.map((r) => r.id)
-        )
+      ? magicLanguages(db, [...new Set([...focusCards.keys(), ...rows.map((r) => r.id)])])
       : null
-  return {
-    total: n,
-    cards: rows.map((r): BrowseCard => ({
-      id: r.id,
-      name: r.name,
-      type: r.type,
-      frameType: r.frame_type,
-      attribute: r.attribute,
-      race: r.race,
-      level: r.level,
-      linkval: r.linkval,
-      atk: r.atk,
-      def: r.def,
-      imageId: r.image_id,
-      price: pagePriced ? (r.page_price ?? null) : r.price,
-      releasedAt: r.released_at,
-      owned: r.owned,
-      defaultPrintingId: r.default_printing_id,
-      ...magic?.get(r.id)
-    }))
-  }
+  const toCard = (r: BrowseRow): BrowseCard => ({
+    id: r.id,
+    name: r.name,
+    type: r.type,
+    frameType: r.frame_type,
+    attribute: r.attribute,
+    race: r.race,
+    level: r.level,
+    linkval: r.linkval,
+    atk: r.atk,
+    def: r.def,
+    imageId: r.image_id,
+    price: pagePriced ? (r.page_price ?? null) : r.price,
+    releasedAt: r.released_at,
+    owned: r.owned,
+    defaultPrintingId: r.default_printing_id,
+    ...magic?.get(r.id)
+  })
+  const focusTiles = focusPage.flatMap((p): BrowseCard[] => {
+    const r = focusCards.get(p.card_id)
+    if (!r) return []
+    return [
+      {
+        ...toCard(r),
+        imageId: printingArtImageId(p) ?? r.image_id,
+        defaultPrintingId: p.id,
+        focusPrintingId: p.id,
+        focusLabel: p.set_code.replace(/:\S*/, '')
+      }
+    ]
+  })
+  return { total: focus.length + n, cards: [...focusTiles, ...rows.map(toCard)] }
+}
+
+/**
+ * The printings of `ids` (in that order) the card panel lists, in the language, whose card passes
+ * the other filters `where`.
+ */
+function focusPrintings(
+  db: SqlDb,
+  ids: number[],
+  where: { sql: string; params: unknown[] },
+  scope: Scope,
+  language: Language | undefined
+): FocusRow[] {
+  const { sql, params } = where
+  const rows = db
+    .prepare(
+      `SELECT p.id, p.card_id, p.language, p.set_code, p.set_rarity_code, p.contributed
+       FROM card_printings p JOIN cards c ON c.id = p.card_id
+       LEFT JOIN (SELECT p.card_id, SUM(e.quantity) AS n FROM collection_entries e
+         JOIN card_printings p ON p.id = e.printing_id AND +p.game = ${scope.game} WHERE ${scope.where('e')}
+         GROUP BY p.card_id) o ON o.card_id = c.id${sql}
+         AND p.id IN (SELECT value FROM json_each(?)) AND +p.game = ${scope.game}${inLanguage(language)}
+         AND ${shownPrinting(scope)}`
+    )
+    .all(...params, JSON.stringify(ids)) as FocusRow[]
+  const byId = new Map(rows.map((r) => [r.id, r]))
+  return ids.flatMap((id) => byId.get(id) ?? [])
+}
+
+interface FocusRow {
+  id: number
+  card_id: number
+  language: string
+  set_code: string
+  set_rarity_code: string
+  contributed: number
 }
 
 /**

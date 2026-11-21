@@ -19,7 +19,8 @@ import { shownPrinting } from './shownPrinting'
 import { LOCAL, scopeGame, type Scope } from './scope'
 import { pokemonNamedNumber, pokemonNumberMatch } from './pkmFilters'
 import { buildFtsQuery } from './fts'
-import { matchTerms, termPrintingIds } from './searchTerms'
+import { matchTerms } from './searchTerms'
+import { spellsName, termIds, termNarrowing } from './queryPrintings'
 import { fieldPrintingIds, parseFields } from './queryFields'
 import { termWords } from '../../shared/search/terms'
 import { nearNameWords } from './nearNames'
@@ -249,8 +250,6 @@ export const escapeLike = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\
 
 /** At most this many version rows per matched term; all term rows together take at most half. */
 const TERM_ROWS = 10
-/** How many of a term's printings a narrowing word is checked against. */
-const TERM_POOL = 500
 
 /**
  * Cards and versions a search finds: versions an approved term names first (narrowed by any set,
@@ -283,30 +282,12 @@ export function searchCards(
   const termRows: CardSearchResult[] = []
   if (matches.length > 0) {
     // Field words beside the term narrow it; with none, the leftover words narrow it by name.
-    const narrow =
-      rest.length === 0
-        ? null
-        : (parseFields(db, scope, rest, true) ?? {
-            sets: null,
-            rarities: null,
-            codePrefix: null,
-            number: null,
-            nameWords: rest
-          })
+    const narrow = termNarrowing(db, scope, rest)
     const termRoom = Math.ceil(limit / 2)
     for (const m of matches) {
       const room = Math.min(TERM_ROWS, termRoom - termRows.length)
       if (room <= 0) break
-      let ids = termPrintingIds(
-        db,
-        scope,
-        m.term.target,
-        narrow ? TERM_POOL : room + versionIds.size
-      )
-      if (narrow) {
-        const within = new Set(fieldPrintingIds(db, scope, narrow, TERM_POOL, ids))
-        ids = ids.filter((id) => within.has(id))
-      }
+      const ids = termIds(db, scope, m.term.target, narrow, room + versionIds.size)
       termRows.push(...versionRows(db, take(ids, room), scope, m.term.phrase))
     }
   }
@@ -343,15 +324,6 @@ function nearMissRows(db: SqlDb, text: string, limit: number, scope: Scope): Car
     limit,
     scopeGame(db, scope) === 'mtg'
   ).map((r) => ({ ...r, nearMiss: true as const }))
-}
-
-/** Whether every query word is a word of `name`, the last one maybe only its start. */
-function spellsName(words: string[], name: string): boolean {
-  if (words.length === 0) return false
-  const nameWords = termWords(name)
-  return words.every((w, i) =>
-    i === words.length - 1 ? nameWords.some((n) => n.startsWith(w)) : nameWords.includes(w)
-  )
 }
 
 /** The first `room` rows, or for Magic the rows of the first `room` names (its limit counts names). */

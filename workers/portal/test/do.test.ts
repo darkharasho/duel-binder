@@ -10,7 +10,8 @@ import { assignSweep, refreshSweepQueue } from '../src/sweep'
 import { assignPokemonSweep, refreshPokemonQueue } from '../src/pokemonSweep'
 import { readRollup, storeRollup } from '../../../src/main/repo/rollup'
 import { listSetNames, listSetsFast } from '../../../src/main/repo/sets'
-import { browseFacetsFast } from '../../../src/main/repo/browse'
+import { browseCards, browseFacetsFast } from '../../../src/main/repo/browse'
+import { addEntry, listEntries } from '../../../src/main/repo/collection'
 import { userScope } from '../src/scope'
 import { GAME_SET_INDEX } from '../src/catalogLoad'
 import { settleAllRollups } from '../src/rollups'
@@ -85,6 +86,43 @@ describe('Store Durable Object SQLite', () => {
     })
     expect(rows.term).toEqual(['bewd:LOB-001'])
     expect(rows.field).toEqual([':SDK-001'])
+  })
+
+  it('Browse version tiles and Collection field words run on DO SQLite', async () => {
+    const out = await inStore('focus', (db) => {
+      const scope = userScope(1, 'ygo')
+      db.exec(
+        "INSERT INTO users (id, discord_id, username, created_at, updated_at) VALUES (1, 'd1', 'one', 'x', 'x')"
+      )
+      insertCard(db, 89631139, 'Blue-Eyes White Dragon')
+      db.exec("INSERT INTO cards_fts(cards_fts) VALUES('rebuild')")
+      db.prepare(
+        "INSERT INTO card_images (image_id, game, card_id, sort_order) VALUES (89631139, 'ygo', 89631139, 0)"
+      ).run()
+      const printing = db.prepare(
+        `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, language) VALUES (89631139, ?, ?, ?, 'en')`
+      )
+      const lob = Number(
+        printing.run('Legend of Blue Eyes White Dragon', 'LOB-001', 'Ultra Rare').lastInsertRowid
+      )
+      const sdk = Number(printing.run('Starter Deck: Kaiba', 'SDK-001', 'Rare').lastInsertRowid)
+      const set = db.prepare(
+        "INSERT INTO sets (game, language, set_name, set_code) VALUES ('ygo', 'en', ?, ?)"
+      )
+      set.run('Legend of Blue Eyes White Dragon', 'LOB')
+      set.run('Starter Deck: Kaiba', 'SDK')
+      addEntry(db, { printingId: lob, imageId: 89631139, quantity: 1 }, new Date(), scope)
+      addEntry(db, { printingId: sdk, imageId: 89631139, quantity: 1 }, new Date(), scope)
+      const page = browseCards(db, { q: 'kaiba blue', sort: 'name', dir: 'asc' }, scope)
+      return {
+        tiles: page.cards.map((c) => c.focusLabel ?? c.name),
+        total: page.total,
+        copies: listEntries(db, { q: 'kaiba blue', sort: 'name', dir: 'asc' }, scope).map(
+          (e) => e.printing.setCode
+        )
+      }
+    })
+    expect(out).toEqual({ tiles: ['SDK-001'], total: 1, copies: ['SDK-001'] })
   })
 
   it('nested transaction rolls back as one unit', async () => {

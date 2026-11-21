@@ -269,9 +269,18 @@ describe('per-game filters and facets', () => {
           expect(found('102/128')).toEqual([])
         })
 
+        const foundTiles = (q: string): string[] =>
+          browseCards(db, { ...BROWSE, q }).cards.map((c) =>
+            c.focusLabel ? `${c.name} @${c.focusLabel}` : c.name
+          )
+
         it('is found by its name or set code and its number', () => {
           for (const q of ['Victini 102', 'victini 102', 'MEP 102', 'mep 102']) {
-            expect(found(q)).toEqual(['Victini'])
+            // A name and a number name the MEP 102 version too: its tile comes before the card's,
+            // as in Add Card ("MEP" is no set here, so the code alone adds none).
+            expect(foundTiles(q)).toEqual(
+              /victini/i.test(q) ? ['Victini @MEP 102', 'Victini'] : ['Victini']
+            )
             expect(searchedCodes(q)).toEqual(['Victini MEP 102'])
           }
           expect(searchedCodes('Victini 13')).toEqual(['Victini 30C 013/128'])

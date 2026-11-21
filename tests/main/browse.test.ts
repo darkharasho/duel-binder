@@ -265,3 +265,84 @@ describe('browseFacets', () => {
     expect(f.rarities).toEqual(['Rare', 'Ultra Rare'])
   })
 })
+
+describe('browseCards with set, rarity and code words', () => {
+  const BY_NAME = { sort: 'name', dir: 'asc' } as const
+  const charizard = pokemonId('test/charizard')
+
+  /** Charizard in Lost Origin (LOR 020) and its Trainer Gallery (TG03), plus Pikachu. */
+  async function lostOriginDb(): Promise<{ db: Database.Database; lor: number; tg: number }> {
+    const db = await seededDb()
+    seedPokemon(db)
+    db.prepare("INSERT INTO meta (key, value) VALUES ('active_game', 'pkm')").run()
+    db.prepare(
+      `INSERT INTO cards (id, game, name, type, frame_type, race, "desc", updated_at)
+       VALUES (?, 'pkm', 'Charizard', 'Pokémon', 'pokemon', 'Stage 2', '', '2026-11-21')`
+    ).run(charizard)
+    db.prepare(
+      "INSERT INTO card_images (image_id, game, card_id, sort_order) VALUES (?, 'pkm', ?, 0)"
+    ).run(charizard, charizard)
+    const set = db.prepare(
+      "INSERT INTO sets (game, language, set_name, set_code, tcg_date) VALUES ('pkm', 'en', ?, ?, '2022-09-09')"
+    )
+    set.run('Lost Origin', 'LOR')
+    set.run('Lost Origin Trainer Gallery', 'LOR:TG')
+    const printing = db.prepare(
+      `INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity)
+       VALUES ('pkm', ?, 'en', ?, ?, ?)`
+    )
+    const lor = Number(
+      printing.run(charizard, 'Lost Origin', 'LOR 020/196', 'Rare').lastInsertRowid
+    )
+    const tg = Number(
+      printing.run(charizard, 'Lost Origin Trainer Gallery', 'LOR:TG TG03/30', 'Rare Holo')
+        .lastInsertRowid
+    )
+    db.exec("INSERT INTO cards_fts(cards_fts) VALUES('rebuild')")
+    return { db, lor, tg }
+  }
+
+  it('lists the version set words name first, as its own tile', async () => {
+    const { db, tg } = await lostOriginDb()
+    const page = browseCards(db, { ...BY_NAME, q: 'trainer gallery charizard' })
+    expect(page.cards[0]).toMatchObject({
+      id: charizard,
+      name: 'Charizard',
+      imageId: charizard,
+      defaultPrintingId: tg,
+      focusPrintingId: tg,
+      focusLabel: 'LOR TG03/30'
+    })
+    expect(page.total).toBe(page.cards.length)
+  })
+
+  it('leaves a plain name search as it was', async () => {
+    const { db } = await lostOriginDb()
+    const page = browseCards(db, { ...BY_NAME, q: 'charizard' })
+    expect(page.total).toBe(1)
+    expect(page.cards).toHaveLength(1)
+    expect(page.cards[0].name).toBe('Charizard')
+    expect(page.cards[0]).not.toHaveProperty('focusPrintingId')
+    expect(page.cards[0]).not.toHaveProperty('focusLabel')
+  })
+
+  it('counts version tiles in the total and pages through them before the card tiles', async () => {
+    const { db, lor } = await lostOriginDb()
+    // "lor 020" names LOR 020 by code and number; its set code also matches the card search.
+    const tiles = (offset: number, limit: number) =>
+      browseCards(db, { ...BY_NAME, q: 'lor 020', offset, limit }).cards.map(
+        (c) => c.focusPrintingId ?? c.name
+      )
+    expect(browseCards(db, { ...BY_NAME, q: 'lor 020' }).total).toBe(2)
+    expect(tiles(0, 10)).toEqual([lor, 'Charizard'])
+    expect(tiles(0, 1)).toEqual([lor])
+    expect(tiles(1, 1)).toEqual(['Charizard'])
+    expect(tiles(2, 1)).toEqual([])
+  })
+
+  it('keeps other filters on version tiles', async () => {
+    const { db } = await lostOriginDb()
+    const page = browseCards(db, { ...BY_NAME, q: 'trainer gallery charizard', owned: 'owned' })
+    expect(page).toEqual({ total: 0, cards: [] })
+  })
+})

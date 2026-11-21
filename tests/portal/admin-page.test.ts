@@ -30,6 +30,18 @@ describe('admin page', () => {
     expect(html).toContain('of 12')
   })
 
+  it('has a Terms tab', async () => {
+    const html = await adminPage().text()
+    expect(html).toContain('href="#terms"')
+    expect(html).toContain('id="terms"')
+    expect(html).toContain("'/admin/terms?status='")
+    expect(html).toContain("'/admin/terms/decide'")
+    expect(html).toContain("'/admin/terms/add'")
+    expect(html).toContain('actions/workflows/terms.yml')
+    // Phrases and eBay titles are set as text only.
+    expect(html).not.toMatch(/innerHTML/)
+  })
+
   it('has a Photos tab', async () => {
     const html = await adminPage().text()
     expect(html).toContain('href="#photos"')

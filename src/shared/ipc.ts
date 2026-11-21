@@ -7,6 +7,8 @@ import type {
   AdminSkippedSignIn,
   AdminStats,
   AdminBeta,
+  AdminTerm,
+  AdminTermFields,
   AdminTester,
   AdminTesterBy,
   AdminWorkflow,
@@ -80,7 +82,7 @@ import type { Prefs } from './prefs'
 import type { SupporterPlan, SupporterStatus } from './supporter'
 import type { BinderDraft, BinderEditAction, BinderTarget, RuleField } from './binders'
 import type { GradedCopy, GradedDraft } from './graded'
-import type { TermNote } from './search/terms'
+import type { TermNote, TermStatus } from './search/terms'
 
 /** The API exposed to the renderer as `window.api`. */
 export interface Api {
@@ -390,6 +392,12 @@ export interface Api {
     decideBeta(id: number, status: 'added' | 'declined'): Promise<{ emailed: boolean }>
     /** Deletes a request for good. */
     deleteBeta(id: number): Promise<void>
+    /** A game's community search terms with one status (newest first). */
+    terms(game: GameId, status: TermStatus): Promise<AdminTerm[]>
+    /** Approves or rejects a term, with edited fields when given; rejects with a readable message on a phrase clash. */
+    decideTerm(id: number, status: 'approved' | 'rejected', edit?: AdminTermFields): Promise<void>
+    /** Adds an approved term; rejects with a readable message when the phrase is taken. */
+    addTerm(game: GameId, term: AdminTermFields): Promise<void>
     /**
      * Rip capture: saves a key frame picked from a live pack opening under the app's data folder
      * (`rip-capture/<session>/<name>`, names as `RIP_SESSION` / `RIP_FRAME` in main); its path.
@@ -668,6 +676,9 @@ export const INVOKE_CHANNELS = [
   'admin:beta',
   'admin:decideBeta',
   'admin:deleteBeta',
+  'admin:terms',
+  'admin:decideTerm',
+  'admin:addTerm',
   'admin:captureSave',
   'admin:captureRemove',
   'admin:captureNote',

@@ -27,7 +27,7 @@ function localCards(db: SqlDb, scope: Scope, ids: number[]): { id: number; name:
   return ids.flatMap((id) => byId.get(id) ?? [])
 }
 
-function labelOf(db: SqlDb, scope: Scope, term: SearchTerm): string | null {
+export function labelOf(db: SqlDb, scope: Scope, term: SearchTerm): string | null {
   const t = term.target
   switch (term.targetKind) {
     case 'printing': {

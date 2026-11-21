@@ -7,6 +7,7 @@ import { adminRoute } from './catalogLoad'
 import type { CostMeter } from './meter'
 import { adminMergeRoute } from './merge'
 import { adminTestersRoute } from './testers'
+import { adminTermsRoute } from './searchTerms'
 import { adminBetaRoute, betaSubmitRoute } from './beta'
 import { adminAdminsRoute } from './admins'
 import { rpcRoute } from './rpc'
@@ -186,6 +187,8 @@ async function route(req: Request, deps: AppDeps): Promise<Response> {
     return adminTestersRoute(req, deps)
   if (url.pathname === '/admin/beta' || url.pathname.startsWith('/admin/beta/'))
     return adminBetaRoute(req, deps)
+  if (url.pathname === '/admin/terms' || url.pathname.startsWith('/admin/terms/'))
+    return adminTermsRoute(req, deps)
   if (url.pathname === '/admin/training' || url.pathname.startsWith('/admin/training/'))
     return adminTrainingRoute(req, deps)
   if (url.pathname === '/admin/supporters') return adminSupportersRoute(req, deps)

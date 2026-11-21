@@ -58,3 +58,17 @@ export function termKey(s: string): string {
 export function termWords(s: string): string[] {
   return termKey(s).split(' ').filter(Boolean)
 }
+
+/** A term as the portal feed sends it. */
+export type WireTerm = Pick<
+  SearchTerm,
+  'id' | 'game' | 'phrase' | 'phraseKey' | 'kind' | 'targetKind' | 'target' | 'seq'
+>
+
+/** GET /api/sync/search-terms: terms approved after `since`, ids that left approved, next cursor. */
+export interface TermFeed {
+  terms: WireTerm[]
+  deleted: number[]
+  cursor: number
+  more: boolean
+}

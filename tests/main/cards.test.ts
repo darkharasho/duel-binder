@@ -272,6 +272,24 @@ describe('version rows', () => {
     }
   })
 
+  test('no field rows when a card row spells every word', () => {
+    set('Dark Beginning 1', 'DB1', '2004-01-01')
+    card(5, 'Dark Magician')
+    printing('db1', 5, 'Dark Beginning 1', 'DB1-EN101', 'Rare')
+    expect(brief(searchCards(vdb, 'dark magician'))).toEqual(['Dark Magician'])
+    expect(brief(searchCards(vdb, 'dark magic'))).toEqual(['Dark Magician'])
+    expect(brief(searchCards(vdb, 'trainer gallery charizard'))).toEqual([`v${p.tg}`])
+    expect(brief(searchCards(vdb, 'mew sir'))).toEqual([`v${p.paf232}`])
+  })
+
+  test('name words beside a term narrow its versions', () => {
+    card(6, 'Pikachu V')
+    printing('tgpika', 6, 'Lost Origin Trainer Gallery', 'LOR:TG TG05/30', 'Rare Holo')
+    term('tg', { sets: [{ language: 'en', setName: 'Lost Origin Trainer Gallery' }] })
+    expect(brief(searchCards(vdb, 'tg charizard'))).toEqual([`v${p.tg}:tg`])
+    expect(brief(searchCards(vdb, 'tg'))).toEqual([`v${p.tg}:tg`, `v${p.tgpika}:tg`])
+  })
+
   test('a version row shows the art the card panel shows for it', () => {
     const { cardIds, printingIds } = seedOnePiece(vdb)
     vdb

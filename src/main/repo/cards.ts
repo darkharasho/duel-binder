@@ -281,7 +281,17 @@ export function searchCards(
   const { matches, rest } = matchTerms(db, scope, text)
   const termRows: CardSearchResult[] = []
   if (matches.length > 0) {
-    const narrow = rest.length > 0 ? parseFields(db, scope, rest, true) : null
+    // Field words beside the term narrow it; with none, the leftover words narrow it by name.
+    const narrow =
+      rest.length === 0
+        ? null
+        : (parseFields(db, scope, rest, true) ?? {
+            sets: null,
+            rarities: null,
+            codePrefix: null,
+            number: null,
+            nameWords: rest
+          })
     const termRoom = Math.ceil(limit / 2)
     for (const m of matches) {
       const room = Math.min(TERM_ROWS, termRoom - termRows.length)
@@ -303,7 +313,12 @@ export function searchCards(
   const cardRows = capRows(searchCardRows(db, text, limit, scope), limit - termRows.length, mtg)
   const used = termRows.length + (mtg ? new Set(cardRows.map((r) => r.name)).size : cardRows.length)
   let fieldRows: CardSearchResult[] = []
-  const fq = used < limit ? parseFields(db, scope, termWords(text)) : null
+  const words = termWords(text)
+  // A card row already spelling the whole query ("dark magician") is what was meant: no field rows.
+  const fq =
+    used < limit && !cardRows.some((r) => spellsName(words, r.name))
+      ? parseFields(db, scope, words)
+      : null
   if (fq) {
     const room = limit - used
     fieldRows = versionRows(
@@ -313,6 +328,15 @@ export function searchCards(
     )
   }
   return [...termRows, ...cardRows, ...fieldRows]
+}
+
+/** Whether every query word is a word of `name`, the last one maybe only its start. */
+function spellsName(words: string[], name: string): boolean {
+  if (words.length === 0) return false
+  const nameWords = termWords(name)
+  return words.every((w, i) =>
+    i === words.length - 1 ? nameWords.some((n) => n.startsWith(w)) : nameWords.includes(w)
+  )
 }
 
 /** The first `room` rows, or for Magic the rows of the first `room` names (its limit counts names). */

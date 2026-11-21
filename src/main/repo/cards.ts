@@ -22,6 +22,7 @@ import { buildFtsQuery } from './fts'
 import { matchTerms, termPrintingIds } from './searchTerms'
 import { fieldPrintingIds, parseFields } from './queryFields'
 import { termWords } from '../../shared/search/terms'
+import { nearNameWords } from './nearNames'
 
 export { buildFtsQuery }
 
@@ -327,7 +328,21 @@ export function searchCards(
       scope
     )
   }
-  return [...termRows, ...cardRows, ...fieldRows]
+  const found = [...termRows, ...cardRows, ...fieldRows]
+  return found.length > 0 ? found : nearMissRows(db, text, limit, scope)
+}
+
+/** Nothing matched: retry with each unknown name word swapped for its closest spelling. */
+function nearMissRows(db: SqlDb, text: string, limit: number, scope: Scope): CardSearchResult[] {
+  const words = termWords(text)
+  const near = words.map((w) => nearNameWords(db, w, 1)[0])
+  if (near.every((n) => n === undefined)) return []
+  const fixed = words.map((w, i) => near[i] ?? w).join(' ')
+  return capRows(
+    searchCardRows(db, fixed, limit, scope),
+    limit,
+    scopeGame(db, scope) === 'mtg'
+  ).map((r) => ({ ...r, nearMiss: true as const }))
 }
 
 /** Whether every query word is a word of `name`, the last one maybe only its start. */

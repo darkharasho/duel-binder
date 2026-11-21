@@ -50,6 +50,15 @@ describe('Store Durable Object SQLite', () => {
     expect(hits.map((h) => h.id)).toContain(89631139)
   })
 
+  it('a misspelt name returns nearMiss rows through DO SQLite vocab', async () => {
+    const rows = await inStore('near-miss', (db) => {
+      insertCard(db, 89631139, 'Blue-Eyes White Dragon')
+      db.exec("INSERT INTO cards_fts(cards_fts) VALUES('rebuild')")
+      return searchCards(db, 'blue-eyse white dragon', 20, userScope(1, 'ygo'))
+    })
+    expect(rows.map((r) => [r.id, r.nearMiss])).toEqual([[89631139, true]])
+  })
+
   it('version rows for terms and field words', async () => {
     const rows = await inStore('versions', (db) => {
       insertCard(db, 89631139, 'Blue-Eyes White Dragon')

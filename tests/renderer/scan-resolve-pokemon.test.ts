@@ -301,6 +301,34 @@ describe('resolvePokemonSignals', () => {
     expect(await resolveSignals(signals, ctx(`CLC ${number}/999`))).toEqual({ kind: 'unsure' })
   })
 
+  it("a read of a card's own total with a misread number still tells it from twins of other totals", async () => {
+    const ctx = (codes: string[]): ResolveContext => ({
+      ...pkm('en'),
+      lookups: {
+        ...lookups,
+        printingsForCards: async (ids) =>
+          PKM.filter((p) => ids.includes(p.cardId)).map((p) =>
+            p.cardId === 1 ? { ...p, unseenTwin: true as const, unseenTwinCodes: codes } : p
+          )
+      }
+    })
+    const own = PKM.find((p) => p.cardId === 1 && p.language === 'en')!.setCode
+    const [number, total] = own.split(' ').at(-1)!.split('/')
+    // Perfect Order's Potion 083/088 read "PED 03/088"; its twins are Trainer Kit and My First
+    // Battle Potions, numbered of 30 and of 48.
+    const signals = raw({
+      art: [twins[0]],
+      codeTexts: [`PED ${number.slice(0, 1)}${number.slice(2)}/${total}`]
+    })
+    expect(await recognized(signals, ctx(['TK5E 15/30', 'MFB 33/48']))).toMatchObject({
+      cardId: 1
+    })
+    // A twin of the same total could be the card read.
+    expect(await resolveSignals(signals, ctx(['TK5E 15/30', `X 100/${total}`]))).toEqual({
+      kind: 'unsure'
+    })
+  })
+
   it('a twin whose product photo is other art does not stop a card', async () => {
     const ctx = (distance: number): ResolveContext => ({
       ...pkm('en'),

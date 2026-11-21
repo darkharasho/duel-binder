@@ -281,6 +281,24 @@ function readsOwnNumber(raw: RawSignals, code: string, twinCodes: string[]): boo
   return read.has(bare(own)) && ![...twins].some((n) => read.has(n))
 }
 
+/**
+ * Whether a number read shows code's total, its number misread ("PED 03/088" for POR 083/088),
+ * and no twin of twinCodes prints that total or has its number read: Trainer Kit and My First
+ * Battle reprints are numbered of 30 or 48. Never when a twin prints the same total.
+ */
+function readsOwnTotal(raw: RawSignals, code: string, twinCodes: string[]): boolean {
+  const own = numberOfCode(code)?.total
+  if (!own) return false
+  const twins = twinCodes.flatMap((c) => numberOfCode(c) ?? [])
+  if (twins.some((t) => t.total === null || bare(t.total) === bare(own))) return false
+  const reads = raw.codeTexts.flatMap((t) => collectorNumberCandidates(t))
+  const twinNumbers = new Set(twins.map((t) => bare(t.number)))
+  return (
+    reads.some((n) => n.total !== null && bare(n.total) === bare(own)) &&
+    !reads.some((n) => twinNumbers.has(bare(n.number)))
+  )
+}
+
 /** Printed rarities, lowercased, that are mostly not foil. Any other rarity is a holo. */
 const PLAIN_RARITIES = new Set(['common', 'uncommon', 'rare', 'promo', 'none'])
 
@@ -506,6 +524,8 @@ export async function resolvePokemonSignals(
     // A read of the card's own number tells it from twins of other numbers, though its total is
     // misread ("003/903" for 003/103) and so finds no printing.
     if (p.unseenTwinCodes?.length && readsOwnNumber(raw, p.setCode, p.unseenTwinCodes)) return false
+    // So does a read of its own total, its number misread, when no twin prints that total.
+    if (p.unseenTwinCodes?.length && readsOwnTotal(raw, p.setCode, p.unseenTwinCodes)) return false
     const twins = p.unseenTwinImages ?? []
     if (!ctx.artDistance || !twins.length || twins.length < new Set(p.unseenTwinCodes).size)
       return 'yes'

@@ -11,5 +11,8 @@ describe('termKey / termWords', () => {
     expect(termKey('232/091')).toBe('232 091')
     expect(termWords('Bubble Mew!')).toEqual(['bubble', 'mew'])
     expect(termKey('!!!')).toBe('')
+    expect(termKey('ガブリエル')).toBe('ガブリエル')
+    expect(termKey('R&D')).toBe('r and d')
+    expect(termWords('')).toEqual([])
   })
 })

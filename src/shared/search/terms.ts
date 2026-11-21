@@ -39,14 +39,19 @@ export interface TermNote {
   label: string
 }
 
-/** Canonical form used to compare phrases: accent-free, lowercase, words separated by single spaces. */
+/**
+ * Canonical form used to compare phrases: accent-free, lowercase, words separated by single spaces.
+ * Only Latin combining diacritics are stripped, so Japanese voicing marks (ガ = カ + U+3099) survive
+ * and are recomposed by NFC.
+ */
 export function termKey(s: string): string {
   return s
     .normalize('NFKD')
-    .replace(/\p{M}+/gu, '')
+    .replace(/[\u0300-\u036F]+/g, '')
+    .normalize('NFC')
     .toLowerCase()
     .replace(/&/g, ' and ')
-    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/[^\p{L}\p{N}\p{M}]+/gu, ' ')
     .trim()
 }
 

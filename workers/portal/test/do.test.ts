@@ -50,6 +50,34 @@ describe('Store Durable Object SQLite', () => {
     expect(hits.map((h) => h.id)).toContain(89631139)
   })
 
+  it('version rows for terms and field words', async () => {
+    const rows = await inStore('versions', (db) => {
+      insertCard(db, 89631139, 'Blue-Eyes White Dragon')
+      db.exec("INSERT INTO cards_fts(cards_fts) VALUES('rebuild')")
+      const printing = db.prepare(
+        `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, language) VALUES (89631139, ?, ?, ?, 'en')`
+      )
+      printing.run('Legend of Blue Eyes White Dragon', 'LOB-001', 'Ultra Rare')
+      printing.run('Starter Deck: Kaiba', 'SDK-001', 'Rare')
+      const set = db.prepare(
+        "INSERT INTO sets (game, language, set_name, set_code) VALUES ('ygo', 'en', ?, ?)"
+      )
+      set.run('Legend of Blue Eyes White Dragon', 'LOB')
+      set.run('Starter Deck: Kaiba', 'SDK')
+      db.prepare(
+        `INSERT INTO search_terms (game, phrase, phrase_key, kind, target_kind, target, status, source, created_at)
+         VALUES ('ygo', 'bewd', 'bewd', 'nickname', 'card', '{"cardIds":[89631139]}', 'approved', 'owner', '2026-11-21')`
+      ).run()
+      const brief = (q: string): string[] =>
+        searchCards(db, q, 20, userScope(1, 'ygo')).map((r) =>
+          r.printingId ? `${r.term ?? ''}:${r.setCode}` : r.name
+        )
+      return { term: brief('bewd ultra rare'), field: brief('kaiba blue') }
+    })
+    expect(rows.term).toEqual(['bewd:LOB-001'])
+    expect(rows.field).toEqual([':SDK-001'])
+  })
+
   it('nested transaction rolls back as one unit', async () => {
     const ids = await inStore('nested', (db) => {
       const outer = db.transaction(() => {
@@ -92,8 +120,11 @@ describe('Store Durable Object SQLite', () => {
           VALUES (1, 1, 'a', 7, 1, 1, 'x', 'x', 5);
       `)
       const seq = (): number =>
-        (db.prepare('SELECT server_seq FROM collection_entries WHERE id = 1').get() as { server_seq: number })
-          .server_seq
+        (
+          db.prepare('SELECT server_seq FROM collection_entries WHERE id = 1').get() as {
+            server_seq: number
+          }
+        ).server_seq
       const before = seq()
       db.prepare(
         'UPDATE collection_entries SET server_seq = (SELECT COALESCE(MAX(server_seq), 0) + 1 FROM collection_entries) WHERE id = ?'
@@ -114,8 +145,9 @@ describe('Store Durable Object SQLite', () => {
         INSERT INTO collection_entries (id, user_id, uid, printing_id, image_id, quantity, created_at, updated_at, server_seq)
           VALUES (1, 1, 'a', 8, 1, 1, 'x', 'x', 1);
       `)
-      const pkey = (db.prepare('SELECT pkey FROM card_printings WHERE id = 7').get() as { pkey: string })
-        .pkey
+      const pkey = (
+        db.prepare('SELECT pkey FROM card_printings WHERE id = 7').get() as { pkey: string }
+      ).pkey
       const now = new Date('2026-10-24T12:00:00.000Z')
       const first = requestPrices(db, 1, [pkey], now)
       const again = requestPrices(db, 1, [pkey], now)
@@ -155,7 +187,10 @@ describe('Store Durable Object SQLite', () => {
         'ja',
         {
           codes: {
-            'CORI-JP001': { all: { price: 9, listingCount: 4 }, byRarity: { 'Ultra Rare': { price: 7, listingCount: 3 } } },
+            'CORI-JP001': {
+              all: { price: 9, listingCount: 4 },
+              byRarity: { 'Ultra Rare': { price: 7, listingCount: 3 } }
+            },
             'CORI-JP002': { all: { price: 1, listingCount: 2 }, byRarity: {} }
           },
           calls: 2,
@@ -163,7 +198,9 @@ describe('Store Durable Object SQLite', () => {
         },
         now
       )
-      const prices = db.prepare('SELECT price, price_seq FROM intl_prices ORDER BY price').all() as { price: number; price_seq: number }[]
+      const prices = db
+        .prepare('SELECT price, price_seq FROM intl_prices ORDER BY price')
+        .all() as { price: number; price_seq: number }[]
       const sweep = db.prepare('SELECT key, language, swept_at, calls FROM price_sweeps').all()
       return { listed, again, res, prices, sweep }
     })
@@ -172,7 +209,9 @@ describe('Store Durable Object SQLite', () => {
     expect(out.res).toEqual({ priced: 2, skipped: 1 })
     expect(out.prices.map((p) => p.price)).toEqual([1, 7])
     expect(out.prices.every((p) => p.price_seq > 0)).toBe(true)
-    expect(out.sweep).toEqual([{ key: 'CORI-JP', language: 'ja', swept_at: '2026-10-28T12:00:00.000Z', calls: 2 }])
+    expect(out.sweep).toEqual([
+      { key: 'CORI-JP', language: 'ja', swept_at: '2026-10-28T12:00:00.000Z', calls: 2 }
+    ])
   })
 
   it('the Pokémon sweep queue and assignment run on DO SQLite', async () => {
@@ -191,7 +230,11 @@ describe('Store Durable Object SQLite', () => {
         'CS3aC',
         'zh-hans',
         {
-          items: [2, 3, 4].map((price, i) => ({ title: 'Chinese Blipbug 017/122 CS3a', price, seller: `s${i}` })),
+          items: [2, 3, 4].map((price, i) => ({
+            title: 'Chinese Blipbug 017/122 CS3a',
+            price,
+            seller: `s${i}`
+          })),
           calls: 1,
           checkedAt: now.toISOString()
         },
@@ -206,15 +249,22 @@ describe('Store Durable Object SQLite', () => {
   it('a rollup over the 2 MB row cap is stored in pieces and read back on DO SQLite', async () => {
     // Yu-Gi-Oh!'s Sets list is about 2.2 MB of JSON; production DO SQLite refuses a row that size
     // (local workerd doesn't enforce the cap, so this checks the pieces, not the refusal).
-    const big = Array.from({ length: 12_000 }, (_, i) => ({ setName: `Set ${i} 日本語`, pad: 'x'.repeat(160) }))
+    const big = Array.from({ length: 12_000 }, (_, i) => ({
+      setName: `Set ${i} 日本語`,
+      pad: 'x'.repeat(160)
+    }))
     const result = await inStore('rollup-pieces', (db) => {
       storeRollup(db, 'big', 'ygo', big)
       const back = readRollup<typeof big>(db, 'big')
-      const rows = (db.prepare('SELECT COUNT(*) AS n FROM catalog_rollups').get() as { n: number }).n
+      const rows = (db.prepare('SELECT COUNT(*) AS n FROM catalog_rollups').get() as { n: number })
+        .n
       // A Yu-Gi-Oh! catalog change, settled (its upload finished), drops every piece.
-      db.prepare("INSERT INTO sets (game, language, set_name, set_code) VALUES ('ygo', 'en', 'S', 'S')").run()
+      db.prepare(
+        "INSERT INTO sets (game, language, set_name, set_code) VALUES ('ygo', 'en', 'S', 'S')"
+      ).run()
       settleAllRollups(db, new Date())
-      const left = (db.prepare('SELECT COUNT(*) AS n FROM catalog_rollups').get() as { n: number }).n
+      const left = (db.prepare('SELECT COUNT(*) AS n FROM catalog_rollups').get() as { n: number })
+        .n
       return { same: JSON.stringify(back) === JSON.stringify(big), rows, left }
     })
     expect(result.same).toBe(true)
@@ -234,13 +284,15 @@ describe('Store Durable Object SQLite', () => {
       const sets = listSetsFast(db, scope)
       const names = listSetNames(db, scope)
       const facets = browseFacetsFast(db, scope)
-      const stored = (db.prepare('SELECT key FROM catalog_rollups ORDER BY key').all() as { key: string }[]).map(
-        (r) => r.key
-      )
+      const stored = (
+        db.prepare('SELECT key FROM catalog_rollups ORDER BY key').all() as { key: string }[]
+      ).map((r) => r.key)
       return { sets: sets.map((s) => s.setCode), names, facetSets: facets.setNames, stored }
     })
     expect(out.sets).toEqual(['LOB'])
-    expect(out.names).toEqual([{ language: 'en', setName: 'Legend of Blue Eyes White Dragon', setCode: 'LOB' }])
+    expect(out.names).toEqual([
+      { language: 'en', setName: 'Legend of Blue Eyes White Dragon', setCode: 'LOB' }
+    ])
     expect(out.facetSets).toEqual(['Legend of Blue Eyes White Dragon'])
     expect(out.stored.length).toBe(3)
   })

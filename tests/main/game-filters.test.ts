@@ -256,8 +256,11 @@ describe('per-game filters and facets', () => {
           db.exec(`INSERT INTO cards_fts(cards_fts) VALUES('rebuild')`)
         })
 
+        // Card rows only: field words ("102") may add version rows after them.
         const searchedCodes = (q: string): string[] =>
-          searchCards(db, q).map((r) => `${r.name} ${r.matchedSetCode}`)
+          searchCards(db, q)
+            .filter((r) => r.printingId === undefined)
+            .map((r) => `${r.name} ${r.matchedSetCode}`)
 
         it('is found by its number', () => {
           expect(found('102')).toEqual(['Victini'])

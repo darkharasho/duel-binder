@@ -55,7 +55,7 @@ function fieldLists(db: SqlDb, scope: Scope, game: GameId): FieldLists {
   const hit = byGame.get(game)
   if (hit && hit.stamp === stamp) return hit
   const setRows = db
-    .prepare(`SELECT language, set_name, set_code FROM sets WHERE game = ${scope.game}`)
+    .prepare(`SELECT language, set_name, set_code FROM sets WHERE +game = ${scope.game}`)
     .all() as { language: string; set_name: string; set_code: string }[]
   const codes = new Set<string>()
   for (const r of setRows) {
@@ -208,11 +208,22 @@ export function parseFields(
 
 /**
  * Printing ids whose card matches `fq.nameWords` (any card when empty) and that pass every field
- * constraint, newest set first, cut at `limit`.
+ * constraint, newest set first, cut at `limit`. `within` keeps only those ids (a term's printings).
  */
-export function fieldPrintingIds(db: SqlDb, scope: Scope, fq: FieldQuery, limit: number): number[] {
+export function fieldPrintingIds(
+  db: SqlDb,
+  scope: Scope,
+  fq: FieldQuery,
+  limit: number,
+  within?: number[]
+): number[] {
   const conds: string[] = []
   const params: unknown[] = []
+  if (within) {
+    // One JSON parameter, not one per id: the portal's SQLite caps bound parameters.
+    conds.push('p.id IN (SELECT value FROM json_each(?))')
+    params.push(JSON.stringify(within))
+  }
   const fts = buildFtsQuery(fq.nameWords.join(' '))
   if (fq.sets && fq.sets.length > 0) {
     conds.push(`(p.language, p.set_name) IN (VALUES ${fq.sets.map(() => '(?, ?)').join(', ')})`)

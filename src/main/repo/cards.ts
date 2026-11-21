@@ -19,6 +19,9 @@ import { shownPrinting } from './shownPrinting'
 import { LOCAL, scopeGame, type Scope } from './scope'
 import { pokemonNamedNumber, pokemonNumberMatch } from './pkmFilters'
 import { buildFtsQuery } from './fts'
+import { matchTerms, termPrintingIds } from './searchTerms'
+import { fieldPrintingIds, parseFields } from './queryFields'
+import { termWords } from '../../shared/search/terms'
 
 export { buildFtsQuery }
 
@@ -243,6 +246,17 @@ const NAME_POOL = 300
 
 export const escapeLike = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\${c}`)
 
+/** At most this many version rows per matched term; all term rows together take at most half. */
+const TERM_ROWS = 10
+/** How many of a term's printings a narrowing word is checked against. */
+const TERM_POOL = 500
+
+/**
+ * Cards and versions a search finds: versions an approved term names first (narrowed by any set,
+ * rarity, code or number words beside it), then the name search's card rows exactly as they have
+ * always been, then versions the query's field words name ("trainer gallery charizard"). A version
+ * row is a card row with `printingId` set; it never stands in for a card row. All within `limit`.
+ */
 export function searchCards(
   db: SqlDb,
   q: string,
@@ -251,6 +265,115 @@ export function searchCards(
 ): CardSearchResult[] {
   const text = q.trim()
   if (!text) return []
+  const mtg = scopeGame(db, scope) === 'mtg'
+  const versionIds = new Set<number>()
+  const take = (ids: number[], room: number): number[] => {
+    const out: number[] = []
+    for (const id of ids) {
+      if (out.length >= room) break
+      if (versionIds.has(id)) continue
+      versionIds.add(id)
+      out.push(id)
+    }
+    return out
+  }
+
+  const { matches, rest } = matchTerms(db, scope, text)
+  const termRows: CardSearchResult[] = []
+  if (matches.length > 0) {
+    const narrow = rest.length > 0 ? parseFields(db, scope, rest, true) : null
+    const termRoom = Math.ceil(limit / 2)
+    for (const m of matches) {
+      const room = Math.min(TERM_ROWS, termRoom - termRows.length)
+      if (room <= 0) break
+      let ids = termPrintingIds(
+        db,
+        scope,
+        m.term.target,
+        narrow ? TERM_POOL : room + versionIds.size
+      )
+      if (narrow) {
+        const within = new Set(fieldPrintingIds(db, scope, narrow, TERM_POOL, ids))
+        ids = ids.filter((id) => within.has(id))
+      }
+      termRows.push(...versionRows(db, take(ids, room), scope, m.term.phrase))
+    }
+  }
+
+  const cardRows = capRows(searchCardRows(db, text, limit, scope), limit - termRows.length, mtg)
+  const used = termRows.length + (mtg ? new Set(cardRows.map((r) => r.name)).size : cardRows.length)
+  let fieldRows: CardSearchResult[] = []
+  const fq = used < limit ? parseFields(db, scope, termWords(text)) : null
+  if (fq) {
+    const room = limit - used
+    fieldRows = versionRows(
+      db,
+      take(fieldPrintingIds(db, scope, fq, room + versionIds.size), room),
+      scope
+    )
+  }
+  return [...termRows, ...cardRows, ...fieldRows]
+}
+
+/** The first `room` rows, or for Magic the rows of the first `room` names (its limit counts names). */
+function capRows(rows: CardSearchResult[], room: number, mtg: boolean): CardSearchResult[] {
+  if (room <= 0) return []
+  if (!mtg) return rows.slice(0, room)
+  const names = new Set<string>()
+  return rows.filter((r) => {
+    if (!names.has(r.name) && names.size >= room) return false
+    names.add(r.name)
+    return true
+  })
+}
+
+/** One row per printing, in `ids` order; a printing the card panel doesn't list is left out. */
+function versionRows(db: SqlDb, ids: number[], scope: Scope, term?: string): CardSearchResult[] {
+  if (ids.length === 0) return []
+  const rows = db
+    .prepare(
+      `SELECT p.id, p.card_id, p.language, p.set_name, p.set_code, ${RARITY_LABEL} AS set_rarity,
+              p.set_rarity_code, p.contributed, c.name, c.type,
+              COALESCE((SELECT image_id FROM card_images WHERE card_id = c.id AND +game = ${scope.game} AND sort_order = 0), c.id) AS default_image_id
+       FROM card_printings p JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
+       WHERE p.id IN (SELECT value FROM json_each(?)) AND +p.game = ${scope.game} AND ${shownPrinting(scope)}`
+    )
+    .all(JSON.stringify(ids)) as (Pick<
+    PrintingDbRow,
+    | 'id'
+    | 'card_id'
+    | 'language'
+    | 'set_name'
+    | 'set_code'
+    | 'set_rarity'
+    | 'set_rarity_code'
+    | 'contributed'
+  > & { name: string; type: string; default_image_id: number })[]
+  const byId = new Map(rows.map((r) => [r.id, r]))
+  return ids.flatMap((id) => {
+    const r = byId.get(id)
+    if (!r) return []
+    return [
+      {
+        id: r.card_id,
+        name: r.name,
+        type: r.type,
+        defaultImageId: r.default_image_id,
+        matchedSetCode: r.set_code,
+        printingId: r.id,
+        setName: r.set_name,
+        setCode: r.set_code,
+        rarity: r.set_rarity,
+        // The art the card panel shows for this printing: its own, else the card's first.
+        imageId: printingArtImageId(r) ?? r.default_image_id,
+        ...(term ? { term } : {})
+      }
+    ]
+  })
+}
+
+/** The name search: cards whose name, number or set code matches, newest first. */
+function searchCardRows(db: SqlDb, text: string, limit: number, scope: Scope): CardSearchResult[] {
   const mtg = scopeGame(db, scope) === 'mtg'
   // Every language of a Magic card is its own card under the English name, so Magic's limit counts
   // names: each query fetches enough rows for that many names in every language, and a name already

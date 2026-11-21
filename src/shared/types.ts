@@ -106,6 +106,17 @@ export interface CardSearchResult {
   language?: Language
   /** Magic only: the printed name in that language, when it has one. */
   localName?: string
+  /** A version row: the one printing a term or field words named. Absent on a card row. */
+  printingId?: number
+  setName?: string
+  setCode?: string
+  rarity?: string
+  /** That printing's art, as the card panel shows it. */
+  imageId?: number
+  /** The approved term phrase that named the version. */
+  term?: string
+  /** A version found by a near-miss spelling. */
+  nearMiss?: true
 }
 
 export interface CardDetail {

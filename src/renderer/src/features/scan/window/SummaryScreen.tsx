@@ -35,12 +35,16 @@ function usePage(pages: number): number {
 
 function Hit({ card }: { card: ScanSummaryCard }): React.JSX.Element {
   const reverse = useReverseLook(card, card.rarity, card.setCode)
+  // The art keeps its aspect from its width, so in a short window the name below it was the one
+  // thing left to shrink (truncate hides its overflow) and showed cut in half. The width is
+  // capped by the height left after the padding, header and text lines (at their largest, about
+  // 14vh and 17.5rem with Best guess), at the card's 1.4 aspect, and the lines don't shrink.
   return (
     <section
       aria-label="Hit of the session"
-      className="flex w-[min(30vw,40vh)] shrink-0 flex-col portrait:w-[min(30vw,13vh)] portrait:self-center animate-in fade-in slide-in-from-bottom-[3vh] zoom-in-95 duration-700 motion-reduce:animate-none"
+      className="flex w-[min(30vw,40vh,calc((86vh-17.5rem)/1.4))] shrink-0 flex-col portrait:w-[min(30vw,13vh)] portrait:self-center animate-in fade-in slide-in-from-bottom-[3vh] zoom-in-95 duration-700 motion-reduce:animate-none"
     >
-      <p className="mb-[1vh] text-[clamp(0.8rem,1.4vw,1.3rem)] font-semibold tracking-wide text-amber-300">
+      <p className="mb-[1vh] shrink-0 text-[clamp(0.8rem,1.4vw,1.3rem)] font-semibold tracking-wide text-amber-300">
         Hit of the session
       </p>
       <CardArt
@@ -51,16 +55,16 @@ function Hit({ card }: { card: ScanSummaryCard }): React.JSX.Element {
         alt=""
         className="w-full rounded-[clamp(0.4rem,0.9vw,0.8rem)] bg-transparent shadow-none drop-shadow-[0_0_2vw_rgba(251,191,36,0.35)]"
       />
-      <p className="mt-[1vh] truncate text-[clamp(0.9rem,1.8vw,1.7rem)] font-semibold">
+      <p className="mt-[1vh] shrink-0 truncate text-[clamp(0.9rem,1.8vw,1.7rem)] font-semibold">
         {card.name}
       </p>
       {card.guess && (
-        <p className="text-[clamp(0.75rem,1.2vw,1.1rem)] text-amber-300">Best guess</p>
+        <p className="shrink-0 text-[clamp(0.75rem,1.2vw,1.1rem)] text-amber-300">Best guess</p>
       )}
       {card.price == null ? (
-        <p className="text-[clamp(1.1rem,2.6vw,2.4rem)] text-white/60">No price</p>
+        <p className="shrink-0 text-[clamp(1.1rem,2.6vw,2.4rem)] text-white/60">No price</p>
       ) : (
-        <p className="flex items-baseline gap-[0.5vw] text-[clamp(1.1rem,2.6vw,2.4rem)] font-bold text-emerald-400 tabular-nums">
+        <p className="flex shrink-0 items-baseline gap-[0.5vw] text-[clamp(1.1rem,2.6vw,2.4rem)] font-bold text-emerald-400 tabular-nums">
           {formatUsd(card.price)}
           {card.raw && <span className="text-[0.6em] font-normal text-emerald-200/80">Raw</span>}
         </p>

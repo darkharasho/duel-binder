@@ -75,12 +75,18 @@ function sellerRarity(t: BuyTarget): string {
   )
 }
 
-/** eBay search for the printing: name, set code, seller rarity words and, off English, the language. */
+/**
+ * eBay search for the printing. Yu-Gi-Oh! sellers title listings by set code ("YA01-JP001"), which
+ * already names the set and the language, so the code is the whole search; the English name and
+ * rarity spellings ("QCSR") only lose listings. Otherwise: name, set code, seller rarity words and,
+ * off English, the language.
+ */
 export function ebayUrl(t: BuyTarget, ids: AffiliateIds = AFFILIATE): string | null {
   if (!ids.ebayCampaignId) return null
+  const code = t.setCode.trim()
   const rarity = sellerRarity(t)
   const language = t.language === 'en' ? '' : languageInfo(t.language).ebayWord
-  const q = words(t.name, t.setCode, rarity, language)
+  const q = t.game === 'ygo' && code ? code : words(t.name, t.setCode, rarity, language)
   return (
     `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(q)}` +
     `&mkcid=1&mkrid=711-53200-19255-0&siteid=0&campid=${encodeURIComponent(ids.ebayCampaignId)}` +

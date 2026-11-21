@@ -80,11 +80,14 @@ import type { Prefs } from './prefs'
 import type { SupporterPlan, SupporterStatus } from './supporter'
 import type { BinderDraft, BinderEditAction, BinderTarget, RuleField } from './binders'
 import type { GradedCopy, GradedDraft } from './graded'
+import type { TermNote } from './search/terms'
 
 /** The API exposed to the renderer as `window.api`. */
 export interface Api {
   cards: {
     search(q: string): Promise<CardSearchResult[]>
+    /** Which community terms in `q` matched, and what each stands for here. */
+    explain(q: string): Promise<TermNote[]>
     get(cardId: number): Promise<CardDetail | null>
     /** One page of every card in the database. */
     browse(f: BrowseFilters): Promise<BrowsePage>
@@ -494,6 +497,7 @@ export interface Api {
 /** One `'ns:method'` string per invoke (request/response) method on Api. */
 export const INVOKE_CHANNELS = [
   'cards:search',
+  'cards:explain',
   'cards:get',
   'cards:browse',
   'cards:browseFacets',

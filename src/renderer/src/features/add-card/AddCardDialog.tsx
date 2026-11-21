@@ -4,6 +4,7 @@ import { ChevronLeft, XIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import type { CardSearchResult, Printing } from '@shared/types'
 import { api, invalidateAfterEdit, queryKeys } from '@/lib/api'
+import { TermNotes } from '@/components/TermNotes'
 import { track } from '@/lib/usage'
 import { priceFor } from '@shared/pricing'
 import {
@@ -334,6 +335,7 @@ export function AddCardDialog({
                 onValueChange={setText}
               />
               <CommandList className={listClass}>
+                <TermNotes q={settled ? q : ''} className="px-5 pt-2" />
                 {text.trim() !== '' && (!settled || search.isFetching) && (
                   <p className={emptyClass}>Searching…</p>
                 )}

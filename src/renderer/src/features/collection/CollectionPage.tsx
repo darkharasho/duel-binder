@@ -15,6 +15,7 @@ import {
 import { PageHeader } from '@/components/PageHeader'
 import { listNav } from '@/components/panelNav'
 import { SearchInput } from '@/components/SearchInput'
+import { TermNotes } from '@/components/TermNotes'
 import { SortControl } from '@/components/SortControl'
 import { Button } from '@/components/ui/button'
 import { CardGridSkeleton, InlineLoading } from '@/components/ui/loading'
@@ -326,6 +327,7 @@ export function CollectionPage({
               {friendsErrorMessage(entries.error)}
             </p>
           )}
+          {!friend && <TermNotes q={filters.q ?? ''} />}
           {friendLoadFailed && entries.isError ? (
             <div className="flex flex-col items-center gap-3 py-24 text-center">
               <p role="alert" className="text-sm text-muted-foreground">

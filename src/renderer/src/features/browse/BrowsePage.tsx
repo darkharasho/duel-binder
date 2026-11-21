@@ -21,6 +21,7 @@ import {
 import { PageHeader } from '@/components/PageHeader'
 import { listNav } from '@/components/panelNav'
 import { SearchInput } from '@/components/SearchInput'
+import { TermNotes } from '@/components/TermNotes'
 import { SortControl } from '@/components/SortControl'
 import { Button } from '@/components/ui/button'
 import { CardGridSkeleton, InlineLoading, Spinner } from '@/components/ui/loading'
@@ -261,6 +262,7 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
           />
         </PageHeader>
 
+        <TermNotes q={filters.q ?? ''} />
         {pages.isSuccess && cards.length === 0 ? (
           <div className="flex flex-col items-start gap-3 py-16">
             <p className="text-lg font-medium">

@@ -2,6 +2,7 @@ import type { Api, InvokeChannel } from '../../../src/shared/ipc'
 import type { AccountLinkChannel, PortalChannel } from '../../../src/shared/portal'
 import type { BrowseFilters, CollectionFilters } from '../../../src/shared/types'
 import type { Scope } from '../../../src/main/repo/scope'
+import { explainQuery } from '../../../src/main/repo/explainQuery'
 import { settleRollups } from './rollups'
 import {
   checkAddInput,
@@ -175,6 +176,7 @@ const HANDLERS: { [C in Exclude<PortalChannel, AccountLinkChannel>]: Handler<C> 
   [C in AccountLinkChannel]: WorkerHandler
 } = {
   'cards:search': ({ db }, scope, q) => searchCards(db, checkString(q, 'q'), undefined, scope),
+  'cards:explain': ({ db }, scope, q) => explainQuery(db, scope, checkString(q, 'q')),
   'cards:get': ({ db }, scope, cardId) => getCardDetail(db, checkId(cardId, 'cardId'), scope),
   'cards:browse': ({ db }, scope, f) =>
     browseCards(db, checkObject(f, 'Filters') as unknown as BrowseFilters, scope),

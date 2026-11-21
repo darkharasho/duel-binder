@@ -26,6 +26,7 @@ export const queryKeys = {
   setChecklist: (name: string, language: Language) =>
     ['sets', 'checklist', language, name] as const,
   search: (q: string) => ['search', q] as const,
+  termNotes: (q: string) => ['termNotes', q] as const,
   card: (id: number) => ['card', id] as const,
   forCard: (id: number) => ['forCard', id] as const,
   update: ['update'] as const,

@@ -9,6 +9,7 @@ import {
   SCHEMA_V45,
   SCHEMA_V36,
   SCHEMA_V51,
+  SCHEMA_V52,
   type Migration
 } from '../../../src/main/db/schema'
 import type { SqlDb } from '../../../src/main/db/sql'
@@ -988,7 +989,9 @@ CREATE INDEX ix_graded_pkey ON graded_copies(pkey);
 `
   },
   // Subgrades on graded copies, as desktop 51.
-  { name: 'server-50', sql: SCHEMA_V51 }
+  { name: 'server-50', sql: SCHEMA_V51 },
+  // Community search terms and the vocab table, as desktop 52.
+  { name: 'server-51', sql: SCHEMA_V52 }
 ]
 
 /**

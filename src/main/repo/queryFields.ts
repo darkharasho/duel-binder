@@ -92,14 +92,16 @@ function fieldLists(db: SqlDb, scope: Scope, game: GameId): FieldLists {
 }
 
 /** Whether `run` is a contiguous word-prefix match inside a set's name words. */
-function runMatches(run: string[], name: string[]): boolean {
+function runMatches(run: string[], name: string[], prefixOk: boolean): boolean {
   for (let at = 0; at + run.length <= name.length; at++) {
     let ok = true
     for (let k = 0; k < run.length && ok; k++) {
       const w = run[k]
       const n = name[at + k]
       const last = k === run.length - 1
-      ok = n === w || (last && w.length >= MIN_PREFIX_LENGTH && !/^\d+$/.test(w) && n.startsWith(w))
+      ok =
+        n === w ||
+        (last && prefixOk && w.length >= MIN_PREFIX_LENGTH && !/^\d+$/.test(w) && n.startsWith(w))
     }
     if (ok) return true
   }
@@ -123,13 +125,20 @@ export function parseFields(
   const lists = fieldLists(db, scope, game)
   const used = new Array<boolean>(words.length).fill(false)
 
+  // A last word that is a rarity word ("str", "rare") only ever matches a set name exactly.
+  const abbreviations = RARITY_ABBREVIATIONS[game]
+  const isRarityWord = (w: string): boolean =>
+    lists.rarities.has(w) || (!!abbreviations[w] && lists.rarities.has(termKey(abbreviations[w])))
+  const setMatches = (run: string[], name: string[]): boolean =>
+    runMatches(run, name, !isRarityWord(run[run.length - 1]))
+
   // The longest run of words that is a word-prefix of one or more set names.
   let sets: FieldQuery['sets'] = null
   let best = { start: -1, len: 0 }
   for (let i = 0; i < words.length; i++) {
     for (let n = Math.min(MAX_SET_WORDS, words.length - i); n > best.len; n--) {
       const run = words.slice(i, i + n)
-      if (lists.sets.some((s) => runMatches(run, s.words))) {
+      if (lists.sets.some((s) => setMatches(run, s.words))) {
         best = { start: i, len: n }
         break
       }
@@ -138,13 +147,12 @@ export function parseFields(
   if (best.len > 0) {
     const run = words.slice(best.start, best.start + best.len)
     sets = lists.sets
-      .filter((s) => runMatches(run, s.words))
+      .filter((s) => setMatches(run, s.words))
       .map((s) => ({ language: s.language, setName: s.setName }))
     for (let k = 0; k < best.len; k++) used[best.start + k] = true
   }
 
   // Rarity runs, longest first; an abbreviation maps to its label's key.
-  const abbreviations = RARITY_ABBREVIATIONS[game]
   const rarityLabels = new Set<string>()
   for (let i = 0; i < words.length;) {
     let took = 0

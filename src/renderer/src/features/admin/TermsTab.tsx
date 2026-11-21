@@ -50,7 +50,10 @@ function targetFrom(f: ReturnType<typeof targetText>): TermTarget {
   const cardIds = list(f.cardIds).map(Number)
   const sets = list(f.sets).map((s) => {
     const i = s.indexOf(':')
-    return { language: s.slice(0, i).trim(), setName: s.slice(i + 1).trim() }
+    const language = s.slice(0, i).trim()
+    const setName = s.slice(i + 1).trim()
+    if (i <= 0 || !language || !setName) throw new Error(SETS_HINT)
+    return { language, setName }
   })
   const rarities = list(f.rarities)
   if (pkeys.length) target.pkeys = pkeys
@@ -59,6 +62,8 @@ function targetFrom(f: ReturnType<typeof targetText>): TermTarget {
   if (rarities.length) target.rarities = rarities
   return target
 }
+
+const SETS_HINT = 'Sets need language:Set name'
 
 const EMPTY: AdminTermFields = { phrase: '', kind: 'nickname', targetKind: 'card', target: {} }
 
@@ -94,9 +99,16 @@ function TermForm({
       className="mt-2 flex flex-wrap items-center gap-2"
       onSubmit={(e) => {
         e.preventDefault()
-        setBusy(true)
         setError(null)
-        onSubmit({ phrase, kind, targetKind, target: targetFrom(text) })
+        let target: TermTarget
+        try {
+          target = targetFrom(text)
+        } catch (err) {
+          setError(errorText(err))
+          return
+        }
+        setBusy(true)
+        onSubmit({ phrase, kind, targetKind, target })
           .catch((err: unknown) => setError(errorText(err)))
           .finally(() => setBusy(false))
       }}

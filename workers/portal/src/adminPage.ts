@@ -674,7 +674,10 @@ const termTargetFrom = (f) => {
   const cardIds = termList(f.cardIds.value).map(Number)
   const sets = termList(f.sets.value).map((s) => {
     const i = s.indexOf(':')
-    return { language: s.slice(0, i).trim(), setName: s.slice(i + 1).trim() }
+    const language = s.slice(0, i).trim()
+    const setName = s.slice(i + 1).trim()
+    if (i <= 0 || !language || !setName) throw new Error('Sets need language:Set name')
+    return { language, setName }
   })
   const rarities = termList(f.rarities.value)
   if (pkeys.length) target.pkeys = pkeys

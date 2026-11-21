@@ -38,6 +38,7 @@ describe('admin page', () => {
     expect(html).toContain("'/admin/terms/decide'")
     expect(html).toContain("'/admin/terms/add'")
     expect(html).toContain('actions/workflows/terms.yml')
+    expect(html).toContain('Sets need language:Set name')
     // Phrases and eBay titles are set as text only.
     expect(html).not.toMatch(/innerHTML/)
   })

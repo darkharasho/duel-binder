@@ -82,4 +82,23 @@ describe('TermsTab', () => {
       })
     )
   })
+
+  it('refuses a set without a language, on edit and on add', async () => {
+    const admin = setup([term()])
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    await userEvent.type(screen.getAllByLabelText('Sets (language:name)')[0], 'LOB')
+    await userEvent.click(screen.getByRole('button', { name: 'Save and approve' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Sets need language:Set name')
+    expect(admin.decideTerm).not.toHaveBeenCalled()
+
+    await userEvent.type(screen.getAllByLabelText('Phrase')[1], 'x')
+    await userEvent.type(screen.getAllByLabelText('Sets (language:name)')[1], ':LOB')
+    await userEvent.click(screen.getByRole('button', { name: 'Add term' }))
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole('alert').some((a) => /language:Set name/.test(a.textContent!))
+      ).toBe(true)
+    )
+    expect(admin.addTerm).not.toHaveBeenCalled()
+  })
 })

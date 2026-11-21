@@ -115,8 +115,8 @@ export interface CardSearchResult {
   imageId?: number
   /** The approved term phrase that named the version. */
   term?: string
-  /** A version found by a near-miss spelling. */
-  nearMiss?: true
+  /** Set when the query was respelt: the corrected words, as searched. */
+  nearMiss?: string
 }
 
 export interface CardDetail {

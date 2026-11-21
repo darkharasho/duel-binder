@@ -173,7 +173,8 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
   const [pendingId, setPendingId] = useState<number | null>(null)
   const open = async (c: BrowseCard): Promise<void> => {
     const n = ++opening.current
-    if (c.owned > 0) {
+    // A version tile opens on its printing, owned or not.
+    if (c.owned > 0 && c.focusPrintingId === undefined) {
       setPendingId(c.id)
       const copies = await qc
         .fetchQuery({
@@ -337,6 +338,7 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
                     )}
                   </div>
                   <div className="mt-0.5 min-w-0 space-y-0.5 font-mono text-[11.5px] font-medium">
+                    {c.focusLabel && <div className="truncate">{c.focusLabel}</div>}
                     <div className="flex justify-between gap-2">
                       <span className="truncate">{statsLine(c)}</span>
                       <span className="shrink-0">
@@ -375,7 +377,14 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
             <CardPanel
               cardId={openId}
               entryId={selected?.entryId}
-              seed={unowned ?? undefined}
+              seed={
+                unowned
+                  ? {
+                      ...unowned,
+                      defaultPrintingId: unowned.focusPrintingId ?? unowned.defaultPrintingId
+                    }
+                  : undefined
+              }
               onSelectEntry={
                 selected
                   ? (entryId) => setSelected({ cardId: selected.cardId, entryId })

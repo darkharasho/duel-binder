@@ -57,7 +57,7 @@ describe('Store Durable Object SQLite', () => {
       db.exec("INSERT INTO cards_fts(cards_fts) VALUES('rebuild')")
       return searchCards(db, 'blue-eyse white dragon', 20, userScope(1, 'ygo'))
     })
-    expect(rows.map((r) => [r.id, r.nearMiss])).toEqual([[89631139, true]])
+    expect(rows.map((r) => [r.id, r.nearMiss])).toEqual([[89631139, 'blue eyes white dragon']])
   })
 
   it('version rows for terms and field words', async () => {

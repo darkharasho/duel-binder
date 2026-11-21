@@ -323,7 +323,7 @@ function nearMissRows(db: SqlDb, text: string, limit: number, scope: Scope): Car
     searchCardRows(db, fixed, limit, scope),
     limit,
     scopeGame(db, scope) === 'mtg'
-  ).map((r) => ({ ...r, nearMiss: true as const }))
+  ).map((r) => ({ ...r, nearMiss: fixed }))
 }
 
 /** The first `room` rows, or for Magic the rows of the first `room` names (its limit counts names). */

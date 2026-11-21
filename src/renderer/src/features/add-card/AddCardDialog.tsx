@@ -195,7 +195,8 @@ export function AddCardDialog({
 
   const pickCard = (c: CardSearchResult): void => {
     setCard(c)
-    setPreferredId(null)
+    // A version row opens on the printing it named.
+    setPreferredId(c.printingId ?? null)
     setPickedLanguage(null)
     setHighlight(undefined)
     setStep('printing')
@@ -239,7 +240,9 @@ export function AddCardDialog({
   const downloading = sync?.cardCount === 0
   // On the phone the dialog fills the screen, so its lists can grow to the space left.
   const phone = isPhone()
-  const listClass = phone ? 'max-h-none flex-1' : 'max-h-[min(26rem,calc(100dvh-18dvh-9rem))] min-h-0'
+  const listClass = phone
+    ? 'max-h-none flex-1'
+    : 'max-h-[min(26rem,calc(100dvh-18dvh-9rem))] min-h-0'
   const commandClass = phone ? 'min-h-0 flex-1 rounded-none' : 'rounded-none'
   // The search underline: Bricolage at 22 px, italic placeholder (the Input primitive's field).
   const inputWrapClass =
@@ -250,9 +253,7 @@ export function AddCardDialog({
     'gap-4 rounded-full px-3 py-2 text-base data-[selected=true]:bg-chip data-[selected=true]:text-foreground'
   const emptyClass = 'py-8 text-center text-base text-foreground'
   const gameLabel = (
-    <p className="font-mono text-[11px] tracking-[0.14em] text-foreground uppercase">
-      {def.name}
-    </p>
+    <p className="font-mono text-[11px] tracking-[0.14em] text-foreground uppercase">{def.name}</p>
   )
 
   return (
@@ -342,16 +343,22 @@ export function AddCardDialog({
                 {settled && q !== '' && !search.isFetching && (search.data?.length ?? 0) === 0 && (
                   <CommandEmpty className={emptyClass}>No cards found.</CommandEmpty>
                 )}
+                {settled && q !== '' && search.data?.[0]?.nearMiss && (
+                  <p className="px-5 pt-2 text-sm text-foreground">
+                    Showing results for “{search.data[0].nearMiss}”
+                  </p>
+                )}
                 <CommandGroup className="px-3 py-3">
                   {(!settled || q === '' ? [] : (search.data ?? [])).map((c) => (
                     <CommandItem
-                      key={c.id}
-                      value={String(c.id)}
+                      // A version row shares its card's id, so the printing keys it.
+                      key={c.printingId !== undefined ? `p${c.printingId}` : `c${c.id}`}
+                      value={c.printingId !== undefined ? `p${c.printingId}` : `c${c.id}`}
                       onSelect={() => pickCard(c)}
                       className={itemClass}
                     >
                       <CardArt
-                        imageId={c.defaultImageId}
+                        imageId={c.imageId ?? c.defaultImageId}
                         size="small"
                         alt=""
                         className="w-12 shrink-0"
@@ -362,7 +369,11 @@ export function AddCardDialog({
                           {c.language && <LanguageTag language={c.language} className="shrink-0" />}
                         </span>
                         <span className="block truncate font-mono text-xs text-foreground">
-                          {c.localName ? `${c.localName} · ${c.type}` : c.type}
+                          {c.printingId !== undefined && c.setName
+                            ? `${c.setName} · ${c.setCode ?? ''}`
+                            : c.localName
+                              ? `${c.localName} · ${c.type}`
+                              : c.type}
                         </span>
                       </span>
                       {c.matchedSetCode && (
@@ -449,7 +460,11 @@ export function AddCardDialog({
                 className="w-28 font-mono text-xl tabular-nums"
               />
             </label>
-            <Button type="submit" className="rounded-full px-6" disabled={!qtyValid || add.isPending}>
+            <Button
+              type="submit"
+              className="rounded-full px-6"
+              disabled={!qtyValid || add.isPending}
+            >
               Save
             </Button>
           </form>

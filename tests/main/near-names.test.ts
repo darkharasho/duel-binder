@@ -26,7 +26,7 @@ test('a misspelt name finds its near words, closest first', () => {
 test('a misspelt name returns the card rows marked nearMiss', () => {
   const rows = searchCards(db, 'dark magican')
   expect(rows.length).toBeGreaterThan(0)
-  expect(rows.every((r) => r.nearMiss === true)).toBe(true)
+  expect(rows.every((r) => r.nearMiss === "dark magician")).toBe(true)
   expect(rows.map((r) => r.name)).toContain('Dark Magician')
   expect(searchCards(db, 'xq')).toEqual([])
 })

@@ -349,8 +349,8 @@ export function browseCards(db: SqlDb, f: BrowseFilters, scope: Scope = LOCAL): 
   // been; the page runs across both. Versions the set, rarity or number words name are only listed
   // when the card search finds nothing: they never go ahead of its cards.
   const text = f.q?.trim()
-  const named = text ? queryPrintingIds(db, scope, text) : null
-  const focusIds = named ? (n === 0 ? named.ids : named.ids.slice(0, named.fromTerms)) : []
+  const named = text ? queryPrintingIds(db, scope, text, undefined, { fields: n === 0 }) : null
+  const focusIds = named?.ids ?? []
   // The other filters, without the text: a version tile's card is found by its printing.
   const nt = focusIds.length ? whereClause(db, f, scope, false) : null
   const focus = nt ? focusPrintings(db, focusIds, nt, scope, language) : []

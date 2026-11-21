@@ -14,6 +14,8 @@ import { MAX_NOTES } from '../../src/shared/cloud'
 import { seededDb } from './helpers'
 import { pokemonId } from '../../src/shared/games'
 import { forgetSearchTerms } from '../../src/main/repo/searchTerms'
+import { queryPrintingIds } from '../../src/main/repo/queryPrintings'
+import { LOCAL } from '../../src/main/repo/scope'
 
 let db: Database.Database
 beforeEach(async () => {
@@ -378,6 +380,26 @@ describe('set, rarity and term words', () => {
         .map((e) => e.printing.id)
         .sort()
     ).toEqual([paf216, paf232].sort())
+  })
+
+  test('a broad query searches the owned printings, not the newest ones', () => {
+    const { paf232 } = seedMew()
+    // A newer Special Illustration Rare Mew ex the collection doesn't own.
+    db.prepare(
+      "INSERT INTO sets (game, language, set_name, set_code, tcg_date) VALUES ('pkm', 'en', 'Prismatic Evolutions', 'PRE', '2025-01-17')"
+    ).run()
+    const newer = Number(
+      db
+        .prepare(
+          `INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity)
+           VALUES ('pkm', ?, 'en', 'Prismatic Evolutions', 'PRE 151/131', 'Special Illustration Rare')`
+        )
+        .run(pkm('mew')).lastInsertRowid
+    )
+    // Cut at 1, the catalog's newest match pushes the owned copy out; within the owned ones it stays.
+    expect(queryPrintingIds(db, LOCAL, 'mew sir', 1)?.ids).toEqual([newer])
+    expect(queryPrintingIds(db, LOCAL, 'mew sir', 1, { within: [paf232] })?.ids).toEqual([paf232])
+    expect(listEntries(db, { ...all, q: 'mew sir' }).map((e) => e.printing.id)).toEqual([paf232])
   })
 
   test('an approved term shows the copies of the versions it names', () => {

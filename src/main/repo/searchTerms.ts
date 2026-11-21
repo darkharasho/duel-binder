@@ -103,12 +103,14 @@ export function matchTerms(
 /**
  * Local printing ids a term target names, English printings first then by id, cut at `limit`.
  * Kinds with entries are ANDed; empty or missing kinds are ignored; a target with none gives [].
+ * `within` keeps only those ids (a collection's owned printings).
  */
 export function termPrintingIds(
   db: SqlDb,
   scope: Scope,
   target: TermTarget,
-  limit: number
+  limit: number,
+  within?: number[]
 ): number[] {
   const conds: string[] = []
   const params: unknown[] = []
@@ -126,6 +128,11 @@ export function termPrintingIds(
     for (const s of target.sets) params.push(s.language, s.setName)
   }
   if (conds.length === 0) return []
+  if (within) {
+    // One JSON parameter, not one per id: the portal's SQLite caps bound parameters.
+    conds.push('p.id IN (SELECT value FROM json_each(?))')
+    params.push(JSON.stringify(within))
+  }
   return (
     db
       .prepare(

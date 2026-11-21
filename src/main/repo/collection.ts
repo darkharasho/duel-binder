@@ -301,7 +301,13 @@ export function listEntries(db: SqlDb, f: CollectionFilters, scope: Scope = LOCA
       }
     }
     // Copies of the versions the query's terms and set, rarity or number words name ("mew sir").
-    const named = queryPrintingIds(db, scope, text)
+    // Only the owned printings are searched, so a broad query's cut never drops an owned copy.
+    const owned = (
+      db
+        .prepare(`SELECT DISTINCT e.printing_id AS id FROM collection_entries e WHERE ${scope.where('e')}`)
+        .all() as { id: number }[]
+    ).map((r) => r.id)
+    const named = queryPrintingIds(db, scope, text, undefined, { within: owned })
     if (named && named.ids.length > 0) {
       parts.push('e.printing_id IN (SELECT value FROM json_each(?))')
       params.push(JSON.stringify(named.ids))

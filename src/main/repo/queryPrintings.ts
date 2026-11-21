@@ -28,18 +28,22 @@ export function termNarrowing(db: SqlDb, scope: Scope, rest: string[]): FieldQue
   )
 }
 
-/** A term's printing ids (English first), cut at `limit`, kept only where `narrow` matches. */
+/**
+ * A term's printing ids (English first), cut at `limit`, kept only where `narrow` matches and,
+ * with `within`, only among those ids.
+ */
 export function termIds(
   db: SqlDb,
   scope: Scope,
   target: TermTarget,
   narrow: FieldQuery | null,
-  limit: number
+  limit: number,
+  within?: number[]
 ): number[] {
-  const ids = termPrintingIds(db, scope, target, narrow ? TERM_POOL : limit)
+  const ids = termPrintingIds(db, scope, target, narrow ? TERM_POOL : limit, within)
   if (!narrow) return ids
-  const within = new Set(fieldPrintingIds(db, scope, narrow, TERM_POOL, ids))
-  return ids.filter((id) => within.has(id))
+  const narrowed = new Set(fieldPrintingIds(db, scope, narrow, TERM_POOL, ids))
+  return ids.filter((id) => narrowed.has(id))
 }
 
 /** Whether every query word is a word of `name`, the last one maybe only its start. */
@@ -69,14 +73,17 @@ function nameSpelled(db: SqlDb, scope: Scope, words: string[]): boolean {
  * searchCards finds its version rows: each term's printings (narrowed by the words beside it),
  * then the field words' printings, unless a card's name spells the whole query ("dark magician").
  * `term` is the matched phrases; the first `fromTerms` ids came from terms, the rest from field
- * words. Null when the query has neither.
+ * words. Null when the query has neither. `within` searches only those printings (a collection's
+ * own, so the cut at `limit` never drops an owned copy); `fields: false` skips the field words.
  */
 export function queryPrintingIds(
   db: SqlDb,
   scope: Scope,
   text: string,
-  limit = 2000
+  limit = 2000,
+  opts: { within?: number[]; fields?: boolean } = {}
 ): { ids: number[]; term: string | null; fromTerms: number } | null {
+  const { within, fields: withFields = true } = opts
   const words = termWords(text)
   if (words.length === 0) return null
   const { matches, rest } = matchTerms(db, scope, text)
@@ -86,12 +93,12 @@ export function queryPrintingIds(
   }
   if (matches.length > 0) {
     const narrow = termNarrowing(db, scope, rest)
-    for (const m of matches) add(termIds(db, scope, m.term.target, narrow, limit))
+    for (const m of matches) add(termIds(db, scope, m.term.target, narrow, limit, within))
   }
   const fromTerms = ids.size
-  const fq = ids.size < limit ? parseFields(db, scope, words) : null
+  const fq = withFields && ids.size < limit ? parseFields(db, scope, words) : null
   const fields = fq !== null && !nameSpelled(db, scope, words)
-  if (fields) add(fieldPrintingIds(db, scope, fq, limit))
+  if (fields) add(fieldPrintingIds(db, scope, fq, limit, within))
   if (matches.length === 0 && !fields) return null
   return {
     ids: [...ids],

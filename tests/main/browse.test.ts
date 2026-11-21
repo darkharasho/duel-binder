@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type Database from 'better-sqlite3'
 import { browseCards, browseFacets, browseFacetsFast } from '../../src/main/repo/browse'
 import { addEntry } from '../../src/main/repo/collection'
@@ -333,6 +333,22 @@ describe('browseCards with set, rarity and code words', () => {
     const page = browseCards(db, { ...BY_NAME, q: 'lor 020' })
     expect(page.total).toBe(1)
     expect(page.cards.map((c) => c.focusPrintingId ?? c.name)).toEqual(['Charizard'])
+  })
+
+  it('skips the field-word lookups when the card search finds cards', async () => {
+    const { db } = await lostOriginDb()
+    const prepare = vi.spyOn(db, 'prepare')
+    const fieldSql = (): string[] =>
+      prepare.mock.calls
+        .map(([sql]) => String(sql))
+        .filter((sql) =>
+          /COUNT\(\*\) AS n FROM sets|bm25\(cards_fts\) LIMIT|s\.tcg_date DESC, p\.id/.test(sql)
+        )
+    browseCards(db, { ...BY_NAME, q: 'lor 020' })
+    expect(fieldSql()).toEqual([])
+    // With nothing found, the same lookups do run.
+    browseCards(db, { ...BY_NAME, q: 'trainer gallery charizard' })
+    expect(fieldSql()).not.toEqual([])
   })
 
   it('counts term tiles in the total and pages through them before the card tiles', async () => {

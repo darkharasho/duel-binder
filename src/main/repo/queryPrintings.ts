@@ -74,16 +74,21 @@ function nameSpelled(db: SqlDb, scope: Scope, words: string[]): boolean {
  * then the field words' printings, unless a card's name spells the whole query ("dark magician").
  * `term` is the matched phrases; the first `fromTerms` ids came from terms, the rest from field
  * words. Null when the query has neither. `within` searches only those printings (a collection's
- * own, so the cut at `limit` never drops an owned copy); `fields: false` skips the field words.
+ * own, so the cut at `limit` never drops an owned copy; a function is called only when needed);
+ * `fields: false` skips the field words.
  */
 export function queryPrintingIds(
   db: SqlDb,
   scope: Scope,
   text: string,
   limit = 2000,
-  opts: { within?: number[]; fields?: boolean } = {}
+  opts: { within?: number[] | (() => number[]); fields?: boolean } = {}
 ): { ids: number[]; term: string | null; fromTerms: number } | null {
-  const { within, fields: withFields = true } = opts
+  const { fields: withFields = true } = opts
+  // `within` may be a function so a collection's owned ids are only read when a term or field matched.
+  let withinIds: number[] | undefined
+  const within = (): number[] | undefined =>
+    (withinIds ??= typeof opts.within === 'function' ? opts.within() : opts.within)
   const words = termWords(text)
   if (words.length === 0) return null
   const { matches, rest } = matchTerms(db, scope, text)
@@ -93,12 +98,12 @@ export function queryPrintingIds(
   }
   if (matches.length > 0) {
     const narrow = termNarrowing(db, scope, rest)
-    for (const m of matches) add(termIds(db, scope, m.term.target, narrow, limit, within))
+    for (const m of matches) add(termIds(db, scope, m.term.target, narrow, limit, within()))
   }
   const fromTerms = ids.size
   const fq = withFields && ids.size < limit ? parseFields(db, scope, words) : null
   const fields = fq !== null && !nameSpelled(db, scope, words)
-  if (fields) add(fieldPrintingIds(db, scope, fq, limit, within))
+  if (fields) add(fieldPrintingIds(db, scope, fq, limit, within()))
   if (matches.length === 0 && !fields) return null
   return {
     ids: [...ids],

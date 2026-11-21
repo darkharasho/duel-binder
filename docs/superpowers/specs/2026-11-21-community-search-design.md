@@ -212,3 +212,82 @@ look of the term line (follow the app's current style).
 - After the owner approves it, "bubble mew" finds Mew ex PAF 232/91 on desktop, web and phone, offline.
 - Each run's queue has ≤100 proposals, most worth approving.
 - No visible slowdown in per-keystroke search (numbers reported).
+
+## Speed check results (2026-11-21)
+
+`scripts/bench-search.ts` on a copy of the owner's real collection database (1.6 GB; Magic and Pokémon
+catalogs), 30 timed runs after a warm-up, no approved terms loaded. `main` is the merge base.
+Before the fix below, single-word names were up to +25 ms slower (`charizard`/mtg listEntries) because
+`parseFields` loaded the field lists and `listEntries` read every owned printing on each keystroke.
+Fixed: `parseFields` returns at once for one bare word, and the owned ids are read only when a term or
+field matched. Table is after the fix.
+
+| query | scope | fn | main median / p95 (ms) | branch median / p95 (ms) | diff median |
+|---|---|---|---|---|---|
+| charizard | mtg | searchCards | 74.3 / 81.0 | 74.2 / 78.3 | -0.1 |
+| charizard | mtg | listEntries | 76.5 / 79.3 | 76.6 / 80.0 | +0.1 |
+| lightning bolt | mtg | searchCards | 76.1 / 78.2 | 76.8 / 88.0 | +0.7 |
+| lightning bolt | mtg | listEntries | 77.1 / 79.6 | 79.2 / 85.4 | +2.1 |
+| trainer gallery charizard | mtg | searchCards | 73.2 / 75.9 | 75.4 / 79.7 | +2.2 |
+| trainer gallery charizard | mtg | listEntries | 76.8 / 81.2 | 78.5 / 82.6 | +1.8 |
+| mew sir | mtg | searchCards | 72.0 / 75.8 | 74.6 / 78.0 | +2.7 |
+| mew sir | mtg | listEntries | 76.4 / 80.5 | 76.7 / 80.0 | +0.3 |
+| charzard | mtg | searchCards | 72.8 / 76.4 | 149.7 / 160.2 | +76.9 |
+| charzard | mtg | listEntries | 76.3 / 80.1 | 76.6 / 80.0 | +0.3 |
+| a | mtg | searchCards | 289.6 / 378.7 | 285.8 / 298.2 | -3.8 |
+| a | mtg | listEntries | 100.5 / 106.2 | 101.3 / 108.6 | +0.7 |
+| b | mtg | searchCards | 263.6 / 274.2 | 261.4 / 270.5 | -2.2 |
+| b | mtg | listEntries | 92.3 / 95.1 | 91.3 / 97.0 | -1.0 |
+| c | mtg | searchCards | 291.0 / 307.1 | 286.1 / 301.6 | -4.9 |
+| c | mtg | listEntries | 98.5 / 102.6 | 98.9 / 104.2 | +0.3 |
+| d | mtg | searchCards | 286.9 / 291.9 | 285.4 / 293.6 | -1.6 |
+| d | mtg | listEntries | 97.4 / 106.0 | 97.3 / 102.6 | -0.1 |
+| e | mtg | searchCards | 275.0 / 280.1 | 274.0 / 282.6 | -1.0 |
+| e | mtg | listEntries | 98.3 / 101.2 | 99.7 / 106.8 | +1.4 |
+| f | mtg | searchCards | 257.6 / 277.1 | 253.8 / 260.4 | -3.8 |
+| f | mtg | listEntries | 90.6 / 94.1 | 91.7 / 96.7 | +1.1 |
+| g | mtg | searchCards | 268.5 / 279.8 | 266.3 / 277.1 | -2.2 |
+| g | mtg | listEntries | 92.6 / 96.2 | 94.1 / 100.7 | +1.4 |
+| h | mtg | searchCards | 237.0 / 244.6 | 240.1 / 257.7 | +3.1 |
+| h | mtg | listEntries | 87.4 / 90.7 | 87.8 / 91.7 | +0.4 |
+| i | mtg | searchCards | 252.1 / 261.5 | 253.8 / 262.2 | +1.6 |
+| i | mtg | listEntries | 93.2 / 96.8 | 93.8 / 98.0 | +0.6 |
+| j | mtg | searchCards | 167.2 / 174.7 | 165.3 / 175.3 | -2.0 |
+| j | mtg | listEntries | 77.1 / 79.8 | 78.0 / 80.0 | +0.9 |
+| charizard | pkm | searchCards | 6.4 / 7.5 | 6.5 / 7.5 | +0.1 |
+| charizard | pkm | listEntries | 18.6 / 20.0 | 18.4 / 19.9 | -0.2 |
+| lightning bolt | pkm | searchCards | 3.5 / 4.3 | 4.5 / 5.3 | +1.0 |
+| lightning bolt | pkm | listEntries | 18.0 / 18.9 | 26.2 / 28.3 | +8.2 |
+| trainer gallery charizard | pkm | searchCards | 3.3 / 3.9 | 4.4 / 5.2 | +1.1 |
+| trainer gallery charizard | pkm | listEntries | 18.2 / 19.7 | 26.5 / 28.1 | +8.2 |
+| mew sir | pkm | searchCards | 3.3 / 4.2 | 4.9 / 5.3 | +1.6 |
+| mew sir | pkm | listEntries | 18.8 / 20.6 | 26.6 / 28.2 | +7.7 |
+| charzard | pkm | searchCards | 3.5 / 4.0 | 10.9 / 12.0 | +7.5 |
+| charzard | pkm | listEntries | 18.0 / 19.6 | 18.2 / 20.3 | +0.2 |
+| a | pkm | searchCards | 90.4 / 92.1 | 89.1 / 93.0 | -1.3 |
+| a | pkm | listEntries | 37.2 / 39.4 | 37.5 / 40.2 | +0.3 |
+| b | pkm | searchCards | 80.3 / 83.6 | 79.4 / 82.4 | -0.8 |
+| b | pkm | listEntries | 33.6 / 35.6 | 33.0 / 34.7 | -0.7 |
+| c | pkm | searchCards | 93.6 / 98.7 | 92.3 / 97.6 | -1.3 |
+| c | pkm | listEntries | 45.4 / 47.6 | 45.4 / 47.6 | +0.0 |
+| d | pkm | searchCards | 82.8 / 84.6 | 81.8 / 84.0 | -1.0 |
+| d | pkm | listEntries | 36.0 / 37.6 | 35.8 / 36.9 | -0.2 |
+| e | pkm | searchCards | 86.8 / 89.7 | 85.6 / 88.5 | -1.2 |
+| e | pkm | listEntries | 35.7 / 37.7 | 35.9 / 37.4 | +0.2 |
+| f | pkm | searchCards | 69.6 / 72.7 | 68.7 / 70.6 | -0.9 |
+| f | pkm | listEntries | 29.2 / 30.8 | 29.6 / 31.3 | +0.4 |
+| g | pkm | searchCards | 85.1 / 87.8 | 84.4 / 88.0 | -0.7 |
+| g | pkm | listEntries | 33.2 / 35.6 | 33.5 / 34.4 | +0.3 |
+| h | pkm | searchCards | 64.0 / 67.1 | 63.5 / 66.3 | -0.5 |
+| h | pkm | listEntries | 28.5 / 30.6 | 27.4 / 30.3 | -1.1 |
+| i | pkm | searchCards | 60.6 / 62.0 | 60.1 / 63.3 | -0.5 |
+| i | pkm | listEntries | 26.5 / 27.4 | 26.1 / 28.3 | -0.4 |
+| j | pkm | searchCards | 25.7 / 27.6 | 25.5 / 26.6 | -0.2 |
+| j | pkm | listEntries | 22.1 / 23.3 | 22.2 / 29.2 | +0.0 |
+
+Reading: every plain one-word name is within +2 ms of `main` (the largest is a single-letter `h` on mtg
+searchCards, +3.1 ms on a 240 ms query). Two kinds of query are slower on purpose:
+- Multi-word queries that name a set ("lightning bolt" matches the set "Battle Party Set: Lightning",
+  "mew sir", "trainer gallery charizard"): +1 to +8 ms, the field-word search itself (pkm listEntries).
+- A misspelt word with no hits ("charzard"): the typo fallback runs where `main` returned nothing.
+  +7.5 ms on pkm, +77 ms on mtg (its vocabulary is large; 3000 candidates are edit-distance scored).

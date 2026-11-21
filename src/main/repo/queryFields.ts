@@ -121,6 +121,8 @@ export function parseFields(
   words: string[],
   termsConstrain = false
 ): FieldQuery | null {
+  // One bare word can't be a field plus something else: skip loading the lists (the per-keystroke path).
+  if (words.length < 2 && !termsConstrain) return null
   const game = scopeGame(db, scope)
   const lists = fieldLists(db, scope, game)
   const used = new Array<boolean>(words.length).fill(false)

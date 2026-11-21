@@ -67,7 +67,8 @@ export function pickPrintings(
          ${recent ? 'JOIN sets s ON +s.game = ? AND s.language = p.language AND s.set_name = p.set_name' : ''}
          WHERE +p.game = ? AND +c.game = ? AND p.language = 'en' AND p.contributed = 0
            AND p.market_price IS NOT NULL
-           ${recent ? 'AND p.market_price >= ? AND s.tcg_date >= ? AND s.tcg_date <= ?' : ''}
+           ${recent ? // TCGdex dates use slashes and TCGCSV's may carry a time, so compare the first ten characters.
+             "AND p.market_price >= ? AND substr(replace(s.tcg_date, '/', '-'), 1, 10) BETWEEN ? AND ?" : ''}
          ORDER BY p.market_price DESC, p.id
          LIMIT ?`
       )
@@ -91,4 +92,15 @@ export function harvestQuery(p: PrintingRef): string {
   if (p.game === 'pkm') return `${p.name} ${p.number}`
   if (p.game === 'mtg') return `${p.name} ${p.setName}`
   return `${p.name} ${p.setCode}`
+}
+
+/** One printing per game and search: the same search would return the same titles twice. */
+export function uniqueSearches(picked: PrintingRef[]): PrintingRef[] {
+  const seen = new Set<string>()
+  return picked.filter((p) => {
+    const key = `${p.game}\u0000${harvestQuery(p)}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }

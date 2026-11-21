@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import type Database from 'better-sqlite3'
 import { openDatabase } from '../../src/main/db/database'
-import { harvestQuery, pickPrintings } from '../../scripts/terms/targets'
+import { harvestQuery, pickPrintings, uniqueSearches } from '../../scripts/terms/targets'
 
 const NOW = new Date('2026-11-21T00:00:00Z')
 let db: Database.Database
@@ -68,6 +68,27 @@ describe('pickPrintings', () => {
     const got = pickPrintings(db, { mode: 'recent', from: 0, count: 10, now: NOW })
     expect(got.map((p) => p.name)).toEqual(['InWindow', 'PkmIn'])
     expect(pickPrintings(db, { mode: 'recent', from: 0, count: 1, now: NOW })).toHaveLength(1)
+  })
+})
+
+describe('recent window dates', () => {
+  it('reads slash dates (TCGdex) and dates with a time as well as plain ISO ones', () => {
+    db = openDatabase(':memory:')
+    seed([
+      { game: 'pkm', name: 'Slash', set: 'A', code: 'AAA 001/010', date: '2026/10/01', price: 30 },
+      { game: 'pkm', name: 'SlashOld', set: 'B', code: 'BBB 001/010', date: '2026/03/01', price: 30 },
+      { game: 'ygo', name: 'Timed', set: 'C', code: 'C-EN001', date: '2026-10-01T00:00:00', price: 20 }
+    ])
+    const got = pickPrintings(db, { mode: 'recent', from: 0, count: 10, now: NOW })
+    expect(got.map((p) => p.name).sort()).toEqual(['Slash', 'Timed'])
+  })
+})
+
+describe('uniqueSearches', () => {
+  const p = { game: 'ygo' as const, pkey: 'a', cardId: 1, name: 'Dark Magician', setName: 'S', setCode: 'LOB-EN005', number: 'LOB-EN005', rarity: 'Ultra Rare', language: 'en' }
+  it('keeps one printing per game and search', () => {
+    const got = uniqueSearches([p, { ...p, pkey: 'b', rarity: 'Secret Rare' }, { ...p, game: 'op' }])
+    expect(got.map((x) => x.pkey + x.game)).toEqual(['aygo', 'aop'])
   })
 })
 

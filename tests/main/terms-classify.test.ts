@@ -46,6 +46,9 @@ describe('classify', () => {
     const client = fake([
       result({ target: { pkeys: ['en|9|ZZZ|R'], cardIds: [], sets: [], rarities: [] } }),
       result({ verdict: 'junk' }),
+      result({ phrase: 'one two three four five' }),
+      result({ phrase: 'x'.repeat(81) }),
+      result({ phrase: '   ' }),
       result({ target: { pkeys: [], cardIds: [], sets: [], rarities: [] } })
     ])
     const out = await classify(client, 'pkm', [cand])

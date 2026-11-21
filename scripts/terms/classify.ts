@@ -2,7 +2,7 @@ import type Anthropic from '@anthropic-ai/sdk'
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
 import { z } from 'zod'
 import type { GameId } from '../../src/shared/games/types'
-import type { TermEvidence, TermKind, TermTarget, TermTargetKind } from '../../src/shared/search/terms'
+import { MAX_TERM_WORDS, termWords, type TermEvidence, type TermKind, type TermTarget, type TermTargetKind } from '../../src/shared/search/terms'
 import type { Candidate } from './mine'
 
 export const MODEL = 'claude-opus-5-5'
@@ -10,6 +10,13 @@ export const MODEL = 'claude-opus-5-5'
 export const INPUT_DOLLARS_PER_MTOK = 4
 export const OUTPUT_DOLLARS_PER_MTOK = 20
 const BATCH = 20
+const MAX_PHRASE = 80
+
+/** The portal refuses a whole proposal batch over one phrase this fails (checkPhrase). */
+export const phraseOk = (p: string): boolean => {
+  const n = termWords(p).length
+  return p.length <= MAX_PHRASE && n >= 1 && n <= MAX_TERM_WORDS
+}
 
 export const ResultSchema = z.object({
   results: z.array(
@@ -100,7 +107,7 @@ export async function classify(
     }
     for (const r of res.parsed_output.results) {
       const c = byId.get(r.id)
-      if (!c || r.verdict !== 'term') continue
+      if (!c || r.verdict !== 'term' || !phraseOk(r.phrase)) continue
       const t = r.target
       if (
         t.pkeys.length + t.cardIds.length + t.sets.length + t.rarities.length === 0 ||

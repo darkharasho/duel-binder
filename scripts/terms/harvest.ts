@@ -20,7 +20,7 @@ import { openDatabase } from '../../src/main/db/database'
 import { GAME_IDS } from '../../src/shared/games/types'
 import { classify, estimateCost, type Proposal, type Usage } from './classify'
 import { findCandidates, type HarvestedPrinting } from './mine'
-import { harvestQuery, pickPrintings, type PrintingRef } from './targets'
+import { harvestQuery, pickPrintings, uniqueSearches, type PrintingRef } from './targets'
 
 /** Calls left in eBay's daily allowance that the harvest never touches. */
 const QUOTA_RESERVE = 1500
@@ -60,6 +60,9 @@ const need = (name: string): string => {
 const removeDb = (file: string): void => {
   for (const f of [file, `${file}-wal`, `${file}-shm`]) rmSync(f, { force: true })
 }
+
+const describeFailures = (f: Map<number, number>): string =>
+  [...f].map(([status, n]) => `${status} x${n}`).join(', ')
 
 async function getJson<T>(
   url: string,
@@ -126,7 +129,8 @@ async function main(): Promise<void> {
   const harvested: HarvestedPrinting[] = []
   let made = 0
   let titles = 0
-  for (const p of picked.slice(0, calls)) {
+  const failures = new Map<number, number>()
+  for (const p of uniqueSearches(picked).slice(0, calls)) {
     const q = new URLSearchParams({ q: harvestQuery(p), game: p.game })
     const res = await getJson<{ titles: { title: string; seller: string }[] }>(
       `${ebayUrl}/v1/titles?${q}`,
@@ -137,10 +141,18 @@ async function main(): Promise<void> {
       console.log('eBay rate limit reached; stopping the harvest early')
       break
     }
-    if (!res.body) continue
+    if (!res.body) {
+      if (made === 1 && [401, 403, 404].includes(res.status))
+        throw new Error(`The first eBay titles call got ${res.status}; check HARVEST_TOKEN and EBAY_PRICES_URL`)
+      failures.set(res.status, (failures.get(res.status) ?? 0) + 1)
+      continue
+    }
     titles += res.body.titles.length
     harvested.push({ ...p, titles: res.body.titles })
   }
+
+  const failed = [...failures.values()].reduce((a, b) => a + b, 0)
+  if (made > 0 && failed === made) throw new Error(`Every eBay titles call failed (${describeFailures(failures)})`)
 
   const usage: Usage = { input: 0, output: 0 }
   const proposals: Proposal[] = []
@@ -167,11 +179,15 @@ async function main(): Promise<void> {
       headers: { ...adminHeaders, 'content-type': 'application/json' },
       body: JSON.stringify({ proposals: posted })
     })
-    if (!res.ok) throw new Error(`Posting the proposals failed (${res.status})`)
+    if (!res.ok) {
+      console.error(`The portal refused the proposals (${res.status}): ${await res.text().catch(() => '')}`)
+      console.error(JSON.stringify(posted))
+      throw new Error(`Posting the proposals failed (${res.status})`)
+    }
     console.log(`Portal added ${((await res.json()) as { added: number }).added} pending terms`)
   }
   console.log(
-    `Summary: ${made} eBay calls, ${titles} titles, ${candidateCount} candidates, ${proposals.length} proposals` +
+    `Summary: ${made} eBay calls${failed ? ` (${failed} failed: ${describeFailures(failures)})` : ''}, ${titles} titles, ${candidateCount} candidates, ${proposals.length} proposals` +
       `${args.dryRun ? ' (dry run, not posted)' : ''}, Claude ${usage.input} in / ${usage.output} out tokens, ` +
       `about $${estimateCost(usage).toFixed(2)}`
   )

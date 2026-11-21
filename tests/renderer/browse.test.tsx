@@ -171,6 +171,46 @@ async function openLobStepper(server: ReturnType<typeof lobServer>): Promise<{
   }
 }
 
+describe('Browse version tiles', () => {
+  it('keys a version tile apart from the plain tile of the same card', async () => {
+    const cards = [
+      card(1, 'Dark Magician', {
+        focusPrintingId: 11,
+        focusLabel: 'DP JP001',
+        defaultPrintingId: 10
+      }),
+      card(1, 'Dark Magician', { defaultPrintingId: 10 }),
+      card(2, 'Kuriboh')
+    ]
+    // Both printings English, so neither is hidden by the language filter.
+    const both = {
+      ...detail,
+      printings: [printing(10), printing(11, { setName: 'Duelist Pack', setCode: 'DP-EN001' })]
+    }
+    const get = vi.fn(async () => both)
+    setup(cards, 3, { cards: { get } })
+    const tiles = await screen.findAllByRole('button', { name: /^Dark Magician/ })
+    expect(tiles).toHaveLength(2)
+    expect(tiles[0]).toHaveTextContent('DP JP001')
+    expect(tiles[1]).not.toHaveTextContent('DP JP001')
+    expect(tiles[0].getAttribute('data-nav-key')).not.toBe(tiles[1].getAttribute('data-nav-key'))
+
+    // The focus tile opens the panel on its printing (DP-EN001 is printing 11, the plain default is 10).
+    await userEvent.click(tiles[0])
+    const panel = await screen.findByRole('dialog')
+    const pills = await findPills(panel)
+    expect(pills[0]).toHaveAccessibleName(/DP-EN001/)
+
+    // Next from the focus tile is the plain tile of the same card, then Kuriboh: with ids as keys
+    // the plain tile is mistaken for the focus tile and the step never gets past it.
+    await userEvent.keyboard('{ArrowRight}')
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument())
+    // Next from the plain tile is Kuriboh: the plain tile isn't mistaken for the focus tile.
+    await userEvent.keyboard('{ArrowRight}')
+    expect(await within(screen.getByRole('dialog')).findByText('Kuriboh')).toBeInTheDocument()
+  })
+})
+
 describe('BrowseCardPanel steppers', () => {
   it('counts a click before the server answers', async () => {
     const server = lobServer()

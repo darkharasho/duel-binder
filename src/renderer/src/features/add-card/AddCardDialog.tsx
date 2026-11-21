@@ -240,9 +240,7 @@ export function AddCardDialog({
   const downloading = sync?.cardCount === 0
   // On the phone the dialog fills the screen, so its lists can grow to the space left.
   const phone = isPhone()
-  const listClass = phone
-    ? 'max-h-none flex-1'
-    : 'max-h-[min(26rem,calc(100dvh-18dvh-9rem))] min-h-0'
+  const listClass = phone ? 'max-h-none flex-1' : 'max-h-[min(26rem,calc(100dvh-18dvh-9rem))] min-h-0'
   const commandClass = phone ? 'min-h-0 flex-1 rounded-none' : 'rounded-none'
   // The search underline: Bricolage at 22 px, italic placeholder (the Input primitive's field).
   const inputWrapClass =
@@ -253,7 +251,9 @@ export function AddCardDialog({
     'gap-4 rounded-full px-3 py-2 text-base data-[selected=true]:bg-chip data-[selected=true]:text-foreground'
   const emptyClass = 'py-8 text-center text-base text-foreground'
   const gameLabel = (
-    <p className="font-mono text-[11px] tracking-[0.14em] text-foreground uppercase">{def.name}</p>
+    <p className="font-mono text-[11px] tracking-[0.14em] text-foreground uppercase">
+      {def.name}
+    </p>
   )
 
   return (
@@ -460,11 +460,7 @@ export function AddCardDialog({
                 className="w-28 font-mono text-xl tabular-nums"
               />
             </label>
-            <Button
-              type="submit"
-              className="rounded-full px-6"
-              disabled={!qtyValid || add.isPending}
-            >
+            <Button type="submit" className="rounded-full px-6" disabled={!qtyValid || add.isPending}>
               Save
             </Button>
           </form>

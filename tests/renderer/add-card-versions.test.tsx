@@ -70,6 +70,9 @@ describe('AddCardDialog version rows', () => {
     expect(options).toHaveLength(2)
     expect(options[0]).toHaveTextContent('Lost Origin Trainer Gallery · LOR:TG TG03/30')
     expect(options[1]).not.toHaveTextContent('Lost Origin')
+    // The version row shows its printing's art (imageId 200); the card row the card's (100).
+    expect(options[0].querySelector('img')?.getAttribute('src')).toMatch(/\b200\b/)
+    expect(options[1].querySelector('img')?.getAttribute('src')).toMatch(/\b100\b/)
     await userEvent.click(options[0])
     const picked = await screen.findByRole('option', { selected: true })
     expect(picked).toHaveTextContent('Lost Origin Trainer Gallery')

@@ -4,7 +4,7 @@ import { defineConfig } from 'vite'
 const root = fileURLToPath(new URL('../../', import.meta.url))
 
 /**
- * Bundles the nightly catalog job (build.mjs), its parity check (parity.mjs) and the Pokémon set art dry run (set-art.mjs) and the printing photos' small copies (thumbs.mjs) into ESM files, run with `ELECTRON_RUN_AS_NODE=1 electron`
+ * Bundles the nightly catalog job (build.mjs), its parity check (parity.mjs) the Pokémon set art dry run (set-art.mjs), the printing photos' small copies (thumbs.mjs) and the deck rules pack (rules.mjs) into ESM files, run with `ELECTRON_RUN_AS_NODE=1 electron`
  * so it uses the repo's Electron-built better-sqlite3 (kept external with the other dependencies).
  */
 export default defineConfig({
@@ -33,6 +33,7 @@ export default defineConfig({
         thumbs: `${root}scripts/catalog/thumbs.ts`,
         'zh-art': `${root}scripts/catalog/zhArt.ts`,
         snapshots: `${root}scripts/catalog/snapshots.ts`,
+        rules: `${root}scripts/catalog/rules.ts`,
         'terms-harvest': `${root}scripts/terms/harvest.ts`,
         'terms-post': `${root}scripts/terms/post.ts`,
         'pull-training': `${root}scripts/scan/pull-training.ts`,

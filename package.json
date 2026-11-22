@@ -33,6 +33,7 @@
     "catalog:snapshots": "vite build --config scripts/catalog/vite.config.ts && cross-env ELECTRON_RUN_AS_NODE=1 electron out/catalog/snapshots.mjs",
     "terms:harvest": "vite build --config scripts/catalog/vite.config.ts && cross-env ELECTRON_RUN_AS_NODE=1 electron out/catalog/terms-harvest.mjs",
     "terms:post": "vite build --config scripts/catalog/vite.config.ts && cross-env ELECTRON_RUN_AS_NODE=1 electron out/catalog/terms-post.mjs",
+    "catalog:rules": "vite build --config scripts/catalog/vite.config.ts && node out/catalog/rules.mjs",
     "catalog:thumbs": "vite build --config scripts/catalog/vite.config.ts && node out/catalog/thumbs.mjs",
     "catalog:zh-art": "vite build --config scripts/catalog/vite.config.ts && cross-env ELECTRON_RUN_AS_NODE=1 electron out/catalog/zh-art.mjs",
     "scan:pull-training": "vite build --config scripts/catalog/vite.config.ts && node out/catalog/pull-training.mjs",

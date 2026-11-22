@@ -1,0 +1,105 @@
+{
+  "data": [
+    {
+      "id": 55144522,
+      "name": "Pot of Greed",
+      "frameType": "spell",
+      "banlist_info": {
+        "ban_tcg": "Forbidden",
+        "ban_ocg": "Forbidden",
+        "ban_goat": "Limited"
+      },
+      "misc_info": [
+        {
+          "tcg_date": "2002-03-08",
+          "ocg_date": "1999-05-27"
+        }
+      ]
+    },
+    {
+      "id": 1475311,
+      "name": "Allure of Darkness",
+      "frameType": "spell",
+      "banlist_info": {
+        "ban_ocg": "Limited"
+      },
+      "misc_info": [
+        {
+          "tcg_date": "2008-01-26",
+          "ocg_date": "2008-09-13"
+        }
+      ]
+    },
+    {
+      "id": 33760966,
+      "name": "Dracotail Arthalion",
+      "frameType": "fusion",
+      "banlist_info": {
+        "ban_tcg": "Semi-Limited"
+      },
+      "misc_info": [
+        {
+          "tcg_date": "2025-07-31",
+          "ocg_date": "2025-03-22"
+        }
+      ]
+    },
+    {
+      "id": 80181649,
+      "name": "\"A Case for K9\"",
+      "frameType": "spell",
+      "banlist_info": {
+        "ban_tcg": "Limited"
+      },
+      "misc_info": [
+        {
+          "tcg_date": "2025-07-31",
+          "ocg_date": "2025-03-22"
+        }
+      ]
+    },
+    {
+      "id": 72978038,
+      "name": "\"Raise Moon\" the City that Never Sleeps",
+      "frameType": "spell",
+      "misc_info": [
+        {
+          "ocg_date": "2026-09-05"
+        }
+      ]
+    },
+    {
+      "id": 100461101,
+      "name": "Arcana Force VIII - The Strength",
+      "frameType": "effect",
+      "misc_info": [
+        {
+          "tcg_date": "2027-02-25",
+          "ocg_date": "2027-02-16"
+        }
+      ]
+    },
+    {
+      "id": 4731783,
+      "name": "A Bao A Qu, the Lightless Shadow",
+      "frameType": "link",
+      "misc_info": [
+        {
+          "tcg_date": "2025-01-23",
+          "ocg_date": "2024-10-26"
+        }
+      ]
+    },
+    {
+      "id": 23771716,
+      "name": "7 Colored Fish",
+      "frameType": "normal",
+      "misc_info": [
+        {
+          "tcg_date": "2002-06-26",
+          "ocg_date": "2000-01-27"
+        }
+      ]
+    }
+  ]
+}

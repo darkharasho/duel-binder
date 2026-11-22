@@ -31,7 +31,7 @@ export function DecksPage({
   const list = useQuery<DeckList>({
     queryKey: friendId === undefined ? queryKeys.decks : queryKeys.friendDecks(friendId, game),
     queryFn: () => (friendId === undefined ? api.decks.list() : api.friends.decks(friendId)),
-    retry: friendId === undefined ? undefined : false
+    ...(friendId === undefined ? {} : { retry: false })
   })
   const pack = useRulesPack(game)
   const [uid, setUid] = useState<string | null>(null)
@@ -68,7 +68,7 @@ export function DecksPage({
     }
   }
 
-  if (uid && !readOnly) return <DeckPage uid={uid} onBack={() => setUid(null)} />
+  if (uid) return <DeckPage uid={uid} friendId={friendId} onBack={() => setUid(null)} />
   const empty = list.isSuccess && decks.length === 0
   return (
     <div className="space-y-4 p-8 max-md:p-4">
@@ -96,6 +96,8 @@ export function DecksPage({
             </div>
           </EmptyHero>
         )
+      ) : list.isError ? (
+        <p className="text-sm text-destructive">Could not load the decks.</p>
       ) : list.isPending ? (
         <CardGridSkeleton label="Loading decks" count={6} className={GRID} />
       ) : (
@@ -107,8 +109,7 @@ export function DecksPage({
               cards={list.data?.cardFacts ?? {}}
               pack={pack}
               today={today}
-              showCost={!readOnly}
-              onOpen={() => !readOnly && setUid(d.uid)}
+              onOpen={() => setUid(d.uid)}
             />
           ))}
         </ul>

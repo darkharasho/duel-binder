@@ -120,8 +120,7 @@ export function AppShell({
   }, [page, scroll])
   useEffect(() => trackOpen(), [])
   useEffect(() => {
-    // Decks has no usage event yet: the portal refuses events it doesn't know.
-    if (page !== 'admin' && page !== 'decks') track(`page:${page}`)
+    if (page !== 'admin') track(`page:${page}`)
   }, [page])
   // A switch to a game without this page (Scan) leaves it.
   useEffect(() => {

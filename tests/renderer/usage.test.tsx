@@ -82,6 +82,18 @@ describe('usage counts', () => {
     expect(report()).toHaveBeenCalledWith({ 'page:pokedex': 1 })
   })
 
+  it('sends page:decks on its own, so a portal without it keeps the rest of the report', async () => {
+    report().mockImplementation(async (batch: Record<string, number>) => {
+      if ('page:decks' in batch) throw new Error('400')
+    })
+    track('open')
+    track('page:decks')
+    flushUsage()
+    expect(report()).toHaveBeenCalledTimes(2)
+    expect(report()).toHaveBeenCalledWith({ open: 1 })
+    expect(report()).toHaveBeenCalledWith({ 'page:decks': 1 })
+  })
+
   it('sends buy-link clicks on their own, so a portal without them keeps the rest', async () => {
     report().mockImplementation(async (batch: Record<string, number>) => {
       if ('buy:ebay' in batch) throw new Error('400')

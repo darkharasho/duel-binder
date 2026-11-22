@@ -7,9 +7,21 @@ import { api, queryKeys } from '@/lib/api'
 import { useBackHandler } from '@/lib/backStack'
 
 /** A placeholder: the deck page proper replaces this. */
-export function DeckPage({ uid, onBack }: { uid: string; onBack: () => void }): React.JSX.Element {
+export function DeckPage({
+  uid,
+  onBack,
+  friendId
+}: {
+  uid: string
+  onBack: () => void
+  friendId?: number
+}): React.JSX.Element {
   useBackHandler(true, onBack)
-  const q = useQuery({ queryKey: queryKeys.deck(uid), queryFn: () => api.decks.get(uid) })
+  const q = useQuery({
+    queryKey: friendId === undefined ? queryKeys.deck(uid) : queryKeys.friendDeck(friendId, uid),
+    queryFn: () => (friendId === undefined ? api.decks.get(uid) : api.friends.deck(friendId, uid)),
+    ...(friendId === undefined ? {} : { retry: false })
+  })
   return (
     <div className="space-y-4 p-8 max-md:p-4">
       <PageHeader>

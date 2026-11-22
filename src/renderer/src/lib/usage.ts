@@ -61,6 +61,7 @@ export function flushUsage(): void {
   const {
     'page:wishlist': wishlist,
     'page:binders': binders,
+    'page:decks': decks,
     'page:sessions': sessions,
     'page:pokedex': pokedex,
     'buy:tcgplayer': buyTcgplayer,
@@ -77,6 +78,7 @@ export function flushUsage(): void {
     rest,
     wishlist ? { 'page:wishlist': wishlist } : {},
     binders ? { 'page:binders': binders } : {},
+    decks ? { 'page:decks': decks } : {},
     sessions ? { 'page:sessions': sessions } : {},
     pokedex ? { 'page:pokedex': pokedex } : {},
     buy,

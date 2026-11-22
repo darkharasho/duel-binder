@@ -68,13 +68,14 @@ const pack = (version: string, limits: Record<string, 0 | 1 | 2> = { [POT]: 0 })
 })
 const apiWith = (decks: DeckSummary[], rules: PackState, o: DeepPartial<Api> = {}): Api =>
   createMockApi({
+    ...o,
     decks: {
       rules: vi.fn(async () => rules),
       list: vi.fn(async () => ({ decks, cardFacts: facts })),
       save: vi.fn(async () => 'new-uid'),
-      get: vi.fn(async () => null)
-    },
-    ...o
+      get: vi.fn(async () => null),
+      ...o.decks
+    }
   })
 
 afterEach(() => {
@@ -144,20 +145,61 @@ describe('the decks page', () => {
     expect(await screen.findByRole('button', { name: /Back/ })).toBeInTheDocument()
   })
 
-  it('is read-only for a friend and uses their decks', async () => {
+  it('shows no badge while the rules are pending, and Legality unknown if they fail', async () => {
+    const pending = apiWith(
+      [deck({})],
+      { state: 'missing' },
+      {
+        decks: { rules: vi.fn(() => new Promise<never>(() => {})) }
+      }
+    )
+    const first = renderWithProviders(<DecksPage />, { api: pending })
+    expect(await screen.findByText('Deck')).toBeInTheDocument()
+    expect(screen.queryByText(/Legal|Not legal/)).not.toBeInTheDocument()
+    first.unmount()
+    const failing = apiWith(
+      [deck({})],
+      { state: 'missing' },
+      {
+        decks: { rules: vi.fn(async () => Promise.reject(new Error('offline'))) }
+      }
+    )
+    renderWithProviders(<DecksPage />, { api: failing })
+    expect(await screen.findByText('Legality unknown')).toBeInTheDocument()
+  })
+
+  it('shows an error line when the list fails', async () => {
+    const api = apiWith(
+      [],
+      { state: 'missing' },
+      {
+        decks: { list: vi.fn(async () => Promise.reject(new Error('boom'))) }
+      }
+    )
+    renderWithProviders(<DecksPage />, { api })
+    expect(await screen.findByText('Could not load the decks.')).toBeInTheDocument()
+    expect(screen.queryByText('Build your first deck')).not.toBeInTheDocument()
+  })
+
+  it('is read-only for a friend, shows their cost and opens their deck', async () => {
     const api = apiWith(
       [],
       { state: 'missing' },
       {
         friends: {
-          decks: vi.fn(async () => ({ decks: [deck({ name: 'Theirs' })], cardFacts: facts }))
+          decks: vi.fn(async () => ({ decks: [deck({ name: 'Theirs' })], cardFacts: facts })),
+          deck: vi.fn(async () => null)
         }
       }
     )
     renderWithProviders(<DecksPage friendId={7} />, { api })
-    expect(await screen.findByText('Theirs')).toBeInTheDocument()
+    const tile = (await screen.findByText('Theirs')).closest('li') as HTMLElement
     expect(api.friends.decks).toHaveBeenCalledWith(7)
     expect(screen.queryByRole('button', { name: 'New deck' })).not.toBeInTheDocument()
+    expect(within(tile).getByText('$3.00 +1 unpriced')).toBeInTheDocument()
+    await userEvent.click(within(tile).getByRole('button'))
+    expect(await screen.findByRole('button', { name: /Back/ })).toBeInTheDocument()
+    expect(api.friends.deck).toHaveBeenCalledWith(7, 'd1')
   })
 })
 
@@ -183,7 +225,9 @@ describe('Decks in the nav', () => {
     })
     renderWithProviders(<App />, { api })
     const n = await screen.findByRole('navigation', { name: 'Main' })
-    await waitFor(() => expect(within(n).getAllByRole('button').length).toBeGreaterThan(3))
+    await waitFor(() =>
+      expect(within(n).getByRole('button', { name: 'Binders' })).toBeInTheDocument()
+    )
     return within(n)
       .getAllByRole('button')
       .map((b) => b.textContent ?? '')
@@ -193,7 +237,6 @@ describe('Decks in the nav', () => {
     expect(names[names.indexOf('Binders') + 1]).toBe('Decks')
   })
   it('is not in the nav for Pokémon', async () => {
-    await waitFor(async () => expect(await nav('pkm')).toContain('Binders'))
     expect(await nav('pkm')).not.toContain('Decks')
   })
 })

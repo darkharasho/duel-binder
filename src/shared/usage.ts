@@ -13,6 +13,7 @@ export const USAGE_EVENTS = [
   'page:graded',
   'page:wishlist',
   'page:binders',
+  'page:decks',
   'page:pokedex',
   'page:sets',
   'page:browse',

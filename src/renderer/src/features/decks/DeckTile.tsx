@@ -21,15 +21,12 @@ export function DeckTile({
   cards,
   pack,
   today,
-  showCost,
   onOpen
 }: {
   deck: DeckSummary
   cards: Record<number, DeckCard>
   pack: PackState | undefined
   today: string
-  /** False for a friend's deck: owned counts are theirs. */
-  showCost: boolean
   onOpen: () => void
 }): React.JSX.Element {
   const format = formatOf(deck.game, deck.format)
@@ -37,7 +34,7 @@ export function DeckTile({
   const change = verdict ? verdictChange(deck.lastSeen, verdict) : null
   const count = (s: string): number =>
     deck.cards.reduce((n, e) => (e.section === s ? n + e.qty : n), 0)
-  const cost = format && showCost ? deckCost(deck.cards, cards, format.priceRegion) : null
+  const cost = format ? deckCost(deck.cards, cards, format.priceRegion) : null
   return (
     <li className="min-w-0">
       <button

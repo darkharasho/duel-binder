@@ -43,7 +43,8 @@ export function checkDeck(
 ): DeckVerdict {
   const format = formatOf(deck.game, deck.format)
   // A format this app doesn't know (made by a newer one) can't be judged, and is never Legal.
-  if (!format) return { status: 'update', badge: 'Update to check legality', problems: [], packVersion: null }
+  if (!format)
+    return { status: 'update', badge: 'Update to check legality', problems: [], packVersion: null }
   const problems: DeckProblem[] = []
   let packVersion: string | null = null
   if (deck.game === 'ygo') {

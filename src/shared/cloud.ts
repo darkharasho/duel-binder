@@ -312,3 +312,9 @@ export function keepsKey(a: WireEntry, b: WireEntry): boolean {
   const tb = Date.parse(editTime(b))
   return ta > tb || (ta === tb && a.uid < b.uid)
 }
+
+/** What sign-in says when the portal's seat cap is reached; the screens add a waitlist link to it. */
+export const SEATS_FULL_TEXT = 'Duel Binder is full for now.'
+/** The portal's `error=full` / `{ error: 'full' }` code, as the apps carry it in an Error message. */
+export const SEATS_FULL_CODE = 'full'
+export const WAITLIST_URL = 'https://duelbinder.com/waitlist'

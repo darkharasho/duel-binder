@@ -18,6 +18,7 @@ vi.mock('../../src/phone/nativeSignIn', async (orig) => ({
 }))
 
 import { claimEmailClient, phoneEmailClient } from '../../src/phone/emailAuth'
+import { EMAIL_COPY } from '../../src/shared/emailAuth'
 import { SignIn } from '../../src/phone/SignIn'
 import { nativeSignIn } from '../../src/phone/nativeSignIn'
 
@@ -156,5 +157,29 @@ describe('phone SignIn, native', () => {
     const call = f.mock.calls.find((c) => String(c[0]).endsWith('/auth/email/claim'))!
     expect(JSON.parse(call[1].body)).toEqual({ password: 'hunter22!', ticket: 'cl', verifier: 'v' })
     expect(store.signIn).toHaveBeenCalledWith('tok', USER)
+  })
+  it('a Discord sign-in turned away as full says so and links the waitlist', async () => {
+    build.platform = 'android'
+    const user = userEvent.setup()
+    portal(true, {})
+    vi.mocked(nativeSignIn).mockRejectedValue(new Error('full'))
+    render(<SignIn store={{} as never} onSignedIn={() => {}} />)
+    await user.click(await screen.findByRole('button', { name: 'Sign in with Discord' }))
+    expect(await screen.findByText(/Duel Binder is full for now\./)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Join the waitlist' })).toHaveAttribute(
+      'href',
+      'https://duelbinder.com/waitlist'
+    )
+    expect(screen.queryByText("Sign-in didn't go through. Try again.")).toBeNull()
+  })
+
+  it('an email step answered full shows the portal copy', async () => {
+    const f = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ error: EMAIL_COPY.full, code: 'full' }), { status: 403 })
+    )
+    await expect(
+      phoneEmailClient({ signIn: vi.fn() }, f as never).step('confirm', {})
+    ).rejects.toThrow(EMAIL_COPY.full)
   })
 })

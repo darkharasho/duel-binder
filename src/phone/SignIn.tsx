@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { APP_PLATFORM, isNativeApp } from '@/lib/portal'
 import { fetchMe } from '@/web/account'
-import type { Me } from '../shared/cloud'
+import { SEATS_FULL_CODE, type Me } from '../shared/cloud'
+import { SeatsFull } from '@/features/account/SeatsFull'
 import { EmailClaim } from '@/features/account/EmailClaim'
 import { EmailSignIn } from '@/features/account/EmailSignIn'
 import { claimEmailClient, emailSignInEnabled, phoneEmailClient } from './emailAuth'
@@ -73,7 +74,7 @@ export function SignIn({
 }): React.JSX.Element {
   const native = isNativeApp()
   const [checking, setChecking] = useState(!native)
-  const [nativeFailed, setNativeFailed] = useState(false)
+  const [nativeFailed, setNativeFailed] = useState<false | 'failed' | 'full'>(false)
   const [emailOn, setEmailOn] = useState(false)
   /** The in-app email flow (`forgot`: straight to a password reset) or a claim to link. */
   const [emailFlow, setEmailFlow] = useState<
@@ -81,8 +82,10 @@ export function SignIn({
     | { at: 'email'; forgotFor?: string }
     | { at: 'claim'; email: string; provider: string; claim: string; verifier?: string }
   >(null)
+  const full = nativeFailed === 'full'
   const failed =
-    nativeFailed || new URLSearchParams(window.location.search).get('signin') === 'failed'
+    nativeFailed === 'failed' ||
+    new URLSearchParams(window.location.search).get('signin') === 'failed'
 
   const mounted = useMounted()
   const emailClient = useMemo(() => phoneEmailClient(store), [store])
@@ -105,7 +108,8 @@ export function SignIn({
       if (mounted.current) onSignedIn(signedIn.user)
       return
     } catch (e) {
-      if (mounted.current && !(e instanceof SignInCancelled)) setNativeFailed(true)
+      if (mounted.current && !(e instanceof SignInCancelled))
+        setNativeFailed(e instanceof Error && e.message === SEATS_FULL_CODE ? 'full' : 'failed')
     }
     if (mounted.current) setChecking(false)
   }
@@ -142,8 +146,12 @@ export function SignIn({
       <p className="max-w-xs text-[15px] text-muted-foreground">
         {native ? NATIVE_SIGN_IN_COPY : SIGN_IN_COPY}
       </p>
+      {full && <SeatsFull />}
       {failed && (
-        <p role="alert" className="inline-block rounded-2xl bg-popover px-3 py-1.5 text-sm text-destructive">
+        <p
+          role="alert"
+          className="inline-block rounded-2xl bg-popover px-3 py-1.5 text-sm text-destructive"
+        >
           {SIGN_IN_FAILED}
         </p>
       )}

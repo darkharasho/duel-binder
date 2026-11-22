@@ -16,7 +16,8 @@ import { useAccountStatus, useApplyAccountStatus } from '@/lib/account'
 import { formatRelative } from '@/lib/format'
 import { isWeb } from '@/lib/platform'
 import { fetchMe } from '@/web/account'
-import type { Me } from '@shared/cloud'
+import { SEATS_FULL_TEXT, type Me } from '@shared/cloud'
+import { SeatsFull } from '@/features/account/SeatsFull'
 import { SignInMethods } from './SignInMethods'
 import { useOwnSupporter } from '@/lib/supporter'
 import { SupporterHeart } from '@/components/SupporterHeart'
@@ -133,7 +134,8 @@ function DesktopAccount(): React.JSX.Element {
             in again.
           </p>
         )}
-        {s.error && (
+        {s.error === SEATS_FULL_TEXT && <SeatsFull />}
+        {s.error && s.error !== SEATS_FULL_TEXT && (
           <p className="inline-block rounded-2xl bg-popover px-3 py-1.5 text-destructive">
             {s.error}
           </p>

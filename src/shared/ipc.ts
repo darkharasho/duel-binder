@@ -7,6 +7,8 @@ import type {
   AdminSkippedSignIn,
   AdminStats,
   AdminBeta,
+  AdminSeats,
+  AdminSeatsAction,
   AdminTerm,
   AdminTermFields,
   AdminTester,
@@ -392,6 +394,14 @@ export interface Api {
     decideBeta(id: number, status: 'added' | 'declined'): Promise<{ emailed: boolean }>
     /** Deletes a request for good. */
     deleteBeta(id: number): Promise<void>
+    /** The seat cap: its counts and the waitlist. */
+    seats(): Promise<AdminSeats>
+    /**
+     * One seat action: set the cap (`cap`), invite the waiting from the list (`fill`), or act on a
+     * waitlist entry by `id`. Resolves with how many `cap` and `fill` invited. Rejects with a
+     * readable message when the invite email didn't go out or the entry already has an account.
+     */
+    seatsAction(req: AdminSeatsAction): Promise<{ invited?: number }>
     /** A game's community search terms with one status (newest first). */
     terms(game: GameId, status: TermStatus): Promise<AdminTerm[]>
     /** Approves or rejects a term, with edited fields when given; rejects with a readable message on a phrase clash. */
@@ -676,6 +686,8 @@ export const INVOKE_CHANNELS = [
   'admin:beta',
   'admin:decideBeta',
   'admin:deleteBeta',
+  'admin:seats',
+  'admin:seatsAction',
   'admin:terms',
   'admin:decideTerm',
   'admin:addTerm',

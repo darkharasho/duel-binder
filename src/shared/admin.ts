@@ -196,3 +196,9 @@ export interface AdminSeats {
   counts: { cap: number; accounts: number; invited: number; free: number; waiting: number }
   waitlist: AdminWaitlistEntry[]
 }
+
+/** One POST /admin/seats/{action}: `cap` carries the new cap; the entry actions carry the waitlist `id`; `fill` neither. */
+export type AdminSeatsAction =
+  | { action: 'cap'; cap: number }
+  | { action: 'fill' }
+  | { action: 'invite' | 'resend' | 'cancel' | 'delete'; id: number }

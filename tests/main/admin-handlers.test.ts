@@ -85,6 +85,39 @@ describe('admin handlers: search terms', () => {
   })
 })
 
+describe('admin handlers: seats', () => {
+  it('reads the seats and posts each action to its route', async () => {
+    const { h, admin } = make()
+    await h['admin:seats']()
+    expect(admin).toHaveBeenLastCalledWith('/admin/seats')
+    admin.mockResolvedValueOnce({ ok: true, invited: 3 })
+    await expect(h['admin:seatsAction']({ action: 'cap', cap: 50 })).resolves.toEqual({
+      invited: 3
+    })
+    expect(admin).toHaveBeenLastCalledWith('/admin/seats/cap', { cap: 50 })
+    await h['admin:seatsAction']({ action: 'fill' })
+    expect(admin).toHaveBeenLastCalledWith('/admin/seats/fill', {})
+    await h['admin:seatsAction']({ action: 'invite', id: 4 })
+    expect(admin).toHaveBeenLastCalledWith('/admin/seats/invite', { id: 4 })
+  })
+
+  it('rejects bad arguments and says why an invite failed', async () => {
+    const { h, admin } = make()
+    await expect(h['admin:seatsAction']({ action: 'cap', cap: -1 })).rejects.toThrow('Bad cap')
+    await expect(h['admin:seatsAction']({ action: 'nuke' })).rejects.toThrow('Bad action')
+    await expect(h['admin:seatsAction']({ action: 'invite', id: 'x' })).rejects.toThrow('Bad id')
+    expect(admin).not.toHaveBeenCalled()
+    admin.mockRejectedValueOnce(new CloudOfflineError('The portal refused (409)'))
+    await expect(h['admin:seatsAction']({ action: 'resend', id: 1 })).rejects.toThrow(
+      'already has an account'
+    )
+    admin.mockRejectedValueOnce(new CloudOfflineError('The portal failed (502)'))
+    await expect(h['admin:seatsAction']({ action: 'invite', id: 1 })).rejects.toThrow(
+      "invite email didn't go out"
+    )
+  })
+})
+
 describe('admin handlers: phone beta', () => {
   it('reads, decides and deletes beta requests', async () => {
     const { h, admin } = make()

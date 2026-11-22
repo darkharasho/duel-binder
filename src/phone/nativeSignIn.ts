@@ -1,5 +1,5 @@
 import { registerPlugin } from '@capacitor/core'
-import type { Me } from '../shared/cloud'
+import { SEATS_FULL_CODE, type Me } from '../shared/cloud'
 import { APP_PLATFORM, PORTAL_ORIGIN } from '@/lib/portal'
 
 /**
@@ -73,6 +73,10 @@ async function tradeForToken(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body)
   })
+  if (res.status === 403) {
+    const refusal = (await res.json().catch(() => null)) as { error?: unknown } | null
+    if (refusal?.error === SEATS_FULL_CODE) throw new Error(SEATS_FULL_CODE)
+  }
   if (!res.ok) throw new Error('signin-failed')
   const out = (await res.json()) as {
     token?: unknown
@@ -91,7 +95,8 @@ async function tradeForToken(
  * `?app=android`) with a PKCE challenge,
  * shown in the system's sign-in sheet, which hands back a one-time code on duelbinder://; the code
  * and verifier trade for the app's Bearer token like the desktop's. Rejects with SignInCancelled
- * when the sheet is closed, and with an Error when the sign-in fails.
+ * when the sheet is closed, and with an Error when the sign-in fails (message `full` when the
+ * seat cap is reached).
  */
 export async function nativeSignIn(deps: {
   app?: 'ios' | 'android'
@@ -132,7 +137,9 @@ export async function nativeSignIn(
   const code = q.get('code')
   const claim = q.get('claim')
   const claimEmail = q.get('email')
-  if (q.get('state') !== state || q.has('error')) throw new Error('signin-failed')
+  if (q.get('state') !== state) throw new Error('signin-failed')
+  if (q.get('error') === SEATS_FULL_CODE) throw new Error(SEATS_FULL_CODE)
+  if (q.has('error')) throw new Error('signin-failed')
   // An email account uses this Discord email: the callback carries a claim in place of a code.
   if (deps.intent !== 'link' && !code && claim && claimEmail)
     return { claim, email: claimEmail, verifier }

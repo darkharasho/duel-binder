@@ -3,6 +3,7 @@ import {
   type AdminBeta,
   type AdminErrorGroup,
   type AdminList,
+  type AdminSeats,
   type AdminMerge,
   type AdminPhotos,
   type AdminSkippedSignIn,
@@ -68,6 +69,9 @@ export function duplicateText(status: string | undefined): string {
   if (status === 'approved') return 'That phrase is already used by an approved term in this game.'
   return 'That phrase is already used by another term in this game.'
 }
+
+/** The seats actions that act on one waitlist entry by id. */
+const SEAT_ENTRY_ACTIONS = ['invite', 'resend', 'cancel', 'delete']
 
 async function termWrite(call: () => Promise<unknown>): Promise<void> {
   try {
@@ -161,6 +165,33 @@ export function adminHandlers(
     },
     'admin:deleteBeta': async (requestId: unknown) => {
       await account.admin('/admin/beta/delete', { id: id(requestId) })
+    },
+    'admin:seats': () => account.admin<AdminSeats>('/admin/seats'),
+    'admin:seatsAction': async (req: unknown) => {
+      const { action, id: entryId, cap } = (req ?? {}) as Record<string, unknown>
+      let body: Record<string, number> = {}
+      if (action === 'cap') {
+        if (typeof cap !== 'number' || !Number.isInteger(cap) || cap < 0 || cap > 100_000)
+          throw new Error('Bad cap')
+        body = { cap }
+      } else if (action !== 'fill') {
+        if (!SEAT_ENTRY_ACTIONS.includes(action as string)) throw new Error('Bad action')
+        body = { id: id(entryId) }
+      }
+      try {
+        const res = await account.admin<{ invited?: number } | undefined>(
+          `/admin/seats/${action as string}`,
+          body
+        )
+        return typeof res?.invited === 'number' ? { invited: res.invited } : {}
+      } catch (e) {
+        // invite and resend: 409 is an entry that already has an account, 502 an email that failed.
+        if (e instanceof CloudOfflineError && e.message.includes('(409)'))
+          throw new Error('That person already has an account.', { cause: e })
+        if (e instanceof CloudOfflineError && e.message.includes('(502)'))
+          throw new Error("The invite email didn't go out. Try again.", { cause: e })
+        throw e
+      }
     },
     'admin:terms': async (game: unknown, status: unknown) => {
       if (!isGameId(game)) throw new Error('Bad game')

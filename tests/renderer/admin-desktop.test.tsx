@@ -139,6 +139,11 @@ function adminApi(): NonNullable<Api['admin']> {
     })),
     decideBeta: vi.fn(async () => ({ emailed: true })),
     deleteBeta: vi.fn(async () => {}),
+    seats: vi.fn(async () => ({
+      counts: { cap: 100, accounts: 0, invited: 0, free: 100, waiting: 0 },
+      waitlist: []
+    })),
+    seatsAction: vi.fn(async () => ({})),
     terms: vi.fn(async () => []),
     decideTerm: vi.fn(async () => {}),
     addTerm: vi.fn(async () => {}),

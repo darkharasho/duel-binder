@@ -271,8 +271,14 @@ describe('the seat gate', () => {
       full()
       const res = await emailJson('create', create)
       expect(res.status).toBe(403)
-      expect(await res.json()).toEqual({ error: EMAIL_COPY.full })
+      expect(await res.json()).toEqual({ error: EMAIL_COPY.full, code: 'full' })
       expect(sender.sent).toEqual([])
+    })
+
+    it('an error with no code set keeps the plain { error } shape', async () => {
+      const res = await emailJson('create', { ...create, email: 'not-an-email' })
+      expect(res.status).toBe(400)
+      expect(Object.keys((await res.json()) as object)).toEqual(['error'])
     })
 
     it('the web form shows the full copy', async () => {
@@ -311,7 +317,7 @@ describe('the seat gate', () => {
       full()
       const res = await emailJson('confirm', { ticket, code: sender.lastCode() })
       expect(res.status).toBe(403)
-      expect(await res.json()).toEqual({ error: EMAIL_COPY.full })
+      expect(await res.json()).toEqual({ error: EMAIL_COPY.full, code: 'full' })
       expect(accounts()).toBe(1)
     })
 

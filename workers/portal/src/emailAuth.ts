@@ -847,7 +847,12 @@ export async function emailAuthRoute(req: Request, deps: AppDeps, step: string):
     const token = await mintSession(deps, out.userId, 'desktop', deps.now().toISOString())
     return json({ next: 'signed-in', token, user: loadMe(deps, out.userId), created: out.created })
   } catch (err) {
-    if (err instanceof EmailAuthError) return json({ error: err.message }, err.status)
+    // The default 'refused' is no code: only a set one goes out, for apps to act on.
+    if (err instanceof EmailAuthError)
+      return json(
+        err.code === 'refused' ? { error: err.message } : { error: err.message, code: err.code },
+        err.status
+      )
     throw err
   }
 }

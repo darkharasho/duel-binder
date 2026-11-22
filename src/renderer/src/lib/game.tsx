@@ -2,6 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { GAMES, gameOfId, type CardAspect, type GameDef, type GameId } from '@shared/games'
+import { decksAvailable } from '@shared/decks/formats'
 import { api } from '@/lib/api'
 
 export interface GameState {
@@ -75,6 +76,7 @@ export function useCardGame(imageId?: number): GameId {
 /** Whether a page is in this game: Scan (and its Sessions) and the Pokédex only for a game that has them. */
 export function pageInGame(page: string, def: GameDef): boolean {
   if (page === 'pokedex') return def.features.pokedex
+  if (page === 'decks') return decksAvailable(def.id)
   return (page !== 'scan' && page !== 'sessions') || def.features.scan
 }
 

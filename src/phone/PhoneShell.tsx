@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import {
   AwardIcon,
   BookOpenIcon,
+  LayersIcon,
   CircleDotIcon,
   EllipsisIcon,
   HeartIcon,
@@ -56,6 +57,7 @@ const TABS: { page: Page; label: string; icon: LucideIcon }[] = [
 ]
 const MORE: { page: Page; label: string; icon: LucideIcon }[] = [
   { page: 'binders', label: 'Binders', icon: BookOpenIcon },
+  { page: 'decks', label: 'Decks', icon: LayersIcon },
   { page: 'graded', label: 'Graded', icon: AwardIcon },
   { page: 'pokedex', label: 'Pokédex', icon: CircleDotIcon },
   { page: 'wishlist', label: 'Wishlist', icon: HeartIcon },

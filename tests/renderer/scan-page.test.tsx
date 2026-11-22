@@ -146,6 +146,7 @@ describe('Scan nav', () => {
       'Collection',
       'Graded',
       'Binders',
+      'Decks',
       'Wishlist',
       'Sets',
       'Browse',

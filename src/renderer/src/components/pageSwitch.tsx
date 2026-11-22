@@ -13,6 +13,7 @@ import { PokedexPage } from '@/features/pokedex/PokedexPage'
 import { SessionsPage } from '@/features/sessions/SessionsPage'
 import { SetsPage } from '@/features/sets/SetsPage'
 import { WishlistPage } from '@/features/wishlist/WishlistPage'
+import { DecksPage } from '@/features/decks/DecksPage'
 import { GradedPage } from '@/features/graded/GradedPage'
 import type { AdminPageTab } from '@/features/admin/adminTabs'
 import { api } from '@/lib/api'
@@ -124,6 +125,7 @@ export function PageSwitch({
       {page === 'wishlist' && <WishlistPage onNavigate={onNavigate} />}
       {page === 'graded' && <GradedPage onNavigate={onNavigate} />}
       {page === 'binders' && <BindersPage />}
+      {page === 'decks' && <DecksPage onNavigate={onNavigate} />}
       {page === 'pokedex' && <PokedexPage />}
       {page === 'browse' && (
         <BrowsePage onAddCard={(card, printingId) => openAdd({ card, printingId })} />

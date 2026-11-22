@@ -124,6 +124,7 @@ describe('AppShell sets nav', () => {
       'Collection',
       'Graded',
       'Binders',
+      'Decks',
       'Wishlist',
       'Sets',
       'Browse',

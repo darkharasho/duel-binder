@@ -26,6 +26,7 @@ export type Page =
   | 'graded'
   | 'wishlist'
   | 'binders'
+  | 'decks'
   | 'pokedex'
   | 'browse'
   | 'scan'
@@ -54,6 +55,7 @@ const NAV_GROUPS: readonly { heading?: string; pages: readonly { page: Page; lab
         { page: 'collection', label: 'Collection' },
         { page: 'graded', label: 'Graded' },
         { page: 'binders', label: 'Binders' },
+        { page: 'decks', label: 'Decks' },
         { page: 'pokedex', label: 'Pokédex' },
         { page: 'wishlist', label: 'Wishlist' }
       ]
@@ -118,7 +120,8 @@ export function AppShell({
   }, [page, scroll])
   useEffect(() => trackOpen(), [])
   useEffect(() => {
-    if (page !== 'admin') track(`page:${page}`)
+    // Decks has no usage event yet: the portal refuses events it doesn't know.
+    if (page !== 'admin' && page !== 'decks') track(`page:${page}`)
   }, [page])
   // A switch to a game without this page (Scan) leaves it.
   useEffect(() => {

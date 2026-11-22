@@ -305,6 +305,21 @@ describe('the deck page', () => {
     expect(within(entry('Pricey')).getByText('0/3')).toBeInTheDocument()
   })
 
+  it('a desktop save failure shows the reason without the IPC prefix', async () => {
+    const save = vi.fn(async () =>
+      Promise.reject(
+        new Error("Error invoking remote method 'decks:save': Error: That deck is gone")
+      )
+    )
+    const api = pageApi(detail(), pack('2026-11-22'), { decks: { save } })
+    renderWithProviders(<DeckPage uid="d1" onBack={vi.fn()} />, { api })
+    await screen.findByText('Main Deck 42 / 40–60')
+    await userEvent.click(screen.getByRole('button', { name: 'Add a copy of Pricey' }))
+    expect(
+      await screen.findByText('Not saved: That deck is gone', {}, SAVE_WAIT)
+    ).toBeInTheDocument()
+  })
+
   it('tapping a problem highlights its entry', async () => {
     const cards: DeckEntry[] = [...fillers(), { section: 'main', card: POT, qty: 3 }]
     const api = pageApi(detail({ cards }), pack('2026-11-22'))

@@ -3,6 +3,7 @@ import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-q
 import type { FriendsOverview } from '@shared/types'
 import { api, queryKeys } from './api'
 import { isWeb } from './platform'
+import { errorMessage } from './errorMessage'
 
 const SIGNED_IN_KEY = 'friends.signedIn'
 
@@ -83,7 +84,7 @@ export function useFriendsOverview(): UseQueryResult<FriendsOverview> {
   })
 }
 
-/** An error's message without Electron's "Error invoking remote method '…': Error: " IPC prefix. */
+/** An error's message without Electron's IPC prefix. */
 export function friendsErrorMessage(error: Error): string {
-  return error.message.replace(/^Error invoking remote method '[^']*': (Error: )?/, '')
+  return errorMessage(error)
 }

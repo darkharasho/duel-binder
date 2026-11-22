@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { api, queryKeys } from '@/lib/api'
 import { useBackHandler } from '@/lib/backStack'
+import { errorMessage } from '@/lib/errorMessage'
 import { isPhone } from '@/lib/platform'
 import { cn } from '@/lib/utils'
 import {
@@ -108,7 +109,7 @@ export function DeckPage({
         if (mine === seq.current) setSaveError(null)
         void qc.invalidateQueries({ queryKey: queryKeys.decks })
       } catch (e) {
-        if (mine === seq.current) setSaveError(e instanceof Error ? e.message : 'Could not save')
+        if (mine === seq.current) setSaveError(errorMessage(e, 'Could not save'))
       }
     },
     [uid, qc]
@@ -192,7 +193,7 @@ export function DeckPage({
       await qc.invalidateQueries({ queryKey: queryKeys.decks, exact: true })
       toast.success(`Saved as ${name}`)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not duplicate the deck')
+      toast.error(errorMessage(e, 'Could not duplicate the deck'))
     } finally {
       setBusy(false)
     }
@@ -207,7 +208,7 @@ export function DeckPage({
       await qc.invalidateQueries({ queryKey: queryKeys.decks, exact: true })
       onBack()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not delete the deck')
+      toast.error(errorMessage(e, 'Could not delete the deck'))
       setBusy(false)
     }
   }

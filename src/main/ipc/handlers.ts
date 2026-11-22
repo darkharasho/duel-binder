@@ -259,7 +259,9 @@ export function createHandlers({
       const ids = local(serverIdsOf.sessions(sessions))
       return sessions.map((s) => friendSession(s, ids))
     },
-    'decks:rules': (game: GameId) => rulesPack(game),
+    // The game names a meta key and a URL path: only a known one gets that far.
+    'decks:rules': async (game: GameId) =>
+      isGameId(game) ? rulesPack(game) : ({ state: 'missing' } as const),
     'friends:graded': async (friendId: number) => {
       const slabs = await account.portal<GradedCopy[]>('friends:graded', [friendId])
       const ids = local(serverIdsOf.graded(slabs))

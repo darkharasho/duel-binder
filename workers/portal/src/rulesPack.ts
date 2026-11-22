@@ -46,7 +46,10 @@ async function serve(
   game: string,
   cache: Cache | null
 ): Promise<Response> {
-  const cacheKey = new Request(new URL(req.url).toString(), { method: 'GET' })
+  // Keyed without the query string: one copy per game, the one a PUT purges.
+  const url = new URL(req.url)
+  url.search = ''
+  const cacheKey = new Request(url.toString(), { method: 'GET' })
   let res = (await cache?.match(cacheKey)) ?? null
   if (!res) {
     const obj = await bucket.get(keyOf(game))

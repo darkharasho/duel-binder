@@ -14,6 +14,8 @@ import { mkdtempSync, readFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createScanTrace } from '../../src/main/scan/scanTrace'
+import type { PackState } from '../../src/shared/decks/pack'
+import type { GameId } from '../../src/shared/games'
 
 type FakeAccount = { [K in Exclude<keyof AccountService, 'portal'>]: Mock<AccountService[K]> } & {
   portal: Mock<(channel: PortalChannel, args: unknown[]) => Promise<unknown>>
@@ -55,7 +57,9 @@ const fakeAccount = (signedIn = false): FakeAccount => ({
   training: vi.fn(async () => ({ ok: true as const, summary: null }))
 })
 
-async function makeHandlers(opts: { signedIn?: boolean } = {}) {
+async function makeHandlers(
+  opts: { signedIn?: boolean; rulesPack?: (game: GameId) => Promise<PackState> } = {}
+) {
   const db = await seededDb()
   const account = fakeAccount(opts.signedIn)
   const scanWindow = {
@@ -115,7 +119,8 @@ async function makeHandlers(opts: { signedIn?: boolean } = {}) {
       dispose: async () => {}
     },
     ripCapture: { save: vi.fn(), remove: vi.fn(), note: vi.fn(), openFolder: vi.fn() },
-    scanTrace
+    scanTrace,
+    rulesPack: opts.rulesPack
   })
   return { db, handlers, account, catalog, scanWindow, images, scanTrace, openTrace }
 }
@@ -614,5 +619,19 @@ describe('scan trace handlers', () => {
     await expect(handlers['scan:traceDir']()).resolves.toBe(scanTrace.root)
     await handlers['scan:openTraceDir']()
     expect(openTrace).toHaveBeenCalledWith(scanTrace.root)
+  })
+
+  it('decks:rules reads only a known game', async () => {
+    const rulesPack = vi.fn(async (): Promise<PackState> => ({ state: 'missing' }))
+    const { handlers } = await makeHandlers({ rulesPack })
+    await expect(handlers['decks:rules']('../../etc' as GameId)).resolves.toEqual({
+      state: 'missing'
+    })
+    await expect(handlers['decks:rules'](7 as unknown as GameId)).resolves.toEqual({
+      state: 'missing'
+    })
+    expect(rulesPack).not.toHaveBeenCalled()
+    await handlers['decks:rules']('ygo')
+    expect(rulesPack).toHaveBeenCalledWith('ygo')
   })
 })

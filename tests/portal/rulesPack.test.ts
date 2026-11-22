@@ -137,4 +137,16 @@ describe('rulesPackRoute', () => {
     const res = (await call(b, '/api/rules/ygo', {}, cache))!
     expect(((await res.json()) as { version: string }).version).toBe('2026-11-23')
   })
+
+  it('one edge cache entry whatever the query string, so a PUT purges every copy', async () => {
+    const b = bucket()
+    const cache = fakeCache()
+    await put(b, '/api/admin/rules/ygo', pack(), true, cache)
+    await call(b, '/api/rules/ygo?v=1', {}, cache)
+    await call(b, '/api/rules/ygo?bust=2', {}, cache)
+    expect([...cache.map.keys()]).toEqual([`${ORIGIN}/api/rules/ygo`])
+    await put(b, '/api/admin/rules/ygo', pack('ygo', { version: '2026-11-23' }), true, cache)
+    const res = (await call(b, '/api/rules/ygo?v=1', {}, cache))!
+    expect(((await res.json()) as { version: string }).version).toBe('2026-11-23')
+  })
 })

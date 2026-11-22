@@ -48,7 +48,7 @@ describe('affiliate buy links', () => {
     ).not.toBeNull()
   })
 
-  it('eBay query carries code, untoned rarity and the language word', () => {
+  it('Yu-Gi-Oh! eBay query is the set code alone', () => {
     const url = ebayUrl(
       target({
         name: 'Blue-Eyes',
@@ -58,7 +58,11 @@ describe('affiliate buy links', () => {
       }),
       ids
     )
-    expect(query(url)).toBe('Blue-Eyes RV01-KR005 Ultra Rare Korean')
+    // Sellers title by code; it already carries the set and the language.
+    expect(query(url)).toBe('RV01-KR005')
+    expect(query(ebayUrl(target({ setCode: 'YA01-JP001', language: 'ja' }), ids))).toBe(
+      'YA01-JP001'
+    )
     expect(url).toContain('campid=5338000000')
     expect(url!.startsWith('https://www.ebay.com/sch/i.html?')).toBe(true)
   })
@@ -85,8 +89,6 @@ describe('affiliate buy links', () => {
     expect(
       q({ game: 'mtg', name: 'Lightning Bolt', setCode: 'M10 146', setRarity: 'Rare (Foil)' })
     ).toBe('Lightning Bolt M10 146')
-    // Yu-Gi-Oh! rarities are the sellers' own words.
-    expect(q({ setRarity: 'Secret Rare' })).toBe('Dark Magician LOB-005 Secret Rare')
   })
 
   it('eBay query with no set code is just the name', () => {
@@ -95,9 +97,20 @@ describe('affiliate buy links', () => {
     )
   })
 
+  it('Yu-Gi-Oh! with no set code falls back to name, rarity and language', () => {
+    expect(
+      query(
+        ebayUrl(
+          target({ setCode: '', setRarity: 'Ultra Rare (Manga-Style, Color)', language: 'ko' }),
+          ids
+        )
+      )
+    ).toBe('Dark Magician Ultra Rare Korean')
+  })
+
   it('names with & " / and CJK survive the round trip', () => {
     const name = 'Dragon & "Fire"/炎'
-    expect(query(ebayUrl(target({ name }), ids)).startsWith(name)).toBe(true)
+    expect(query(ebayUrl(target({ game: 'pkm', name }), ids)).startsWith(name)).toBe(true)
     expect(new URL(inner(tcgplayerUrl(target({ name }), ids))).searchParams.get('q')).toBe(
       `${name} LOB-005`
     )

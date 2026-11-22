@@ -13,6 +13,11 @@ const EXTRA_KINDS: Record<string, string> = {
   xyz_pendulum: 'Pendulum Xyz Monster'
 }
 
+/** True for the frames of Extra Deck monsters. */
+export function isExtraFrame(frameType: string): boolean {
+  return Object.hasOwn(EXTRA_KINDS, frameType)
+}
+
 const SHORT: Record<string, { label: string; region: string }> = {
   advanced: { label: 'Advanced', region: 'the TCG' },
   ocg: { label: 'OCG', region: 'the OCG' }

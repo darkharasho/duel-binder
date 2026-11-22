@@ -6,14 +6,7 @@ import { checkDeck, verdictChange } from '@shared/decks/check'
 import { deckCost } from '@shared/decks/cost'
 import type { PackState } from '@shared/decks/pack'
 import type { DeckCard, DeckSummary } from '@shared/decks/types'
-
-const BADGE: Record<string, string> = {
-  legal: 'text-complete',
-  warnings: 'text-amber-500',
-  illegal: 'text-destructive',
-  unknown: 'text-muted-foreground',
-  update: 'text-muted-foreground'
-}
+import { BADGE } from './deckEntries'
 
 /** One deck on the list: cover, name, format, counts, legality and what it costs to finish. */
 export function DeckTile({

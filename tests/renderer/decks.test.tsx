@@ -1,9 +1,11 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from '@/App'
+import { DeckPage } from '@/features/decks/DeckPage'
 import { DecksPage } from '@/features/decks/DecksPage'
+import { OFFLINE_MESSAGE } from '@shared/friends'
 import type { PackState } from '@shared/decks/pack'
-import type { DeckCard, DeckEntry, DeckSummary } from '@shared/decks/types'
+import type { DeckCard, DeckDetail, DeckEntry, DeckSummary } from '@shared/decks/types'
 import type { Api } from '@shared/ipc'
 import type { AccountStatus } from '@shared/types'
 import { createMockApi, renderWithProviders, type DeepPartial } from './mockApi'
@@ -200,6 +202,154 @@ describe('the decks page', () => {
     await userEvent.click(within(tile).getByRole('button'))
     expect(await screen.findByRole('button', { name: /Back/ })).toBeInTheDocument()
     expect(api.friends.deck).toHaveBeenCalledWith(7, 'd1')
+  })
+})
+
+const detail = (over: Partial<DeckDetail> = {}): DeckDetail => ({
+  ...deck({}),
+  notes: 'Side for the mirror',
+  cover: null,
+  cardFacts: facts,
+  printingArt: {},
+  ...over
+})
+const pageApi = (d: DeckDetail, rules: PackState, o: DeepPartial<Api> = {}): Api =>
+  createMockApi({
+    ...o,
+    decks: {
+      rules: vi.fn(async () => rules),
+      list: vi.fn(async () => ({ decks: [], cardFacts: {} })),
+      get: vi.fn(async () => d),
+      save: vi.fn(async () => d.uid),
+      remove: vi.fn(async () => undefined),
+      markSeen: vi.fn(async () => undefined),
+      ...o.decks
+    }
+  })
+const entry = (name: string): HTMLElement => screen.getByRole('listitem', { name })
+const SAVE_WAIT = { timeout: 2500 }
+
+describe('the deck page', () => {
+  it('adding a Link monster from search lands in Extra', async () => {
+    const link = {
+      id: 50,
+      name: 'Linkuriboh',
+      type: 'Link Monster',
+      frameType: 'link',
+      attribute: 'DARK',
+      race: 'Cyberse',
+      level: null,
+      linkval: 1,
+      atk: 300,
+      def: null,
+      imageId: 50,
+      price: 0.2,
+      releasedAt: null,
+      owned: 1,
+      defaultPrintingId: null
+    }
+    const api = pageApi(detail(), pack('2026-11-22'), {
+      cards: { browse: vi.fn(async () => ({ cards: [link], total: 1 })) }
+    })
+    renderWithProviders(<DeckPage uid="d1" onBack={vi.fn()} />, { api })
+    await userEvent.type(await screen.findByLabelText('Search cards'), 'Linku')
+    await userEvent.click(await screen.findByRole('button', { name: 'Add Linkuriboh' }))
+    const extra = screen.getByRole('region', { name: 'Extra Deck' })
+    expect(within(extra).getByText('Linkuriboh')).toBeInTheDocument()
+    expect(within(extra).getByText('Extra Deck 1 / 0–15')).toBeInTheDocument()
+    await waitFor(
+      () =>
+        expect(api.decks.save).toHaveBeenCalledWith(
+          expect.objectContaining({
+            uid: 'd1',
+            cards: expect.arrayContaining([{ section: 'extra', card: 50, qty: 1 }])
+          })
+        ),
+      SAVE_WAIT
+    )
+  })
+
+  it('+ past 3 copies shows the copy problem at once and still saves', async () => {
+    const api = pageApi(detail(), pack('2026-11-22'))
+    renderWithProviders(<DeckPage uid="d1" onBack={vi.fn()} />, { api })
+    expect(await screen.findByText('Main Deck 42 / 40–60')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Add a copy of Filler 100' }))
+    expect(
+      screen.getByRole('button', { name: /4 × Filler 100: at most 3 copies/ })
+    ).toBeInTheDocument()
+    expect(screen.getByText('Not legal')).toBeInTheDocument()
+    expect(api.decks.save).not.toHaveBeenCalled()
+    await waitFor(
+      () =>
+        expect(api.decks.save).toHaveBeenCalledWith(
+          expect.objectContaining({
+            cards: expect.arrayContaining([{ section: 'main', card: 100, qty: 4 }])
+          })
+        ),
+      SAVE_WAIT
+    )
+  })
+
+  it('a failed save keeps the edit and offers retry', async () => {
+    const save = vi.fn(async () => Promise.reject(new Error(OFFLINE_MESSAGE)))
+    const api = pageApi(detail(), pack('2026-11-22'), { decks: { save } })
+    renderWithProviders(<DeckPage uid="d1" onBack={vi.fn()} />, { api })
+    await screen.findByText('Main Deck 42 / 40–60')
+    await userEvent.click(screen.getByRole('button', { name: 'Add a copy of Pricey' }))
+    expect(
+      await screen.findByText(`Not saved: ${OFFLINE_MESSAGE}`, {}, SAVE_WAIT)
+    ).toBeInTheDocument()
+    expect(within(entry('Pricey')).getByText('0/3')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2))
+    expect(within(entry('Pricey')).getByText('0/3')).toBeInTheDocument()
+  })
+
+  it('tapping a problem highlights its entry', async () => {
+    const cards: DeckEntry[] = [...fillers(), { section: 'main', card: POT, qty: 3 }]
+    const api = pageApi(detail({ cards }), pack('2026-11-22'))
+    renderWithProviders(<DeckPage uid="d1" onBack={vi.fn()} />, { api })
+    const problem = await screen.findByRole('button', { name: /Pot of Greed: Forbidden/ })
+    expect(entry('Pot of Greed')).not.toHaveAttribute('data-highlight')
+    await userEvent.click(problem)
+    expect(entry('Pot of Greed')).toHaveAttribute('data-highlight', 'true')
+  })
+
+  it('opening a changed deck marks it seen', async () => {
+    const maxx: DeckEntry[] = [...fillers(), { section: 'main', card: MAXX, qty: 3 }]
+    const api = pageApi(
+      detail({
+        cards: maxx,
+        lastSeen: { status: 'legal', problems: [], packVersion: '2026-11-01' }
+      }),
+      pack('2026-12-01', { [MAXX]: 0 })
+    )
+    renderWithProviders(<DeckPage uid="d1" onBack={vi.fn()} />, { api })
+    await waitFor(() =>
+      expect(api.decks.markSeen).toHaveBeenCalledWith(
+        'd1',
+        expect.objectContaining({ status: 'illegal', packVersion: '2026-12-01' })
+      )
+    )
+    expect(api.decks.markSeen).toHaveBeenCalledTimes(1)
+  })
+
+  it('friend view hides edit controls and notes', async () => {
+    const api = pageApi(detail(), pack('2026-11-22'), {
+      friends: { deck: vi.fn(async () => detail({ name: 'Theirs' })) }
+    })
+    renderWithProviders(<DeckPage uid="d1" friendId={7} onBack={vi.fn()} />, { api })
+    expect(await screen.findByText('Main Deck 42 / 40–60')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Theirs' })).toBeInTheDocument()
+    expect(screen.getByText('Legal')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Search cards')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Add a copy of/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Remove a copy of/ })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Deck name')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Notes')).not.toBeInTheDocument()
+    expect(screen.queryByText('Side for the mirror')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    expect(api.decks.markSeen).not.toHaveBeenCalled()
   })
 })
 

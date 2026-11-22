@@ -1,5 +1,6 @@
 import type { GameId } from '../games'
-import type { DeckSection } from './types'
+import type { DeckCard, DeckSection } from './types'
+import { isExtraFrame } from './ygo/check'
 
 export interface SectionDef {
   id: DeckSection
@@ -38,4 +39,9 @@ export function formatOf(game: GameId, id: string): DeckFormat | null {
 
 export function decksAvailable(game: GameId): boolean {
   return DECK_FORMATS[game].length > 0
+}
+
+/** Where a card goes when added without a section picked: Extra Deck monsters to Extra, else Main. */
+export function defaultSection(game: GameId, card: DeckCard | undefined): DeckSection {
+  return game === 'ygo' && card && isExtraFrame(card.frameType) ? 'extra' : 'main'
 }

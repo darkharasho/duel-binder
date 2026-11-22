@@ -45,6 +45,8 @@ export const queryKeys = {
   friendBinders: (id: number) => ['friends', id, 'binders'] as const,
   friendSessions: (id: number, game: string) => ['friends', id, 'sessions', game] as const,
   friendGraded: (id: number, game: string) => ['friends', id, 'graded', game] as const,
+  friendDecks: (id: number, game: string) => ['friends', id, 'decks', game] as const,
+  friendDeck: (id: number, uid: string) => ['friends', id, 'decks', 'deck', uid] as const,
   friendBinder: (id: number, uid: string) => ['friends', id, 'binders', uid] as const,
   friendsWanting: (game: GameId, cardId: number) => ['friends', 'wanting', game, cardId] as const,
   friendsOwning: (game: GameId, pkeys: string[]) => ['friends', 'owning', game, pkeys] as const,
@@ -56,6 +58,9 @@ export const queryKeys = {
   binder: (uid: string) => ['binders', 'binder', uid] as const,
   bindersForCard: (id: number) => ['binders', 'card', id] as const,
   favourites: ['favourites'] as const,
+  decks: ['decks'] as const,
+  deck: (uid: string) => ['decks', uid] as const,
+  rulesPack: (game: string) => ['rulesPack', game] as const,
   graded: ['graded'] as const,
   gradedForCard: (id: number) => ['graded', 'card', id] as const,
   pokedex: ['pokedex'] as const,
@@ -74,6 +79,7 @@ export const mutationInvalidationKeys = [
   ['binders'],
   ['favourites'],
   ['graded'],
+  ['decks'],
   ['sessions'],
   // Also the species panels, `['pokedex', n]`.
   ['pokedex']

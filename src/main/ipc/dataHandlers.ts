@@ -53,6 +53,16 @@ import { listWishlist, removeWish, setWish, settleWishlist, wishesForCard } from
 import { listFavourites, setFavourite } from '../repo/favourites'
 import { gradedForCard, listGraded, removeGraded, saveGraded } from '../repo/graded'
 import type { GradedDraft } from '@shared/graded'
+import {
+  getDeck,
+  listDecks,
+  markDeckSeen,
+  removeDeck,
+  resolveDeckLines,
+  saveDeck
+} from '../repo/decks'
+import type { DeckDraft, DeckVerdictMark } from '@shared/decks/types'
+import type { DeckLineRef } from '@shared/decks/ygo/lists'
 import { activeOwner, listSyncIssues } from '../cloud/localSync'
 import {
   deleteScanSession,
@@ -96,6 +106,12 @@ export const DATA_CHANNELS = [
   'sessions:removeCard',
   'favourites:list',
   'favourites:set',
+  'decks:list',
+  'decks:get',
+  'decks:save',
+  'decks:remove',
+  'decks:markSeen',
+  'decks:resolve',
   'graded:list',
   'graded:forCard',
   'graded:save',
@@ -276,6 +292,12 @@ export function createDataHandlers({
     'favourites:list': async () => listFavourites(db),
     'favourites:set': async (cardId: number, on: boolean) =>
       edited(setFavourite(db, wholeNumber(cardId, 'cardId'), on)),
+    'decks:list': async () => listDecks(db),
+    'decks:get': async (uid: string) => getDeck(db, uid),
+    'decks:save': async (draft: DeckDraft) => edited(saveDeck(db, draft)),
+    'decks:remove': async (uid: string) => edited(removeDeck(db, uid)),
+    'decks:markSeen': async (uid: string, mark: DeckVerdictMark) => markDeckSeen(db, uid, mark),
+    'decks:resolve': async (refs: DeckLineRef[]) => resolveDeckLines(db, refs),
     'graded:list': async () => listGraded(db),
     'graded:forCard': async (cardId: number) => gradedForCard(db, wholeNumber(cardId, 'cardId')),
     'graded:save': async (draft: GradedDraft) => edited(saveGraded(db, draft)),

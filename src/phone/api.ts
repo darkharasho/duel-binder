@@ -91,6 +91,8 @@ const EDITS: readonly DataChannel[] = [
   'sessions:delete',
   'sessions:removeCard',
   'favourites:set',
+  'decks:save',
+  'decks:remove',
   'graded:save',
   'graded:remove',
   'binders:save',
@@ -239,7 +241,8 @@ export function createPhoneApi(deps: {
       save: () => Promise.reject(new Error('Placeholders are only in the desktop app'))
     },
     decks: {
-      rules: (game) => store.rulesPack(game)
+      rules: (game) => store.rulesPack(game),
+      ...dataPart('decks')
     },
     friends: {
       overview: portal('friends:overview'),
@@ -291,6 +294,8 @@ export function createPhoneApi(deps: {
         const ids = await local(serverIdsOf.graded(slabs))
         return slabs.map((s) => friendItem(s, ids))
       },
+      decks: portal('friends:decks'),
+      deck: portal('friends:deck'),
       binder: async (userId: number, uid: string) => {
         const b = await store.portal<BinderDetail | null>('friends:binder', [userId, uid])
         return b && friendBinder(b, await local(serverIdsOf.binder(b)))

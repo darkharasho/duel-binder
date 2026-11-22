@@ -85,6 +85,9 @@ import type { SupporterPlan, SupporterStatus } from './supporter'
 import type { BinderDraft, BinderEditAction, BinderTarget, RuleField } from './binders'
 import type { GradedCopy, GradedDraft } from './graded'
 import type { PackState } from './decks/pack'
+import type { DeckDetail, DeckDraft, DeckList, DeckVerdictMark } from './decks/types'
+import type { DeckLineRef } from './decks/ygo/lists'
+import type { DeckResolution } from '../main/repo/decks'
 import type { TermNote, TermStatus } from './search/terms'
 
 /** The API exposed to the renderer as `window.api`. */
@@ -153,6 +156,10 @@ export interface Api {
     sessions(friendId: number): Promise<ScanSession[]>
     /** An accepted friend's slabs (active game), newest first, without what they paid or notes; a portal without it answers 404. */
     graded(friendId: number): Promise<GradedCopy[]>
+    /** An accepted friend's decks that aren't private (active game), without notes; counts are theirs. */
+    decks(friendId: number): Promise<DeckList>
+    /** One of those decks; null if it is private or unknown. */
+    deck(friendId: number, uid: string): Promise<DeckDetail | null>
     /** Friends who want this card and don't hide their wishlist. */
     wanting(cardId: number): Promise<FriendWantsCard[]>
     /** Which friends own these printings (sync keys), in one call; only those some friend owns. */
@@ -206,6 +213,16 @@ export interface Api {
   decks: {
     /** The game's rules pack (card limits and release dates), from this device's cache or the portal. */
     rules(game: GameId): Promise<PackState>
+    /** The decks of the game shown, newest edit first, with the facts of every card in them. */
+    list(): Promise<DeckList>
+    get(uid: string): Promise<DeckDetail | null>
+    /** Adds a deck (no uid) or replaces one; returns its uid. A deck saves however illegal it is. */
+    save(draft: DeckDraft): Promise<string>
+    remove(uid: string): Promise<void>
+    /** Records this device's last legality verdict; never synced. */
+    markSeen(uid: string, mark: DeckVerdictMark): Promise<void>
+    /** Finds the catalog card for each pasted or imported deck line. */
+    resolve(refs: DeckLineRef[]): Promise<DeckResolution[]>
   }
   /** Graded copies (slabs), in the game shown; private, and never counted toward completion. */
   graded: {
@@ -557,6 +574,8 @@ export const INVOKE_CHANNELS = [
   'friends:binder',
   'friends:sessions',
   'friends:graded',
+  'friends:decks',
+  'friends:deck',
   'friends:wanting',
   'friends:owning',
   'friends:wishlistVisible',
@@ -579,6 +598,12 @@ export const INVOKE_CHANNELS = [
   'favourites:list',
   'favourites:set',
   'decks:rules',
+  'decks:list',
+  'decks:get',
+  'decks:save',
+  'decks:remove',
+  'decks:markSeen',
+  'decks:resolve',
   'graded:list',
   'graded:forCard',
   'graded:save',

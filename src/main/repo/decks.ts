@@ -368,6 +368,24 @@ export function removeDeck(db: SqlDb, uid: unknown, now = new Date(), scope: Sco
   ).run(ts, ts, id)
 }
 
+/** A deck as a friend sees it: its notes and this device's last verdict stay private. */
+export const deckForFriends = (d: DeckDetail): DeckDetail => ({ ...d, notes: '', lastSeen: null })
+
+/** A friend's public decks (never the private ones), with only the facts of the cards in them. */
+export function decksForFriends(list: DeckList): DeckList {
+  const decks = list.decks.filter((d) => !d.private).map((d) => ({ ...d, lastSeen: null }))
+  const cardFacts: Record<number, DeckCard> = {}
+  for (const d of decks)
+    for (const e of d.cards) if (list.cardFacts[e.card]) cardFacts[e.card] = list.cardFacts[e.card]
+  return { decks, cardFacts }
+}
+
+/** One of a friend's decks as they see it, or null when it is private or not there. */
+export function friendDeck(db: SqlDb, uid: unknown, scope: Scope): DeckDetail | null {
+  const d = getDeck(db, uid, scope)
+  return d && !d.private ? deckForFriends(d) : null
+}
+
 /**
  * Records this device's last legality verdict for a deck. Per device and never synced, so it
  * neither marks the deck changed nor moves its updated_at. A gone deck is left alone.

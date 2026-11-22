@@ -13,6 +13,10 @@ import { saveGraded } from '../../src/main/repo/graded'
 import { CollectionError } from '../../src/main/repo/collection'
 import { userScope } from '../../workers/portal/src/scope'
 import type { DeckDraft, DeckEntry, DeckVerdictMark } from '../../src/shared/decks/types'
+import { acceptFriend, requestFriend } from '../../workers/portal/src/friends'
+import { createCloudClient } from '../../src/main/cloud/client'
+import type { DeckDetail, DeckList } from '../../src/shared/decks/types'
+import { inProcessPortal, PORTAL } from './cloudHelpers'
 import { seededDb } from './helpers'
 import { addUser, seededServerDb } from '../portal/helpers'
 
@@ -366,5 +370,79 @@ describe('decks repo on the server', () => {
     removeDeck(db, a, T2, annYgo)
     expect(seqOf(a)).toBeGreaterThan(seqOf(b))
     expect(listDecks(db, annYgo).decks).toEqual([])
+  })
+})
+
+describe('deck channels on the portal', () => {
+  const clientFor = async (
+    portal: Awaited<ReturnType<typeof inProcessPortal>>,
+    userId: number
+  ): Promise<ReturnType<typeof createCloudClient>> =>
+    createCloudClient({
+      baseUrl: PORTAL,
+      token: await portal.desktopToken(userId),
+      fetch: portal.fetch
+    })
+
+  it('the web (server scope) saves and removes decks', async () => {
+    const portal = await inProcessPortal()
+    const user = portal.addUser('owner')
+    const client = await clientFor(portal, user)
+    const uid = await client.rpc<string>('decks:save', [draft()], 'ygo')
+    const list = await client.rpc<DeckList>('decks:list', [], 'ygo')
+    expect(list.decks.map((d) => d.uid)).toEqual([uid])
+    expect((await client.rpc<DeckDetail | null>('decks:get', [uid], 'ygo'))!.name).toBe(
+      'Spellcasters'
+    )
+    await client.rpc(
+      'decks:markSeen',
+      [uid, { status: 'legal', problems: [], packVersion: 'v1' }],
+      'ygo'
+    )
+    await client.rpc('decks:remove', [uid], 'ygo')
+    expect((await client.rpc<DeckList>('decks:list', [], 'ygo')).decks).toEqual([])
+  })
+
+  it("friends see a friend's non-private decks without notes, with the friend's owned counts", async () => {
+    const portal = await inProcessPortal()
+    const user = portal.addUser('owner')
+    const friend = portal.addUser('friend')
+    const scope = userScope(user, 'ygo')
+    const pub = saveDeck(portal.serverDb, draft({ notes: 'sideboard plan' }), T1, scope)
+    const priv = saveDeck(
+      portal.serverDb,
+      draft({
+        name: 'Secret',
+        private: true,
+        cards: [{ section: 'main', card: POT_OF_GREED, qty: 1 }]
+      }),
+      T1,
+      scope
+    )
+    markDeckSeen(portal.serverDb, pub, { status: 'legal', problems: [], packVersion: 'v1' }, scope)
+    const printing = portal.serverDb
+      .prepare('SELECT id FROM card_printings WHERE card_id = ? LIMIT 1')
+      .get(DARK_MAGICIAN) as { id: number }
+    portal.serverDb
+      .prepare(
+        `INSERT INTO collection_entries (user_id, uid, printing_id, image_id, quantity, created_at, updated_at, server_seq)
+         VALUES (?, 'c1', ?, ?, 2, ?, ?, 1)`
+      )
+      .run(user, printing.id, DARK_MAGICIAN, T1.toISOString(), T1.toISOString())
+    const asFriend = await clientFor(portal, friend)
+    await expect(asFriend.rpc('friends:decks', [user], 'ygo')).rejects.toThrow()
+    await expect(asFriend.rpc('friends:deck', [user, pub], 'ygo')).rejects.toThrow()
+    requestFriend(portal.serverDb, friend, 'owner', T1)
+    acceptFriend(portal.serverDb, user, friend, T2)
+    const list = await asFriend.rpc<DeckList>('friends:decks', [user], 'ygo')
+    expect(list.decks.map((d) => d.uid)).toEqual([pub])
+    expect(list.decks[0].lastSeen).toBeNull()
+    expect(Object.keys(list.cardFacts).map(Number)).toEqual([DARK_MAGICIAN])
+    const seen = await asFriend.rpc<DeckDetail | null>('friends:deck', [user, pub], 'ygo')
+    expect(seen).toMatchObject({ uid: pub, notes: '', lastSeen: null })
+    expect(seen!.cardFacts[DARK_MAGICIAN].owned).toBe(2)
+    expect(await asFriend.rpc('friends:deck', [user, priv], 'ygo')).toBeNull()
+    expect(await asFriend.rpc('friends:deck', [user, 'nope'], 'ygo')).toBeNull()
+    expect((await asFriend.rpc<DeckList>('friends:decks', [user], 'pkm')).decks).toEqual([])
   })
 })

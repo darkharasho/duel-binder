@@ -101,6 +101,16 @@ import { dismissLinkHint, listSignIns, removeSignIn, setUsername } from './accou
 import { linkApple, linkCode } from './link'
 import { mergeWithTicket } from './merge'
 import { GAME_HEADER } from '../../../src/shared/cloud'
+import {
+  decksForFriends,
+  friendDeck,
+  getDeck,
+  listDecks,
+  markDeckSeen,
+  removeDeck,
+  resolveDeckLines,
+  saveDeck
+} from '../../../src/main/repo/decks'
 import { slabForFriends } from '../../../src/shared/graded'
 import type { GameId } from '../../../src/shared/games'
 
@@ -291,9 +301,22 @@ const HANDLERS: { [C in Exclude<PortalChannel, AccountLinkChannel>]: Handler<C> 
   // A friend's slabs of the caller's game; what they paid and their notes stay private.
   'friends:graded': ({ db, userId, game }, _s, id) =>
     listGraded(db, userScope(friendId(db, userId, id), game)).map(slabForFriends),
+  // A friend's public decks of the caller's game; notes and their last verdict stay private.
+  'friends:decks': ({ db, userId, game }, _s, id) =>
+    decksForFriends(listDecks(db, userScope(friendId(db, userId, id), game))),
+  'friends:deck': ({ db, userId, game }, _s, id, uid) =>
+    friendDeck(db, checkBounded(uid, 'uid', MAX_UID), userScope(friendId(db, userId, id), game)),
   'favourites:list': ({ db }, scope) => listFavourites(db, scope),
   'favourites:set': ({ db, now }, scope, cardId, on) =>
     setFavourite(db, checkId(cardId, 'cardId'), on, now(), scope),
+  'decks:list': ({ db }, scope) => listDecks(db, scope),
+  'decks:get': ({ db }, scope, uid) => getDeck(db, checkBounded(uid, 'uid', MAX_UID), scope),
+  'decks:save': ({ db, now }, scope, draft) => saveDeck(db, draft, now(), scope),
+  'decks:remove': ({ db, now }, scope, uid) =>
+    removeDeck(db, checkBounded(uid, 'uid', MAX_UID), now(), scope),
+  'decks:markSeen': ({ db }, scope, uid, mark) =>
+    markDeckSeen(db, checkBounded(uid, 'uid', MAX_UID), mark, scope),
+  'decks:resolve': ({ db }, scope, refs) => resolveDeckLines(db, refs, scope),
   'graded:list': ({ db }, scope) => listGraded(db, scope),
   'graded:forCard': ({ db }, scope, cardId) => gradedForCard(db, checkId(cardId, 'cardId'), scope),
   'graded:save': ({ db, now }, scope, draft) => saveGraded(db, draft, now(), scope),

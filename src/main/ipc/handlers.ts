@@ -265,6 +265,9 @@ export function createHandlers({
       const ids = local(serverIdsOf.graded(slabs))
       return slabs.map((s) => friendItem(s, ids))
     },
+    'friends:decks': async (friendId: number) => account.portal('friends:decks', [friendId]),
+    'friends:deck': async (friendId: number, uid: string) =>
+      account.portal('friends:deck', [friendId, uid]),
     'friends:binder': async (userId: number, uid: string) => {
       const b = await account.portal<BinderDetail | null>('friends:binder', [userId, uid])
       return b && friendBinder(b, local(serverIdsOf.binder(b)))

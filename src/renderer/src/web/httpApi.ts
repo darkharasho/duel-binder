@@ -232,6 +232,8 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       binder: call('friends:binder'),
       sessions: (friendId: number) => call('friends:sessions')(friendId),
       graded: call('friends:graded'),
+      decks: call('friends:decks'),
+      deck: call('friends:deck'),
       wanting: call('friends:wanting'),
       owning: call('friends:owning'),
       wishlistVisible: call('friends:wishlistVisible'),
@@ -268,7 +270,13 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
           fetch: doFetch,
           origin: location.origin,
           now: () => new Date()
-        })
+        }),
+      list: call('decks:list'),
+      get: call('decks:get'),
+      save: call('decks:save'),
+      remove: call('decks:remove'),
+      markSeen: call('decks:markSeen'),
+      resolve: call('decks:resolve')
     },
     graded: {
       list: call('graded:list'),

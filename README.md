@@ -35,9 +35,15 @@ npm test
 
 ## Release
 
-1. Bump `version` in `package.json`.
-2. Commit, then tag `vX.Y.Z` (it must match `package.json`) and push the tag: `git tag vX.Y.Z && git push origin vX.Y.Z`.
-3. The `Release` workflow tests, then builds Linux (AppImage), Windows (NSIS) and macOS (dmg + zip, universal) and publishes them to a GitHub release along with the `latest*.yml` update feeds.
+One `vX.Y.Z` tag releases every platform at that version. Phones get web-only changes as live updates, without waiting on store review.
+
+1. **Full release** (needed for native changes: `ios/`, `android/`, `capacitor.config.ts`, Capacitor plugins). Bump `version` in `package.json`, commit, then tag `vX.Y.Z` (it must match `package.json`; every workflow checks) and push the tag: `git tag vX.Y.Z && git push origin vX.Y.Z`.
+   - `Release` tests, then builds Linux (AppImage), Windows (NSIS) and macOS (dmg + zip, universal) and publishes them as the latest GitHub release along with the `latest*.yml` update feeds.
+   - `iOS` uploads to TestFlight, then brings the App Store to that build (`scripts/asc-submit.py reconcile`, also run hourly by `submit.yml`): it submits the build unless the App Store is already on that version (live, approved, waiting or in review) or it was rejected. An older version waiting or in review is replaced only when live installs already get everything in it as live updates (`scripts/review-required.sh` runs `scripts/native-check.sh`, the phone-shell fingerprint check, against the App Store's live version). One Apple is already reviewing, one with native changes, or one approved but not released yet (releases are manual) stays, and the new build waits in TestFlight until it's live. A failed submission is only a warning; `gh workflow run submit.yml` shows the review status, `-f reconcile=true` runs the hourly step now, and `-f submit=true` submits by hand.
+   - `Android` uploads to Play internal testing and attaches the APK.
+   - Both also publish the tag's web bundle as a live update. A build that reached TestFlight or Play is tagged `native/<ios|android>/<version>+<build number>`.
+2. **Live update** (web-only changes between full releases): `gh workflow run ota.yml` (`-f dry_run=true` to check first). It tests, checks that nothing native changed since the newest `native/*` releases (and the App Store's live version), then publishes the web code to them as the next unused patch version.
+3. **Desktop catch-up**: `gh workflow run release.yml -f desktop_release=<that version>` builds only the desktop apps from `main` and publishes them as the latest release `v<that version>`; iOS and Android don't build. The next full release takes a later version.
 
 Windows signing is required: the Windows build signs the installer and `duel-binder.exe` with Azure Artifact Signing (`win.azureSignOptions` in `electron-builder.yml`: account `darkharasho-signing`, profile `public-trust`). It needs the repo secrets `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` and `AZURE_CLIENT_SECRET` (set them with `~/.claude/templates/windows-signing/set-azure-signing-secrets.sh duel-binder`), and fails if the installer's signature isn't valid.
 

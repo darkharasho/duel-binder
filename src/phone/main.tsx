@@ -10,7 +10,7 @@ import { installErrorReports } from '@/lib/errorReports'
 import { trackOpen } from '@/lib/usage'
 import { App } from './App'
 import { listenForBack } from './backButton'
-import { startLiveUpdate } from './liveUpdate'
+import { LiveUpdateBoot } from './LiveUpdateBoot'
 import { createBrowserOcr } from './ocr'
 import { createPhoneRuntime, type WorkerLike } from './runtime'
 
@@ -35,20 +35,10 @@ async function start(): Promise<void> {
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <App store={runtime.store} onFatal={runtime.onFatal} />
+      <LiveUpdateBoot />
     </StrictMode>
   )
 }
-
-// Tell the live-update plugin this bundle booted, or it rolls back to the previous one.
-if (isNativeApp())
-  void import('@capgo/capacitor-updater')
-    .then(({ CapacitorUpdater }) => CapacitorUpdater.notifyAppReady())
-    .then(() => {
-      startLiveUpdate()
-    })
-    .catch((err: unknown) => {
-      console.warn('Live update setup failed:', err)
-    })
 
 void start()
 

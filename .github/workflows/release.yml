@@ -1,8 +1,24 @@
 name: Release
 
+# Desktop apps (Linux, Windows, macOS) on a v* tag, published as the latest GitHub release, which
+# installed desktops update to (electron-updater). iOS and Android build from the same tag in
+# ios.yml and android.yml.
+#
+# Desktop-only release (gh workflow run release.yml -f desktop_release=0.112.1): after phones got a
+# live update (ota.yml), builds only the desktop apps from this commit at that version and
+# publishes them as the latest release v0.112.1. The tag is made when the release is published,
+# with GITHUB_TOKEN, so it starts no workflows: iOS and Android don't build (they also only run on
+# v* tag pushes, pull requests and their own manual runs). The next full release takes a later
+# version.
+
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      desktop_release:
+        description: 'Desktop-only release: version to publish as the latest release v<version> (e.g. 0.112.1); no iOS or Android'
+        required: true
 
 permissions:
   contents: write
@@ -10,19 +26,41 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - name: Verify tag matches package.json version
+      - name: Version
+        id: version
+        env:
+          DESKTOP_RELEASE: ${{ inputs.desktop_release }}
         run: |
-          VERSION=$(node -p "require('./package.json').version")
-          if [ "refs/tags/v${VERSION}" != "${GITHUB_REF}" ]; then
-            echo "::error::Tag ${GITHUB_REF} does not match package.json version v${VERSION}"
-            exit 1
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            VERSION="${DESKTOP_RELEASE#v}"
+            [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Version '$VERSION' isn't x.y.z"; exit 1; }
+            if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" >/dev/null; then
+              echo "::error::v$VERSION already exists; pick a later version."; exit 1
+            fi
+            # electron-updater only offers a release newer than the installed version.
+            NEWEST=$(git ls-remote --tags origin 'refs/tags/v*' | sed -nE 's#.*refs/tags/v([0-9]+\.[0-9]+\.[0-9]+)$#\1#p' | sort -V | tail -1)
+            if [ -n "$NEWEST" ] && [ "$(printf '%s\n%s\n' "$VERSION" "$NEWEST" | sort -V | tail -1)" != "$VERSION" ]; then
+              echo "::error::$VERSION isn't newer than the latest release v$NEWEST."; exit 1
+            fi
+            echo "Desktop-only release v$VERSION from $GITHUB_REF_NAME ($GITHUB_SHA)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            VERSION=$(node -p "require('./package.json').version")
+            if [ "refs/tags/v${VERSION}" != "${GITHUB_REF}" ]; then
+              echo "::error::Tag ${GITHUB_REF} does not match package.json version v${VERSION}"
+              exit 1
+            fi
           fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
@@ -31,15 +69,18 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     steps:
+      # A desktop-only release's tag doesn't exist yet: the draft points at this commit, and
+      # publishing it makes the tag there.
       - name: Create draft release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.test.outputs.tag }}
         run: |
-          gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
-            gh release create "$GITHUB_REF_NAME" --draft --title "$GITHUB_REF_NAME" --generate-notes -R "$GITHUB_REPOSITORY"
+          gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create "$TAG" --draft --title "$TAG" --target "$GITHUB_SHA" --generate-notes -R "$GITHUB_REPOSITORY"
 
   release:
-    needs: create-release
+    needs: [test, create-release]
     strategy:
       fail-fast: false
       matrix:
@@ -55,6 +96,13 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # The app's version and electron-builder's file names, release tag and latest*.yml feeds all
+      # come from package.json.
+      - name: Set the desktop-only release's version
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          VERSION: ${{ needs.test.outputs.version }}
+        run: npm version "$VERSION" --no-git-tag-version --allow-same-version
       - name: Build app
         # CSC_LINK is read at build time (electron.vite.config.ts bakes __MAC_SIGNED__)
         env:
@@ -110,10 +158,11 @@ jobs:
           }
 
   publish-release:
-    needs: release
+    needs: [test, release]
     runs-on: ubuntu-latest
     steps:
       - name: Publish release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release edit "$GITHUB_REF_NAME" --draft=false -R "$GITHUB_REPOSITORY"
+          TAG: ${{ needs.test.outputs.tag }}
+        run: gh release edit "$TAG" --draft=false --latest -R "$GITHUB_REPOSITORY"

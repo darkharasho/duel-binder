@@ -4,7 +4,14 @@ import { join } from 'node:path'
 import { createHash, generateKeyPairSync } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import { signedMessage, type ManifestEntry } from '../../src/shared/appBundles'
-import { fingerprint } from '../../scripts/live-update/fingerprint'
+import { execFileSync } from 'node:child_process'
+import {
+  fingerprint,
+  lockPackages,
+  nativeFiles,
+  platformFingerprint,
+  platformFingerprintAt
+} from '../../scripts/live-update/fingerprint'
 import { buildManifest, sign } from '../../scripts/live-update/publish'
 
 const enc = (s: string): Uint8Array => new TextEncoder().encode(s)
@@ -22,6 +29,36 @@ describe('live update scripts', () => {
     const f1 = { path: 'a', bytes: enc('1') }
     const f2 = { path: 'b', bytes: enc('2') }
     expect(fingerprint([f1, f2], {})).toBe(fingerprint([f2, f1], {}))
+  })
+
+  it('lockPackages reads the given package-lock text', () => {
+    const lock = JSON.stringify({
+      packages: {
+        '': { version: '1.0.0' },
+        'node_modules/@capacitor/core': { version: '8.5.3' },
+        'node_modules/@capgo/capacitor-updater': { version: '8.54.2' },
+        'node_modules/react': { version: '19.0.0' }
+      }
+    })
+    expect(lockPackages(lock)).toEqual({
+      'node_modules/@capacitor/core': '8.5.3',
+      'node_modules/@capgo/capacitor-updater': '8.54.2'
+    })
+  })
+
+  it('fingerprints the committed shell at a git ref like the working tree', () => {
+    for (const platform of ['ios', 'android'] as const) {
+      const at = platformFingerprintAt(platform, 'HEAD')
+      expect(at).toMatch(/^[0-9a-f]{64}$/)
+      const paths = [...nativeFiles(platform), 'package-lock.json']
+      let clean = true
+      try {
+        execFileSync('git', ['diff', '--quiet', 'HEAD', '--', ...paths])
+      } catch {
+        clean = false // native files edited locally: the two may differ
+      }
+      if (clean) expect(at).toBe(platformFingerprint(platform))
+    }
   })
 
   it('buildManifest lists nested files with sha256', () => {

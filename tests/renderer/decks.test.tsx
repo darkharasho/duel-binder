@@ -372,7 +372,7 @@ describe('the deck page', () => {
 describe('importing and exporting', () => {
   const LIST = '3 Pot of Greed\n2 Maxx C\n1 Mystery card\n!!!'
   const resolutions: DeckResolution[] = [
-    { status: 'matched', card: POT },
+    { status: 'matched', card: POT, name: 'Pot of Greed' },
     {
       status: 'ambiguous',
       options: [
@@ -446,6 +446,24 @@ describe('importing and exporting', () => {
         ]
       })
     )
+  })
+
+  it('a .ydk import lists the matched cards by name', async () => {
+    const api = apiWith([], pack('2026-11-22'), {
+      decks: {
+        resolve: vi.fn(async () => [
+          { status: 'matched' as const, card: POT, name: 'Pot of Greed' },
+          { status: 'unmatched' as const }
+        ])
+      }
+    })
+    renderWithProviders(<DecksPage />, { api })
+    await userEvent.click(await screen.findByRole('button', { name: 'Import' }))
+    const dialog = await screen.findByRole('dialog')
+    await paste(dialog, `#main\n${POT}\n${POT}\n12345678\n#extra\n!side\n`)
+    expect(await within(dialog).findByText('2 Pot of Greed')).toBeInTheDocument()
+    expect(within(dialog).getByText('#12345678 (not in the catalog)')).toBeInTheDocument()
+    expect(within(dialog).queryByText(/#55144522/)).not.toBeInTheDocument()
   })
 
   it('replace asks first', async () => {

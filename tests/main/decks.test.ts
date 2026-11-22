@@ -289,6 +289,9 @@ describe('decks repo', () => {
   })
 
   it('resolves passcodes, alternate art, set codes and names', () => {
+    const DM = (
+      db.prepare('SELECT name FROM cards WHERE id = ?').get(DARK_MAGICIAN) as { name: string }
+    ).name
     db.prepare(
       "INSERT INTO card_images (image_id, game, card_id, sort_order) VALUES (36996508, 'ygo', ?, 5)"
     ).run(DARK_MAGICIAN)
@@ -314,10 +317,10 @@ describe('decks repo', () => {
         { name: 'Dárk Magician' }
       ])
     ).toEqual([
-      { status: 'matched', card: DARK_MAGICIAN },
-      { status: 'matched', card: DARK_MAGICIAN },
+      { status: 'matched', card: DARK_MAGICIAN, name: DM },
+      { status: 'matched', card: DARK_MAGICIAN, name: DM },
       { status: 'unmatched' },
-      { status: 'matched', card: DARK_MAGICIAN },
+      { status: 'matched', card: DARK_MAGICIAN, name: DM },
       {
         status: 'ambiguous',
         options: [
@@ -326,9 +329,9 @@ describe('decks repo', () => {
         ]
       },
       { status: 'unmatched' },
-      { status: 'matched', card: 900001 },
+      { status: 'matched', card: 900001, name: 'Maxx "C"' },
       { status: 'unmatched' },
-      { status: 'matched', card: 900002 },
+      { status: 'matched', card: 900002, name: 'Ash Blossom & Joyous Spring' },
       {
         status: 'ambiguous',
         options: [
@@ -337,7 +340,7 @@ describe('decks repo', () => {
         ]
       },
       { status: 'unmatched' },
-      { status: 'matched', card: DARK_MAGICIAN }
+      { status: 'matched', card: DARK_MAGICIAN, name: DM }
     ])
     expect(() => resolveDeckLines(db, 'x')).toThrow(CollectionError)
     expect(() => resolveDeckLines(db, [{ bogus: 1 }])).toThrow(CollectionError)

@@ -35,7 +35,7 @@ const REGION_LANGUAGES = "('ja', 'ko', 'zh-hans', 'zh-hant', 'ae', 'ja-asia')"
 const IN_LIST = '(SELECT value FROM json_each(?))'
 
 export type DeckResolution =
-  | { status: 'matched'; card: number }
+  | { status: 'matched'; card: number; name: string }
   | { status: 'ambiguous'; options: { card: number; name: string; imageId: number | null }[] }
   | { status: 'unmatched' }
 
@@ -497,7 +497,11 @@ export function resolveDeckLines(db: SqlDb, refs: unknown, scope: Scope = LOCAL)
     if (hits.length > 1) for (const h of hits) ambiguousIds.add(h.id)
   const names = new Map<number, string>()
   for (const hits of byName.values()) for (const h of hits) names.set(h.id, h.name)
-  const missing = [...ambiguousIds].filter((id) => !names.has(id))
+  // Every matched card's name too, so the import preview reads in names, not passcodes.
+  const wanted = new Set(ambiguousIds)
+  for (const id of byPasscode.values()) wanted.add(id)
+  for (const ids of byCode.values()) for (const id of ids) wanted.add(id)
+  const missing = [...wanted].filter((id) => !names.has(id))
   if (missing.length > 0)
     for (const r of db
       .prepare(
@@ -511,7 +515,7 @@ export function resolveDeckLines(db: SqlDb, refs: unknown, scope: Scope = LOCAL)
     ids.length === 0
       ? { status: 'unmatched' }
       : ids.length === 1
-        ? { status: 'matched', card: ids[0] }
+        ? { status: 'matched', card: ids[0], name: names.get(ids[0]) ?? '' }
         : {
             status: 'ambiguous',
             options: ids.map((card) => ({
@@ -524,7 +528,9 @@ export function resolveDeckLines(db: SqlDb, refs: unknown, scope: Scope = LOCAL)
   return lines.map((r) => {
     if ('passcode' in r) {
       const card = byPasscode.get(r.passcode)
-      return card === undefined ? { status: 'unmatched' } : { status: 'matched', card }
+      return card === undefined
+        ? { status: 'unmatched' }
+        : { status: 'matched', card, name: names.get(card) ?? '' }
     }
     if ('setCode' in r)
       return resolve([...(byCode.get(r.setCode.toLowerCase()) ?? [])].sort((a, b) => a - b))

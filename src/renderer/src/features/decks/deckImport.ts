@@ -25,9 +25,11 @@ export type Pick =
   | { drop: true }
   | { drop?: false; card: number; section: DeckSection; name: string; facts?: DeckCard }
 
-function textOf(l: ParsedLine, kind: 'ydk' | 'ydke' | 'text'): string {
+/** A matched line reads by the catalog's name; one still unknown reads as typed or by passcode. */
+function textOf(l: ParsedLine, kind: 'ydk' | 'ydke' | 'text', name?: string): string {
+  if (name) return `${l.qty} ${name}`
   if (kind === 'text') return l.raw.trim()
-  return `${l.qty} ${'passcode' in l.ref ? `#${l.ref.passcode}` : l.raw.trim()}`
+  return 'passcode' in l.ref ? `#${l.ref.passcode} (not in the catalog)` : l.raw.trim()
 }
 
 /** Sorts the parsed lines into the three groups by what `resolve` answered for each. */
@@ -38,8 +40,13 @@ export function buildPreview(
 ): ImportPreview {
   const out: ImportPreview = { matched: [], ambiguous: [], notFound: [] }
   parsed.lines.forEach((l, i) => {
-    const item: ImportItem = { key: `l${i}`, text: textOf(l, kind), qty: l.qty, section: l.section }
     const r = resolutions[i]
+    const item: ImportItem = {
+      key: `l${i}`,
+      text: textOf(l, kind, r?.status === 'matched' ? r.name : undefined),
+      qty: l.qty,
+      section: l.section
+    }
     if (r?.status === 'matched') out.matched.push({ ...item, card: r.card })
     else if (r?.status === 'ambiguous') out.ambiguous.push({ ...item, options: r.options })
     else out.notFound.push(item)

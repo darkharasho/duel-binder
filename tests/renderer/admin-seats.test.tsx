@@ -3,6 +3,9 @@ import userEvent from '@testing-library/user-event'
 import type { AdminSeats } from '@shared/admin'
 import { SeatsTab } from '@/features/admin/SeatsTab'
 import { createMockApi, renderWithProviders } from './mockApi'
+import { toast } from 'sonner'
+
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() }, Toaster: () => null }))
 
 afterEach(() => {
   window.api = undefined as never
@@ -38,8 +41,10 @@ const SEATS: AdminSeats = {
   ]
 }
 
-function setup(): { seatsAction: ReturnType<typeof vi.fn> } {
-  const seatsAction = vi.fn(async () => ({}))
+function setup(reply: (req: unknown) => Promise<object> = async () => ({})): {
+  seatsAction: ReturnType<typeof vi.fn>
+} {
+  const seatsAction = vi.fn(reply)
   const api = createMockApi({ window: { platform: 'linux' } })
   api.admin = { seats: vi.fn(async () => SEATS), seatsAction } as never
   renderWithProviders(<SeatsTab seats={SEATS} />, { api })
@@ -47,6 +52,30 @@ function setup(): { seatsAction: ReturnType<typeof vi.fn> } {
 }
 
 describe('admin Seats tab', () => {
+  it('says when a fill left people waiting for another press', async () => {
+    setup(async () => ({ invited: 25, left: 4 }))
+    await userEvent.click(screen.getByRole('button', { name: 'Fill open seats' }))
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenLastCalledWith(
+        'Invited 25 from the waitlist. 4 more can be invited: press Fill open seats again.'
+      )
+    )
+  })
+
+  it('shows the already-has-an-account message when cancel is refused', async () => {
+    setup(async (req) => {
+      if ((req as { action: string }).action === 'cancel')
+        throw new Error('That person already has an account.')
+      return {}
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel invite' }))
+    const dialog = await screen.findByRole('dialog')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel invite' }))
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'That person already has an account.'
+    )
+  })
+
   it('shows the counts and the waitlist', () => {
     setup()
     expect(screen.getByText(/used 90 of 100/)).toHaveTextContent(

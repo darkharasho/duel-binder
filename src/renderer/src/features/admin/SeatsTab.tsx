@@ -26,8 +26,13 @@ export function SeatsTab({ seats }: { seats: AdminSeats }): React.JSX.Element {
   const [cap, setCap] = useState(String(counts.cap))
   const act = async (req: AdminSeatsAction): Promise<void> => {
     if (!api.admin) throw new Error('Admin pages are desktop only')
-    const { invited } = await api.admin.seatsAction(req)
-    if (typeof invited === 'number') toast.success(`Invited ${invited} from the waitlist.`)
+    const { invited, left } = await api.admin.seatsAction(req)
+    if (typeof invited === 'number')
+      toast.success(
+        left
+          ? `Invited ${invited} from the waitlist. ${left} more can be invited: press Fill open seats again.`
+          : `Invited ${invited} from the waitlist.`
+      )
     await qc.invalidateQueries({ queryKey: adminKeys.seats })
   }
   const run = useMutation({

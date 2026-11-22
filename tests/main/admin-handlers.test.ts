@@ -95,7 +95,11 @@ describe('admin handlers: seats', () => {
       invited: 3
     })
     expect(admin).toHaveBeenLastCalledWith('/admin/seats/cap', { cap: 50 })
-    await h['admin:seatsAction']({ action: 'fill' })
+    admin.mockResolvedValueOnce({ ok: true, invited: 25, left: 4 })
+    await expect(h['admin:seatsAction']({ action: 'fill' })).resolves.toEqual({
+      invited: 25,
+      left: 4
+    })
     expect(admin).toHaveBeenLastCalledWith('/admin/seats/fill', {})
     await h['admin:seatsAction']({ action: 'invite', id: 4 })
     expect(admin).toHaveBeenLastCalledWith('/admin/seats/invite', { id: 4 })
@@ -115,6 +119,11 @@ describe('admin handlers: seats', () => {
     })
     admin.mockImplementationOnce((path, body) => client.admin(path as `/admin/${string}`, body))
     await expect(h['admin:seatsAction']({ action: 'resend', id: 1 })).rejects.toThrow(
+      'That person already has an account.'
+    )
+    // Cancel on an entry that joined gets the same 409.
+    admin.mockImplementationOnce((path, body) => client.admin(path as `/admin/${string}`, body))
+    await expect(h['admin:seatsAction']({ action: 'cancel', id: 1 })).rejects.toThrow(
       'That person already has an account.'
     )
     admin.mockRejectedValueOnce(new CloudOfflineError('The portal failed (502)'))

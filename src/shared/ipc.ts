@@ -401,7 +401,7 @@ export interface Api {
      * waitlist entry by `id`. Resolves with how many `cap` and `fill` invited. Rejects with a
      * readable message when the invite email didn't go out or the entry already has an account.
      */
-    seatsAction(req: AdminSeatsAction): Promise<{ invited?: number }>
+    seatsAction(req: AdminSeatsAction): Promise<{ invited?: number; left?: number }>
     /** A game's community search terms with one status (newest first). */
     terms(game: GameId, status: TermStatus): Promise<AdminTerm[]>
     /** Approves or rejects a term, with edited fields when given; rejects with a readable message on a phrase clash. */

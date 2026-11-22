@@ -321,6 +321,34 @@ describe('the seat gate', () => {
       expect(accounts()).toBe(1)
     })
 
+    it('an existing Discord account whose email matches links it with the cap at 0', async () => {
+      const kaiba = addUser(db, '111', 'kaiba')
+      db.prepare("UPDATE sign_ins SET email = 'new@x.io' WHERE user_id = ?").run(kaiba)
+      discordUser = { id: '111', username: 'kaiba', email: 'new@x.io', verified: true }
+      setCap(db, 0, NOW_ISO)
+      const created = await emailForm('create', create)
+      expect(created.status).toBe(200)
+      const ticket = ticketOf(await created.text())
+      const confirmed = await emailForm('confirm', {
+        ticket,
+        email: 'new@x.io',
+        code: sender.lastCode()
+      })
+      expect(confirmed.status).toBe(200)
+      expect(await confirmed.text()).toContain('Link your accounts')
+      const toDiscord = await emailForm('link-discord', { ticket, email: 'new@x.io' })
+      expect(toDiscord.status).toBe(303)
+      const res = await webDiscord(`email_link=${cookieOf(toDiscord, 'email_link')}`)
+      expect(res.headers.get('location')).toBe('/')
+      expect(cookieOf(res, 'session')).toBeTruthy()
+      expect(accounts()).toBe(1)
+      expect(
+        db
+          .prepare("SELECT user_id FROM sign_ins WHERE provider = 'email' AND subject = 'new@x.io'")
+          .get()
+      ).toEqual({ user_id: kaiba })
+    })
+
     it('an existing email user signs in with the cap at 0', async () => {
       const created = await emailForm('create', create)
       const ticket = ticketOf(await created.text())

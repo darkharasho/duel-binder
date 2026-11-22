@@ -303,10 +303,13 @@ async function createStep(
   if (hasEmailSignIn(db, email)) throw new EmailAuthError(EMAIL_COPY.emailTaken, 400)
   const now = deps.now()
   const nowIso = now.toISOString()
-  // No code goes out for a sign-up with no seat. Creating the account checks again later.
+  // No code goes out for a sign-up with no seat. Creating the account checks again later. An
+  // address a Discord or Apple account already vouches for is offered that account at confirm
+  // (a link, no new account), so it needs no seat.
   if (
     seatCounts(db, nowIso).free === 0 &&
-    !(ctx.inviteHash && inviteValid(db, ctx.inviteHash, nowIso))
+    !(ctx.inviteHash && inviteValid(db, ctx.inviteHash, nowIso)) &&
+    matchedAccount(db, email) === null
   )
     throw seatsFull()
   // Limits first, before the costly hash: a refused request must do no work and leave the

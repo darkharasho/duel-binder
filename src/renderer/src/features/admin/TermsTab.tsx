@@ -19,7 +19,6 @@ import { api } from '@/lib/api'
 import { ADMIN_QUERY, adminKeys, errorText } from './adminTabs'
 import { ConfirmButton, Failed, Note, Panel } from './parts'
 
-const TERMS_WORKFLOW = 'https://github.com/darkharasho/duel-binder/actions/workflows/terms.yml'
 const KINDS: TermKind[] = ['nickname', 'abbreviation', 'subset', 'rarity', 'cards']
 const TARGET_KINDS: TermTargetKind[] = ['printing', 'card', 'set', 'rarity', 'cards']
 
@@ -323,14 +322,6 @@ export function TermsTab(): React.JSX.Element {
             ))}
           </SelectContent>
         </Select>
-        <a
-          href={TERMS_WORKFLOW}
-          target="_blank"
-          rel="noreferrer"
-          className="text-[13px] font-medium hover:underline"
-        >
-          Run harvest
-        </a>
       </div>
       <Panel title="Pending">{list(pending, 'Nothing waiting.')}</Panel>
       <Panel title="Approved">{list(approved, 'No approved terms yet.')}</Panel>

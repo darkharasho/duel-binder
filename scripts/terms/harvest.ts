@@ -1,16 +1,16 @@
 /**
- * Monthly search-term harvest: looks up eBay listing titles for the priciest English printings,
- * mines them for phrases nothing explains, has Claude keep the ones collectors use, and posts what
- * is left to the portal as pending terms for the owner to approve in the Admin Terms tab.
+ * Search-term harvest, step 1 of 2, run by hand from a Claude Code session every so often: looks
+ * up eBay listing titles for the priciest English printings, mines them for phrases nothing
+ * explains, and writes the candidates to `terms-work/candidates.json`. The session then reviews
+ * them into `terms-work/reviews.json` (see ReviewSchema in review.ts) and `npm run terms:post`
+ * sends what it kept to the portal as pending terms, approved in the Admin Terms tab.
  *
- *   npm run terms:harvest -- --mode recent|backfill --from N --count N [--dry-run]
+ *   npm run terms:harvest -- --mode recent|backfill --from N --count N
  *
- * Env: PORTAL_URL, PORTAL_ADMIN_TOKEN, EBAY_PRICES_URL, HARVEST_TOKEN, ANTHROPIC_API_KEY.
- * --dry-run still asks Claude (it needs the key) but prints the proposals instead of posting them.
+ * Env: PORTAL_URL, PORTAL_ADMIN_TOKEN, EBAY_PRICES_URL, HARVEST_TOKEN.
  */
-import Anthropic from '@anthropic-ai/sdk'
 import { rmSync } from 'node:fs'
-import { mkdir } from 'node:fs/promises'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { pullGame } from '../../src/main/catalog/pull'
@@ -18,27 +18,24 @@ import { inProcessApplier } from '../../src/main/catalogApplier'
 import { createCloudClient } from '../../src/main/cloud/client'
 import { openDatabase } from '../../src/main/db/database'
 import { GAME_IDS } from '../../src/shared/games/types'
-import { classify, estimateCost, type Proposal, type Usage } from './classify'
-import { findCandidates, type HarvestedPrinting } from './mine'
+import { findCandidates, type Candidate, type HarvestedPrinting } from './mine'
 import { harvestQuery, pickPrintings, uniqueSearches, type PrintingRef } from './targets'
 
 /** Calls left in eBay's daily allowance that the harvest never touches. */
 const QUOTA_RESERVE = 1500
-const MAX_POSTED = 100
+export const WORK_DIR = 'terms-work'
 
 export interface Args {
   mode: 'recent' | 'backfill'
   from: number
   count: number
-  dryRun: boolean
 }
 
 export function parseArgs(argv: string[]): Args {
-  const args: Args = { mode: 'recent', from: 0, count: 300, dryRun: false }
+  const args: Args = { mode: 'recent', from: 0, count: 300 }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
-    if (a === '--dry-run') args.dryRun = true
-    else if (a === '--mode') {
+    if (a === '--mode') {
       const v = argv[++i]
       if (v !== 'recent' && v !== 'backfill') throw new Error('--mode must be recent or backfill')
       args.mode = v
@@ -109,7 +106,6 @@ async function main(): Promise<void> {
   const adminToken = need('PORTAL_ADMIN_TOKEN')
   const ebayUrl = need('EBAY_PRICES_URL').replace(/\/$/, '')
   const harvestToken = need('HARVEST_TOKEN')
-  const anthropic = new Anthropic({ apiKey: need('ANTHROPIC_API_KEY') })
   const adminHeaders = { Authorization: `Bearer ${adminToken}` }
 
   const picked = await pickFromCatalog(args, portalUrl, adminToken)
@@ -154,42 +150,27 @@ async function main(): Promise<void> {
   const failed = [...failures.values()].reduce((a, b) => a + b, 0)
   if (made > 0 && failed === made) throw new Error(`Every eBay titles call failed (${describeFailures(failures)})`)
 
-  const usage: Usage = { input: 0, output: 0 }
-  const proposals: Proposal[] = []
-  let candidateCount = 0
+  const candidates: Candidate[] = []
   for (const game of GAME_IDS) {
     const known = await getJson<{ keys: string[] }>(
       `${portalUrl}/admin/terms/known?game=${game}`,
       adminHeaders
     )
     if (!known.body) throw new Error(`Could not read the known terms for ${game} (${known.status})`)
-    const cands = findCandidates(
-      harvested.filter((h) => h.game === game),
-      new Set(known.body.keys)
+    candidates.push(
+      ...findCandidates(
+        harvested.filter((h) => h.game === game),
+        new Set(known.body.keys)
+      )
     )
-    candidateCount += cands.length
-    proposals.push(...(await classify(anthropic, game, cands, usage)))
   }
-  const posted = proposals.sort((a, b) => b.evidence.sellers - a.evidence.sellers).slice(0, MAX_POSTED)
-
-  if (args.dryRun) console.log(JSON.stringify(posted, null, 2))
-  else if (posted.length > 0) {
-    const res = await fetch(`${portalUrl}/admin/terms/propose`, {
-      method: 'POST',
-      headers: { ...adminHeaders, 'content-type': 'application/json' },
-      body: JSON.stringify({ proposals: posted })
-    })
-    if (!res.ok) {
-      console.error(`The portal refused the proposals (${res.status}): ${await res.text().catch(() => '')}`)
-      console.error(JSON.stringify(posted))
-      throw new Error(`Posting the proposals failed (${res.status})`)
-    }
-    console.log(`Portal added ${((await res.json()) as { added: number }).added} pending terms`)
-  }
+  candidates.sort((x, y) => y.sellers - x.sellers || y.count - x.count)
+  await mkdir(WORK_DIR, { recursive: true })
+  const file = join(WORK_DIR, 'candidates.json')
+  await writeFile(file, JSON.stringify(candidates, null, 1))
   console.log(
-    `Summary: ${made} eBay calls${failed ? ` (${failed} failed: ${describeFailures(failures)})` : ''}, ${titles} titles, ${candidateCount} candidates, ${proposals.length} proposals` +
-      `${args.dryRun ? ' (dry run, not posted)' : ''}, Claude ${usage.input} in / ${usage.output} out tokens, ` +
-      `about $${estimateCost(usage).toFixed(2)}`
+    `Summary: ${made} eBay calls${failed ? ` (${failed} failed: ${describeFailures(failures)})` : ''}, ${titles} titles, ` +
+      `${candidates.length} candidates written to ${file}`
   )
 }
 

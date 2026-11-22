@@ -37,7 +37,7 @@ describe('admin page', () => {
     expect(html).toContain("'/admin/terms?status='")
     expect(html).toContain("'/admin/terms/decide'")
     expect(html).toContain("'/admin/terms/add'")
-    expect(html).toContain('actions/workflows/terms.yml')
+    expect(html).not.toContain('actions/workflows/terms.yml')
     expect(html).toContain('Sets need language:Set name')
     // A Rejected list with Restore, a confirm on Reject and Remove, and clash text naming the status.
     expect(html).toContain("['rejected', 'Rejected']")

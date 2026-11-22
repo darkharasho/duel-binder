@@ -65,7 +65,8 @@ export function renderPrivacy(view: PrivacyView): string {
         [
           'The waitlist',
           p(
-            'When Duel Binder is full, the form at <a href="/waitlist">duelbinder.com/waitlist</a> stores the email you enter and when you joined. It is used only to email you an invite link when a seat opens, and is kept until then; to have it deleted, email support@duelbinder.com.',
+            'When Duel Binder is full, the form at <a href="/waitlist">duelbinder.com/waitlist</a> stores the email you enter and when you joined. It is used only to email you an invite link when a seat opens.',
+            'Your waitlist email, and any invite sent to it, are kept until you’re invited and make your account (with the invite link, or signing in with that email), which deletes them, or until we remove you from the list. To be removed sooner, email support@duelbinder.com. Deleting your account also deletes any waitlist entry or invite under its emails.',
             'Waitlist attempts are counted by IP address to stop floods; those counts are deleted after a day.'
           )
         ],

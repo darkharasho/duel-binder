@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { JSDOM } from 'jsdom'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type Database from 'better-sqlite3'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
@@ -107,7 +108,7 @@ describe('admin seats routes', () => {
     wait('b@example.com', '2026-11-02T00:00:00.000Z')
     const res = await call('/admin/seats/cap', { cap: 101 })
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ ok: true, invited: 2 })
+    expect(await res.json()).toEqual({ ok: true, invited: 2, left: 0 })
     expect(sent.map((m) => m.to)).toEqual(['a@example.com', 'b@example.com'])
     expect((await list()).counts).toMatchObject({ cap: 101, invited: 2, waiting: 0 })
   })
@@ -123,7 +124,7 @@ describe('admin seats routes', () => {
     addUser(db, '2', 'y')
     wait('a@example.com', '2026-11-01T00:00:00.000Z')
     const res = await call('/admin/seats/cap', { cap: 1 })
-    expect(await res.json()).toEqual({ ok: true, invited: 0 })
+    expect(await res.json()).toEqual({ ok: true, invited: 0, left: 0 })
     const l = await list()
     expect(l.counts).toMatchObject({ cap: 1, accounts: 3, free: 0, waiting: 1 })
     expect(db.prepare('SELECT COUNT(*) AS n FROM users WHERE closed_at IS NULL').get()).toEqual({
@@ -198,13 +199,76 @@ describe('admin seats routes', () => {
     db.prepare(
       'INSERT INTO seat_invites (token_hash, waitlist_id, email, created_at, expires_at, used_at) VALUES (?, ?, ?, ?, ?, ?)'
     ).run('h', id, 'a@example.com', '2026-11-10T00:00:00.000Z', FUTURE, '2026-11-11T00:00:00.000Z')
-    for (const a of ['invite', 'resend']) {
+    for (const a of ['invite', 'resend', 'cancel']) {
       const res = await call('/admin/seats/' + a, { id })
       expect(res.status).toBe(409)
+      expect(await res.json()).toEqual({ error: 'joined' })
     }
     expect(sent).toEqual([])
     expect(db.prepare('SELECT COUNT(*) AS n FROM seat_invites').get()).toEqual({ n: 1 })
     expect((await list()).waitlist[0].status).toBe('joined')
+    expect((await list()).counts.waiting).toBe(0)
+    // Delete is still allowed: it only drops the list entry.
+    expect(await (await call('/admin/seats/delete', { id })).json()).toEqual({ ok: true })
+    expect((await list()).waitlist).toEqual([])
+  })
+
+  it('a fill stops at 25 invites and says how many are left', async () => {
+    for (let i = 0; i < 27; i++)
+      wait(`u${i}@example.com`, `2026-11-01T00:00:${String(i).padStart(2, '0')}.000Z`)
+    expect(await (await call('/admin/seats/fill', {})).json()).toEqual({
+      ok: true,
+      invited: 25,
+      left: 2
+    })
+    expect(await (await call('/admin/seats/fill', {})).json()).toEqual({
+      ok: true,
+      invited: 2,
+      left: 0
+    })
+  })
+
+  it('the web Save refuses an empty or non-number cap', async () => {
+    const posts: string[] = []
+    const alerts: string[] = []
+    let loads = 0
+    const seats = await (await call('/admin/seats')).json()
+    const html = await adminPage().text()
+    const dom = new JSDOM(html, {
+      url: BASE + '/admin#seats',
+      runScripts: 'dangerously',
+      beforeParse(window) {
+        ;(window as unknown as { fetch: unknown }).fetch = async (path: string, init?: RequestInit) => {
+          if (String(path).startsWith('https:')) throw new Error('offline')
+          if (init?.method === 'POST') posts.push(String(path))
+          else if (path === '/admin/seats') loads++
+          return new Response(JSON.stringify(path === '/admin/seats' ? seats : {}))
+        }
+        window.alert = (m: string) => void alerts.push(m)
+      }
+    })
+    const doc = dom.window.document
+    await expect
+      .poll(() => doc.querySelector('#seats input[aria-label="Seat cap"]'), { timeout: 2000 })
+      .not.toBeNull()
+    const input = doc.querySelector('#seats input[aria-label="Seat cap"]') as HTMLInputElement
+    const form = input.form!
+    for (const v of ['', '  ']) {
+      input.value = v
+      form.dispatchEvent(new dom.window.Event('submit', { cancelable: true }))
+    }
+    // A number box drops text it can't parse, so 'abc' reads as '' too.
+    input.value = 'abc'
+    form.dispatchEvent(new dom.window.Event('submit', { cancelable: true }))
+    expect(posts).toEqual([])
+    expect(alerts.length).toBe(3)
+    input.value = '120'
+    form.dispatchEvent(new dom.window.Event('submit', { cancelable: true }))
+    await expect.poll(() => posts).toEqual(['/admin/seats/cap'])
+    // Let the reload after the save finish before the window goes.
+    await expect.poll(() => loads).toBe(2)
+    await expect.poll(() => doc.querySelector('#seats input[aria-label="Seat cap"]')).not.toBe(input)
+    dom.window.close()
   })
 
   it('needs the Bearer token or the right origin for a write, and JSON', async () => {

@@ -1,7 +1,7 @@
 import type { SqlDb } from '../../../src/main/db/sql'
 import { USERNAME_RE, type SignInProvider } from '../../../src/shared/account'
 import { emailProblem, normalizeEmail } from '../../../src/shared/emailAuth'
-import { spendInvite, takeSeat, type SeatPass } from './seats'
+import { seatTaken, spendInvite, takeSeat, type SeatPass } from './seats'
 
 /**
  * Sign-in methods (server-30's `sign_ins`): each account has at most one per provider, and each
@@ -98,8 +98,9 @@ export function refreshLegacyDiscordId(db: SqlDb, userId: number): void {
 /**
  * A new account for this sign-in. It keeps the offered username when valid and free, else gets a
  * generated one; either way the name counts as not chosen yet. It takes a seat first: the pass's
- * invite (spent here) or a free one, and throws SeatsFull when there is neither. Call inside a
- * transaction.
+ * invite (spent here) or a free one, and throws SeatsFull when there is neither. The account's
+ * verified email (Discord's or Apple's, or the email sign-in's own address) then leaves the
+ * waitlist and voids its other invites, so nobody holds two seats. Call inside a transaction.
  */
 export function createAccount(
   db: SqlDb,
@@ -129,6 +130,8 @@ export function createAccount(
   ).run(id.provider, id.subject, userId, nowIso, profile.email ?? null)
   refreshLegacyDiscordId(db, userId)
   if (invite !== null) spendInvite(db, invite, userId, nowIso)
+  const email = id.provider === 'email' ? id.subject : (profile.email ?? pass.verifiedEmail ?? null)
+  seatTaken(db, email, invite)
   return userId
 }
 

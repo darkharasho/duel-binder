@@ -3,7 +3,14 @@ import { cookie, sha256Hex } from './auth'
 import { clientIp, takeLimit } from './authLimits'
 import { readForm } from './beta'
 import { pageShell } from './home'
-import { INVITE_DAYS, SEAT_INVITE_COOKIE, inviteValid, joinWaitlist } from './seats'
+import {
+  INVITE_DAYS,
+  SEAT_INVITE_COOKIE,
+  inviteValid,
+  joinWaitlist,
+  fillSeats,
+  seatCounts
+} from './seats'
 import { esc } from './site/page'
 
 /** What the pages explain when they get one back as `?error=`. */
@@ -45,6 +52,13 @@ export async function waitlistRoute(req: Request, deps: AppDeps): Promise<Respon
   if (deps.db.prepare('SELECT 1 FROM waitlist WHERE email = ?').get(email)) return back('sent=1')
   if (!takeLimit(deps.db, 'waitlist-ip', clientIp(req), now)) return back('error=limit')
   joinWaitlist(deps.db, email, now.toISOString())
+  // A seat is free right now: invite from the front of the line (likely this joiner) at once
+  // instead of waiting for the next fill. A failed fill still counts as joined.
+  try {
+    if (seatCounts(deps.db, now.toISOString()).free > 0) await fillSeats(deps)
+  } catch (err) {
+    console.error('filling seats after a waitlist join failed', err)
+  }
   return back('sent=1')
 }
 

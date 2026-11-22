@@ -569,7 +569,8 @@ async function loadSeats() {
       const out = await res.json().catch(() => ({}))
       if (!res.ok) alert(out.error === 'email' ? "The invite email didn't go out. Try again." : out.error === 'joined' ? 'That person already has an account.' : 'Failed: ' + (out.error ?? 'HTTP ' + res.status))
       else {
-        if (typeof out.invited === 'number') alert('Invited ' + out.invited + ' from the waitlist.')
+        if (typeof out.invited === 'number')
+          alert('Invited ' + out.invited + ' from the waitlist.' + (out.left > 0 ? ' ' + out.left + ' more can be invited: press Fill open seats again.' : ''))
         loadSeats()
       }
     } catch (e) {
@@ -595,7 +596,14 @@ async function loadSeats() {
     save.type = 'submit'
     form.addEventListener('submit', (ev) => {
       ev.preventDefault()
-      post('cap', { cap: Number(cap.value) }, save)
+      // Number('') is 0: an empty box must not close sign-ups.
+      const raw = cap.value.trim()
+      const n = Number(raw)
+      if (raw === '' || !Number.isInteger(n) || n < 0 || n > 100000) {
+        alert('Enter a whole number from 0 to 100000.')
+        return
+      }
+      post('cap', { cap: n }, save)
     })
     form.append(cap, save)
     const fill = el('button', 'Fill open seats')

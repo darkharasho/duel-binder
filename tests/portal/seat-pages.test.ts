@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type Database from 'better-sqlite3'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
 import { sha256Hex } from '../../workers/portal/src/auth'
+import { setCap } from '../../workers/portal/src/seats'
 import { handleSite } from '../../workers/portal/src/site/handler'
 import { addUser, memoryBucket, noPrices, noPrintingArt, seededServerDb } from './helpers'
 
@@ -94,6 +95,35 @@ describe('seat cap public pages', () => {
     expect(rows()).toBe(1)
   })
 
+  it('invites a new joiner straight away while a seat is free', async () => {
+    const sent: string[] = []
+    deps.email = { send: async (m) => void sent.push(m.to) }
+    const res = await post({ email: 'a@example.com' })
+    expect(res.headers.get('location')).toBe(`${SITE}/waitlist?sent=1`)
+    expect(sent).toEqual(['a@example.com'])
+    expect(db.prepare('SELECT COUNT(*) AS n FROM seat_invites WHERE used_at IS NULL').get()).toEqual({ n: 1 })
+  })
+
+  it('invites no one when the seats are full', async () => {
+    const sent: string[] = []
+    deps.email = { send: async (m) => void sent.push(m.to) }
+    setCap(db, 1, NOW.toISOString())
+    await post({ email: 'a@example.com' })
+    expect(sent).toEqual([])
+    expect(rows()).toBe(1)
+  })
+
+  it('a failed fill still answers sent=1 and keeps the entry', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    // fillSeats breaks on its first statement after the join.
+    db.exec('DROP TABLE seat_invites')
+    const res = await post({ email: 'a@example.com' })
+    expect(res.headers.get('location')).toBe(`${SITE}/waitlist?sent=1`)
+    expect(rows()).toBe(1)
+    expect(logged).toHaveBeenCalled()
+    logged.mockRestore()
+  })
+
   it('serves /full with the form', async () => {
     const res = await handle(new Request(`${BASE}/full`), deps)
     expect(res.status).toBe(200)
@@ -152,5 +182,9 @@ describe('seat cap public pages', () => {
     expect(page.body).toContain(`action="${BASE}/waitlist"`)
     expect((await site('/waitlist?sent=1')).body).toContain('on the list')
     expect((await site('/privacy')).body.toLowerCase()).toContain('waitlist')
+    const privacy = (await site('/privacy')).body
+    expect(privacy).toContain('make your account')
+    expect(privacy).toContain('until we remove you from the list')
+    expect(privacy).not.toContain('is kept until then')
   })
 })

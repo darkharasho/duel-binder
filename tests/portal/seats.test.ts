@@ -1,12 +1,15 @@
 import { createHash } from 'node:crypto'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type Database from 'better-sqlite3'
 import type { AppDeps } from '../../workers/portal/src/app'
 import type { EmailMessage } from '../../workers/portal/src/emailSend'
 import {
+  FILL_LIMIT,
   SeatsFull,
   cancelInvite,
   fillSeats,
+  forgetEmail,
+  seatTaken,
   inviteEntry,
   joinWaitlist,
   resendInvite,
@@ -162,7 +165,92 @@ describe('seats', () => {
     setCap(db, 1, NOW)
     expect(await fillSeats(deps)).toBe(1)
     expect(sent.map((m) => m.to)).toEqual(['b@x.com'])
-    expect(db.prepare('SELECT invited_at FROM waitlist WHERE id = ?').get(a)).toEqual({ invited_at: null })
+    // Back of the line by queued_at; created_at stays the date they joined.
+    expect(
+      db.prepare('SELECT invited_at, created_at, queued_at FROM waitlist WHERE id = ?').get(a)
+    ).toEqual({ invited_at: null, created_at: '2026-11-01T00:00:00.000Z', queued_at: NOW })
+  })
+
+  it('fillSeats goes by queued_at, not the join date', async () => {
+    const a = wait('a@x.com', '2026-11-01T00:00:00.000Z')
+    wait('b@x.com', '2026-11-02T00:00:00.000Z')
+    db.prepare('UPDATE waitlist SET queued_at = ? WHERE id = ?').run('2026-11-05T00:00:00.000Z', a)
+    setCap(db, 1, NOW)
+    await fillSeats(deps)
+    expect(sent.map((m) => m.to)).toEqual(['b@x.com'])
+  })
+
+  it('fillSeats sends at most FILL_LIMIT invites a run', async () => {
+    expect(FILL_LIMIT).toBe(25)
+    for (let i = 0; i < 27; i++) wait(`u${i}@x.com`, `2026-11-01T00:00:${String(i).padStart(2, '0')}.000Z`)
+    expect(await fillSeats(deps)).toBe(25)
+    expect(seatCounts(db, NOW)).toMatchObject({ invited: 25, waiting: 2 })
+    expect(await fillSeats(deps)).toBe(2)
+  })
+
+  it('inviteEntry for a fill re-checks a free seat and an uninvited entry before writing', async () => {
+    const id = wait('a@x.com', NOW)
+    setCap(db, 0, NOW)
+    expect(await inviteEntry(deps, id, { fill: true })).toBe(false)
+    setCap(db, 5, NOW)
+    db.prepare('UPDATE waitlist SET invited_at = ? WHERE id = ?').run(PAST, id)
+    expect(await inviteEntry(deps, id, { fill: true })).toBe(false)
+    expect(sent).toEqual([])
+    expect(db.prepare('SELECT COUNT(*) AS n FROM seat_invites').get()).toEqual({ n: 0 })
+    // The admin's Invite now ignores both.
+    setCap(db, 0, NOW)
+    expect(await inviteEntry(deps, id)).toBe(true)
+  })
+
+  it('a failed send leaves the entry invited when a newer invite went out meanwhile', async () => {
+    const id = wait('a@x.com', NOW)
+    let failFirst!: (e: Error) => void
+    deps.email = {
+      send: (m) =>
+        sent.length === 0 && !failFirst
+          ? new Promise<void>((_, reject) => {
+              failFirst = reject
+            })
+          : (sent.push(m), Promise.resolve())
+    }
+    const first = inviteEntry(deps, id)
+    await vi.waitFor(() => expect(failFirst).toBeDefined())
+    expect(await resendInvite(deps, id)).toBe(true)
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    failFirst(new Error('boom'))
+    expect(await first).toBe(false)
+    logged.mockRestore()
+    const token = sent[0].text.match(/invite\/(\S+)/)![1]
+    expect(db.prepare('SELECT token_hash AS h FROM seat_invites').all()).toEqual([{ h: sha(token) }])
+    expect(
+      (db.prepare('SELECT invited_at FROM waitlist WHERE id = ?').get(id) as { invited_at: string | null })
+        .invited_at
+    ).not.toBeNull()
+  })
+
+  it('seatTaken drops the spent invite\'s entry and everything under the email', () => {
+    const a = wait('a@x.com', PAST)
+    const b = wait('b@x.com', PAST)
+    db.prepare(
+      'INSERT INTO seat_invites (token_hash, waitlist_id, email, created_at, expires_at, used_at, used_by) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).run('spent', a, 'a@x.com', PAST, FUTURE, NOW, 1)
+    db.prepare(
+      'INSERT INTO seat_invites (token_hash, waitlist_id, email, created_at, expires_at) VALUES (?, ?, ?, ?, ?)'
+    ).run('open-b', b, 'b@x.com', PAST, FUTURE)
+    seatTaken(db, 'B@x.com', 'spent')
+    expect(db.prepare('SELECT COUNT(*) AS n FROM waitlist').get()).toEqual({ n: 0 })
+    expect(db.prepare('SELECT token_hash, waitlist_id, email, used_by FROM seat_invites').all()).toEqual([
+      { token_hash: 'spent', waitlist_id: null, email: '', used_by: 1 }
+    ])
+  })
+
+  it('forgetEmail leaves other people alone', () => {
+    wait('a@x.com', PAST)
+    wait('b@x.com', PAST)
+    invite('h-b', 'b@x.com', FUTURE)
+    forgetEmail(db, 'a@x.com')
+    expect(db.prepare('SELECT email FROM waitlist').all()).toEqual([{ email: 'b@x.com' }])
+    expect(db.prepare('SELECT COUNT(*) AS n FROM seat_invites').get()).toEqual({ n: 1 })
   })
 
   it('inviteEntry works over the cap', async () => {

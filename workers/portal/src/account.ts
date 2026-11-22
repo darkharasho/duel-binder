@@ -3,7 +3,7 @@ import type { AppDeps } from './app'
 import { revokeAppleToken } from './apple'
 import { clearSessionCookie, currentUser, fromPublicOrigin } from './auth'
 import { mergedFrom } from './merge'
-import { fillSeatsAfterClose } from './seats'
+import { fillSeatsAfterClose, forgetEmail } from './seats'
 import { deleteCustomers } from './supporters'
 
 /** The most keys one R2 delete call takes. */
@@ -23,10 +23,17 @@ const json = (body: unknown, status: number): Response =>
  *   binders, binder_edits, scan_sessions, favourites, graded_copies, sign_ins, apple_tokens, account_change_log, merge_tickets
  *   and training_photos (foreign keys are always on in a Durable Object); deleteAccountRoute
  *   deletes the training photos' R2 objects.
+ * The waitlist entries and invites under the account's emails, and the invite it signed up with,
+ * have no foreign key, so they're deleted here too.
  * One statement per table: Durable Object SQLite rejects large compound queries. `account_merges`
  * rows have no foreign key and stay.
  */
 export function deleteUserData(db: SqlDb, userId: number): void {
+  const emails = db
+    .prepare('SELECT DISTINCT email FROM sign_ins WHERE user_id = ? AND email IS NOT NULL')
+    .all(userId) as { email: string }[]
+  for (const { email } of emails) forgetEmail(db, email)
+  db.prepare('DELETE FROM seat_invites WHERE used_by = ?').run(userId)
   db.prepare('DELETE FROM collection_entries WHERE user_id = ?').run(userId)
   db.prepare('DELETE FROM value_snapshots WHERE user_id = ?').run(userId)
   db.prepare('DELETE FROM users WHERE id = ?').run(userId)

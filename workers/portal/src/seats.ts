@@ -100,11 +100,49 @@ export function inviteValid(
   return row ?? null
 }
 
+/** Joins the list (`created_at` is the join date; `queued_at` the place in line, reset on re-queue). */
 export function joinWaitlist(db: SqlDb, email: string, nowIso: string): void {
-  db.prepare('INSERT OR IGNORE INTO waitlist (email, created_at) VALUES (?, ?)').run(
+  db.prepare('INSERT OR IGNORE INTO waitlist (email, created_at, queued_at) VALUES (?, ?, ?)').run(
     email.toLowerCase(),
+    nowIso,
     nowIso
   )
+}
+
+/**
+ * Drops one waitlist entry and its open invites. A used invite stays but loses its link to the
+ * entry, so a later entry reusing the id isn't taken for one that already joined.
+ */
+function dropEntry(db: SqlDb, waitlistId: number): boolean {
+  db.prepare('DELETE FROM seat_invites WHERE waitlist_id = ? AND used_at IS NULL').run(waitlistId)
+  db.prepare('UPDATE seat_invites SET waitlist_id = NULL WHERE waitlist_id = ?').run(waitlistId)
+  return db.prepare('DELETE FROM waitlist WHERE id = ?').run(waitlistId).changes > 0
+}
+
+/**
+ * Inside createAccount's transaction, once the account exists: the person is in, so their place in
+ * line and every other invite for them go. That's the waitlist entry of the invite just spent (if
+ * any) and every entry and open invite under the account's verified email, so an invitee who signs
+ * up some other way doesn't hold a second seat. The spent invite keeps only `used_by`.
+ */
+export function seatTaken(db: SqlDb, email: string | null, spentHash: string | null): void {
+  if (spentHash !== null) {
+    const spent = db
+      .prepare('SELECT waitlist_id AS w FROM seat_invites WHERE token_hash = ?')
+      .get(spentHash) as { w: number | null } | undefined
+    if (spent?.w != null) dropEntry(db, spent.w)
+    db.prepare("UPDATE seat_invites SET email = '' WHERE token_hash = ?").run(spentHash)
+  }
+  if (email) forgetEmail(db, email)
+}
+
+/** Every waitlist entry and open invite under this email (account sign-up or deletion). */
+export function forgetEmail(db: SqlDb, email: string): void {
+  const clean = email.toLowerCase()
+  const entry = db.prepare('SELECT id FROM waitlist WHERE email = ?').get(clean) as
+    { id: number } | undefined
+  if (entry) dropEntry(db, entry.id)
+  db.prepare('DELETE FROM seat_invites WHERE email = ? AND used_at IS NULL').run(clean)
 }
 
 /** True when this entry's invite was used, i.e. the person already has an account. */
@@ -114,38 +152,56 @@ export function entryJoined(db: SqlDb, waitlistId: number): boolean {
     .get(waitlistId)
 }
 
-/** Invite one waitlist entry, ignoring the cap. False when there's no such entry or no mail went. */
-export async function inviteEntry(deps: AppDeps, waitlistId: number): Promise<boolean> {
+/**
+ * Invite one waitlist entry. False when there's no such entry, it already joined, or no mail went.
+ * The admin's Invite now and Resend ignore the cap; `fill` (fillSeats) needs a free seat and an
+ * entry not yet invited, both re-checked in the same transaction as the insert.
+ */
+export async function inviteEntry(
+  deps: AppDeps,
+  waitlistId: number,
+  opts: { fill?: boolean } = {}
+): Promise<boolean> {
   const { db } = deps
-  const entry = db.prepare('SELECT email FROM waitlist WHERE id = ?').get(waitlistId) as
-    { email: string } | undefined
-  if (!entry) return false
-  // Their invite was already used: they have an account, so no second seat.
-  if (entryJoined(db, waitlistId)) return false
   const now = deps.now()
   const nowIso = now.toISOString()
   const expiresAt = new Date(now.getTime() + INVITE_MS).toISOString()
+  // Token and hash first: the hash awaits, and nothing below may wait between check and insert.
   const token = randomToken()
   const hash = await sha256Hex(token)
-  db.transaction(() => {
+  const email = db.transaction((): string | null => {
+    const entry = db
+      .prepare('SELECT email, invited_at AS invitedAt FROM waitlist WHERE id = ?')
+      .get(waitlistId) as { email: string; invitedAt: string | null } | undefined
+    if (!entry) return null
+    // Their invite was already used: they have an account, so no second seat.
+    if (entryJoined(db, waitlistId)) return null
+    if (opts.fill && (entry.invitedAt !== null || seatCounts(db, nowIso).free <= 0)) return null
     db.prepare('DELETE FROM seat_invites WHERE waitlist_id = ? AND used_at IS NULL').run(waitlistId)
     db.prepare(
       `INSERT INTO seat_invites (token_hash, waitlist_id, email, created_at, expires_at)
        VALUES (?, ?, ?, ?, ?)`
     ).run(hash, waitlistId, entry.email, nowIso, expiresAt)
     db.prepare('UPDATE waitlist SET invited_at = ? WHERE id = ?').run(nowIso, waitlistId)
+    return entry.email
   })()
-  const undo = (): void => {
-    db.prepare('DELETE FROM seat_invites WHERE token_hash = ?').run(hash)
-    db.prepare('UPDATE waitlist SET invited_at = NULL WHERE id = ?').run(waitlistId)
-  }
+  if (email === null) return false
+  // A newer invite for the entry (a Resend while this send was out) keeps the entry invited.
+  const undo = (): void =>
+    db.transaction(() => {
+      db.prepare('DELETE FROM seat_invites WHERE token_hash = ?').run(hash)
+      const other = db
+        .prepare('SELECT 1 FROM seat_invites WHERE waitlist_id = ? AND used_at IS NULL LIMIT 1')
+        .get(waitlistId)
+      if (!other) db.prepare('UPDATE waitlist SET invited_at = NULL WHERE id = ?').run(waitlistId)
+    })()
   if (!deps.email) {
     undo()
     return false
   }
   try {
     await deps.email.send(
-      seatInviteMessage(entry.email, `${deps.env.PUBLIC_URL}/invite/${token}`, expiresAt)
+      seatInviteMessage(email, `${deps.env.PUBLIC_URL}/invite/${token}`, expiresAt)
     )
     return true
   } catch (e) {
@@ -155,13 +211,20 @@ export async function inviteEntry(deps: AppDeps, waitlistId: number): Promise<bo
   }
 }
 
-/** Invite the waitlist, oldest first, until the free seats run out. Returns the invites sent. */
-export async function fillSeats(deps: AppDeps): Promise<number> {
+/** The most invites one fill tries, so a big cap raise doesn't outlast the admin's request. */
+export const FILL_LIMIT = 25
+
+/**
+ * Invite the waitlist in queue order until the free seats run out, trying at most `limit` entries.
+ * Returns the invites sent; whoever is left waits for the next fill.
+ */
+export async function fillSeats(deps: AppDeps, limit = FILL_LIMIT): Promise<number> {
   const { db } = deps
   const nowIso = deps.now().toISOString()
-  // An invite that ran out unused gives someone else a turn: its entry goes back in line.
+  // An invite that ran out unused gives someone else a turn: its entry goes to the back of the
+  // line (created_at stays the date they joined).
   db.prepare(
-    `UPDATE waitlist SET invited_at = NULL, created_at = ?
+    `UPDATE waitlist SET invited_at = NULL, queued_at = ?
      WHERE invited_at IS NOT NULL
        AND EXISTS (SELECT 1 FROM seat_invites i WHERE i.waitlist_id = waitlist.id)
        AND NOT EXISTS (SELECT 1 FROM seat_invites i
@@ -169,14 +232,14 @@ export async function fillSeats(deps: AppDeps): Promise<number> {
   ).run(nowIso, nowIso)
   let sent = 0
   const tried = new Set<number>()
-  while (seatCounts(db, nowIso).free > 0) {
+  while (tried.size < limit && seatCounts(db, nowIso).free > 0) {
     const rows = db
-      .prepare('SELECT id FROM waitlist WHERE invited_at IS NULL ORDER BY created_at, id')
+      .prepare('SELECT id FROM waitlist WHERE invited_at IS NULL ORDER BY queued_at, id')
       .all() as { id: number }[]
     const next = rows.find((r) => !tried.has(r.id))
     if (!next) break
     tried.add(next.id)
-    if (await inviteEntry(deps, next.id)) sent++
+    if (await inviteEntry(deps, next.id, { fill: true })) sent++
   }
   return sent
 }
@@ -206,10 +269,7 @@ export function cancelInvite(db: SqlDb, waitlistId: number): boolean {
 }
 
 export function deleteEntry(db: SqlDb, waitlistId: number): boolean {
-  return db.transaction(() => {
-    db.prepare('DELETE FROM seat_invites WHERE waitlist_id = ? AND used_at IS NULL').run(waitlistId)
-    return db.prepare('DELETE FROM waitlist WHERE id = ?').run(waitlistId).changes > 0
-  })()
+  return db.transaction(() => dropEntry(db, waitlistId))()
 }
 
 export function seatInviteMessage(email: string, link: string, expiresAt: string): EmailMessage {
@@ -245,13 +305,13 @@ const MAX_CAP = 100000
 function adminWaitlist(db: SqlDb, nowIso: string): AdminWaitlistEntry[] {
   const rows = db
     .prepare(
-      `SELECT w.id, w.email, w.created_at AS createdAt, w.invited_at AS invitedAt,
+      `SELECT w.id, w.email, w.created_at AS createdAt, w.queued_at AS queuedAt, w.invited_at AS invitedAt,
          (SELECT MAX(i.expires_at) FROM seat_invites i WHERE i.waitlist_id = w.id AND i.used_at IS NULL) AS inviteExpiresAt,
          EXISTS (SELECT 1 FROM seat_invites i WHERE i.waitlist_id = w.id AND i.used_at IS NOT NULL) AS joined
        FROM waitlist w`
     )
-    .all() as (Omit<AdminWaitlistEntry, 'status'> & { joined: number })[]
-  const entries = rows.map(({ joined, ...r }): AdminWaitlistEntry => {
+    .all() as (Omit<AdminWaitlistEntry, 'status'> & { joined: number; queuedAt: string })[]
+  const entries = rows.map(({ joined, ...r }): AdminWaitlistEntry & { queuedAt: string } => {
     const status = joined
       ? 'joined'
       : r.invitedAt === null
@@ -262,11 +322,24 @@ function adminWaitlist(db: SqlDb, nowIso: string): AdminWaitlistEntry[] {
     return { ...r, status }
   })
   const rank = { waiting: 0, expired: 0, invited: 1, joined: 2 } as const
-  return entries.sort(
-    (a, b) =>
-      rank[a.status] - rank[b.status] ||
-      (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id - b.id)
-  )
+  // In queue order: a re-queued entry sits behind later joiners but keeps its join date.
+  return entries
+    .sort(
+      (a, b) =>
+        rank[a.status] - rank[b.status] ||
+        (a.queuedAt < b.queuedAt ? -1 : a.queuedAt > b.queuedAt ? 1 : a.id - b.id)
+    )
+    .map(({ queuedAt: _q, ...e }): AdminWaitlistEntry => e)
+}
+
+/**
+ * Runs a fill and answers `{ ok, invited, left }`: `left` is how many waiting entries still have a
+ * free seat (a fill stops at FILL_LIMIT), so the admin can press Fill again.
+ */
+async function fillReply(deps: AppDeps): Promise<Response> {
+  const invited = await fillSeats(deps)
+  const c = seatCounts(deps.db, deps.now().toISOString())
+  return json({ ok: true, invited, left: Math.min(c.free, c.waiting) })
 }
 
 /**
@@ -297,16 +370,16 @@ export async function adminSeatsRoute(req: Request, deps: AppDeps): Promise<Resp
     if (typeof cap !== 'number' || !Number.isInteger(cap) || cap < 0 || cap > MAX_CAP)
       return json({ error: 'Bad request' }, 400)
     setCap(db, cap, deps.now().toISOString())
-    return json({ ok: true, invited: await fillSeats(deps) })
+    return fillReply(deps)
   }
-  if (action === 'fill') return json({ ok: true, invited: await fillSeats(deps) })
+  if (action === 'fill') return fillReply(deps)
   const id = body?.id
   if (typeof id !== 'number' || !Number.isInteger(id)) return json({ error: 'Bad request' }, 400)
   if (!db.prepare('SELECT 1 FROM waitlist WHERE id = ?').get(id)) return notFound
-  if (action === 'cancel') return cancelInvite(db, id) ? json({ ok: true }) : notFound
   if (action === 'delete') return deleteEntry(db, id) ? json({ ok: true }) : notFound
-  // invite and resend: someone who already joined has their seat.
+  // invite, resend and cancel: someone who already joined has their seat.
   if (entryJoined(db, id)) return json({ error: 'joined' }, 409)
+  if (action === 'cancel') return cancelInvite(db, id) ? json({ ok: true }) : notFound
   const emailed = action === 'invite' ? await inviteEntry(deps, id) : await resendInvite(deps, id)
   return emailed ? json({ ok: true, emailed }) : json({ error: 'email' }, 502)
 }

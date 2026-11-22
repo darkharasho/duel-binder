@@ -79,6 +79,25 @@ describe('the seat gate', () => {
       'INSERT INTO seat_invites (token_hash, email, created_at, expires_at) VALUES (?, ?, ?, ?)'
     ).run(sha(token), email, NOW_ISO, FUTURE)
   }
+  /** A waitlist entry with an outstanding invite, as a fill would leave it. */
+  const queued = (token: string, email: string): number => {
+    joinWaitlist(db, email, NOW_ISO)
+    const id = (db.prepare('SELECT id FROM waitlist WHERE email = ?').get(email) as { id: number })
+      .id
+    db.prepare(
+      'INSERT INTO seat_invites (token_hash, waitlist_id, email, created_at, expires_at) VALUES (?, ?, ?, ?, ?)'
+    ).run(sha(token), id, email, NOW_ISO, FUTURE)
+    db.prepare('UPDATE waitlist SET invited_at = ? WHERE id = ?').run(NOW_ISO, id)
+    return id
+  }
+  const seatRows = (): { waitlist: number; open: number } => ({
+    waitlist: (db.prepare('SELECT COUNT(*) AS n FROM waitlist').get() as { n: number }).n,
+    open: (
+      db.prepare('SELECT COUNT(*) AS n FROM seat_invites WHERE used_at IS NULL').get() as {
+        n: number
+      }
+    ).n
+  })
   const inviteUsed = (token: string): { used_at: string | null; used_by: number | null } =>
     db
       .prepare('SELECT used_at, used_by FROM seat_invites WHERE token_hash = ?')
@@ -373,6 +392,55 @@ describe('the seat gate', () => {
     })
   })
 
+  describe('an invitee who signs up another way', () => {
+    it('desktop Discord with a free seat voids their invite and leaves the waitlist', async () => {
+      queued('tok-x', 'kaiba@x.io')
+      discordUser = { id: '111', username: 'kaiba', email: 'Kaiba@x.io', verified: true }
+      const res = await desktopDiscord()
+      expect(new URL(res.headers.get('location')!).searchParams.get('code')).toBeTruthy()
+      expect(seatCounts(db, NOW_ISO)).toMatchObject({ accounts: 1, invited: 0, waiting: 0 })
+      expect(seatRows()).toEqual({ waitlist: 0, open: 0 })
+    })
+
+    it('an unverified Discord email voids nothing', async () => {
+      queued('tok-x', 'kaiba@x.io')
+      discordUser = { id: '111', username: 'kaiba', email: 'kaiba@x.io', verified: false }
+      await desktopDiscord()
+      expect(seatRows()).toEqual({ waitlist: 1, open: 1 })
+    })
+
+    it('an in-app email sign-up voids the invite for that address', async () => {
+      queued('tok-e', 'new@x.io')
+      const created = await emailJson('create', { email: 'new@x.io', password: 'hunter2hunter2' })
+      const { ticket } = (await created.json()) as { ticket: string }
+      const res = await emailJson('confirm', { ticket, code: sender.lastCode() })
+      expect(res.status).toBe(200)
+      expect(seatRows()).toEqual({ waitlist: 0, open: 0 })
+    })
+
+    it('a waitlisted person who gets in on a free seat leaves the list', async () => {
+      joinWaitlist(db, 'kaiba@x.io', NOW_ISO)
+      discordUser = { id: '111', username: 'kaiba', email: 'kaiba@x.io', verified: true }
+      await webDiscord()
+      expect(seatRows()).toEqual({ waitlist: 0, open: 0 })
+    })
+
+    it('a link used under another email drops the entry it was sent to and keeps no email', async () => {
+      addUser(db, '1', 'first')
+      full()
+      queued('tok-1', 'invited@x.io')
+      discordUser = { id: '111', username: 'kaiba', email: 'other@x.io', verified: true }
+      const res = await webDiscord('seat_invite=tok-1')
+      expect(res.headers.get('location')).toBe('/')
+      expect(seatRows()).toEqual({ waitlist: 0, open: 0 })
+      expect(
+        db
+          .prepare('SELECT email, waitlist_id FROM seat_invites WHERE token_hash = ?')
+          .get(sha('tok-1'))
+      ).toEqual({ email: '', waitlist_id: null })
+    })
+  })
+
   describe('an invite cookie on an existing account', () => {
     it('web Discord clears the cookie and leaves the invite', async () => {
       addUser(db, '111', 'kaiba')
@@ -425,12 +493,36 @@ describe('the seat gate', () => {
       expect(sender.sent.map((m) => m.to)).toEqual(['waiting@x.io'])
     })
 
+    it('deleting an account removes the waitlist and invite rows under its email', async () => {
+      const a = addUser(db, '1', 'first')
+      db.prepare("UPDATE sign_ins SET email = 'first@x.io' WHERE user_id = ?").run(a)
+      joinWaitlist(db, 'first@x.io', NOW_ISO)
+      invite('tok-open', 'first@x.io')
+      db.prepare(
+        'INSERT INTO seat_invites (token_hash, email, created_at, expires_at, used_at, used_by) VALUES (?, ?, ?, ?, ?, ?)'
+      ).run(sha('tok-used'), '', NOW_ISO, FUTURE, NOW_ISO, a)
+      joinWaitlist(db, 'someone@x.io', NOW_ISO)
+      deps.email = undefined
+      const token = await mintSession(deps, a, 'desktop', NOW_ISO)
+      const res = await handle(
+        new Request(`${BASE}/api/account/delete`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+          body: JSON.stringify({ confirm: 'delete' })
+        }),
+        deps
+      )
+      expect(res.status).toBe(204)
+      expect(db.prepare('SELECT email FROM waitlist').all()).toEqual([{ email: 'someone@x.io' }])
+      expect(db.prepare('SELECT COUNT(*) AS n FROM seat_invites').get()).toEqual({ n: 0 })
+    })
+
     it('a failed fill does not fail the delete', async () => {
       const a = addUser(db, '1', 'first')
       full()
       const token = await mintSession(deps, a, 'desktop', NOW_ISO)
-      // fillSeats throws on its first query.
-      db.exec('DROP TABLE waitlist')
+      // fillSeats throws when it counts the seats (the delete itself doesn't read seat_settings).
+      db.exec('DROP TABLE seat_settings')
       const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
       const res = await handle(
         new Request(`${BASE}/api/account/delete`, {

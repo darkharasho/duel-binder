@@ -998,7 +998,7 @@ CREATE INDEX ix_graded_pkey ON graded_copies(pkey);
     sql: `
 CREATE TABLE seat_settings (id INTEGER PRIMARY KEY CHECK (id = 1), cap INTEGER NOT NULL, updated_at TEXT NOT NULL);
 INSERT INTO seat_settings (id, cap, updated_at) VALUES (1, 100, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
-CREATE TABLE waitlist (id INTEGER PRIMARY KEY, email TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL, invited_at TEXT);
+CREATE TABLE waitlist (id INTEGER PRIMARY KEY, email TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL, queued_at TEXT NOT NULL, invited_at TEXT);
 CREATE TABLE seat_invites (token_hash TEXT PRIMARY KEY, waitlist_id INTEGER, email TEXT NOT NULL,
   created_at TEXT NOT NULL, expires_at TEXT NOT NULL, used_at TEXT, used_by INTEGER);
 CREATE INDEX ix_seat_invites_waitlist ON seat_invites(waitlist_id);

@@ -1,5 +1,6 @@
 import type { SqlDb } from '../db/sql'
 import type { GameId } from '../../shared/games'
+import { MAX_MARK_PROBLEMS, MAX_PROBLEM_KEY } from '../../shared/decks/check'
 import { DeckFieldError, MAX_DECKS_PER_GAME, checkDeckFields } from '../../shared/decks/fields'
 import type {
   DeckCard,
@@ -18,10 +19,11 @@ import { LOCAL, scopeGame, type Scope } from './scope'
 import { printingPrice } from './sets'
 
 const MAX_UID = 64
-const MAX_PROBLEMS = 400
 const MAX_PACK_VERSION = 32
 const MAX_REFS = 300
 const MAX_REF_TEXT = 200
+/** Name matches read per import line: a whole-name match is among the shortest names hit. */
+const NAME_HITS = 200
 const VERDICT_STATUSES: readonly VerdictStatus[] = [
   'legal',
   'warnings',
@@ -84,10 +86,12 @@ function checkMark(v: unknown): DeckVerdictMark {
     throw new CollectionError('Unknown verdict status')
   if (
     !Array.isArray(o.problems) ||
-    o.problems.length > MAX_PROBLEMS ||
-    !o.problems.every((p) => typeof p === 'string')
+    o.problems.length > MAX_MARK_PROBLEMS ||
+    !o.problems.every((p) => typeof p === 'string' && p.length <= MAX_PROBLEM_KEY)
   )
-    throw new CollectionError(`Problems must be a list of at most ${MAX_PROBLEMS} texts`)
+    throw new CollectionError(
+      `Problems must be a list of at most ${MAX_MARK_PROBLEMS} texts of at most ${MAX_PROBLEM_KEY} characters`
+    )
   if (typeof o.packVersion !== 'string' || o.packVersion.length > MAX_PACK_VERSION)
     throw new CollectionError(`Pack version must be text of at most ${MAX_PACK_VERSION} characters`)
   return {
@@ -232,6 +236,24 @@ function readDecks(db: SqlDb, scope: Scope, uid?: string): DeckDbRow[] {
     .all(...(uid === undefined ? [] : [uid])) as DeckDbRow[]
 }
 
+/**
+ * The tile's art: the picked cover while the deck still holds that card, else the first Main
+ * entry with art, else any entry's.
+ */
+function coverImage(
+  r: DeckDbRow,
+  cards: DeckEntry[],
+  images: Map<number, number>
+): number | null {
+  if (r.cover !== null && cards.some((e) => e.card === r.cover)) {
+    const picked = images.get(r.cover)
+    if (picked !== undefined) return picked
+  }
+  const first = (es: DeckEntry[]): number | undefined =>
+    es.map((e) => images.get(e.card)).find((id) => id !== undefined)
+  return first(cards.filter((e) => e.section === 'main')) ?? first(cards) ?? null
+}
+
 function summary(r: DeckDbRow, cards: DeckEntry[], images: Map<number, number>): DeckSummary {
   return {
     uid: r.uid,
@@ -239,7 +261,7 @@ function summary(r: DeckDbRow, cards: DeckEntry[], images: Map<number, number>):
     format: r.format,
     name: r.name,
     private: r.private === 1,
-    coverImageId: r.cover === null ? null : (images.get(r.cover) ?? null),
+    coverImageId: coverImage(r, cards, images),
     cards,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
@@ -470,7 +492,8 @@ export function resolveDeckLines(db: SqlDb, refs: unknown, scope: Scope = LOCAL)
 
   const named = db.prepare(
     `SELECT c.id, c.name FROM cards_fts JOIN cards c ON c.id = cards_fts.rowid
-     WHERE cards_fts MATCH ? AND +c.game = ${scope.game}`
+     WHERE cards_fts MATCH ? AND +c.game = ${scope.game}
+     ORDER BY length(c.name), c.id LIMIT ${NAME_HITS}`
   )
   const byName = new Map<string, { id: number; name: string }[]>()
   for (const r of lines) {

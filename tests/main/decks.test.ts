@@ -114,7 +114,8 @@ describe('decks repo', () => {
       updatedAt: T2.toISOString(),
       lastSeen: null
     })
-    expect(list.decks[1].coverImageId).toBeNull()
+    // No cover picked: the first Main card's art.
+    expect(list.decks[1].coverImageId).toBe(DARK_MAGICIAN)
     expect(Object.keys(list.cardFacts).map(Number).sort()).toEqual(
       [FEATHER_DUSTER, DARK_MAGICIAN, POT_OF_GREED].sort()
     )
@@ -135,6 +136,29 @@ describe('decks repo', () => {
 
     expect(saveDeck(db, { ...draft({ name: 'First, edited' }), uid: first }, T3)).toBe(first)
     expect(listDecks(db).decks.map((d) => d.name)).toEqual(['First, edited', 'Second'])
+  })
+
+  it('the tile art falls back to the first Main card when no cover is picked or it left', () => {
+    const cards: DeckEntry[] = [
+      { section: 'side', card: FEATHER_DUSTER, qty: 1 },
+      { section: 'main', card: 999999, qty: 1 },
+      { section: 'main', card: POT_OF_GREED, qty: 1 }
+    ]
+    const none = saveDeck(db, draft({ cards }), T1)
+    const gone = saveDeck(db, draft({ cards, cover: DARK_MAGICIAN }), T2)
+    const sideOnly = saveDeck(
+      db,
+      draft({ cards: [{ section: 'side', card: FEATHER_DUSTER, qty: 1 }] }),
+      T3
+    )
+    const empty = saveDeck(db, draft({ cards: [] }), T3)
+    const cover = (uid: string): number | null =>
+      listDecks(db).decks.find((d) => d.uid === uid)!.coverImageId
+    expect(cover(none)).toBe(POT_OF_GREED)
+    expect(cover(gone)).toBe(POT_OF_GREED)
+    expect(getDeck(db, gone)!.coverImageId).toBe(POT_OF_GREED)
+    expect(cover(sideOnly)).toBe(FEATHER_DUSTER)
+    expect(cover(empty)).toBeNull()
   })
 
   it('maps pinned printings to their art', () => {
@@ -278,8 +302,15 @@ describe('decks repo', () => {
     expect(() => markDeckSeen(db, uid, { ...mark, status: 'great' })).toThrow(CollectionError)
     expect(() => markDeckSeen(db, uid, { ...mark, problems: [1] })).toThrow(CollectionError)
     expect(() =>
-      markDeckSeen(db, uid, { ...mark, problems: Array.from({ length: 401 }, () => 'x') })
+      markDeckSeen(db, uid, { ...mark, problems: Array.from({ length: 301 }, () => 'x') })
     ).toThrow(CollectionError)
+    expect(() => markDeckSeen(db, uid, { ...mark, problems: ['x'.repeat(65)] })).toThrow(
+      CollectionError
+    )
+    const most = { ...mark, problems: Array.from({ length: 300 }, (_, i) => `place:${i}:extra`) }
+    markDeckSeen(db, uid, most)
+    expect(getDeck(db, uid)!.lastSeen).toEqual(most)
+    markDeckSeen(db, uid, mark)
     expect(() => markDeckSeen(db, uid, { ...mark, packVersion: 'x'.repeat(33) })).toThrow(
       CollectionError
     )

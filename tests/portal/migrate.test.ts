@@ -15,17 +15,26 @@ function freshDb(): Database.Database {
 }
 
 const tableNames = (db: Database.Database): string[] =>
-  (db.prepare("SELECT name FROM sqlite_master WHERE type IN ('table','view')").all() as { name: string }[]).map((r) => r.name)
+  (
+    db.prepare("SELECT name FROM sqlite_master WHERE type IN ('table','view')").all() as {
+      name: string
+    }[]
+  ).map((r) => r.name)
 
 describe('migrateServer', () => {
   it('creates the server schema and records every step', () => {
     const db = freshDb()
     migrateServer(db)
     const names = tableNames(db)
-    for (const t of ['users', 'sessions', 'collection_entries', 'cards_fts']) expect(names).toContain(t)
-    const cols = (db.prepare('PRAGMA table_info(collection_entries)').all() as { name: string }[]).map((c) => c.name)
+    for (const t of ['users', 'sessions', 'collection_entries', 'cards_fts'])
+      expect(names).toContain(t)
+    const cols = (
+      db.prepare('PRAGMA table_info(collection_entries)').all() as { name: string }[]
+    ).map((c) => c.name)
     expect(cols).toEqual(expect.arrayContaining(['user_id', 'uid', 'deleted_at']))
-    const done = (db.prepare('SELECT name FROM server_migrations').all() as { name: string }[]).map((r) => r.name)
+    const done = (db.prepare('SELECT name FROM server_migrations').all() as { name: string }[]).map(
+      (r) => r.name
+    )
     for (let v = 1; v <= 10; v++) expect(done).toContain(`desktop-${v}`)
     expect(done).toContain('server-1')
     db.close()
@@ -34,7 +43,8 @@ describe('migrateServer', () => {
   it('is a no-op when run again', () => {
     const db = freshDb()
     migrateServer(db)
-    const count = (): number => (db.prepare('SELECT count(*) AS n FROM server_migrations').get() as { n: number }).n
+    const count = (): number =>
+      (db.prepare('SELECT count(*) AS n FROM server_migrations').get() as { n: number }).n
     const before = count()
     expect(() => migrateServer(db)).not.toThrow()
     expect(count()).toBe(before)
@@ -46,17 +56,26 @@ describe('migrateServer', () => {
     db.exec('CREATE TABLE server_migrations (name TEXT PRIMARY KEY)')
     runSteps(db, [{ version: 99, sql: 'CREATE TABLE nope(x)', server: false }])
     expect(tableNames(db)).not.toContain('nope')
-    expect(db.prepare("SELECT name FROM server_migrations WHERE name = 'desktop-99'").get()).toBeTruthy()
+    expect(
+      db.prepare("SELECT name FROM server_migrations WHERE name = 'desktop-99'").get()
+    ).toBeTruthy()
     db.close()
   })
 
   it('a desktop step with foreignKeysOff and no server override is refused', () => {
     const db = freshDb()
-    expect(() => runSteps(db, [{ version: 99, sql: 'CREATE TABLE nope(x)', foreignKeysOff: true }])).toThrow(
-      /desktop-99.*foreignKeysOff/
-    )
+    expect(() =>
+      runSteps(db, [{ version: 99, sql: 'CREATE TABLE nope(x)', foreignKeysOff: true }])
+    ).toThrow(/desktop-99.*foreignKeysOff/)
     expect(tableNames(db)).not.toContain('nope')
-    runSteps(db, [{ version: 99, sql: 'CREATE TABLE nope(x)', foreignKeysOff: true, server: 'CREATE TABLE yes(x)' }])
+    runSteps(db, [
+      {
+        version: 99,
+        sql: 'CREATE TABLE nope(x)',
+        foreignKeysOff: true,
+        server: 'CREATE TABLE yes(x)'
+      }
+    ])
     expect(tableNames(db)).toContain('yes')
     db.close()
   })
@@ -75,13 +94,17 @@ describe('migrateServer', () => {
         (4, 1, 'a', 7, 1, 1, 'x', 'x'), (6, 1, 'b', 8, 1, 2, 'x', 'x');
     `)
     migrateServer(db)
-    const done = (db.prepare('SELECT name FROM server_migrations').all() as { name: string }[]).map((r) => r.name)
+    const done = (db.prepare('SELECT name FROM server_migrations').all() as { name: string }[]).map(
+      (r) => r.name
+    )
     expect(done).toEqual(expect.arrayContaining(['desktop-12', 'server-2']))
     expect(db.prepare('SELECT id, server_seq FROM collection_entries ORDER BY id').all()).toEqual([
       { id: 4, server_seq: 4 },
       { id: 6, server_seq: 6 }
     ])
-    const cols = (db.prepare('PRAGMA table_info(collection_entries)').all() as { name: string }[]).map((c) => c.name)
+    const cols = (
+      db.prepare('PRAGMA table_info(collection_entries)').all() as { name: string }[]
+    ).map((c) => c.name)
     expect(cols).not.toContain('owner_id')
     expect(cols).not.toContain('dirty')
     expect(tableNames(db)).toContain('desktop_codes')
@@ -92,7 +115,11 @@ describe('migrateServer', () => {
 
   it('upgraded and fresh servers end with the same schema', () => {
     const schema = (db: Database.Database): unknown[] =>
-      db.prepare("SELECT type, name, tbl_name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY name").all()
+      db
+        .prepare(
+          "SELECT type, name, tbl_name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY name"
+        )
+        .all()
     const upgraded = freshDb()
     runSteps(upgraded, [...MIGRATIONS.slice(0, 11), SERVER_STEPS[0]])
     migrateServer(upgraded)
@@ -104,21 +131,36 @@ describe('migrateServer', () => {
   })
 
   it('late desktop steps touching collection data have a server override', () => {
-    const late = MIGRATIONS.filter((m) => m.version >= 12 && /collection_entries|value_snapshots/.test(m.sql))
+    const late = MIGRATIONS.filter(
+      (m) => m.version >= 12 && /collection_entries|value_snapshots/.test(m.sql)
+    )
     expect(late.length).toBeGreaterThan(0)
     for (const m of late) expect(m.server, `desktop-${m.version}`).not.toBeUndefined()
   })
 
   it('server-11 backfills price_seq', () => {
     const db = freshDb()
-    runSteps(db, [...MIGRATIONS, ...SERVER_STEPS].filter((s) => !('name' in s && s.name === 'server-11')))
-    db.exec(`INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at) VALUES (1, 'C', 'M', 'n', 'W', '', '')`)
+    runSteps(
+      db,
+      [...MIGRATIONS, ...SERVER_STEPS].filter((s) => !('name' in s && s.name === 'server-11'))
+    )
+    db.exec(
+      `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at) VALUES (1, 'C', 'M', 'n', 'W', '', '')`
+    )
     for (let i = 1; i <= 3; i++) {
-      db.exec(`INSERT INTO card_printings (id, card_id, set_name, set_code, set_rarity, language) VALUES (${i}, 1, 'S', 'X-JP00${i}', 'Common', 'ja')`)
-      db.exec(`INSERT INTO intl_prices (printing_id, price, listing_count, checked_at) VALUES (${i}, ${i}, 2, 't')`)
+      db.exec(
+        `INSERT INTO card_printings (id, card_id, set_name, set_code, set_rarity, language) VALUES (${i}, 1, 'S', 'X-JP00${i}', 'Common', 'ja')`
+      )
+      db.exec(
+        `INSERT INTO intl_prices (printing_id, price, listing_count, checked_at) VALUES (${i}, ${i}, 2, 't')`
+      )
     }
     migrateServer(db)
-    const seqs = (db.prepare('SELECT price_seq AS s FROM intl_prices ORDER BY printing_id').all() as { s: number }[]).map((r) => r.s)
+    const seqs = (
+      db.prepare('SELECT price_seq AS s FROM intl_prices ORDER BY printing_id').all() as {
+        s: number
+      }[]
+    ).map((r) => r.s)
     expect(new Set(seqs).size).toBe(3)
     expect(seqs.every((s) => s > 0)).toBe(true)
     const clock = (db.prepare('SELECT seq FROM catalog_clock').get() as { seq: number }).seq
@@ -132,7 +174,27 @@ function serverBefore12(): Database.Database {
   const db = freshDb()
   runSteps(db, [
     ...MIGRATIONS.filter((m) => m.version <= 18),
-    ...SERVER_STEPS.filter((s) => !['server-12', 'server-13', 'server-14', 'server-16', 'server-18', 'server-21', 'server-23', 'server-26', 'server-27', 'server-28', 'server-35', 'server-40', 'server-41', 'server-42', 'server-43', 'server-44'].includes(s.name))
+    ...SERVER_STEPS.filter(
+      (s) =>
+        ![
+          'server-12',
+          'server-13',
+          'server-14',
+          'server-16',
+          'server-18',
+          'server-21',
+          'server-23',
+          'server-26',
+          'server-27',
+          'server-28',
+          'server-35',
+          'server-40',
+          'server-41',
+          'server-42',
+          'server-43',
+          'server-44'
+        ].includes(s.name)
+    )
   ])
   db.exec(`
     INSERT INTO users (id, discord_id, username, created_at, updated_at) VALUES (1, 'd1', 'one', 'x', 'x');
@@ -165,28 +227,50 @@ describe('server-12 (game columns)', () => {
     const db = serverBefore12()
     const pkeys = rows(db, 'SELECT pkey FROM card_printings ORDER BY id')
     const sets = rows(db, 'SELECT language, set_name, catalog_seq FROM sets ORDER BY rowid')
-    const snapshots = rows(db, 'SELECT user_id, date, total_value FROM value_snapshots ORDER BY date')
+    const snapshots = rows(
+      db,
+      'SELECT user_id, date, total_value FROM value_snapshots ORDER BY date'
+    )
     const clock = clockOf(db)
 
     migrateServer(db)
 
-    for (const t of ['cards', 'card_images', 'card_printings', 'sets', 'collection_entries', 'value_snapshots']) {
+    for (const t of [
+      'cards',
+      'card_images',
+      'card_printings',
+      'sets',
+      'collection_entries',
+      'value_snapshots'
+    ]) {
       expect(rows(db, `SELECT DISTINCT game FROM ${t}`), t).toEqual([{ game: 'ygo' }])
     }
     expect(rows(db, 'SELECT pkey FROM card_printings ORDER BY id')).toEqual(pkeys)
-    expect(rows(db, 'SELECT language, set_name, catalog_seq FROM sets ORDER BY rowid')).toEqual(sets)
-    expect(rows(db, 'SELECT user_id, date, total_value FROM value_snapshots ORDER BY date')).toEqual(snapshots)
+    expect(rows(db, 'SELECT language, set_name, catalog_seq FROM sets ORDER BY rowid')).toEqual(
+      sets
+    )
+    expect(
+      rows(db, 'SELECT user_id, date, total_value FROM value_snapshots ORDER BY date')
+    ).toEqual(snapshots)
     expect(pkOf(db, 'sets')).toEqual(['game', 'language', 'set_name'])
     expect(pkOf(db, 'value_snapshots')).toEqual(['user_id', 'game', 'date'])
     expect(clockOf(db)).toBe(clock)
     expect(rows(db, 'SELECT * FROM catalog_tombstones')).toEqual([])
     expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
-    const indexes = (rows(db, "SELECT name FROM sqlite_master WHERE type = 'index'") as { name: string }[]).map(
-      (r) => r.name
+    const indexes = (
+      rows(db, "SELECT name FROM sqlite_master WHERE type = 'index'") as { name: string }[]
+    ).map((r) => r.name)
+    for (const t of ['cards', 'card_images', 'card_printings', 'sets'])
+      expect(indexes).toContain(`ix_${t}_game_seq`)
+    expect(indexes).toEqual(
+      expect.arrayContaining(['ix_sets_catalog_seq', 'ix_pokemon_cards_catalog_seq'])
     )
-    for (const t of ['cards', 'card_images', 'card_printings', 'sets']) expect(indexes).toContain(`ix_${t}_game_seq`)
-    expect(indexes).toEqual(expect.arrayContaining(['ix_sets_catalog_seq', 'ix_pokemon_cards_catalog_seq']))
-    expect(rows(db, "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'cloud_game_cursors'")).toEqual([])
+    expect(
+      rows(
+        db,
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'cloud_game_cursors'"
+      )
+    ).toEqual([])
     db.close()
   })
 
@@ -197,11 +281,15 @@ describe('server-12 (game columns)', () => {
     const { cardIds } = seedPokemon(db)
     expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
     expect(
-      db.prepare("SELECT game FROM sets WHERE language = 'en' AND set_name = ? ORDER BY game").all(SHARED_SET_NAME)
+      db
+        .prepare("SELECT game FROM sets WHERE language = 'en' AND set_name = ? ORDER BY game")
+        .all(SHARED_SET_NAME)
     ).toEqual([{ game: 'pkm' }, { game: 'ygo' }])
     // 2 cards, 2 images, 2 pokemon_cards rows, 2 sets and 4 printings
     expect(clockOf(db)).toBe(clock + 12)
-    const seq = db.prepare('SELECT catalog_seq AS s FROM pokemon_cards WHERE card_id = ?').get(cardIds[0]) as { s: number }
+    const seq = db
+      .prepare('SELECT catalog_seq AS s FROM pokemon_cards WHERE card_id = ?')
+      .get(cardIds[0]) as { s: number }
     expect(seq.s).toBeGreaterThan(clock)
     db.close()
   })
@@ -210,12 +298,15 @@ describe('server-12 (game columns)', () => {
     const db = freshDb()
     migrateServer(db)
     seedPokemon(db)
-    const cols = (db.prepare('PRAGMA table_info(pokemon_cards)').all() as { name: string }[]).map((c) => c.name)
+    const cols = (db.prepare('PRAGMA table_info(pokemon_cards)').all() as { name: string }[]).map(
+      (c) => c.name
+    )
     expect(cols).toContain('hp')
     const list = getChecklist(db, SHARED_SET_NAME, 'en', userScope(1, 'pkm'))
     expect(list?.cards.length).toBeGreaterThan(0)
     const stored = db.prepare('SELECT hp FROM pokemon_cards WHERE card_id = ?')
-    for (const c of list!.cards) expect(c.hp).toBe((stored.get(c.cardId) as { hp: number | null }).hp)
+    for (const c of list!.cards)
+      expect(c.hp).toBe((stored.get(c.cardId) as { hp: number | null }).hp)
     db.close()
   })
 
@@ -223,7 +314,9 @@ describe('server-12 (game columns)', () => {
     const db = serverBefore12()
     migrateServer(db)
     const { cardIds } = seedPokemon(db)
-    db.prepare("DELETE FROM sets WHERE game = 'pkm' AND language = 'en' AND set_name = ?").run(SHARED_SET_NAME)
+    db.prepare("DELETE FROM sets WHERE game = 'pkm' AND language = 'en' AND set_name = ?").run(
+      SHARED_SET_NAME
+    )
     db.prepare('DELETE FROM pokemon_cards WHERE card_id = ?').run(cardIds[0])
     db.prepare("DELETE FROM sets WHERE game = 'ygo' AND language = 'ja'").run()
     expect(rows(db, 'SELECT tbl, game, key FROM catalog_tombstones ORDER BY seq')).toEqual([
@@ -231,7 +324,9 @@ describe('server-12 (game columns)', () => {
       { tbl: 'pokemon_cards', game: 'pkm', key: JSON.stringify([cardIds[0]]) },
       { tbl: 'sets', game: 'ygo', key: JSON.stringify(['ygo', 'ja', 'Vol.1']) }
     ])
-    expect(rows(db, "SELECT set_name FROM sets WHERE language = 'en'")).toEqual([{ set_name: SHARED_SET_NAME }])
+    expect(rows(db, "SELECT set_name FROM sets WHERE language = 'en'")).toEqual([
+      { set_name: SHARED_SET_NAME }
+    ])
     db.close()
   })
 
@@ -239,8 +334,12 @@ describe('server-12 (game columns)', () => {
     const db = serverBefore12()
     migrateServer(db)
     const { printingIds } = seedPokemon(db)
-    const { pkey } = db.prepare('SELECT pkey FROM card_printings WHERE id = ?').get(printingIds[0]) as { pkey: string }
-    db.prepare("UPDATE card_printings SET set_code = 'PAL 046/193' WHERE id = ?").run(printingIds[0])
+    const { pkey } = db
+      .prepare('SELECT pkey FROM card_printings WHERE id = ?')
+      .get(printingIds[0]) as { pkey: string }
+    db.prepare("UPDATE card_printings SET set_code = 'PAL 046/193' WHERE id = ?").run(
+      printingIds[0]
+    )
     db.prepare("UPDATE sets SET set_name = 'Renamed' WHERE game = 'pkm' AND language = 'ja'").run()
     expect(rows(db, 'SELECT tbl, game, key FROM catalog_tombstones ORDER BY seq')).toEqual([
       { tbl: 'card_printings', game: 'pkm', key: JSON.stringify([pkey]) },
@@ -258,11 +357,27 @@ describe('server-13 (pokemon_cards image_url and local_name)', () => {
     const fresh = freshDb()
     migrateServer(fresh)
     const old = freshDb()
-    runSteps(old, [...MIGRATIONS, ...SERVER_STEPS.filter((s) => !['server-13', 'server-16', 'server-18', 'server-21', 'server-23', 'server-28', 'server-40', 'server-44'].includes(s.name))])
+    runSteps(old, [
+      ...MIGRATIONS,
+      ...SERVER_STEPS.filter(
+        (s) =>
+          ![
+            'server-13',
+            'server-16',
+            'server-18',
+            'server-21',
+            'server-23',
+            'server-28',
+            'server-40',
+            'server-44'
+          ].includes(s.name)
+      )
+    ])
     expect(cols(old)).not.toContain('image_url')
     seedPokemon(old)
     migrateServer(old)
-    for (const db of [fresh, old]) expect(cols(db)).toEqual(expect.arrayContaining(['image_url', 'local_name']))
+    for (const db of [fresh, old])
+      expect(cols(db)).toEqual(expect.arrayContaining(['image_url', 'local_name']))
     expect(rows(old, 'SELECT image_url, local_name FROM pokemon_cards')).toEqual([
       { image_url: null, local_name: null },
       { image_url: null, local_name: null }
@@ -276,7 +391,11 @@ describe('server-13 (pokemon_cards image_url and local_name)', () => {
     migrateServer(db)
     const { cardIds } = seedPokemon(db)
     const seqOf = (): number =>
-      (db.prepare('SELECT catalog_seq AS s FROM pokemon_cards WHERE card_id = ?').get(cardIds[0]) as { s: number }).s
+      (
+        db
+          .prepare('SELECT catalog_seq AS s FROM pokemon_cards WHERE card_id = ?')
+          .get(cardIds[0]) as { s: number }
+      ).s
     const before = seqOf()
     db.prepare("UPDATE pokemon_cards SET image_url = 'x' WHERE card_id = ?").run(cardIds[0])
     const mid = seqOf()
@@ -306,12 +425,28 @@ describe('server-16 (pokemon_cards art_twin_id)', () => {
     const fresh = freshDb()
     migrateServer(fresh)
     const old = freshDb()
-    runSteps(old, [...MIGRATIONS, ...SERVER_STEPS.filter((s) => !['server-16', 'server-18', 'server-21', 'server-23', 'server-28', 'server-40', 'server-44'].includes(s.name))])
+    runSteps(old, [
+      ...MIGRATIONS,
+      ...SERVER_STEPS.filter(
+        (s) =>
+          ![
+            'server-16',
+            'server-18',
+            'server-21',
+            'server-23',
+            'server-28',
+            'server-40',
+            'server-44'
+          ].includes(s.name)
+      )
+    ])
     expect(cols(old)).not.toContain('art_twin_id')
     seedPokemon(old)
     migrateServer(old)
     for (const db of [fresh, old]) expect(cols(db)).toContain('art_twin_id')
-    expect(rows(old, 'SELECT DISTINCT art_twin_id FROM pokemon_cards')).toEqual([{ art_twin_id: null }])
+    expect(rows(old, 'SELECT DISTINCT art_twin_id FROM pokemon_cards')).toEqual([
+      { art_twin_id: null }
+    ])
     fresh.close()
     old.close()
   })
@@ -321,9 +456,16 @@ describe('server-16 (pokemon_cards art_twin_id)', () => {
     migrateServer(db)
     const { cardIds } = seedPokemon(db)
     const seqOf = (): number =>
-      (db.prepare('SELECT catalog_seq AS s FROM pokemon_cards WHERE card_id = ?').get(cardIds[0]) as { s: number }).s
+      (
+        db
+          .prepare('SELECT catalog_seq AS s FROM pokemon_cards WHERE card_id = ?')
+          .get(cardIds[0]) as { s: number }
+      ).s
     const before = seqOf()
-    db.prepare('UPDATE pokemon_cards SET art_twin_id = ? WHERE card_id = ?').run(cardIds[1], cardIds[0])
+    db.prepare('UPDATE pokemon_cards SET art_twin_id = ? WHERE card_id = ?').run(
+      cardIds[1],
+      cardIds[0]
+    )
     expect(seqOf()).toBeGreaterThan(before)
     db.close()
   })
@@ -337,7 +479,12 @@ describe('server-18 (pokemon_cards traditional_twin_id)', () => {
     const fresh = freshDb()
     migrateServer(fresh)
     const old = freshDb()
-    runSteps(old, [...MIGRATIONS, ...SERVER_STEPS.filter((s) => s.name !== 'server-18' && s.name !== 'server-40' && s.name !== 'server-44')])
+    runSteps(old, [
+      ...MIGRATIONS,
+      ...SERVER_STEPS.filter(
+        (s) => s.name !== 'server-18' && s.name !== 'server-40' && s.name !== 'server-44'
+      )
+    ])
     expect(cols(old)).not.toContain('traditional_twin_id')
     seedPokemon(old)
     migrateServer(old)
@@ -354,12 +501,22 @@ describe('server-18 (pokemon_cards traditional_twin_id)', () => {
     migrateServer(db)
     const { cardIds } = seedPokemon(db)
     const seqOf = (): number =>
-      (db.prepare('SELECT catalog_seq AS s FROM pokemon_cards WHERE card_id = ?').get(cardIds[0]) as { s: number }).s
+      (
+        db
+          .prepare('SELECT catalog_seq AS s FROM pokemon_cards WHERE card_id = ?')
+          .get(cardIds[0]) as { s: number }
+      ).s
     const first = seqOf()
-    db.prepare('UPDATE pokemon_cards SET traditional_twin_id = ? WHERE card_id = ?').run(cardIds[1], cardIds[0])
+    db.prepare('UPDATE pokemon_cards SET traditional_twin_id = ? WHERE card_id = ?').run(
+      cardIds[1],
+      cardIds[0]
+    )
     const second = seqOf()
     expect(second).toBeGreaterThan(first)
-    db.prepare('UPDATE pokemon_cards SET art_twin_id = ? WHERE card_id = ?').run(cardIds[1], cardIds[0])
+    db.prepare('UPDATE pokemon_cards SET art_twin_id = ? WHERE card_id = ?').run(
+      cardIds[1],
+      cardIds[0]
+    )
     expect(seqOf()).toBeGreaterThan(second)
     db.close()
   })
@@ -373,7 +530,16 @@ describe('server-40 (pokemon_cards dex_no / dex_extra)', () => {
     const fresh = freshDb()
     migrateServer(fresh)
     const old = freshDb()
-    runSteps(old, [...MIGRATIONS.filter((m) => m.version <= 41), ...SERVER_STEPS.filter((s) => s.name !== 'server-40' && s.name !== 'server-42' && s.name !== 'server-43' && s.name !== 'server-44')])
+    runSteps(old, [
+      ...MIGRATIONS.filter((m) => m.version <= 41),
+      ...SERVER_STEPS.filter(
+        (s) =>
+          s.name !== 'server-40' &&
+          s.name !== 'server-42' &&
+          s.name !== 'server-43' &&
+          s.name !== 'server-44'
+      )
+    ])
     expect(cols(old)).not.toContain('dex_no')
     seedPokemon(old)
     migrateServer(old)
@@ -393,7 +559,11 @@ describe('server-40 (pokemon_cards dex_no / dex_extra)', () => {
     migrateServer(db)
     const { cardIds } = seedPokemon(db)
     const seqOf = (): number =>
-      (db.prepare('SELECT catalog_seq AS s FROM pokemon_cards WHERE card_id = ?').get(cardIds[0]) as { s: number }).s
+      (
+        db
+          .prepare('SELECT catalog_seq AS s FROM pokemon_cards WHERE card_id = ?')
+          .get(cardIds[0]) as { s: number }
+      ).s
     const first = seqOf()
     db.prepare('UPDATE pokemon_cards SET dex_no = ? WHERE card_id = ?').run(643, cardIds[0])
     const second = seqOf()
@@ -417,7 +587,15 @@ describe('server-14 (pokemon_set_art in the change feed)', () => {
     const old = freshDb()
     runSteps(old, [
       ...MIGRATIONS.filter((m) => m.version <= 22),
-      ...SERVER_STEPS.filter((s) => s.name !== 'server-14' && s.name !== 'server-35' && s.name !== 'server-40' && s.name !== 'server-42' && s.name !== 'server-43' && s.name !== 'server-44')
+      ...SERVER_STEPS.filter(
+        (s) =>
+          s.name !== 'server-14' &&
+          s.name !== 'server-35' &&
+          s.name !== 'server-40' &&
+          s.name !== 'server-42' &&
+          s.name !== 'server-43' &&
+          s.name !== 'server-44'
+      )
     ])
     migrateServer(old)
     for (const db of [fresh, old]) {
@@ -471,7 +649,9 @@ describe('server-28 (sets series)', () => {
     seedPokemon(old)
     migrateServer(old)
     for (const db of [fresh, old]) expect(cols(db)).toContain('series')
-    expect(rows(old, "SELECT DISTINCT series FROM sets WHERE game = 'pkm'")).toEqual([{ series: null }])
+    expect(rows(old, "SELECT DISTINCT series FROM sets WHERE game = 'pkm'")).toEqual([
+      { series: null }
+    ])
     fresh.close()
     old.close()
   })
@@ -481,13 +661,18 @@ describe('server-28 (sets series)', () => {
     migrateServer(db)
     seedPokemon(db)
     const seqOf = (): number =>
-      (db.prepare("SELECT max(catalog_seq) AS s FROM sets WHERE game = 'pkm'").get() as { s: number }).s
+      (
+        db.prepare("SELECT max(catalog_seq) AS s FROM sets WHERE game = 'pkm'").get() as {
+          s: number
+        }
+      ).s
     const before = seqOf()
     db.prepare("UPDATE sets SET series = 'Scarlet & Violet' WHERE game = 'pkm'").run()
     expect(seqOf()).toBeGreaterThan(before)
     const sets = catalogChanges(db, before, 100, ['sets'], 'pkm').changes
     expect(sets.length).toBeGreaterThan(0)
-    for (const c of sets) expect(c).toMatchObject({ table: 'sets', row: { series: 'Scarlet & Violet' } })
+    for (const c of sets)
+      expect(c).toMatchObject({ table: 'sets', row: { series: 'Scarlet & Violet' } })
     // The legacy feed's frozen columns leave it out.
     for (const c of catalogChanges(db, 0, 100, ['sets']).changes) {
       expect('row' in c && 'series' in c.row).toBe(false)
@@ -499,18 +684,37 @@ describe('server-28 (sets series)', () => {
 describe('server-30 (sign-ins)', () => {
   it('server-30 backfills sign-ins from discord_id', () => {
     const db = freshDb()
-    runSteps(db, [...MIGRATIONS, ...SERVER_STEPS.filter((s) => s.name !== 'server-30' && s.name !== 'server-34')])
+    runSteps(db, [
+      ...MIGRATIONS,
+      ...SERVER_STEPS.filter((s) => s.name !== 'server-30' && s.name !== 'server-34')
+    ])
     const add = db.prepare(
       "INSERT INTO users (discord_id, username, created_at, updated_at) VALUES (?, ?, '2026-10-01T00:00:00.000Z', 'x')"
     )
     const annId = Number(add.run('123', 'ann').lastInsertRowid)
     const appleId = Number(add.run('apple:abc', 'duelist-k3m8qpza').lastInsertRowid)
     migrateServer(db)
-    expect(db.prepare('SELECT provider, subject, user_id, created_at FROM sign_ins ORDER BY user_id').all()).toEqual([
-      { provider: 'discord', subject: '123', user_id: annId, created_at: '2026-10-01T00:00:00.000Z' },
-      { provider: 'apple', subject: 'abc', user_id: appleId, created_at: '2026-10-01T00:00:00.000Z' }
+    expect(
+      db
+        .prepare('SELECT provider, subject, user_id, created_at FROM sign_ins ORDER BY user_id')
+        .all()
+    ).toEqual([
+      {
+        provider: 'discord',
+        subject: '123',
+        user_id: annId,
+        created_at: '2026-10-01T00:00:00.000Z'
+      },
+      {
+        provider: 'apple',
+        subject: 'abc',
+        user_id: appleId,
+        created_at: '2026-10-01T00:00:00.000Z'
+      }
     ])
-    expect(db.prepare('SELECT id, username_chosen, link_hint, closed_at FROM users ORDER BY id').all()).toEqual([
+    expect(
+      db.prepare('SELECT id, username_chosen, link_hint, closed_at FROM users ORDER BY id').all()
+    ).toEqual([
       { id: annId, username_chosen: 1, link_hint: 0, closed_at: null },
       { id: appleId, username_chosen: 0, link_hint: 0, closed_at: null }
     ])
@@ -524,15 +728,27 @@ describe('server-34 (email sign-in)', () => {
     runSteps(db, [...MIGRATIONS, ...SERVER_STEPS.filter((s) => s.name !== 'server-34')])
     const now = '2026-11-02T12:00:00.000Z'
     const uid = Number(
-      db.prepare('INSERT INTO users (discord_id, username, created_at, updated_at) VALUES (?, ?, ?, ?)').run('d1', 'ann', now, now)
-        .lastInsertRowid
+      db
+        .prepare(
+          'INSERT INTO users (discord_id, username, created_at, updated_at) VALUES (?, ?, ?, ?)'
+        )
+        .run('d1', 'ann', now, now).lastInsertRowid
     )
-    db.prepare('INSERT INTO sign_ins (provider, subject, user_id, created_at) VALUES (?, ?, ?, ?)').run('discord', 'd2', uid, now)
+    db.prepare(
+      'INSERT INTO sign_ins (provider, subject, user_id, created_at) VALUES (?, ?, ?, ?)'
+    ).run('discord', 'd2', uid, now)
     migrateServer(db)
-    const cols = (db.prepare('PRAGMA table_info(sign_ins)').all() as { name: string }[]).map((c) => c.name)
+    const cols = (db.prepare('PRAGMA table_info(sign_ins)').all() as { name: string }[]).map(
+      (c) => c.name
+    )
     expect(cols).toEqual(expect.arrayContaining(['email', 'password_hash']))
-    expect(tableNames(db)).toEqual(expect.arrayContaining(['email_flows', 'provider_claims', 'auth_limits']))
-    const rows = db.prepare('SELECT email, password_hash FROM sign_ins').all() as { email: unknown; password_hash: unknown }[]
+    expect(tableNames(db)).toEqual(
+      expect.arrayContaining(['email_flows', 'provider_claims', 'auth_limits'])
+    )
+    const rows = db.prepare('SELECT email, password_hash FROM sign_ins').all() as {
+      email: unknown
+      password_hash: unknown
+    }[]
     expect(rows.length).toBeGreaterThan(0)
     for (const r of rows) expect(r).toEqual({ email: null, password_hash: null })
   })
@@ -551,8 +767,12 @@ describe('server-35 feeds onepiece_cards', () => {
     db.prepare('DELETE FROM onepiece_images').run()
     db.prepare('DELETE FROM onepiece_cards').run()
     expect(
-      (db.prepare('SELECT tbl, game FROM catalog_tombstones ORDER BY seq').all() as { tbl: string; game: string }[])
-        .filter((r) => r.tbl.startsWith('onepiece_'))
+      (
+        db.prepare('SELECT tbl, game FROM catalog_tombstones ORDER BY seq').all() as {
+          tbl: string
+          game: string
+        }[]
+      ).filter((r) => r.tbl.startsWith('onepiece_'))
     ).toEqual([
       { tbl: 'onepiece_images', game: 'op' },
       { tbl: 'onepiece_images', game: 'op' },
@@ -575,15 +795,23 @@ describe('server-42 feeds mtg_cards', () => {
     db.prepare('DELETE FROM mtg_images').run()
     db.prepare('DELETE FROM mtg_cards').run()
     expect(
-      (db.prepare('SELECT tbl, game FROM catalog_tombstones ORDER BY seq').all() as { tbl: string; game: string }[])
-        .filter((r) => r.tbl.startsWith('mtg_'))
+      (
+        db.prepare('SELECT tbl, game FROM catalog_tombstones ORDER BY seq').all() as {
+          tbl: string
+          game: string
+        }[]
+      ).filter((r) => r.tbl.startsWith('mtg_'))
     ).toEqual([
       { tbl: 'mtg_images', game: 'mtg' },
       { tbl: 'mtg_images', game: 'mtg' },
       { tbl: 'mtg_cards', game: 'mtg' }
     ])
     expect(
-      (db.prepare('SELECT name FROM server_migrations ORDER BY rowid DESC LIMIT 1').get() as { name: string }).name
+      (
+        db.prepare('SELECT name FROM server_migrations ORDER BY rowid DESC LIMIT 1').get() as {
+          name: string
+        }
+      ).name
     ).toBe('server-53')
     db.close()
   })
@@ -595,13 +823,20 @@ describe('server-43 (mtg language and face columns)', () => {
 
   it('an upgraded server keeps its rows and gains the columns', () => {
     const old = freshDb()
-    runSteps(old, [...MIGRATIONS.filter((m) => m.version <= 44), ...SERVER_STEPS.filter((s) => s.name !== 'server-43')])
+    runSteps(old, [
+      ...MIGRATIONS.filter((m) => m.version <= 44),
+      ...SERVER_STEPS.filter((s) => s.name !== 'server-43')
+    ])
     expect(cols(old, 'mtg_cards')).not.toContain('lang')
     seedMagic(old)
     migrateServer(old)
-    expect(cols(old, 'mtg_cards')).toEqual(expect.arrayContaining(['lang', 'local_name', 'local_name_search']))
+    expect(cols(old, 'mtg_cards')).toEqual(
+      expect.arrayContaining(['lang', 'local_name', 'local_name_search'])
+    )
     expect(cols(old, 'mtg_images')).toEqual(expect.arrayContaining(['back_image_id', 'art_from']))
-    expect(rows(old, 'SELECT DISTINCT lang, local_name FROM mtg_cards')).toEqual([{ lang: 'en', local_name: null }])
+    expect(rows(old, 'SELECT DISTINCT lang, local_name FROM mtg_cards')).toEqual([
+      { lang: 'en', local_name: null }
+    ])
     old.close()
   })
 
@@ -615,10 +850,16 @@ describe('server-43 (mtg language and face columns)', () => {
     db.prepare('UPDATE mtg_cards SET local_name = ? WHERE card_id = ?').run('Ange', cardIds[0])
     expect(seqOf('mtg_cards', 'card_id', cardIds[0])).toBeGreaterThan(last)
     last = seqOf('mtg_cards', 'card_id', cardIds[0])
-    db.prepare('UPDATE mtg_cards SET local_name_search = ? WHERE card_id = ?').run('ange', cardIds[0])
+    db.prepare('UPDATE mtg_cards SET local_name_search = ? WHERE card_id = ?').run(
+      'ange',
+      cardIds[0]
+    )
     expect(seqOf('mtg_cards', 'card_id', cardIds[0])).toBeGreaterThan(last)
     last = seqOf('mtg_images', 'image_id', imageIds[0])
-    db.prepare('UPDATE mtg_images SET back_image_id = ? WHERE image_id = ?').run(imageIds[1], imageIds[0])
+    db.prepare('UPDATE mtg_images SET back_image_id = ? WHERE image_id = ?').run(
+      imageIds[1],
+      imageIds[0]
+    )
     expect(seqOf('mtg_images', 'image_id', imageIds[0])).toBeGreaterThan(last)
     last = seqOf('mtg_images', 'image_id', imageIds[0])
     db.prepare('UPDATE mtg_images SET art_from = ? WHERE image_id = ?').run('en', imageIds[0])

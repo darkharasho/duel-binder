@@ -47,7 +47,9 @@ interface RawRow {
 }
 const raw = (id: number): RawRow =>
   db
-    .prepare('SELECT id, uid, quantity, notes, updated_at, deleted_at, dirty FROM collection_entries WHERE id = ?')
+    .prepare(
+      'SELECT id, uid, quantity, notes, updated_at, deleted_at, dirty FROM collection_entries WHERE id = ?'
+    )
     .get(id) as RawRow
 
 /** A: Dark Magician LOB-EN005, B: Pot of Greed LOB-EN119; both in the same set. */
@@ -75,7 +77,10 @@ test('an entry on a token card with no passcode keeps its ids through removal', 
     `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at)
      VALUES (?, 'Token (Nash)', 'Token', 'token', 'Token', '', '2026-10-25')`
   ).run(card)
-  db.prepare('INSERT INTO card_images (image_id, card_id, sort_order) VALUES (?, ?, 0)').run(image, card)
+  db.prepare('INSERT INTO card_images (image_id, card_id, sort_order) VALUES (?, ?, 0)').run(
+    image,
+    card
+  )
   const printing = db
     .prepare(
       `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, language)
@@ -101,7 +106,9 @@ test('removing a never-signed-in (owner 0) entry deletes the row', () => {
   updateEntry(db, c, { printingId: pid('LOB-EN119'), imageId: 55144522 }, later)
   expect(raw(c)).toBeUndefined()
   expect(raw(b).quantity).toBe(2)
-  expect(db.prepare('SELECT COUNT(*) AS n FROM collection_entries WHERE deleted_at IS NOT NULL').get()).toEqual({ n: 0 })
+  expect(
+    db.prepare('SELECT COUNT(*) AS n FROM collection_entries WHERE deleted_at IS NOT NULL').get()
+  ).toEqual({ n: 0 })
 })
 
 test('removing another owner’s entry does nothing', () => {
@@ -126,7 +133,9 @@ test('tombstones are invisible to every reader', () => {
   const browse = browseCards(db, { sort: 'name', dir: 'asc' })
   expect(browse.cards.find((c) => c.id === 46986414)?.owned).toBe(0)
   expect(browse.cards.find((c) => c.id === 55144522)?.owned).toBe(1)
-  expect(browseCards(db, { sort: 'name', dir: 'asc', owned: 'owned' }).cards.map((c) => c.id)).toEqual([55144522])
+  expect(
+    browseCards(db, { sort: 'name', dir: 'asc', owned: 'owned' }).cards.map((c) => c.id)
+  ).toEqual([55144522])
   const set = listSets(db).find((s) => s.setName === SET && s.language === 'en')!
   expect(set.ownedCards).toBe(1)
   const checklist = getChecklist(db, SET, 'en')!
@@ -143,7 +152,11 @@ test('re-adding a removed printing makes a new live entry', () => {
   const { a } = addAB()
   removeEntry(db, a, later)
   const tomb = raw(a)
-  const again = addEntry(db, { printingId: pid('LOB-EN005'), imageId: 46986414, quantity: 1 }, later)
+  const again = addEntry(
+    db,
+    { printingId: pid('LOB-EN005'), imageId: 46986414, quantity: 1 },
+    later
+  )
   expect(again.id).not.toBe(a)
   expect(again.quantity).toBe(1)
   expect(raw(again.id).uid).not.toBe(tomb.uid)
@@ -155,9 +168,11 @@ test('every local write marks the entry dirty', () => {
   const dirty = (action: () => void): number[] => {
     db.prepare('UPDATE collection_entries SET dirty = 0').run()
     action()
-    return (db.prepare('SELECT id FROM collection_entries WHERE dirty = 1 ORDER BY id').all() as { id: number }[]).map(
-      (r) => r.id
-    )
+    return (
+      db.prepare('SELECT id FROM collection_entries WHERE dirty = 1 ORDER BY id').all() as {
+        id: number
+      }[]
+    ).map((r) => r.id)
   }
   const { a, b } = addAB()
   let c = 0
@@ -168,7 +183,11 @@ test('every local write marks the entry dirty', () => {
     })
   ).toEqual([c])
   // add-sum
-  expect(dirty(() => addEntry(db, { printingId: pid('LOB-EN005'), imageId: 46986414, quantity: 1 }, later))).toEqual([a])
+  expect(
+    dirty(() =>
+      addEntry(db, { printingId: pid('LOB-EN005'), imageId: 46986414, quantity: 1 }, later)
+    )
+  ).toEqual([a])
   // update in place
   expect(dirty(() => updateEntry(db, a, { notes: 'x' }, later))).toEqual([a])
   // update that merges: c (SDY-006) re-linked onto a's printing and art
@@ -189,7 +208,9 @@ test('the price refresh ignores removed copies', async () => {
   removeEntry(db, a, later)
   const lookup = vi.fn(async () => ({ price: 9, listingCount: 2, checkedAt: later.toISOString() }))
   await refreshIntlPrices(db, { lookup } as unknown as PriceClient, { now: later })
-  expect(lookup.mock.calls.map((c) => (c as unknown as [{ code: string }])[0].code)).toEqual(['LOB-EN119'])
+  expect(lookup.mock.calls.map((c) => (c as unknown as [{ code: string }])[0].code)).toEqual([
+    'LOB-EN119'
+  ])
 })
 
 /** Every .ts file under `dir`, as a path relative to the repo root. */
@@ -258,7 +279,10 @@ const ENTRY_REFS: Record<string, [count: number, kind: string]> = {
     3,
     'admin stats: live rows for the counts; all rows incl. tombstones for the storage row count'
   ],
-  'workers/portal/src/account.ts': [2, 'account deletion: every row of the deleted user, tombstones included'],
+  'workers/portal/src/account.ts': [
+    2,
+    'account deletion: every row of the deleted user, tombstones included'
+  ],
   'src/main/catalog/apply.ts': [5, FK],
   'src/main/catalog/switch.ts': [
     4,
@@ -283,7 +307,9 @@ test('every repo UPDATE of collection_entries applies scope.touch', () => {
   const repo = 'src/main/repo'
   let checked = 0
   // scope.ts is excluded: it defines touch, and LOCAL.deleteEntry spells out `dirty = 1` itself.
-  for (const name of readdirSync(join(ROOT, repo)).filter((n) => n.endsWith('.ts') && n !== 'scope.ts')) {
+  for (const name of readdirSync(join(ROOT, repo)).filter(
+    (n) => n.endsWith('.ts') && n !== 'scope.ts'
+  )) {
     const src = readFileSync(join(ROOT, repo, name), 'utf8')
     for (const m of src.match(/UPDATE collection_entries SET[^`']*/g) ?? []) {
       expect(m, `${name}: ${m}`).toContain('${scope.touch}')

@@ -330,8 +330,11 @@ describe('removeScanSessionCard', () => {
         .cards
     ) as ScanSessionCard[]
   const at = (db: Awaited<ReturnType<typeof seededDb>>): string =>
-    (db.prepare("SELECT updated_at FROM scan_sessions WHERE uid = 'a'").get() as { updated_at: string })
-      .updated_at
+    (
+      db.prepare("SELECT updated_at FROM scan_sessions WHERE uid = 'a'").get() as {
+        updated_at: string
+      }
+    ).updated_at
 
   it('takes one copy off, then the card, and moves the edit time', async () => {
     const db = await seededDb()

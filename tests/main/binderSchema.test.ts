@@ -4,7 +4,9 @@ import { LOCAL } from '../../src/main/repo/scope'
 import { databaseAt } from './helpers'
 
 const tables = (db: Database.Database): string[] =>
-  (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]).map((r) => r.name)
+  (
+    db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]
+  ).map((r) => r.name)
 
 describe('migration V30 to V32 (binders)', () => {
   it('migrates a version 29 database to 32 and keeps wishlist rows', () => {
@@ -15,8 +17,14 @@ describe('migration V30 to V32 (binders)', () => {
     migrate(db)
     expect(db.pragma('user_version', { simple: true })).toBe(53)
     expect(tables(db)).toEqual(expect.arrayContaining(['binders', 'binder_edits']))
-    expect(db.prepare('SELECT pkey, quantity FROM wishlist_entries').all()).toEqual([{ pkey: 'k', quantity: 2 }])
-    const idx = db.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'ix_pokemon_cards_illustrator'").all()
+    expect(db.prepare('SELECT pkey, quantity FROM wishlist_entries').all()).toEqual([
+      { pkey: 'k', quantity: 2 }
+    ])
+    const idx = db
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'ix_pokemon_cards_illustrator'"
+      )
+      .all()
     expect(idx).toHaveLength(1)
     db.close()
   })

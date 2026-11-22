@@ -47,7 +47,7 @@ These would make it a failure even if it technically works:
 - Formats, sections and limits as in the table below, with feedback as a live panel, decks counted by card rather than printing, cheapest English printing for cost, shared copies counted by every deck, and unmatched import lines listed rather than dropped. These were proposed by Claude and confirmed by the owner ("looks right").
 - **Approach A** (rules pack in R2, checks on the device).
 - Ship order: Yu-Gi-Oh!, Pokémon, One Piece, Magic.
-- Decks on web and phone are online-only, like binders: edits save straight to the portal and need a connection. The checks still run on the device. Desktop works offline as always. Offline phone editing can come later if people need it at events.
+- Decks on the web are online-only, like everything else there: edits save straight to the portal and need a connection. The checks still run in the browser. (The owner answered "online fine" to a question that wrongly said the phone app was online-only too. It isn't: the phone app keeps its own database and runs the desktop's sync, so decks work offline there with no extra work, the same as binders and slabs.)
 - Claude's calls (Pokémon card key, region pricing for OCG, errors vs warnings, the changed-overnight notice, friends without notes) were reviewed and accepted.
 
 ## Approaches
@@ -89,19 +89,19 @@ Rules that need card text to judge, such as Magic's "A deck can have any number 
   - One Piece: a hand-kept file in the repo, `src/shared/decks/rules/onepiece.json`, since Bandai publishes no feed. It's updated by PR when Bandai changes its list. The pack builder copies it in.
   - Magic: Scryfall bulk `legalities` per card.
 - Size target: under 100 KB gzipped for Yu-Gi-Oh!, Pokémon and One Piece. Magic legality across ~30k names is the big one, so store it as a compact name→bitmask map and measure it. If it's over ~1 MB gzipped, split it per format.
-- Clients fetch the pack when a deck for that game is first opened, then again when it is older than 24 h. They cache it locally (SQLite meta on desktop, IndexedDB/Cache API on web and phone). If there's no pack and no network, legality shows "unknown". A pack older than 14 days shows a "rules may be out of date" note.
+- Clients fetch the pack when a deck for that game is first opened, then again when it is older than 24 h. They cache it locally (SQLite meta on desktop, the `phone_files` table on the phone, the Cache API on the web). If there's no pack and no network, legality shows "unknown". A pack older than 14 days shows a "rules may be out of date" note.
 - The pack carries a schema `version`. An app that is too old for the pack's version shows "update to check legality" instead of guessing.
 
 ## Data model and sync
 
-Decks follow the binder pattern (local desktop tables, a portal DO table, seq-based push/pull, friend reads), so a builder should model `src/main/repo/binders.ts`, `workers/portal/src/binderSync.ts` and `workers/portal/src/friendBinders.ts`.
+Decks follow the binder pattern (local desktop tables, a portal DO table, seq-based push/pull, friend reads), so a builder should model graded copies, which already sync one whole row per uid with latest-edit-wins: `src/main/repo/graded.ts`, `workers/portal/src/graded.ts`, the graded parts of `src/main/cloud/localSync.ts` and `engine.ts`, and `tests/main/graded.test.ts`.
 
-- `decks`: `id` (uuid), `game`, `format`, `name`, `notes` (free text, private like graded notes), `cover` (a card id for the tile art), `private`, `last_verdict` + `last_pack_version` (see Changed overnight), `created_at`, `updated_at`, `deleted`.
+- `decks`: `id` (uuid), `game`, `format`, `name`, `notes` (free text, private like graded notes), `cover` (a card id for the tile art), `private`, `last_verdict` + `last_pack_version` (see Changed overnight; kept per device and never synced, so acknowledging a change can't overwrite a card edit made on another device; Claude's call), `created_at`, `updated_at`, `deleted`.
 - Deck contents are stored as one serialized list on the deck row (`cards`: `[{ section, card, printing?, qty }]`), not as per-card edit rows. A deck is small (≤ 115 entries) and edited as a whole, so last-writer-wins per deck, with the newer `updated_at` winning, is enough. This avoids binder-style edit sequences.
 - `card` is the game's card id as the catalog already uses it. `printing` is an optional pinned printing for the art shown. It never affects legality or ownership.
 - Limits: 200 decks per owner per game, 300 entries per deck, an 80-character name and 2,000-character notes.
 - Portal: the next free `server-NN` migration adds a `decks` table, keyed by user, to the shared `Store` DO (there is no per-user DO). Desktop sync adds `decks-push` / `decks-pull` routes, run in the same scheduled sync pass as binders. That's one more call per sync and none per edit. The server keeps its own stamp and clamps future client times through `checkTime`.
-- Web and phone use `decks:*` RPC calls, following the `binders:*` ones in `workers/portal/src/rpc.ts`. `decks:get` returns the card facts the checks need, so neither client has to pull a catalog. Saving needs a connection (owner's decision); without one the deck page says so and keeps the unsaved edit on screen.
+- The phone app runs the same data channels on its own database and syncs as the desktop does. The web uses `decks:*` RPC calls, following the `graded:*` ones in `workers/portal/src/rpc.ts`, which run the same repo code against the portal's tables. `decks:get` returns the card facts the checks need, so the web never pulls a catalog. Saving on the web needs a connection; without one the deck page says so and keeps the unsaved edit on screen.
 - Friends: a Decks tab on the friend page, shown only if the friend has a visible deck. Friends see the cards, format, legality and the owner's owned/missing view, the same as friend binders. Notes are never shown. (Claude's call.)
 
 ## Missing cards and cost

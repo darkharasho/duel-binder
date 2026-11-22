@@ -7,6 +7,7 @@ import { isArtVariant, namedVariant } from '../../src/shared/scan/fingerprintRef
 import { rarityFamily } from '../../src/shared/scan/rarity'
 import { ART_FAR_DISTANCE } from '../../src/shared/scan/thresholds'
 import type { RgbaImage } from '../../src/shared/scan/types'
+import { isTokenId } from '../../src/shared/games/ids'
 import { isLanguage } from '../../src/shared/languages'
 import type { YugipediaClient } from '../../src/main/yugipedia/client'
 import { listCardGalleries } from '../../src/main/yugipedia/cardGallery'
@@ -51,7 +52,8 @@ const FOIL = /^(starlight|ghost|collector's) rare/i
  * chibi art in every rarity (BLGG), where Yugipedia may have the Secret Rare's scan and not the
  * Starlight Rare's.
  */
-const NEW_ART_SET = /^(Original Artwork (Duel Set|Collection)|Battles of Legend: Glorious Gallery)\b/i
+const NEW_ART_SET =
+  /^(Original Artwork (Duel Set|Collection)|Battles of Legend: Glorious Gallery)\b/i
 
 /**
  * Whether a printing looks unlike its card's art from YGOPRODeck: an alternate or overframe art
@@ -206,11 +208,14 @@ export async function buildReferences(opts: ReferenceOptions): Promise<Reference
     .map((p) =>
       p.set_code ? p : { ...p, set_code: setCodes.get(`${p.language}|${p.set_name}`) ?? '' }
     )
-    // Every token: its card art is often the video game's, unlike any printing.
+    // Every token-id card (tokens, cards with no passcode): its card art is often the video
+    // game's or another printing's, unlike this printing.
     .filter(
       (p) =>
         p.set_code &&
-        (p.frame_type === 'token' || wantsReference(p.set_rarity, p.variant, p.set_name))
+        (p.frame_type === 'token' ||
+          isTokenId(p.card_id) ||
+          wantsReference(p.set_rarity, p.variant, p.set_name))
     )
   // Each code's rarities printed in the usual art: an unsuffixed scan of one of those is of that
   // printing, not of an art variant of the same rarity (see fileShowsVariant).

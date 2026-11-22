@@ -2,7 +2,9 @@
 """Submit an iOS build that's already in TestFlight for App Store review, without third-party packages.
 
   asc-submit.py status <bundle-id>
-  asc-submit.py submit <bundle-id> <NAME+NUMBER> [--whats-new TEXT] [--replace-waiting] [--wait MINUTES]
+  asc-submit.py submit <bundle-id> <NAME+NUMBER> [--whats-new TEXT] [--replace-waiting [--keep-required]]
+                [--wait MINUTES]
+  asc-submit.py reconcile <bundle-id> <NAME+NUMBER> [--whats-new TEXT] [--wait MINUTES]
 
   env: ASC_KEY_PATH, ASC_KEY_ID, ASC_ISSUER_ID
 
@@ -12,10 +14,22 @@ creating one), sets What's New where it's empty (or everywhere when --whats-new 
 submits it for review. --wait gives a just-uploaded build that long to
 appear and finish processing. App Store Connect allows one version in flight: an older version waiting
 for review or in review is pulled only with --replace-waiting (named before it covered reviews in
-progress); without it, the submission stops.
+progress); without it, the submission stops. --keep-required still never pulls a version Apple is
+reviewing already, or one that has to be reviewed (scripts/review-required.sh, configured by
+NATIVE_CHECK and NATIVE_TAG_PREFIX: changes no over-the-air update can bring to the App Store's live
+version); the submission stops with exit status 3 instead, and the build waits in TestFlight.
+
+reconcile brings the App Store to build NAME+NUMBER (the newest that reached TestFlight) eventually,
+without holding releases up: it does nothing while that version is live, approved, in review or
+waiting for review, or was rejected (that needs a person); otherwise it submits it, pulling an older
+version in flight unless that one has to be reviewed (--keep-required), in which case it waits for
+the next run. An older version approved but not released yet (PENDING_DEVELOPER_RELEASE, a manual
+release) also makes it wait (--keep-required) until that one is live. Over-the-air updates reach
+every installed version meanwhile. Exits 0 unless something failed.
 Never prints keys.
 """
 import argparse
+import subprocess
 import importlib.util
 import json
 import os
@@ -33,6 +47,20 @@ API = "https://api.appstoreconnect.apple.com"
 EDITABLE = {"PREPARE_FOR_SUBMISSION", "DEVELOPER_REJECTED", "REJECTED", "METADATA_REJECTED",
             "INVALID_BINARY"}
 IN_FLIGHT = {"WAITING_FOR_REVIEW", "IN_REVIEW", "UNRESOLVED_ISSUES"}
+REVIEW_REQUIRED = os.path.join(os.path.dirname(os.path.abspath(__file__)), "review-required.sh")
+
+
+# Versions that need nothing more from us: approved or live.
+DONE = {"READY_FOR_SALE", "READY_FOR_DISTRIBUTION", "PENDING_DEVELOPER_RELEASE", "PENDING_APPLE_RELEASE",
+        "PROCESSING_FOR_APP_STORE", "PROCESSING_FOR_DISTRIBUTION", "ACCEPTED"}
+REJECTED = {"REJECTED", "METADATA_REJECTED", "INVALID_BINARY"}
+# Approved but not live yet (a manual release waits for the owner's Release button).
+APPROVED_NOT_LIVE = {"PENDING_DEVELOPER_RELEASE", "PENDING_APPLE_RELEASE", "PROCESSING_FOR_APP_STORE",
+                     "PROCESSING_FOR_DISTRIBUTION", "ACCEPTED"}
+
+
+class HeldBack(Exception):
+    """A version that has to be reviewed is in flight, so this build waits."""
 
 
 def token() -> str:
@@ -129,7 +157,7 @@ def status(asc: Asc, app: str) -> None:
 
 
 def submit(asc: Asc, app: str, release: str, whats_new: str | None, replace_waiting: bool,
-           wait_minutes: int = 0) -> None:
+           wait_minutes: int = 0, keep_required: bool = False) -> None:
     name, _, number = release.partition("+")
     if not name or not number:
         raise RuntimeError(f"expected NAME+NUMBER, got {release!r}")
@@ -152,10 +180,31 @@ def submit(asc: Asc, app: str, release: str, whats_new: str | None, replace_wait
         asc.patch("builds", build["id"], {"usesNonExemptEncryption": False})
     print(f"Build {release}: {build['id']}")
 
-    # One version in flight at a time: pull an older one, waiting or in review, when asked to.
-    for s in submissions(asc, app):
-        if s["attributes"]["state"] not in IN_FLIGHT:
-            continue
+    # An older version that's approved but not released yet (manual release) is the owner's to
+    # release; the build waits in TestFlight until it's live (keep_required). Submitting beside it would
+# replace an approved review (and App Store Connect may refuse a new version while one is pending).
+    if keep_required:
+        for v in versions(asc, app):
+            held = v["attributes"]["versionString"]
+            if held != name and state(v) in APPROVED_NOT_LIVE:
+                raise HeldBack(f"{held} is approved ({state(v)}) but not live yet, so it stays; {release} "
+                               f"waits in TestFlight. Release {held}, then this submits {name}.")
+
+    # One version in flight at a time: pull an older one, waiting or in review, when asked to, unless
+    # it has to be reviewed (keep_required).
+    flying = [s for s in submissions(asc, app) if s["attributes"]["state"] in IN_FLIGHT]
+    if flying and keep_required:
+        names = {v["id"]: v["attributes"]["versionString"] for v in versions(asc, app)}
+        for s in flying:
+            for vid in submission_versions(asc, s["id"]):
+                held = names.get(vid, "?")
+                if held != name and s["attributes"]["state"] == "IN_REVIEW":
+                    raise HeldBack(f"Apple is reviewing {held} already, so it stays; {release} waits in "
+                                   f"TestFlight. Submit it once {held} is live.")
+                if held != name and subprocess.run([REVIEW_REQUIRED, held]).returncode == 0:
+                    raise HeldBack(f"{held} is {s['attributes']['state']} and has to be reviewed, so it "
+                                   f"stays; {release} waits in TestFlight. Submit it once {held} is live.")
+    for s in flying:
         if not replace_waiting:
             raise RuntimeError(f"review submission {s['id']} is {s['attributes']['state']}; "
                                "pass --replace-waiting to pull it")
@@ -185,7 +234,14 @@ def submit(asc: Asc, app: str, release: str, whats_new: str | None, replace_wait
         if whats_new and current != whats_new or not current:
             if not whats_new:
                 raise RuntimeError(f"What's New is empty for {loc['attributes']['locale']}; pass --whats-new")
-            asc.patch("appStoreVersionLocalizations", loc["id"], {"whatsNew": whats_new})
+            try:
+                asc.patch("appStoreVersionLocalizations", loc["id"], {"whatsNew": whats_new})
+            except RuntimeError as e:
+                # An app's first version has no What's New: App Store Connect refuses to edit it.
+                if "cannot be edited" not in str(e):
+                    raise
+                print(f"What's New can't be set for {loc['attributes']['locale']} (first version); skipped")
+                continue
             print(f"Set What's New for {loc['attributes']['locale']}")
 
     drafts = [s for s in submissions(asc, app) if s["attributes"]["state"] == "READY_FOR_REVIEW"]
@@ -196,16 +252,36 @@ def submit(asc: Asc, app: str, release: str, whats_new: str | None, replace_wait
             "reviewSubmission": rel("reviewSubmissions", submission["id"]),
             "appStoreVersion": rel("appStoreVersions", version["id"])})
     asc.patch("reviewSubmissions", submission["id"], {"submitted": True})
-    print(f"Submitted FamChat {name} ({number}) for App Store review: review submission {submission['id']}")
+    print(f"Submitted {name} ({number}) for App Store review: review submission {submission['id']}")
+
+
+def reconcile(asc: Asc, app: str, release: str, whats_new: str, wait_minutes: int) -> None:
+    name = release.partition("+")[0]
+    for v in versions(asc, app):
+        if v["attributes"]["versionString"] != name:
+            continue
+        st = state(v)
+        if st in DONE | IN_FLIGHT:
+            print(f"App Store version {name} is {st}; nothing to do.")
+            return
+        if st in REJECTED:
+            print(f"::warning::App Store version {name} was {st}; fix it in App Store Connect "
+                  "(or release a newer build), then this submits again.")
+            return
+    try:
+        submit(asc, app, release, whats_new, True, wait_minutes, keep_required=True)
+    except HeldBack as e:
+        print(f"Waiting: {e}")
 
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("command", choices=["status", "submit"])
+    p.add_argument("command", choices=["status", "submit", "reconcile"])
     p.add_argument("bundle_id")
     p.add_argument("release", nargs="?")
     p.add_argument("--whats-new")
     p.add_argument("--replace-waiting", action="store_true")
+    p.add_argument("--keep-required", action="store_true")
     p.add_argument("--wait", type=int, default=0, metavar="MINUTES")
     args = p.parse_args()
     try:
@@ -213,11 +289,18 @@ def main() -> int:
         app = app_id(asc, args.bundle_id)
         if args.command == "status":
             status(asc, app)
-        else:
-            if not args.release:
-                p.error("submit needs NAME+NUMBER")
-            submit(asc, app, args.release, args.whats_new, args.replace_waiting, args.wait)
+        elif not args.release:
+            p.error(f"{args.command} needs NAME+NUMBER")
+        elif args.command == "reconcile":
+            reconcile(asc, app, args.release, args.whats_new or "Bug fixes and improvements.", args.wait)
             status(asc, app)
+        else:
+            submit(asc, app, args.release, args.whats_new, args.replace_waiting, args.wait,
+                   args.keep_required)
+            status(asc, app)
+    except HeldBack as e:
+        print(f"held back: {e}", file=sys.stderr)
+        return 3
     except Exception as e:  # noqa: BLE001 - report any failure plainly
         print(f"error: {e}", file=sys.stderr)
         return 1

@@ -6,7 +6,8 @@ name: iOS
 #
 # A build that reached App Store Connect is tagged native/ios/<version>+<build number> (the build
 # number is CFBundleVersion, this workflow's run number), which ota.yml updates over the air. On a
-# release tag, the build then goes straight to App Store review (app-store-review below).
+# release tag, the App Store is then brought to that build when it safely can be (app-store-review
+# below; submit.yml repeats that hourly).
 #
 # Secrets (App Store Connect > Users and Access > Integrations > App Store Connect API, an
 # Admin key so Xcode can create the distribution certificate and profile itself):
@@ -219,31 +220,45 @@ jobs:
             echo "Tagged $ref" | tee -a "$GITHUB_STEP_SUMMARY"
           fi
 
-  # Release tags go straight to App Store review once App Store Connect has processed the build,
-  # pulling an older version that's waiting for review or in review (the newest build is the one
-  # worth reviewing; live updates carry web changes to the App Store version meanwhile). A failed
-  # submission is a warning: submit.yml can submit the build later.
+  # Release tags bring the App Store to this build once App Store Connect has processed it
+  # (scripts/asc-submit.py reconcile): nothing while the version is already live, approved, waiting
+  # or in review, or was rejected; otherwise it's submitted. An older version in flight is pulled
+  # only when live installs already get everything in it as updates; one Apple is reviewing, one
+  # that has to be reviewed (scripts/review-required.sh: its phone shell differs from the live
+  # version's), or one approved but not released yet stays, and this build waits in TestFlight for
+  # submit.yml's hourly reconcile. A failed submission is a warning, not a failed release.
   app-store-review:
-    needs: ios
-    if: startsWith(github.ref, 'refs/tags/v') && needs.ios.outputs.shipped != ''
+    needs: [ios, native-release]
+    if: always() && startsWith(github.ref, 'refs/tags/v') && needs.ios.outputs.shipped != ''
     runs-on: ubuntu-latest
     timeout-minutes: 100
+    # One App Store change at a time (submit.yml's hourly reconcile uses the same group).
+    concurrency:
+      group: app-store-review
+      cancel-in-progress: false
     env:
       ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
       ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      # scripts/review-required.sh: what can't reach the App Store's live version as an update
+      NATIVE_TAG_PREFIX: native
+      NATIVE_CHECK: scripts/native-check.sh
     steps:
       - uses: actions/checkout@v4
-      - name: Submit for App Store review
+      # native-check.sh runs scripts/live-update/fingerprint.ts with tsx; it needs nothing else.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install -g tsx@4
+      - name: Bring the App Store to this build
         env:
           ASC_KEY: ${{ secrets.APP_STORE_CONNECT_KEY }}
           RELEASE: ${{ needs.ios.outputs.shipped }}
         run: |
           export ASC_KEY_PATH="$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
           (umask 077; printf '%s' "$ASC_KEY" > "$ASC_KEY_PATH")
-          if python3 scripts/asc-submit.py submit "$BUNDLE_ID" "$RELEASE" --wait 90 --replace-waiting \
-              --whats-new "Bug fixes and improvements." | tee -a "$GITHUB_STEP_SUMMARY"; [ "${PIPESTATUS[0]}" = 0 ]; then
-            echo "Submitted $RELEASE for App Store review" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "::warning::$RELEASE wasn't submitted for App Store review (see the log). Submit it later with submit.yml."
+          python3 scripts/asc-submit.py reconcile "$BUNDLE_ID" "$RELEASE" --wait 90 \
+            --whats-new "Bug fixes and improvements." | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ "${PIPESTATUS[0]}" != 0 ]; then
+            echo "::warning::$RELEASE wasn't submitted for App Store review (see the log); submit.yml's hourly reconcile tries again."
           fi
           rm -f "$ASC_KEY_PATH"

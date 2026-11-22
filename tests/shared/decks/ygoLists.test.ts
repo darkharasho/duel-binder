@@ -195,6 +195,26 @@ describe('ygo lists', () => {
     expect(p.lines[0]).toMatchObject({ qty: 2, ref: { passcode: 14558128 } })
   })
 
+  it('reads bare passcode lines (a list without #main) as one copy each, folded', () => {
+    const p = parseYgoList('14558127\n14558127\n55144522\n3 Pot of Greed')
+    expect(keyed(p)).toEqual([
+      'main:{"name":"Pot of Greed"}:3',
+      'main:{"passcode":14558127}:2',
+      'main:{"passcode":55144522}:1'
+    ])
+    expect(p.skipped).toEqual([])
+    // Too short or too long for a passcode: still read as text, not a passcode.
+    expect(parseYgoList('1234').lines[0].ref).toEqual({ name: '1234' })
+    expect(parseYgoList('12345678901').lines[0].ref).toEqual({ name: '12345678901' })
+  })
+
+  it('says whether the list named its sections', () => {
+    expect(parseYgoList('3 Pot of Greed\n1 Accesscode Talker').sectioned).toBe(false)
+    expect(parseYgoList('Main Deck\n3 Pot of Greed').sectioned).toBe(true)
+    expect(parseYgoList(fx('yugiohprodeck.ydk')).sectioned).toBe(true)
+    expect(parseYgoList('ydke://!!!').sectioned).toBe(true)
+  })
+
   it('detects the format', () => {
     expect(detectYgoList(fx('yugiohprodeck.ydk'))).toBe('ydk')
     expect(detectYgoList(fx('edopro.ydk'))).toBe('ydk')

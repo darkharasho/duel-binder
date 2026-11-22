@@ -5,6 +5,8 @@ import { DeckPage } from '@/features/decks/DeckPage'
 import { AddToDeck } from '@/features/decks/AddToDeck'
 import { FriendBinder } from '@/features/friends/FriendBinder'
 import { DecksPage } from '@/features/decks/DecksPage'
+import { buildPreview, keptEntries } from '@/features/decks/deckImport'
+import { parseYgoList } from '@shared/decks/ygo/lists'
 import { OFFLINE_MESSAGE } from '@shared/friends'
 import type { PackState } from '@shared/decks/pack'
 import type { DeckCard, DeckDetail, DeckEntry, DeckSummary } from '@shared/decks/types'
@@ -375,12 +377,12 @@ describe('the deck page', () => {
 describe('importing and exporting', () => {
   const LIST = '3 Pot of Greed\n2 Maxx C\n1 Mystery card\n!!!'
   const resolutions: DeckResolution[] = [
-    { status: 'matched', card: POT, name: 'Pot of Greed' },
+    { status: 'matched', card: POT, name: 'Pot of Greed', frameType: 'spell' },
     {
       status: 'ambiguous',
       options: [
-        { card: MAXX, name: 'Maxx "C"', imageId: null },
-        { card: 1, name: 'Pricey', imageId: null }
+        { card: MAXX, name: 'Maxx "C"', frameType: 'effect', imageId: null },
+        { card: 1, name: 'Pricey', frameType: 'effect', imageId: null }
       ]
     },
     { status: 'unmatched' }
@@ -455,7 +457,7 @@ describe('importing and exporting', () => {
     const api = apiWith([], pack('2026-11-22'), {
       decks: {
         resolve: vi.fn(async () => [
-          { status: 'matched' as const, card: POT, name: 'Pot of Greed' },
+          { status: 'matched' as const, card: POT, name: 'Pot of Greed', frameType: 'spell' },
           { status: 'unmatched' as const }
         ])
       }
@@ -467,6 +469,59 @@ describe('importing and exporting', () => {
     expect(await within(dialog).findByText('2 Pot of Greed')).toBeInTheDocument()
     expect(within(dialog).getByText('#12345678 (not in the catalog)')).toBeInTheDocument()
     expect(within(dialog).queryByText(/#55144522/)).not.toBeInTheDocument()
+  })
+
+  it('editing the text after a preview clears it', async () => {
+    const api = importApi()
+    renderWithProviders(<DecksPage />, { api })
+    await userEvent.click(await screen.findByRole('button', { name: 'Import' }))
+    const dialog = await screen.findByRole('dialog')
+    await paste(dialog, LIST)
+    await within(dialog).findByText('Matched (1)')
+    await userEvent.selectOptions(
+      within(dialog).getByLabelText('Pick a card for 2 Maxx C'),
+      'Maxx "C"'
+    )
+    await userEvent.type(within(dialog).getByLabelText('Deck list'), 'x')
+    expect(within(dialog).queryByText('Matched (1)')).not.toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Import deck' })).toBeDisabled()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Preview' }))
+    expect(await within(dialog).findByLabelText('Pick a card for 2 Maxx C')).toBeInTheDocument()
+  })
+
+  it('a list without headers puts Extra Deck monsters in Extra; a headed list is untouched', () => {
+    const LINK = 50
+    const res: DeckResolution[] = [
+      { status: 'matched', card: POT, name: 'Pot of Greed', frameType: 'spell' },
+      { status: 'matched', card: LINK, name: 'Linkuriboh', frameType: 'link' }
+    ]
+    const bare = buildPreview(parseYgoList('3 Pot of Greed\n1 Linkuriboh'), res, 'text')
+    expect(keptEntries(bare, {})).toEqual([
+      { section: 'main', card: POT, qty: 3 },
+      { section: 'extra', card: LINK, qty: 1 }
+    ])
+    const headed = buildPreview(
+      parseYgoList('Main Deck\n3 Pot of Greed\n1 Linkuriboh'),
+      res,
+      'text'
+    )
+    expect(keptEntries(headed, {})).toEqual([
+      { section: 'main', card: POT, qty: 3 },
+      { section: 'main', card: LINK, qty: 1 }
+    ])
+  })
+
+  it('a line of more than 99 copies is not found, as typed, never cut to 99', () => {
+    const p = buildPreview(
+      parseYgoList('100 Pot of Greed'),
+      [{ status: 'matched', card: POT, name: 'Pot of Greed', frameType: 'spell' }],
+      'text'
+    )
+    expect(p.matched).toEqual([])
+    expect(p.notFound).toMatchObject([
+      { text: '100 Pot of Greed (more than 99 copies)', qty: 100, tooMany: true }
+    ])
+    expect(keptEntries(p, {})).toEqual([])
   })
 
   it('replace asks first', async () => {

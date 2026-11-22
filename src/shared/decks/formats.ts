@@ -42,6 +42,9 @@ export function decksAvailable(game: GameId): boolean {
 }
 
 /** Where a card goes when added without a section picked: Extra Deck monsters to Extra, else Main. */
-export function defaultSection(game: GameId, card: DeckCard | undefined): DeckSection {
+export function defaultSection(
+  game: GameId,
+  card: Pick<DeckCard, 'frameType'> | undefined
+): DeckSection {
   return game === 'ygo' && card && isExtraFrame(card.frameType) ? 'extra' : 'main'
 }

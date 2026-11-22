@@ -19,6 +19,7 @@ import {
   buildPreview,
   deckNameFromFile,
   keptEntries,
+  placeOf,
   unresolvedCount,
   type ImportItem,
   type ImportPreview,
@@ -80,7 +81,7 @@ export function ImportDialog({
         ? await api.decks.resolve(parsed.lines.map((l) => l.ref))
         : []
       if (!parsed.lines.length && !parsed.skipped.length) setError('Nothing to import in that.')
-      else setPreview(buildPreview(parsed, resolutions, detectYgoList(source)))
+      else setPreview(buildPreview(parsed, resolutions, detectYgoList(source), game))
     } catch (e) {
       setError(errorMessage(e, 'Could not read the list'))
     } finally {
@@ -173,7 +174,16 @@ export function ImportDialog({
               value={text}
               rows={6}
               placeholder="Paste a deck list, a .ydk, or a ydke:// link"
-              onChange={(e) => setText(e.target.value)}
+              onChange={(e) => {
+                setText(e.target.value)
+                // A preview is of the text it read; an edit after it needs a new one.
+                if (preview) {
+                  setPreview(null)
+                  setPicks({})
+                  setSearching(null)
+                  setConfirming(false)
+                }
+              }}
               className="w-full rounded-md border bg-transparent px-3 py-2 font-mono text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
             <div className="flex flex-wrap items-center gap-2">
@@ -238,7 +248,7 @@ export function ImportDialog({
                                   if (o)
                                     choose(a.key, {
                                       card: o.card,
-                                      section: a.section,
+                                      section: placeOf(game, preview.sectioned, a.section, o),
                                       name: o.name
                                     })
                                 }}
@@ -268,14 +278,16 @@ export function ImportDialog({
                         : row(
                             n,
                             <>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                aria-label={`Search for ${n.text}`}
-                                onClick={() => setSearching(searching === n.key ? null : n.key)}
-                              >
-                                Search
-                              </Button>
+                              {!n.tooMany && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  aria-label={`Search for ${n.text}`}
+                                  onClick={() => setSearching(searching === n.key ? null : n.key)}
+                                >
+                                  Search
+                                </Button>
+                              )}
                               {drop(n)}
                             </>
                           )

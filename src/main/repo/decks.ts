@@ -36,9 +36,13 @@ const REGION_LANGUAGES = "('ja', 'ko', 'zh-hans', 'zh-hant', 'ae', 'ja-asia')"
 /** An id or pkey list bound as one JSON array, never one parameter per item (the DO caps them). */
 const IN_LIST = '(SELECT value FROM json_each(?))'
 
+/** frameType lets the importer place a card (an Extra Deck monster in Extra) when the list didn't. */
 export type DeckResolution =
-  | { status: 'matched'; card: number; name: string }
-  | { status: 'ambiguous'; options: { card: number; name: string; imageId: number | null }[] }
+  | { status: 'matched'; card: number; name: string; frameType: string }
+  | {
+      status: 'ambiguous'
+      options: { card: number; name: string; frameType: string; imageId: number | null }[]
+    }
   | { status: 'unmatched' }
 
 interface DeckDbRow {
@@ -240,11 +244,7 @@ function readDecks(db: SqlDb, scope: Scope, uid?: string): DeckDbRow[] {
  * The tile's art: the picked cover while the deck still holds that card, else the first Main
  * entry with art, else any entry's.
  */
-function coverImage(
-  r: DeckDbRow,
-  cards: DeckEntry[],
-  images: Map<number, number>
-): number | null {
+function coverImage(r: DeckDbRow, cards: DeckEntry[], images: Map<number, number>): number | null {
   if (r.cover !== null && cards.some((e) => e.card === r.cover)) {
     const picked = images.get(r.cover)
     if (picked !== undefined) return picked
@@ -491,11 +491,12 @@ export function resolveDeckLines(db: SqlDb, refs: unknown, scope: Scope = LOCAL)
   }
 
   const named = db.prepare(
-    `SELECT c.id, c.name FROM cards_fts JOIN cards c ON c.id = cards_fts.rowid
+    `SELECT c.id, c.name, c.frame_type FROM cards_fts JOIN cards c ON c.id = cards_fts.rowid
      WHERE cards_fts MATCH ? AND +c.game = ${scope.game}
      ORDER BY length(c.name), c.id LIMIT ${NAME_HITS}`
   )
-  const byName = new Map<string, { id: number; name: string }[]>()
+  type Hit = { id: number; name: string; frame_type: string }
+  const byName = new Map<string, Hit[]>()
   for (const r of lines) {
     if (!('name' in r)) continue
     const want = normalName(r.name)
@@ -505,9 +506,9 @@ export function resolveDeckLines(db: SqlDb, refs: unknown, scope: Scope = LOCAL)
       byName.set(want, [])
       continue
     }
-    const hits = (
-      named.all(tokens.map((t) => `"${t}"`).join(' ')) as { id: number; name: string }[]
-    ).filter((c) => normalName(c.name) === want)
+    const hits = (named.all(tokens.map((t) => `"${t}"`).join(' ')) as Hit[]).filter(
+      (c) => normalName(c.name) === want
+    )
     byName.set(
       want,
       hits.sort((a, b) => a.id - b.id)
@@ -518,8 +519,9 @@ export function resolveDeckLines(db: SqlDb, refs: unknown, scope: Scope = LOCAL)
   for (const ids of byCode.values()) if (ids.size > 1) for (const id of ids) ambiguousIds.add(id)
   for (const hits of byName.values())
     if (hits.length > 1) for (const h of hits) ambiguousIds.add(h.id)
-  const names = new Map<number, string>()
-  for (const hits of byName.values()) for (const h of hits) names.set(h.id, h.name)
+  const names = new Map<number, { name: string; frameType: string }>()
+  for (const hits of byName.values())
+    for (const h of hits) names.set(h.id, { name: h.name, frameType: h.frame_type })
   // Every matched card's name too, so the import preview reads in names, not passcodes.
   const wanted = new Set(ambiguousIds)
   for (const id of byPasscode.values()) wanted.add(id)
@@ -528,22 +530,25 @@ export function resolveDeckLines(db: SqlDb, refs: unknown, scope: Scope = LOCAL)
   if (missing.length > 0)
     for (const r of db
       .prepare(
-        `SELECT c.id, c.name FROM cards c WHERE c.id IN ${IN_LIST} AND +c.game = ${scope.game}`
+        `SELECT c.id, c.name, c.frame_type FROM cards c
+         WHERE c.id IN ${IN_LIST} AND +c.game = ${scope.game}`
       )
-      .all(JSON.stringify(missing)) as { id: number; name: string }[])
-      names.set(r.id, r.name)
+      .all(JSON.stringify(missing)) as Hit[])
+      names.set(r.id, { name: r.name, frameType: r.frame_type })
   const images = firstImages(db, [...ambiguousIds], scope)
 
+  const fact = (card: number): { name: string; frameType: string } =>
+    names.get(card) ?? { name: '', frameType: '' }
   const resolve = (ids: number[]): DeckResolution =>
     ids.length === 0
       ? { status: 'unmatched' }
       : ids.length === 1
-        ? { status: 'matched', card: ids[0], name: names.get(ids[0]) ?? '' }
+        ? { status: 'matched', card: ids[0], ...fact(ids[0]) }
         : {
             status: 'ambiguous',
             options: ids.map((card) => ({
               card,
-              name: names.get(card) ?? '',
+              ...fact(card),
               imageId: images.get(card) ?? null
             }))
           }
@@ -553,7 +558,7 @@ export function resolveDeckLines(db: SqlDb, refs: unknown, scope: Scope = LOCAL)
       const card = byPasscode.get(r.passcode)
       return card === undefined
         ? { status: 'unmatched' }
-        : { status: 'matched', card, name: names.get(card) ?? '' }
+        : { status: 'matched', card, ...fact(card) }
     }
     if ('setCode' in r)
       return resolve([...(byCode.get(r.setCode.toLowerCase()) ?? [])].sort((a, b) => a - b))

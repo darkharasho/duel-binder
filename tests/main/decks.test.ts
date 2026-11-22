@@ -348,30 +348,30 @@ describe('decks repo', () => {
         { name: 'Dárk Magician' }
       ])
     ).toEqual([
-      { status: 'matched', card: DARK_MAGICIAN, name: DM },
-      { status: 'matched', card: DARK_MAGICIAN, name: DM },
+      { status: 'matched', card: DARK_MAGICIAN, name: DM, frameType: 'normal' },
+      { status: 'matched', card: DARK_MAGICIAN, name: DM, frameType: 'normal' },
       { status: 'unmatched' },
-      { status: 'matched', card: DARK_MAGICIAN, name: DM },
+      { status: 'matched', card: DARK_MAGICIAN, name: DM, frameType: 'normal' },
       {
         status: 'ambiguous',
         options: [
-          { card: 900003, name: 'Twin Name', imageId: 900003 },
-          { card: 900004, name: 'Twin Name', imageId: 900004 }
+          { card: 900003, name: 'Twin Name', frameType: 'effect', imageId: 900003 },
+          { card: 900004, name: 'Twin Name', frameType: 'effect', imageId: 900004 }
         ]
       },
       { status: 'unmatched' },
-      { status: 'matched', card: 900001, name: 'Maxx "C"' },
+      { status: 'matched', card: 900001, name: 'Maxx "C"', frameType: 'effect' },
       { status: 'unmatched' },
-      { status: 'matched', card: 900002, name: 'Ash Blossom & Joyous Spring' },
+      { status: 'matched', card: 900002, name: 'Ash Blossom & Joyous Spring', frameType: 'effect' },
       {
         status: 'ambiguous',
         options: [
-          { card: 900003, name: 'Twin Name', imageId: 900003 },
-          { card: 900004, name: 'Twin Name', imageId: 900004 }
+          { card: 900003, name: 'Twin Name', frameType: 'effect', imageId: 900003 },
+          { card: 900004, name: 'Twin Name', frameType: 'effect', imageId: 900004 }
         ]
       },
       { status: 'unmatched' },
-      { status: 'matched', card: DARK_MAGICIAN, name: DM }
+      { status: 'matched', card: DARK_MAGICIAN, name: DM, frameType: 'normal' }
     ])
     expect(() => resolveDeckLines(db, 'x')).toThrow(CollectionError)
     expect(() => resolveDeckLines(db, [{ bogus: 1 }])).toThrow(CollectionError)

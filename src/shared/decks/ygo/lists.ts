@@ -9,10 +9,15 @@ export interface ParsedLine {
   qty: number
   ref: DeckLineRef
 }
-/** skipped = non-empty, non-comment lines it couldn't read. */
+/**
+ * skipped = non-empty, non-comment lines it couldn't read. sectioned = the list said which section
+ * each card is in (.ydk, ydke://, or a text list with headers); a text list without headers puts
+ * everything in Main, for the importer to place by card.
+ */
 export interface ParsedList {
   lines: ParsedLine[]
   skipped: { line: number; raw: string }[]
+  sectioned: boolean
 }
 
 const SECTIONS: DeckSection[] = ['main', 'extra', 'side']
@@ -38,7 +43,7 @@ export function detectYgoList(text: string): 'ydk' | 'ydke' | 'text' {
 
 /** Adds copies of one card in one section, folding repeats into a single line. */
 class Collector {
-  readonly out: ParsedList = { lines: [], skipped: [] }
+  readonly out: ParsedList = { lines: [], skipped: [], sectioned: true }
   private seen = new Map<string, ParsedLine>()
   add(line: number, raw: string, section: DeckSection, passcode: number): void {
     const k = `${section}:${passcode}`
@@ -120,8 +125,12 @@ function stripBrackets(s: string): string {
   }
 }
 
+/** A bare 5–10 digit line in a text list: a passcode, one copy (a .ydk without its headers). */
+const BARE_PASSCODE = /^\d{5,10}$/
+
 function parseText(text: string): ParsedList {
-  const out: ParsedList = { lines: [], skipped: [] }
+  const out: ParsedList = { lines: [], skipped: [], sectioned: false }
+  const bare = new Map<string, ParsedLine>()
   let section: DeckSection = 'main'
   splitLines(text).forEach((rawLine, i) => {
     let s = normalize(rawLine).trim()
@@ -134,6 +143,24 @@ function parseText(text: string): ParsedList {
     const h = HEADER.exec(s)
     if (h) {
       section = (h[1] ? h[1].toLowerCase() : 'side') as DeckSection
+      out.sectioned = true
+      return
+    }
+    if (BARE_PASSCODE.test(s)) {
+      const k = `${section}:${Number(s)}`
+      const have = bare.get(k)
+      if (have) have.qty += 1
+      else {
+        const l: ParsedLine = {
+          line: i + 1,
+          raw: rawLine,
+          section,
+          qty: 1,
+          ref: { passcode: Number(s) }
+        }
+        bare.set(k, l)
+        out.lines.push(l)
+      }
       return
     }
     let qty = 1

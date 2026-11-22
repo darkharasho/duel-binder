@@ -1,10 +1,12 @@
 import { MAX_ENTRY_QTY } from '@shared/decks/fields'
+import { defaultSection } from '@shared/decks/formats'
+import type { GameId } from '@shared/games'
 import type { ParsedLine, ParsedList } from '@shared/decks/ygo/lists'
 import type { DeckCard, DeckEntry, DeckSection } from '@shared/decks/types'
 import type { Api } from '@shared/ipc'
 
 export type Resolution = Awaited<ReturnType<Api['decks']['resolve']>>[number]
-export type Option = { card: number; name: string; imageId: number | null }
+export type Option = { card: number; name: string; frameType: string; imageId: number | null }
 
 /** One line of an import, as the owner sees it. `key` is stable for the preview's life. */
 export interface ImportItem {
@@ -12,8 +14,12 @@ export interface ImportItem {
   text: string
   qty: number
   section: DeckSection
+  /** More copies than an entry holds: it can only be dropped, never cut down silently. */
+  tooMany?: boolean
 }
 export interface ImportPreview {
+  /** The list named its sections; otherwise a card goes where defaultSection puts it. */
+  sectioned: boolean
   matched: (ImportItem & { card: number })[]
   ambiguous: (ImportItem & { options: Option[] })[]
   /** Lines that matched no card, and lines the parser couldn't read. */
@@ -32,13 +38,32 @@ function textOf(l: ParsedLine, kind: 'ydk' | 'ydke' | 'text', name?: string): st
   return 'passcode' in l.ref ? `#${l.ref.passcode} (not in the catalog)` : l.raw.trim()
 }
 
-/** Sorts the parsed lines into the three groups by what `resolve` answered for each. */
+/** Where a picked or matched card goes: the list's own section, else by the card's frame. */
+export function placeOf(
+  game: GameId,
+  sectioned: boolean,
+  section: DeckSection,
+  card: { frameType: string }
+): DeckSection {
+  return sectioned ? section : defaultSection(game, card)
+}
+
+/**
+ * Sorts the parsed lines into the three groups by what `resolve` answered for each. A line of more
+ * copies than an entry holds is not found, as typed, so it is never cut down without a word.
+ */
 export function buildPreview(
   parsed: ParsedList,
   resolutions: Resolution[],
-  kind: 'ydk' | 'ydke' | 'text'
+  kind: 'ydk' | 'ydke' | 'text',
+  game: GameId = 'ygo'
 ): ImportPreview {
-  const out: ImportPreview = { matched: [], ambiguous: [], notFound: [] }
+  const out: ImportPreview = {
+    sectioned: parsed.sectioned,
+    matched: [],
+    ambiguous: [],
+    notFound: []
+  }
   parsed.lines.forEach((l, i) => {
     const r = resolutions[i]
     const item: ImportItem = {
@@ -47,7 +72,18 @@ export function buildPreview(
       qty: l.qty,
       section: l.section
     }
-    if (r?.status === 'matched') out.matched.push({ ...item, card: r.card })
+    if (l.qty > MAX_ENTRY_QTY)
+      out.notFound.push({
+        ...item,
+        text: `${kind === 'text' ? l.raw.trim() : item.text} (more than ${MAX_ENTRY_QTY} copies)`,
+        tooMany: true
+      })
+    else if (r?.status === 'matched')
+      out.matched.push({
+        ...item,
+        section: placeOf(game, parsed.sectioned, l.section, r),
+        card: r.card
+      })
     else if (r?.status === 'ambiguous') out.ambiguous.push({ ...item, options: r.options })
     else out.notFound.push(item)
   })

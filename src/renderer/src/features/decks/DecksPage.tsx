@@ -22,11 +22,14 @@ const GRID = 'grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 max-md:
 
 /** The current game's decks; opening one shows it. With `friendId`, that friend's, read-only. */
 export function DecksPage({
-  friendId
+  friendId,
+  friendHeader
 }: {
   /** Accepted for the page contract; the list has nowhere to navigate yet. */
   onNavigate?: NavigateFn
   friendId?: number
+  /** The friend's name and tabs, shown in place of the page title. */
+  friendHeader?: React.ReactNode
 } = {}): React.JSX.Element {
   const { game } = useGame()
   const qc = useQueryClient()
@@ -77,8 +80,9 @@ export function DecksPage({
   return (
     <div className="space-y-4 p-8 max-md:p-4">
       <PageHeader>
+        {friendHeader}
         <div className="flex items-center justify-between gap-3">
-          <h1 className={PAGE_TITLE}>Decks</h1>
+          {!friendHeader && <h1 className={PAGE_TITLE}>Decks</h1>}
           {!readOnly && list.isSuccess && !empty && (
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setImporting(true)}>

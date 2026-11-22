@@ -11,6 +11,7 @@ import { SessionCardSheet } from '../sessions/SessionCardSheet'
 import { SessionFeed } from '../sessions/SessionFeed'
 import { FriendBinders } from '../binders/FriendBinders'
 import { CollectionPage } from '../collection/CollectionPage'
+import { DecksPage } from '../decks/DecksPage'
 import { FriendWishlist } from '../wishlist/FriendWishlist'
 import { FriendDashboard } from './FriendDashboard'
 import { FriendCardSheet } from './FriendCardSheet'
@@ -48,7 +49,14 @@ export function FriendBinder({
     retry: false
   })
   const showGraded = (graded.data?.length ?? 0) > 0
+  const decks = useQuery({
+    queryKey: queryKeys.friendDecks(friend.id, game),
+    queryFn: () => api.friends.decks(friend.id),
+    retry: false
+  })
+  const showDecks = (decks.data?.decks.length ?? 0) > 0
   const tab =
+    (chosen === 'decks' && !showDecks) ||
     (chosen === 'binders' && !showBinders) ||
     (chosen === 'sessions' && !showSessions) ||
     (chosen === 'graded' && !showGraded)
@@ -65,6 +73,7 @@ export function FriendBinder({
       showBinders={showBinders}
       showSessions={showSessions}
       showGraded={showGraded}
+      showDecks={showDecks}
     />
   )
   switch (tab) {
@@ -82,9 +91,22 @@ export function FriendBinder({
       return <GradedPage friend={friend} friendHeader={header()} />
     case 'binders':
       return <FriendBinders friend={friend} binders={binders.data ?? []} header={header()} />
+    case 'decks':
+      return <FriendDecks friend={friend} header={header()} />
     case 'sessions':
       return <FriendSessions friend={friend} sessions={sessions.data ?? []} header={header()} />
   }
+}
+
+/** The decks a friend shares, read-only, under their header. */
+function FriendDecks({
+  friend,
+  header
+}: {
+  friend: Friend
+  header: React.ReactNode
+}): React.JSX.Element {
+  return <DecksPage friendId={friend.id} friendHeader={header} />
 }
 
 /** The scan sessions a friend shows: the feed without owner controls; a tile opens their copies. */

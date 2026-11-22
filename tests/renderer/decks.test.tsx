@@ -2,12 +2,15 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from '@/App'
 import { DeckPage } from '@/features/decks/DeckPage'
+import { AddToDeck } from '@/features/decks/AddToDeck'
+import { FriendBinder } from '@/features/friends/FriendBinder'
 import { DecksPage } from '@/features/decks/DecksPage'
 import { OFFLINE_MESSAGE } from '@shared/friends'
 import type { PackState } from '@shared/decks/pack'
 import type { DeckCard, DeckDetail, DeckEntry, DeckSummary } from '@shared/decks/types'
 import type { Api } from '@shared/ipc'
-import type { AccountStatus } from '@shared/types'
+import type { AccountStatus, CardDetail, Friend } from '@shared/types'
+import { toast } from 'sonner'
 import { createMockApi, renderWithProviders, type DeepPartial } from './mockApi'
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() }, Toaster: () => null }))
@@ -541,5 +544,84 @@ describe('Decks in the nav', () => {
   })
   it('is not in the nav for Pokémon', async () => {
     expect(await nav('pkm')).not.toContain('Decks')
+  })
+})
+
+describe('Add to deck', () => {
+  const LINK = 900
+  const linkDetail = {
+    card: { id: LINK, name: 'Link Thing', type: 'Link Monster', frameType: 'link' }
+  } as CardDetail
+  const addApi = (): Api =>
+    pageApi(detail(), pack('2026-11-22'), {
+      cards: { get: vi.fn(async () => linkDetail) },
+      decks: { list: vi.fn(async () => ({ decks: [deck({})], cardFacts: facts })) }
+    })
+
+  it('Add to deck adds one copy to the default section', async () => {
+    const api = addApi()
+    renderWithProviders(<AddToDeck game="ygo" cardId={LINK} />, { api })
+    await userEvent.click(screen.getByRole('button', { name: 'Add to deck' }))
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Deck' }))
+    await waitFor(() =>
+      expect(api.decks.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          uid: 'd1',
+          notes: 'Side for the mirror',
+          cards: [...legalCards, { section: 'extra', card: LINK, qty: 1 }]
+        })
+      )
+    )
+    expect(toast.success).toHaveBeenCalledWith('Added to Deck')
+  })
+
+  it('still adds a fourth copy and the toast names the problem', async () => {
+    const api = addApi()
+    renderWithProviders(<AddToDeck game="ygo" cardId={100} />, { api })
+    await userEvent.click(screen.getByRole('button', { name: 'Add to deck' }))
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Deck' }))
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith(
+        expect.stringMatching(/^Added to Deck\. 4 × Filler 100: at most 3 copies/)
+      )
+    )
+    expect(api.decks.save).toHaveBeenCalled()
+  })
+})
+
+describe('the friend Decks tab', () => {
+  const bob = {
+    id: 7,
+    username: 'bob',
+    displayName: 'Bob',
+    updatedAt: '2026-11-01T00:00:00Z'
+  } as Friend
+  const openFriend = (decks: DeckSummary[]): Api => {
+    const api = apiWith(
+      [],
+      { state: 'missing' },
+      {
+        friends: {
+          decks: vi.fn(async () => ({ decks, cardFacts: facts })),
+          deck: vi.fn(async () => null)
+        }
+      }
+    )
+    renderWithProviders(<FriendBinder friend={bob} onBack={vi.fn()} />, { api })
+    return api
+  }
+
+  it('friend Decks tab appears only when the friend has a visible deck', async () => {
+    const api = openFriend([deck({ name: 'Theirs' })])
+    await userEvent.click(await screen.findByRole('radio', { name: 'Decks' }))
+    expect(api.friends.decks).toHaveBeenCalledWith(7)
+    expect(await screen.findByText('Theirs')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'New deck' })).not.toBeInTheDocument()
+  })
+
+  it('has no Decks tab when they share none', async () => {
+    const api = openFriend([])
+    await waitFor(() => expect(api.friends.decks).toHaveBeenCalled())
+    expect(screen.queryByRole('radio', { name: 'Decks' })).not.toBeInTheDocument()
   })
 })

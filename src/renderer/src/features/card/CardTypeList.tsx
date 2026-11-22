@@ -2,10 +2,12 @@ import { useId, useRef, useState } from 'react'
 import { useQueryClient, type InfiniteData, type QueryClient } from '@tanstack/react-query'
 import { Minus, Plus } from 'lucide-react'
 import { toast } from 'sonner'
+import { decksAvailable } from '@shared/decks/formats'
 import type { Language } from '@shared/languages'
 import type { BrowsePage, ChecklistCard, EntryView, Printing, SetChecklist } from '@shared/types'
 import { Button } from '@/components/ui/button'
 import { AddToBinder } from '@/features/binders/AddToBinder'
+import { AddToDeck } from '@/features/decks/AddToDeck'
 import { replaceChecklistCard } from '@/features/sets/setsView'
 import { api, invalidateAfterEdit, queryKeys } from '@/lib/api'
 import { formatUsd } from '@/lib/format'
@@ -384,6 +386,7 @@ export function CardTypeList({
             : undefined
         }
       />
+      {decksAvailable(def.id) && <AddToDeck game={def.id} cardId={cardId} />}
     </section>
   )
 }

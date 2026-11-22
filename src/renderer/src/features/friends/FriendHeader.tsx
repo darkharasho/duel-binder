@@ -7,7 +7,7 @@ import { formatRelative } from '@/lib/format'
 import { FriendAvatar } from './FriendAvatar'
 
 export type BinderTab =
-  'dashboard' | 'collection' | 'sets' | 'wishlist' | 'graded' | 'binders' | 'sessions'
+  'dashboard' | 'collection' | 'sets' | 'wishlist' | 'graded' | 'binders' | 'decks' | 'sessions'
 
 const BINDER_TABS = [
   { value: 'dashboard', label: 'Dashboard' },
@@ -16,6 +16,7 @@ const BINDER_TABS = [
   { value: 'wishlist', label: 'Wishlist' },
   { value: 'graded', label: 'Graded' },
   { value: 'binders', label: 'Binders' },
+  { value: 'decks', label: 'Decks' },
   { value: 'sessions', label: 'Sessions' }
 ] as const
 
@@ -28,7 +29,8 @@ export function FriendHeader({
   trailing,
   showBinders = false,
   showSessions = false,
-  showGraded = false
+  showGraded = false,
+  showDecks = false
 }: {
   friend: Friend
   tab: BinderTab
@@ -42,6 +44,8 @@ export function FriendHeader({
   showSessions?: boolean
   /** Whether they have any slabs in this game; the Graded tab is hidden otherwise. */
   showGraded?: boolean
+  /** Whether they share any decks in this game; the Decks tab is hidden otherwise. */
+  showDecks?: boolean
 }): React.JSX.Element {
   return (
     <>
@@ -69,7 +73,8 @@ export function FriendHeader({
             (t) =>
               (t.value !== 'binders' || showBinders) &&
               (t.value !== 'sessions' || showSessions) &&
-              (t.value !== 'graded' || showGraded)
+              (t.value !== 'graded' || showGraded) &&
+              (t.value !== 'decks' || showDecks)
           )}
           onChange={onTab}
         />

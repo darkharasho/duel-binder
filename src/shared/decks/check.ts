@@ -20,6 +20,9 @@ export interface DeckVerdict {
 
 const STALE_DAYS = 14
 const DAY = 86_400_000
+/** A verdict mark keeps at most this many problem keys (errors first), each at most this long. */
+export const MAX_MARK_PROBLEMS = 300
+export const MAX_PROBLEM_KEY = 64
 
 export function daysBetween(from: string, to: string): number {
   return Math.round((Date.parse(to.slice(0, 10)) - Date.parse(from.slice(0, 10))) / DAY)
@@ -39,9 +42,11 @@ export function checkDeck(
   today: string
 ): DeckVerdict {
   const format = formatOf(deck.game, deck.format)
+  // A format this app doesn't know (made by a newer one) can't be judged, and is never Legal.
+  if (!format) return { status: 'update', badge: 'Update to check legality', problems: [], packVersion: null }
   const problems: DeckProblem[] = []
   let packVersion: string | null = null
-  if (format && deck.game === 'ygo') {
+  if (deck.game === 'ygo') {
     const ready = pack.state === 'ready' ? pack.pack : null
     const rules = ready
       ? deck.format === 'ocg'
@@ -91,7 +96,14 @@ export function checkDeck(
 
 export function verdictMark(v: DeckVerdict): DeckVerdictMark | null {
   if (v.packVersion === null) return null
-  return { status: v.status, problems: v.problems.map((p) => p.key), packVersion: v.packVersion }
+  return {
+    status: v.status,
+    problems: v.problems
+      .map((p) => p.key)
+      .filter((k) => k.length <= MAX_PROBLEM_KEY)
+      .slice(0, MAX_MARK_PROBLEMS),
+    packVersion: v.packVersion
+  }
 }
 
 /** Non-null only when a newer pack flipped the deck between legal and not legal. */

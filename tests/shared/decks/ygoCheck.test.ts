@@ -197,6 +197,17 @@ describe('checkDeck ygo', () => {
       badge: 'Update to check legality'
     })
   })
+  it('a format this app does not know asks for an update, never Legal', () => {
+    const v = run('genesys', legalCards())
+    expect(v).toEqual({
+      status: 'update',
+      badge: 'Update to check legality',
+      problems: [],
+      packVersion: null
+    })
+    expect(verdictMark(v)).toBeNull()
+    expect(run('genesys', mainOf(10), { state: 'missing' }).status).toBe('update')
+  })
   it('unknown card counts but has no placement problem', () => {
     const v = run('advanced', [...mainOf(39), e('main', 99999999)])
     expect(v.problems).toEqual([])
@@ -226,6 +237,25 @@ describe('verdictMark / verdictChange', () => {
       problems: [`limit:${POT}`],
       packVersion: '2026-11-22'
     })
+  })
+  it('keeps at most 300 problem keys of at most 64 characters, errors first', () => {
+    const many: DeckVerdict = {
+      status: 'illegal',
+      badge: 'Not legal',
+      problems: [
+        { key: 'x'.repeat(65), severity: 'error', message: 'long' },
+        ...Array.from({ length: 400 }, (_, i) => ({
+          key: `copies:${i}`,
+          severity: 'error' as const,
+          message: 'm'
+        }))
+      ],
+      packVersion: '2026-11-22'
+    }
+    const mark = verdictMark(many)!
+    expect(mark.problems).toHaveLength(300)
+    expect(mark.problems[0]).toBe('copies:0')
+    expect(mark.problems.every((k) => k.length <= 64)).toBe(true)
   })
   it('names what flipped', () => {
     const seen = { status: 'legal' as const, problems: [], packVersion: '2026-11-01' }

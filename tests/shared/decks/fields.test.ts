@@ -26,6 +26,12 @@ describe('checkDeckFields', () => {
     expect(s.cards).toHaveLength(2)
   })
 
+  it('an empty printing is no pin and merges with the unpinned entry', () => {
+    const one = { section: 'main', card: 14558127, qty: 1 }
+    const r = checkDeckFields({ ...base, cards: [one, { ...one, printing: '' }] }, 'ygo')
+    expect(r.cards).toEqual([{ section: 'main', card: 14558127, qty: 2 }])
+  })
+
   it('rejects bad fields', () => {
     bad({ name: '' })
     bad({ name: 'x'.repeat(81) })

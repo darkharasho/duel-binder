@@ -33,7 +33,8 @@ function checkEntries(v: unknown, sections: readonly string[]): DeckEntry[] {
     if (typeof e.qty !== 'number' || !Number.isInteger(e.qty) || e.qty < 1 || e.qty > MAX_ENTRY_QTY)
       throw new DeckFieldError(`Quantity must be a whole number from 1 to ${MAX_ENTRY_QTY}`)
     let printing: string | undefined
-    if (e.printing !== undefined && e.printing !== null) {
+    // An empty pin is no pin, so it merges with the entry's unpinned copies.
+    if (e.printing !== undefined && e.printing !== null && e.printing !== '') {
       if (typeof e.printing !== 'string' || e.printing.length > MAX_PRINTING)
         throw new DeckFieldError(`Printing must be text of at most ${MAX_PRINTING} characters`)
       printing = e.printing

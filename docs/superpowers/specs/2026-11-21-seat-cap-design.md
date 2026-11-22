@@ -101,6 +101,10 @@ they go to whoever waited, in order, and the waitlist's length shows the demand.
 - The form is on the site page duelbinder.com/waitlist and on the `/full` page.
 - It answers with "You're on the list, we'll email you when a seat opens". The place in line isn't
   shown.
+- While a seat is free and nobody is waiting (an entry whose invite lapsed counts as waiting), it
+  adds no one and answers "Seats are open, sign up now" instead.
+- Joining never sends an invite by itself; invites go out only from a fill. Emails on the waitlist
+  aren't confirmed, so this keeps made-up addresses from holding seats.
 
 ### Invites
 

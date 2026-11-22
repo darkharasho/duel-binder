@@ -55,13 +55,8 @@ export async function waitlistRoute(req: Request, deps: AppDeps): Promise<Respon
 
 /** A free seat and no one waiting for it (an entry whose invite lapsed is still waiting). */
 function seatsOpen(deps: AppDeps, nowIso: string): boolean {
-  if (seatCounts(deps.db, nowIso).free === 0) return false
-  return !deps.db
-    .prepare(
-      `SELECT 1 FROM waitlist w WHERE NOT EXISTS (SELECT 1 FROM seat_invites i
-       WHERE i.waitlist_id = w.id AND i.used_at IS NULL AND i.expires_at > ?) LIMIT 1`
-    )
-    .get(nowIso)
+  const { free, waiting } = seatCounts(deps.db, nowIso)
+  return free > 0 && waiting === 0
 }
 
 function waitlistForm(deps: AppDeps, req: Request): string {

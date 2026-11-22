@@ -114,6 +114,32 @@ describe('seat cap public pages', () => {
     expect(db.prepare('SELECT COUNT(*) AS n FROM seat_invites').get()).toEqual({ n: 0 })
   })
 
+  it('answers an email already on the list with sent=1 even while seats are open', async () => {
+    await post({ email: 'a@example.com' })
+    db.prepare('DELETE FROM users').run()
+    db.prepare(
+      `INSERT INTO seat_invites (token_hash, email, waitlist_id, created_at, expires_at)
+       VALUES ('h', 'a@example.com', (SELECT id FROM waitlist), '2026-11-20T00:00:00.000Z', '2026-12-04T00:00:00.000Z')`
+    ).run()
+    setCap(db, 5, NOW.toISOString())
+    expect((await post({ email: 'a@example.com' })).headers.get('location')).toBe(
+      `${SITE}/waitlist?sent=1`
+    )
+  })
+
+  it('does not count someone who already joined as waiting', async () => {
+    await post({ email: 'first@example.com' })
+    db.prepare(
+      `INSERT INTO seat_invites (token_hash, email, waitlist_id, created_at, expires_at, used_at)
+       VALUES ('h', 'first@example.com', (SELECT id FROM waitlist), '2026-11-01T00:00:00.000Z',
+               '2026-11-15T00:00:00.000Z', '2026-11-02T00:00:00.000Z')`
+    ).run()
+    setCap(db, 5, NOW.toISOString())
+    expect((await post({ email: 'second@example.com' })).headers.get('location')).toBe(
+      `${SITE}/waitlist?open=1`
+    )
+  })
+
   it('joins behind people already waiting even with a seat free, and invites no one', async () => {
     const sent: string[] = []
     deps.email = { send: async (m) => void sent.push(m.to) }

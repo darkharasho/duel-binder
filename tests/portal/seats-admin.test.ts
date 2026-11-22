@@ -156,7 +156,8 @@ describe('admin seats routes', () => {
       [joined, 'joined']
     ])
     expect(sent).toEqual([])
-    expect(l.counts).toMatchObject({ invited: 1, waiting: 1 })
+    // The lapsed invite counts as waiting again, beside the never-invited entry.
+    expect(l.counts).toMatchObject({ invited: 1, waiting: 2 })
   })
 
   it('invite, resend, cancel and delete change state as named', async () => {

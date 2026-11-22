@@ -51,8 +51,14 @@ export function seatCounts(db: SqlDb, nowIso: string): SeatCounts {
       .prepare('SELECT COUNT(*) AS n FROM seat_invites WHERE used_at IS NULL AND expires_at > ?')
       .get(nowIso) as { n: number }
   ).n
+  // Waiting = no live invite and none used; an entry whose invite lapsed is waiting again.
   const waiting = (
-    db.prepare('SELECT COUNT(*) AS n FROM waitlist WHERE invited_at IS NULL').get() as { n: number }
+    db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM waitlist w WHERE NOT EXISTS (SELECT 1 FROM seat_invites i
+         WHERE i.waitlist_id = w.id AND (i.used_at IS NOT NULL OR i.expires_at > ?))`
+      )
+      .get(nowIso) as { n: number }
   ).n
   return { cap, accounts, invited, free: Math.max(0, cap - accounts - invited), waiting }
 }

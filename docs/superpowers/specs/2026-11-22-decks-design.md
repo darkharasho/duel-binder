@@ -120,8 +120,22 @@ Per game:
 |---|---|---|
 | Yu-Gi-Oh! | `.ydk` file or paste, `ydke://` URL, plain "3 Ash Blossom & Joyous Spring" text | `.ydk`, `ydke://`, plain text |
 | Pokémon | Pokémon TCG Live / PTCGO text (`4 Pikachu ex SVI 057`, section headers) | the same text |
-| One Piece | OPTCGSim / common text (`4xOP01-016`) | the same text |
+| One Piece | OPTCGSim / common text (`4xOP01-016`), and OPlay (oplaytcg.com) deck codes and `?d=` share links | the same text, plus an OPlay deck code and share link |
 | Magic | Arena/MTGO text (`4 Lightning Bolt (2X2) 117`, Deck/Sideboard/Commander headers) | Arena text, MTGO text |
+
+**OPlay compatibility (owner's request, 2026-11-22; built in step 3).** OPlay's deck builder imports a deck code, a share link holding one, or a plain list, and shows a deck code to copy. We read and write the same things. The format below was read from their site's own import code on 2026-11-22.
+
+- **Plain list:** one card per line, as `4xOP13-086`, `4x OP13-086 Sabo`, `4 × OP13-086 - Sabo`, `OP13-086 x4` or `OP13-086` (one copy). The separator can be `x`, `×`, `*` or `·`. The Leader is the line whose card is a Leader. A card code matches `[A-Za-z]{1,5}\d{0,3}-\d{1,4}[A-Za-z0-9_]*`.
+- **Share link:** `https://oplaytcg.com/en/deck-builder?d=<deck code>`. A link with `?deck=<number>` points to a deck saved on their server; we can't read it. The import screen says so and asks for the deck code or share link instead.
+- **Deck code v1:** `1` + base64url(`LEADER|4xOP01-016,4xST01-012,…`), at most 80 entries.
+- **Deck code v2** (what OPlay shows today): `2` + a payload + one check character.
+  - **Payload:** a bit stream written 6 bits per character, most significant bit first, in the alphabet `A–Z a–z 0–9 - _`, padded with 0 bits to a multiple of 6.
+  - **Check character:** start with t = 7, then t = (31·t + charCode) mod 4093 over each payload character. The character is alphabet[t mod 64].
+  - **Bits:** 1 bit says there's a Leader. If there is, the Leader card comes first (no qty, no same-set bit). Then 7 bits give the entry count (at most 80), then the entries sorted by code ascending.
+  - **Each entry:** 1 bit for "same prefix and set as the previous card" (the Leader counts as previous). If that bit is 0: 4 bits of family (an index into `OP, ST, EB, PRB, P`; 14 means a custom prefix of 2 bits length−1, then 5 bits per letter with A=0), then 7 bits of set number. Then 10 bits of card number, then 2 bits of qty−1.
+  - **Card text:** a card is `<prefix><set as 2 digits, left out when 0>-<number as 3 digits>`.
+  - **Raw form:** a code not of the form `^([A-Z]{1,4})(\d{2})?-(\d{3})$`, a set over 127 or a qty over 4 is written raw. An entry writes a 0 same-set bit, then 4 bits of 15, 5 bits of length−1, 7 bits per character, and 7 bits of qty. The Leader writes the same without the same-set bit or qty. A raw card doesn't count as "previous" for the next entry.
+- Tests: round-trip our encoder through our decoder, and decode a handful of codes copied from OPlay itself (fixtures in `tests/fixtures/decks/op/`).
 
 - Matching goes by the most exact identifier the line has: passcode, then set code + number, then name. Names match case- and accent-insensitively, and on Pokémon also check `local_name`.
 - The import screen shows a preview: matched lines, ambiguous lines (several cards share the name, so pick one), and unmatched lines. You can fix or drop them before saving. Nothing is dropped silently.

@@ -54,16 +54,28 @@ const FOIL = /^(starlight|ghost|collector's) rare/i
  */
 const NEW_ART_SET =
   /^(Original Artwork (Duel Set|Collection)|Battles of Legend: Glorious Gallery)\b/i
+/**
+ * Printing codes of a set's variant art pool, in every rarity: Rarity Collection 5's stamp arts
+ * (EN083–140) and extended arts (EN141–150), which Yugipedia's set list notes only in a
+ * description and YGOPRODeck has no art for.
+ */
+const NEW_ART_CODE = /^RA05-EN(0(8[3-9]|9\d)|1[0-4]\d|150)$/i
 
 /**
  * Whether a printing looks unlike its card's art from YGOPRODeck: an alternate or overframe art
  * (named in its variant or in brackets after its rarity), a printing its set list marks "New
  * artwork" (variant NEW_ART_VARIANT, e.g. LOCR-JP029–038, an art YGOPRODeck doesn't have yet), a
- * printing in a set of new art (NEW_ART_SET), or a foil that
+ * printing in a set of new art (NEW_ART_SET) or a variant art pool (NEW_ART_CODE), or a foil that
  * changes the picture.
  */
-export function wantsReference(rarity: string, variant: string | null, setName = ''): boolean {
+export function wantsReference(
+  rarity: string,
+  variant: string | null,
+  setName = '',
+  setCode = ''
+): boolean {
   if (FOIL.test(rarity.trim()) || NEW_ART_SET.test(setName.trim())) return true
+  if (NEW_ART_CODE.test(setCode.trim())) return true
   return namedVariant(rarity, variant) !== null
 }
 
@@ -215,7 +227,7 @@ export async function buildReferences(opts: ReferenceOptions): Promise<Reference
         p.set_code &&
         (p.frame_type === 'token' ||
           isTokenId(p.card_id) ||
-          wantsReference(p.set_rarity, p.variant, p.set_name))
+          wantsReference(p.set_rarity, p.variant, p.set_name, p.set_code))
     )
   // Each code's rarities printed in the usual art: an unsuffixed scan of one of those is of that
   // printing, not of an art variant of the same rarity (see fileShowsVariant).

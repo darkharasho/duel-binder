@@ -47,6 +47,14 @@ describe('wantsReference', () => {
     expect(wantsReference('Secret Rare', null, 'Battles of Legend: Glorious Gallery')).toBe(true)
     expect(wantsReference('Secret Rare', null, 'Battles of Legend: Monster Mayhem')).toBe(false)
   })
+
+  it("takes Rarity Collection 5's variant art pool (stamp and extended arts), every rarity", () => {
+    // RA05-EN083–150 carry art YGOPRODeck doesn't have; Yugipedia only notes it in a description.
+    for (const code of ['RA05-EN083', 'RA05-EN107', 'RA05-EN129', 'RA05-EN140', 'RA05-EN150'])
+      expect(wantsReference('Ultra Rare', null, 'Rarity Collection 5', code)).toBe(true)
+    for (const code of ['RA05-EN001', 'RA05-EN082', 'RA05-EN151'])
+      expect(wantsReference('Ultra Rare', null, 'Rarity Collection 5', code)).toBe(false)
+  })
 })
 
 /** A card-shaped image (or any size) whose brightness ramps along x, or y, or a checker. */

@@ -82,8 +82,8 @@ describe('community search terms', () => {
   })
   const propose = (...phrases: string[]): Promise<Response> =>
     call('POST', '/admin/terms/propose', ADMIN, { proposals: phrases.map((p) => proposal(p)) })
-  type Term = { id: number; target?: unknown; phraseKey?: string; evidence: { count: number } }
-  type Feed = { terms: Term[]; deleted: number[]; cursor: number }
+  type Term = { id: number; phrase: string; target?: unknown; phraseKey?: string; evidence: { count: number } }
+  type Feed = { terms: Term[]; deleted: number[]; cursor: number; more: boolean }
   const feed = async (since: number, token = SAM): Promise<Feed> =>
     (await call('GET', `/api/sync/search-terms?game=ygo&since=${since}`, token)).json()
   const pending = async (): Promise<Term[]> =>
@@ -153,7 +153,7 @@ describe('community search terms', () => {
   it("rejects an edit onto another row's phrase with 409", async () => {
     await propose('one', 'two')
     const rows = await pending()
-    const two = rows.find((r) => r.phrase === 'two')
+    const two = rows.find((r) => r.phrase === 'two')!
     const res = await call('POST', '/admin/terms/decide', OWNER, {
       id: two.id,
       status: 'approved',
@@ -166,7 +166,7 @@ describe('community search terms', () => {
   it('a pending row never reaches the feed, not even as deleted', async () => {
     await propose('one', 'two')
     const rows = await pending()
-    const one = rows.find((r) => r.phrase === 'one')
+    const one = rows.find((r) => r.phrase === 'one')!
     await call('POST', '/admin/terms/decide', OWNER, { id: one.id, status: 'rejected' })
     const f = await feed(0)
     expect(f.terms).toEqual([])

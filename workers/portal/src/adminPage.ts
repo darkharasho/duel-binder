@@ -829,11 +829,7 @@ async function loadTerms() {
     }
     game.value = termsGame
     game.addEventListener('change', () => { termsGame = game.value; loadTerms() })
-    const harvest = el('a', 'Run harvest')
-    harvest.href = 'https://github.com/darkharasho/duel-binder/actions/workflows/terms.yml'
-    harvest.target = '_blank'
-    harvest.rel = 'noreferrer'
-    bar.append(game, harvest)
+    bar.append(game)
     p.append(bar)
     const empty = { pending: 'Nothing waiting.', approved: 'No approved terms yet.', rejected: 'Nothing rejected or removed.' }
     for (const [status, title] of [['pending', 'Pending'], ['approved', 'Approved'], ['rejected', 'Rejected']]) {

@@ -123,7 +123,7 @@ export interface AdminTermFields {
 }
 
 /** The GitHub workflows the Runs tab watches. */
-export const ADMIN_WORKFLOWS = ['catalog.yml', 'release.yml', 'terms.yml'] as const
+export const ADMIN_WORKFLOWS = ['catalog.yml', 'release.yml'] as const
 export type AdminWorkflow = (typeof ADMIN_WORKFLOWS)[number]
 
 /** The fields of a GitHub Actions run the Runs tab reads. */

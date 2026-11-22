@@ -12,5 +12,6 @@ out
 .wrangler
 workers/portal/site/app/
 catalog-work/
+terms-work/
 *.p8
 .eslintcache

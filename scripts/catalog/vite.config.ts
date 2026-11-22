@@ -34,6 +34,7 @@ export default defineConfig({
         'zh-art': `${root}scripts/catalog/zhArt.ts`,
         snapshots: `${root}scripts/catalog/snapshots.ts`,
         'terms-harvest': `${root}scripts/terms/harvest.ts`,
+        'terms-post': `${root}scripts/terms/post.ts`,
         'pull-training': `${root}scripts/scan/pull-training.ts`,
         'op-number-replay': `${root}scripts/scan/op-number-replay.ts`,
         'code-replay': `${root}scripts/scan/code-replay.ts`,

@@ -1185,8 +1185,18 @@ describe('Scan page', () => {
       { setName: mrd.setName, language: 'en' }
     ])
 
-    // Each picked set is a chip that takes it off.
+    // The trigger keeps its size; every picked set is in its tooltip and the page row has no chips.
+    expect(screen.getByRole('combobox', { name: 'Sets' })).toHaveAttribute(
+      'title',
+      'LOB - Legend of Blue Eyes White Dragon\nMRD - Metal Raiders'
+    )
+    expect(screen.queryByRole('button', { name: 'Remove MRD - Metal Raiders' })).toBeNull()
+
+    // Opening the list shows them as chips, each one taking its set off.
+    await u.click(screen.getByRole('combobox', { name: 'Sets' }))
+    expect(screen.getByLabelText('Picked sets')).toHaveTextContent('Metal Raiders')
     await u.click(screen.getByRole('button', { name: 'Remove MRD - Metal Raiders' }))
+    await u.keyboard('{Escape}')
     await run(500)
     expect(screen.getByRole('combobox', { name: 'Sets' })).toHaveTextContent(
       'LOB - Legend of Blue Eyes White Dragon'

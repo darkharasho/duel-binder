@@ -82,10 +82,12 @@ describe('community search terms', () => {
   })
   const propose = (...phrases: string[]): Promise<Response> =>
     call('POST', '/admin/terms/propose', ADMIN, { proposals: phrases.map((p) => proposal(p)) })
-  const feed = async (since: number, token = SAM): Promise<any> =>
+  type Term = { id: number; target?: unknown; phraseKey?: string; evidence: { count: number } }
+  type Feed = { terms: Term[]; deleted: number[]; cursor: number }
+  const feed = async (since: number, token = SAM): Promise<Feed> =>
     (await call('GET', `/api/sync/search-terms?game=ygo&since=${since}`, token)).json()
-  const pending = async (): Promise<any[]> =>
-    ((await (await call('GET', '/admin/terms?status=pending', OWNER)).json()) as any).terms
+  const pending = async (): Promise<Term[]> =>
+    ((await (await call('GET', '/admin/terms?status=pending', OWNER)).json()) as { terms: Term[] }).terms
 
   it('proposes as pending, outside the feed', async () => {
     const res = await propose('blue eyes')
@@ -102,7 +104,7 @@ describe('community search terms', () => {
     const ok = await call('POST', '/admin/terms/decide', OWNER, { id, status: 'approved' })
     expect(ok.status).toBe(200)
     const a = await feed(0)
-    expect(a.terms.map((t: any) => t.id)).toEqual([id])
+    expect(a.terms.map((t) => t.id)).toEqual([id])
     expect(a.cursor).toBeGreaterThan(0)
     expect(a.more).toBe(false)
     await call('POST', '/admin/terms/decide', OWNER, { id, status: 'rejected' })
@@ -209,7 +211,7 @@ describe('community search terms', () => {
         })
       ).status
     ).toBe(200)
-    const approved = (await feed(0)).terms.find((t: any) => t.id === p.id)
+    const approved = (await feed(0)).terms.find((t) => t.id === p.id)
     expect(approved).toMatchObject({ targetKind: 'rarity', target: { rarities: ['Ultra Rare'] } })
   })
 
@@ -231,11 +233,11 @@ describe('community search terms', () => {
     res = await add()
     expect(await res.json()).toEqual({ error: 'duplicate-rejected' })
     const listed = await (await call('GET', '/admin/terms?status=rejected&game=ygo', OWNER)).json()
-    expect((listed as any).terms.map((t: any) => t.id)).toEqual([id])
+    expect((listed as { terms: Term[] }).terms.map((t) => t.id)).toEqual([id])
     expect(
       (await call('POST', '/admin/terms/decide', OWNER, { id, status: 'approved' })).status
     ).toBe(200)
-    expect((await feed(0)).terms.map((t: any) => t.id)).toEqual([id])
+    expect((await feed(0)).terms.map((t) => t.id)).toEqual([id])
     expect(await (await add()).json()).toEqual({ error: 'duplicate-approved' })
   })
 

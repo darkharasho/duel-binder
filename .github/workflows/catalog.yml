@@ -139,6 +139,17 @@ jobs:
           path: catalog-work/base.sqlite
           key: catalog-base-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: catalog-base-
+      # The Yu-Gi-Oh! deck rules pack (banlists, unreleased cards): its own small file on the portal,
+      # read straight from YGOPRODeck. First, so a failed catalog stage never holds back a banlist
+      # change. Bounded and never blocks the stages after it; a failure turns the night red.
+      - name: Deck rules pack
+        id: rules
+        timeout-minutes: 10
+        continue-on-error: true
+        run: npm run catalog:rules
+      - name: Flag failed rules pack
+        if: steps.rules.outcome == 'failure'
+        run: echo "CATALOG_PROBLEMS=1" >> "$GITHUB_ENV"
       # One step per stage so the admin page can show each one's time. A problem only fails the run
       # at "Check for problems", so it doesn't stop the stages after it.
       - name: Refresh Yu-Gi-Oh
@@ -194,15 +205,6 @@ jobs:
         run: npm run catalog:snapshots
       - name: Flag failed snapshots
         if: steps.snapshots.outcome == 'failure'
-        run: echo "CATALOG_PROBLEMS=1" >> "$GITHUB_ENV"
-      # The Yu-Gi-Oh! deck rules pack (banlists, unreleased cards): its own small file on the portal.
-      # Never blocks the stages after it; a failure turns the night red.
-      - name: Deck rules pack
-        id: rules
-        continue-on-error: true
-        run: npm run catalog:rules
-      - name: Flag failed rules pack
-        if: steps.rules.outcome == 'failure'
         run: echo "CATALOG_PROBLEMS=1" >> "$GITHUB_ENV"
       - name: Yu-Gi-Oh fingerprints
         run: npm run catalog:job -- --stage fingerprints-ygo

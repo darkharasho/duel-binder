@@ -62,6 +62,8 @@ export interface Scope {
   sessions: WishlistScope
   /** `graded_copies` scoping: the same shape as `wishlist`. */
   graded: WishlistScope
+  /** `decks` scoping: the same shape as `wishlist`. */
+  decks: WishlistScope
   /**
    * value_snapshots scoping. `insertCols`/`insertVals` are comma-terminated fragments placed before
    * `date` / `?` in an INSERT (and `insertCols + 'date'` is the upsert conflict target); `where` limits a read
@@ -177,6 +179,13 @@ export function localScope(game: string, owner: string = ACTIVE_OWNER): Scope {
       touch: 'dirty = 1'
     },
     graded: {
+      ownerCol: 'owner_id',
+      owner,
+      markerCol: 'dirty',
+      marker: '1',
+      touch: 'dirty = 1'
+    },
+    decks: {
       ownerCol: 'owner_id',
       owner,
       markerCol: 'dirty',

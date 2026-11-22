@@ -773,6 +773,21 @@ CREATE INDEX ix_search_terms_game_status ON search_terms(game, status);
 CREATE VIRTUAL TABLE cards_fts_vocab USING fts5vocab(cards_fts, row);
 `
 
+/**
+ * Decks: one row per deck, keyed by a uid, as graded copies are. `cards` is the JSON list of
+ * entries (card ids, an optional pinned pkey), with no foreign key, so a deck keeps a card this
+ * catalog lacks. `last_verdict` / `last_pack_version` are this device's last legality check and are
+ * never synced. The server has its own shape, so this step is desktop-only (see server-53).
+ */
+export const SCHEMA_V53 = `
+CREATE TABLE decks (owner_id INTEGER NOT NULL DEFAULT 0, uid TEXT NOT NULL, game TEXT NOT NULL, format TEXT NOT NULL,
+  name TEXT NOT NULL, notes TEXT NOT NULL DEFAULT '', cover INTEGER, private INTEGER NOT NULL DEFAULT 0,
+  cards TEXT NOT NULL DEFAULT '[]', last_verdict TEXT, last_pack_version TEXT,
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT, dirty INTEGER NOT NULL DEFAULT 1,
+  PRIMARY KEY (owner_id, uid));
+CREATE INDEX ix_decks_dirty ON decks(owner_id) WHERE dirty = 1;
+`
+
 export const MIGRATIONS: Migration[] = [
   { version: 1, sql: SCHEMA_V1 },
   { version: 2, sql: SCHEMA_V2 },
@@ -825,5 +840,6 @@ export const MIGRATIONS: Migration[] = [
   { version: 49, sql: SCHEMA_V49, server: false },
   { version: 50, sql: SCHEMA_V50 },
   { version: 51, sql: SCHEMA_V51, server: false },
-  { version: 52, sql: SCHEMA_V52, server: false }
+  { version: 52, sql: SCHEMA_V52, server: false },
+  { version: 53, sql: SCHEMA_V53, server: false }
 ]

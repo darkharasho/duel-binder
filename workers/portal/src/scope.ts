@@ -22,6 +22,9 @@ export const NEXT_FAVOURITE_SEQ = '(SELECT COALESCE(MAX(seq), 0) + 1 FROM favour
 /** SQL for the next graded_copies seq: one past the highest in use (the column is unique). */
 export const NEXT_GRADED_SEQ = '(SELECT COALESCE(MAX(seq), 0) + 1 FROM graded_copies)'
 
+/** SQL for the next decks seq: one past the highest in use (the column is unique). */
+export const NEXT_DECK_SEQ = '(SELECT COALESCE(MAX(seq), 0) + 1 FROM decks)'
+
 /** One user's live (non-deleted) rows of one game on the server. */
 export function userScope(userId: number, game: GameId): Scope {
   if (!Number.isSafeInteger(userId)) throw new Error(`Invalid user id: ${userId}`)
@@ -66,7 +69,13 @@ export function userScope(userId: number, game: GameId): Scope {
     },
     binderSync(table) {
       const next = table === 'binders' ? NEXT_BINDER_SEQ : NEXT_BINDER_EDIT_SEQ
-      return { ownerCol: 'user_id', owner: String(userId), markerCol: 'seq', marker: next, touch: `seq = ${next}` }
+      return {
+        ownerCol: 'user_id',
+        owner: String(userId),
+        markerCol: 'seq',
+        marker: next,
+        touch: `seq = ${next}`
+      }
     },
     sessions: {
       ownerCol: 'user_id',
@@ -88,6 +97,13 @@ export function userScope(userId: number, game: GameId): Scope {
       markerCol: 'seq',
       marker: NEXT_GRADED_SEQ,
       touch: `seq = ${NEXT_GRADED_SEQ}`
+    },
+    decks: {
+      ownerCol: 'user_id',
+      owner: String(userId),
+      markerCol: 'seq',
+      marker: NEXT_DECK_SEQ,
+      touch: `seq = ${NEXT_DECK_SEQ}`
     },
     snapshotTable: {
       insertCols: 'user_id, game, ',

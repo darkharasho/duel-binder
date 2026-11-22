@@ -1004,6 +1004,19 @@ CREATE TABLE seat_invites (token_hash TEXT PRIMARY KEY, waitlist_id INTEGER, ema
 CREATE INDEX ix_seat_invites_waitlist ON seat_invites(waitlist_id);
 CREATE INDEX ix_seat_invites_email ON seat_invites(email);
 `
+  },
+  // Decks, numbered by their own clock (`seq`), as graded copies are in server-49.
+  {
+    name: 'server-53',
+    sql: `
+CREATE TABLE decks (user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, uid TEXT NOT NULL,
+  game TEXT NOT NULL, format TEXT NOT NULL, name TEXT NOT NULL, notes TEXT NOT NULL DEFAULT '', cover INTEGER,
+  private INTEGER NOT NULL DEFAULT 0, cards TEXT NOT NULL DEFAULT '[]', last_verdict TEXT, last_pack_version TEXT,
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT, seq INTEGER NOT NULL,
+  PRIMARY KEY (user_id, uid));
+CREATE UNIQUE INDEX ux_decks_seq ON decks(seq);
+CREATE INDEX ix_decks_user_seq ON decks(user_id, seq);
+`
   }
 ]
 

@@ -84,6 +84,7 @@ import type { Prefs } from './prefs'
 import type { SupporterPlan, SupporterStatus } from './supporter'
 import type { BinderDraft, BinderEditAction, BinderTarget, RuleField } from './binders'
 import type { GradedCopy, GradedDraft } from './graded'
+import type { PackState } from './decks/pack'
 import type { TermNote, TermStatus } from './search/terms'
 
 /** The API exposed to the renderer as `window.api`. */
@@ -200,6 +201,11 @@ export interface Api {
     list(): Promise<number[]>
     /** Hearts a card (`on`) or takes the heart off it. */
     set(cardId: number, on: boolean): Promise<void>
+  }
+  /** Decks. */
+  decks: {
+    /** The game's rules pack (card limits and release dates), from this device's cache or the portal. */
+    rules(game: GameId): Promise<PackState>
   }
   /** Graded copies (slabs), in the game shown; private, and never counted toward completion. */
   graded: {
@@ -572,6 +578,7 @@ export const INVOKE_CHANNELS = [
   'sessions:removeCard',
   'favourites:list',
   'favourites:set',
+  'decks:rules',
   'graded:list',
   'graded:forCard',
   'graded:save',

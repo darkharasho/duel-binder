@@ -31,6 +31,7 @@ import { adminTabUrl, INVOKE_CHANNELS as CHANNELS } from '@shared/ipc'
 import type { ImageCache } from '../images/cache'
 import { createDataHandlers } from './dataHandlers'
 import { getMeta } from '../db/meta'
+import type { PackState } from '@shared/decks/pack'
 import { catalogCursorKey } from '../catalog/apply'
 import { activeGame } from '../cloud/activeGame'
 import type { RollupRunner } from '../rollupRunner'
@@ -110,6 +111,8 @@ export interface HandlerDeps {
   rollups?: Pick<RollupRunner, 'build'>
   /** Told which language Browse asks its filters in, so a catalog change builds those ahead. */
   rollupWarmer?: Pick<RollupWarmer, 'browsed'>
+  /** A game's rules pack from the device's cache or the portal; absent (tests) means none. */
+  rulesPack?: (game: GameId) => Promise<PackState>
 }
 
 /** A training photo from the renderer, checked as the portal would check it; null when it isn't one. */
@@ -178,7 +181,8 @@ export function createHandlers({
   ripCapture,
   scanTrace,
   rollups,
-  rollupWarmer
+  rollupWarmer,
+  rulesPack = async () => ({ state: 'missing' })
 }: HandlerDeps): Handlers {
   const mustBeAdmin = (): void => {
     if (!account.status().user?.admin) throw new Error('Not found')
@@ -255,6 +259,7 @@ export function createHandlers({
       const ids = local(serverIdsOf.sessions(sessions))
       return sessions.map((s) => friendSession(s, ids))
     },
+    'decks:rules': (game: GameId) => rulesPack(game),
     'friends:graded': async (friendId: number) => {
       const slabs = await account.portal<GradedCopy[]>('friends:graded', [friendId])
       const ids = local(serverIdsOf.graded(slabs))

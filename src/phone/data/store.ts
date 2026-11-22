@@ -32,6 +32,8 @@ import { gamesOf, type Me } from '../../shared/cloud'
 import { GAME_IDS, GAMES, type GameId } from '../../shared/games'
 import { FRIENDS_SIGNED_OUT, OFFLINE_MESSAGE } from '../../shared/friends'
 import type { PortalChannel } from '../../shared/portal'
+import { loadRulesPack } from '../../shared/decks/rulesCache'
+import type { PackState } from '../../shared/decks/pack'
 import { decodeFingerprints } from '../../shared/scan/fingerprintFile'
 import { parseFingerprintRefs, type ScanRef } from '../../shared/scan/fingerprintRefs'
 import { scanRefs } from '../../main/repo/scanRefs'
@@ -89,6 +91,8 @@ export type { TrainingSend } from '../../shared/training'
 
 export interface PhoneStore {
   account(): Promise<PhoneAccount>
+  /** A game's rules pack from the `phone_files` cache or the portal; a read, outside the serial queue. */
+  rulesPack(game: GameId): Promise<PackState>
   signIn(token: string, user: Me): Promise<void>
   /**
    * Stores the signed-in account's `me` as the portal just returned it (a new username, a dismissed
@@ -904,6 +908,37 @@ export function createPhoneStore(deps: {
       edits = queued.catch(() => {})
       return queued
     },
+
+    rulesPack: (game) =>
+      read(() =>
+        loadRulesPack(game, {
+          store: {
+            read: async (g) => {
+              const row = db
+                .prepare('SELECT etag, checked_at, bytes FROM phone_files WHERE name = ?')
+                .get(`rules-${g}.json`) as
+                { etag: string | null; checked_at: string; bytes: Uint8Array } | undefined
+              return row
+                ? {
+                    body: new TextDecoder().decode(row.bytes),
+                    etag: row.etag,
+                    checkedAt: row.checked_at
+                  }
+                : null
+            },
+            write: async (g, c) => {
+              db.prepare(
+                `INSERT INTO phone_files (name, etag, checked_at, bytes) VALUES (?, ?, ?, ?)
+                 ON CONFLICT(name) DO UPDATE SET etag = excluded.etag,
+                   checked_at = excluded.checked_at, bytes = excluded.bytes`
+              ).run(`rules-${g}.json`, c.etag, c.checkedAt, new TextEncoder().encode(c.body))
+            }
+          },
+          fetch: doFetch,
+          origin: base,
+          now
+        })
+      ),
 
     portal: <T>(channel: PortalChannel, args: unknown[]) =>
       serial(() => portalCall<T>(channel, args)),

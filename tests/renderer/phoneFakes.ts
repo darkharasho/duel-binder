@@ -87,6 +87,7 @@ export function fakeStore(
   >
   const store: PhoneStore = {
     account: vi.fn(async () => state.account),
+    rulesPack: vi.fn(async () => ({ state: 'missing' as const })),
     signIn: vi.fn(async (_token: string, user: Me) => {
       state.account = { state: 'signed-in', user }
     }),

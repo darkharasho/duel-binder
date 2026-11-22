@@ -238,6 +238,9 @@ export function createPhoneApi(deps: {
     placeholders: {
       save: () => Promise.reject(new Error('Placeholders are only in the desktop app'))
     },
+    decks: {
+      rules: (game) => store.rulesPack(game)
+    },
     friends: {
       overview: portal('friends:overview'),
       request: portal('friends:request'),

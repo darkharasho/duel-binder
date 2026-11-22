@@ -153,6 +153,9 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
       list: vi.fn(async () => []),
       set: vi.fn(async () => undefined)
     },
+    decks: {
+      rules: vi.fn(async () => ({ state: 'missing' as const }))
+    },
     graded: {
       list: vi.fn(async () => []),
       forCard: vi.fn(async () => []),

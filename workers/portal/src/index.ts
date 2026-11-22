@@ -18,6 +18,7 @@ import { migrateServer } from './migrate'
 import { handArtRoute } from './handArt'
 import { opArtRoute } from './opArt'
 import { appBundlesRoute } from './appBundles'
+import { rulesPackRoute } from './rulesPack'
 import { catalogSnapshotRoute } from './catalogSnapshot'
 import { thumbsRoute } from './thumbs'
 import { alarmQueue, priceClientFor, runPriceAlarm, type PriceQueue } from './prices'
@@ -177,6 +178,8 @@ export default {
     if (snapshot) return snapshot
     const bundles = await appBundlesRoute(req, env.IMAGES, env.ADMIN_TOKEN, edgeCache())
     if (bundles) return withAppCors(req, bundles)
+    const rules = await rulesPackRoute(req, env.IMAGES, env.ADMIN_TOKEN, edgeCache())
+    if (rules) return withAppCors(req, rules)
     const thumbs = await thumbsRoute(req, env.IMAGES, env.ADMIN_TOKEN)
     if (thumbs) return thumbs
     const opArt = await opArtRoute(req, env.IMAGES, env.ADMIN_TOKEN)

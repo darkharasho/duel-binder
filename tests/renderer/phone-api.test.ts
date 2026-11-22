@@ -22,6 +22,7 @@ const ME = { id: 7, username: 'alice', displayName: 'Alice', avatarUrl: null }
 function fakeStore(over: Partial<PhoneStore> = {}): PhoneStore {
   return {
     account: vi.fn(async () => ({ state: 'signed-in' as const, user: ME })),
+    rulesPack: vi.fn(async () => ({ state: 'missing' as const })),
     signIn: vi.fn(async () => {}),
     updateUser: vi.fn(async () => {}),
     signOut: vi.fn(async () => ({ waiting: 0 })),

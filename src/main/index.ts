@@ -49,6 +49,7 @@ import { describeError, type ErrorDetails } from '@shared/errorReports'
 import { createCloudClient } from './cloud/client'
 import { GAMES, GAME_IDS, isGameId, type GameId } from '@shared/games'
 import { getMeta, setMeta } from './db/meta'
+import { loadRulesPack, type CachedPack } from '@shared/decks/rulesCache'
 import type { FingerprintStore } from './scan/fingerprints'
 import { createFingerprintStore } from './scan/fingerprints'
 import { createOcr } from './scan/ocr'
@@ -622,7 +623,21 @@ async function bootstrap(): Promise<void> {
         open: (p) => shell.openPath(p)
       }),
       rollups,
-      rollupWarmer
+      rollupWarmer,
+      rulesPack: (game) =>
+        loadRulesPack(game, {
+          store: {
+            read: async (g) => {
+              const raw = getMeta(db, `rules_pack_${g}`)
+              return raw ? (JSON.parse(raw) as CachedPack) : null
+            },
+            write: async (g, c) => setMeta(db, `rules_pack_${g}`, JSON.stringify(c))
+          },
+          // The global fetch, looked up now: it has the Chromium fallback.
+          fetch: (input, init) => globalThis.fetch(input, init),
+          origin: portal,
+          now: () => new Date()
+        })
     })
   )
 

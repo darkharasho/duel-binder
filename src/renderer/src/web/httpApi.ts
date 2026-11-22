@@ -1,3 +1,4 @@
+import { loadRulesPack, type CachedPack, type PackStore } from '../../../shared/decks/rulesCache'
 import { GAME_HEADER, gamesOf, type Me } from '../../../shared/cloud'
 import { isGameId, type GameId } from '../../../shared/games'
 import { adminTabUrl, type Api } from '../../../shared/ipc'
@@ -33,6 +34,21 @@ const SYNC_IDLE: SyncStatus = {
   blockedRetry: null
 }
 const UPDATE_IDLE: UpdateStatus = { state: 'idle', mode: 'auto', version: null, error: null }
+
+/** The rules packs in the browser's Cache API, keyed by their route; no Cache API means no cache. */
+const RULES_CACHE = 'duel-binder-rules'
+const rulesKey = (game: GameId): string => `${location.origin}/api/rules/${game}`
+const rulesStore: PackStore = {
+  async read(game) {
+    if (typeof caches === 'undefined') return null
+    const hit = await (await caches.open(RULES_CACHE)).match(rulesKey(game))
+    return hit ? ((await hit.json()) as CachedPack) : null
+  },
+  async write(game, c) {
+    if (typeof caches === 'undefined') return
+    await (await caches.open(RULES_CACHE)).put(rulesKey(game), Response.json(c))
+  }
+}
 
 /**
  * An `Api` for the browser: the portal's channels go to the Worker's
@@ -244,6 +260,15 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
     favourites: {
       list: call('favourites:list'),
       set: call('favourites:set')
+    },
+    decks: {
+      rules: (game) =>
+        loadRulesPack(game, {
+          store: rulesStore,
+          fetch: doFetch,
+          origin: location.origin,
+          now: () => new Date()
+        })
     },
     graded: {
       list: call('graded:list'),

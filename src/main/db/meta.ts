@@ -1,3 +1,4 @@
+import type { GameId } from '@shared/games'
 import type { SqlDb } from './sql'
 
 export type MetaKey =
@@ -84,6 +85,8 @@ export type MetaKey =
    * they go to once it has been pulled (see adoptMergedData).
    */
   | `merge_hold:${number}`
+  /** A game's rules pack as the portal sent it, with its ETag and when it was checked (a `CachedPack`). */
+  | `rules_pack_${GameId}`
 
 export function getMeta(db: SqlDb, key: MetaKey): string | null {
   const row = db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as

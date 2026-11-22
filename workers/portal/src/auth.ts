@@ -2,7 +2,7 @@ import { pruneLimits } from './authLimits'
 import type { Me } from '../../../src/shared/cloud'
 import { allowedGames, GAMES, isGameId, type GameId } from '../../../src/shared/games'
 import type { AppDeps } from './app'
-import { appleRefreshToken, verifyAppleIdentityToken } from './apple'
+import { appleRefreshToken, revokeAppleToken, verifyAppleIdentityToken } from './apple'
 import { attachFromFlow, EmailAuthError } from './emailAuth'
 import { claimTarget, makeClaim } from './emailClaim'
 import { emailEnabled } from './emailSend'
@@ -26,7 +26,7 @@ const NEXT_COOKIE = 'signin_next'
 const SCAN_HOME = '/scan/'
 const SCAN_FAILED = '/scan/?signin=failed'
 /** Where a web sign-up lands when every seat is taken (the scan return path too). */
-const FULL_PAGE = '/full'
+export const FULL_PAGE = '/full'
 /** Desktop tokens last a year and slide forward on use, at most once a day. */
 const DESKTOP_TTL_MS = 365 * DAY_MS
 const DESKTOP_SLIDE_BELOW_MS = 364 * DAY_MS
@@ -593,9 +593,8 @@ export async function finishSignIn(req: Request, deps: AppDeps): Promise<Respons
 
   const invite = readSeatInvite(req)
   const inviteHash = invite === null ? null : await sha256Hex(invite)
-  let created: boolean
   try {
-    created = deps.db.transaction((): boolean => {
+    deps.db.transaction((): void => {
       pruneExpired(deps, nowIso)
       const signedIn = discordSignIn(user, deps, nowIso, { inviteHash })
       deps.db
@@ -608,7 +607,6 @@ export async function finishSignIn(req: Request, deps: AppDeps): Promise<Respons
           nowIso,
           new Date(now.getTime() + SESSION_MAX_AGE * 1000).toISOString()
         )
-      return signedIn.created
     })()
   } catch (err) {
     if (!(err instanceof SeatsFull)) throw err
@@ -617,7 +615,9 @@ export async function finishSignIn(req: Request, deps: AppDeps): Promise<Respons
     return redirect(FULL_PAGE, spent)
   }
   const signedIn = [cookie('session', secret, SESSION_MAX_AGE), clearCookie('oauth_state')]
-  if (created && invite !== null) signedIn.push(clearCookie(SEAT_INVITE_COOKIE))
+  // A spent invite, or one an existing account didn't need (it was voided by email or waits to
+  // expire): the cookie has done its job either way.
+  if (invite !== null) signedIn.push(clearCookie(SEAT_INVITE_COOKIE))
   if (toScan) return redirect(SCAN_HOME, [...signedIn, clearCookie(NEXT_COOKIE)])
   return redirect('/', signedIn)
 }
@@ -807,6 +807,14 @@ export async function exchangeAppleToken(req: Request, deps: AppDeps): Promise<R
     userId = signIn()
   } catch (err) {
     if (!(err instanceof SeatsFull)) throw err
+    // The code was already traded, so Apple lists Duel Binder as connected: undo that.
+    if (refreshToken) {
+      const revoked = await revokeAppleToken(refreshToken, deps).catch((e: unknown) => {
+        console.warn('Apple token revoke after a full sign-up threw', e)
+        return false
+      })
+      if (!revoked) console.warn('Apple token revoke failed for a sign-up refused as full')
+    }
     return jsonResponse(403, { error: 'full' })
   }
   return jsonResponse(200, { token, user: loadMe(deps, userId) })

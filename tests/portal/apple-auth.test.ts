@@ -5,6 +5,7 @@ import { memoryBucket, noPrintingArt, noPrices } from './helpers'
 import { APPLE_NONCE, appleIdentityToken, appleTestKeys } from './appleKeys'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
 import { migrateServer } from '../../workers/portal/src/migrate'
+import { setCap } from '../../workers/portal/src/seats'
 import {
   APPLE_AUDIENCE,
   APPLE_ISSUER,
@@ -359,6 +360,41 @@ describe('Sign in with Apple', () => {
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
       expect((await deleteAccount(token)).status).toBe(204)
       expect(db.prepare('SELECT count(*) AS n FROM users').get()).toEqual({ n: 0 })
+      expect(warn).toHaveBeenCalled()
+      warn.mockRestore()
+    })
+
+    it('revokes the traded token when the sign-up is refused as full', async () => {
+      withAppleKey()
+      setCap(db, 0, NOW.toISOString())
+      const res = await signIn({
+        identityToken: identityToken(),
+        nonce: NONCE,
+        authorizationCode: 'c0de'
+      })
+      expect(res.status).toBe(403)
+      expect(await res.json()).toEqual({ error: 'full' })
+      expect(tokenCalls).toHaveLength(1)
+      expect(revokeCalls.map((c) => c.get('token'))).toEqual(['rt-1'])
+      expect(storedToken()).toBeUndefined()
+    })
+
+    it('still answers full when that revoke throws', async () => {
+      withAppleKey()
+      setCap(db, 0, NOW.toISOString())
+      const fetchMock = deps.fetch
+      deps.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input) === APPLE_REVOKE_URL) throw new Error('offline')
+        return fetchMock(input, init)
+      }) as typeof fetch
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const res = await signIn({
+        identityToken: identityToken(),
+        nonce: NONCE,
+        authorizationCode: 'c0de'
+      })
+      expect(res.status).toBe(403)
+      expect(await res.json()).toEqual({ error: 'full' })
       expect(warn).toHaveBeenCalled()
       warn.mockRestore()
     })

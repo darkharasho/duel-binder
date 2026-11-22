@@ -281,12 +281,25 @@ describe('the seat gate', () => {
       expect(Object.keys((await res.json()) as object)).toEqual(['error'])
     })
 
-    it('the web form shows the full copy', async () => {
+    it('the web form sends a full sign-up to /full, with its waitlist form', async () => {
       addUser(db, '1', 'first')
       full()
       const res = await emailForm('create', create)
-      expect(res.status).toBe(403)
-      expect(await res.text()).toContain(EMAIL_COPY.full.replace("'", '&#39;'))
+      expect(res.status).toBe(303)
+      expect(res.headers.get('location')).toBe('/full')
+      expect(sender.sent).toEqual([])
+    })
+
+    it('the web form confirm that finds the seats filled also goes to /full', async () => {
+      addUser(db, '1', 'first')
+      setCap(db, 2, NOW_ISO)
+      const created = await emailForm('create', create)
+      const ticket = ticketOf(await created.text())
+      full()
+      const res = await emailForm('confirm', { ticket, email: 'new@x.io', code: sender.lastCode() })
+      expect(res.status).toBe(303)
+      expect(res.headers.get('location')).toBe('/full')
+      expect(accounts()).toBe(1)
     })
 
     it('the web form with an invite cookie goes to the code step, and confirm makes the account', async () => {
@@ -357,6 +370,39 @@ describe('the seat gate', () => {
       const res = await emailJson('password', { email: 'new@x.io', password: 'hunter2hunter2' })
       expect(res.status).toBe(200)
       expect(((await res.json()) as { next: string }).next).toBe('signed-in')
+    })
+  })
+
+  describe('an invite cookie on an existing account', () => {
+    it('web Discord clears the cookie and leaves the invite', async () => {
+      addUser(db, '111', 'kaiba')
+      invite('tok-1')
+      const res = await webDiscord('seat_invite=tok-1')
+      expect(res.headers.get('location')).toBe('/')
+      expect(res.headers.getSetCookie()).toContainEqual(
+        expect.stringMatching(/^seat_invite=;.*Max-Age=0/)
+      )
+      expect(inviteUsed('tok-1').used_at).toBeNull()
+    })
+
+    it('the web email password sign-in clears it too', async () => {
+      const created = await emailForm('create', {
+        email: 'new@x.io',
+        password: 'hunter2hunter2',
+        password_confirm: 'hunter2hunter2'
+      })
+      const ticket = ticketOf(await created.text())
+      await emailForm('confirm', { ticket, email: 'new@x.io', code: sender.lastCode() })
+      invite('tok-2')
+      const res = await emailForm(
+        'password',
+        { email: 'new@x.io', password: 'hunter2hunter2' },
+        'seat_invite=tok-2'
+      )
+      expect(res.status).toBe(303)
+      expect(res.headers.getSetCookie()).toContainEqual(
+        expect.stringMatching(/^seat_invite=;.*Max-Age=0/)
+      )
     })
   })
 

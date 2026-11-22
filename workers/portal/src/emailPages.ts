@@ -6,6 +6,7 @@ import {
   EMAIL_LINK_COOKIE,
   EMAIL_LINK_MAX_AGE,
   EMAIL_LINK_PATH,
+  FULL_PAGE,
   SESSION_MAX_AGE,
   clearCookie,
   cookie,
@@ -330,13 +331,16 @@ export async function emailFormRoute(req: Request, deps: AppDeps, step: string):
         res.headers.append('set-cookie', cookie('session', token, SESSION_MAX_AGE))
         res.headers.append('set-cookie', clearCookie(EMAIL_LINK_COOKIE, EMAIL_LINK_PATH))
         res.headers.append('set-cookie', clearCookie(EMAIL_CLAIM_COOKIE, EMAIL_CLAIM_PATH))
-        if (out.created && invite !== null)
-          res.headers.append('set-cookie', clearCookie(SEAT_INVITE_COOKIE))
+        // Spent, or not needed by an account that already existed: either way it's done.
+        if (invite !== null) res.headers.append('set-cookie', clearCookie(SEAT_INVITE_COOKIE))
         return res
       }
     }
   } catch (err) {
     if (!(err instanceof EmailAuthError)) throw err
+    // No seat: the full page, with its waitlist form, as for a web Discord sign-up.
+    if (err.code === 'full')
+      return new Response(null, { status: 303, headers: { location: FULL_PAGE } })
     return errorPage(deps, req, step, f, carry, err)
   }
 }

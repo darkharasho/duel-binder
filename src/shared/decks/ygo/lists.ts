@@ -16,14 +16,18 @@ export interface ParsedList {
 }
 
 const SECTIONS: DeckSection[] = ['main', 'extra', 'side']
-const SECTION_LABEL: Record<DeckSection, string> = { main: 'Main Deck', extra: 'Extra Deck', side: 'Side Deck' }
+const SECTION_LABEL: Record<DeckSection, string> = {
+  main: 'Main Deck',
+  extra: 'Extra Deck',
+  side: 'Side Deck'
+}
 
 function splitLines(text: string): string[] {
-  return text.replace(/^﻿/, '').split(/\r\n|\r|\n/)
+  return text.replace(/^\uFEFF/, '').split(/\r\n|\r|\n/)
 }
 
 export function detectYgoList(text: string): 'ydk' | 'ydke' | 'text' {
-  const t = text.replace(/^﻿/, '').trim()
+  const t = text.replace(/^\uFEFF/, '').trim()
   if (/^ydke:\/\//i.test(t)) return 'ydke'
   for (const l of splitLines(text)) {
     const s = l.trim().toLowerCase()
@@ -98,13 +102,13 @@ function parseYdke(text: string): ParsedList {
 
 const HEADER =
   /^(?:(main|extra|side)(?:\s+deck)?|(sideboard))\s*(?:\(\s*\d+\s*\)|\d+)?\s*:?\s*(?:\(\s*\d+\s*\))?$/i
-const TRAILING_BRACKET = /\s*(?:\([^()]*\)|\[[^\[\]]*\])\s*$/
+const TRAILING_BRACKET = /\s*(?:\([^()]*\)|\[[^[\]]*\])\s*$/
 
 function normalize(s: string): string {
   return s
     .replace(/[“”„‟«»]/g, '"')
     .replace(/[‘’‚‛]/g, "'")
-    .replace(/[   ]/g, ' ')
+    .replace(/[\u00A0\u2007\u202F]/g, ' ')
 }
 
 function stripBrackets(s: string): string {
@@ -170,12 +174,16 @@ export function parseYgoList(text: string): ParsedList {
 
 function passcodes(entries: DeckEntry[], section: DeckSection): number[] {
   const ids: number[] = []
-  for (const e of entries) if (e.section === section) for (let i = 0; i < e.qty; i++) ids.push(e.card)
+  for (const e of entries)
+    if (e.section === section) for (let i = 0; i < e.qty; i++) ids.push(e.card)
   return ids
 }
 
 export function toYdk(entries: DeckEntry[]): string {
-  const block = (s: DeckSection): string => passcodes(entries, s).map((id) => `${id}\n`).join('')
+  const block = (s: DeckSection): string =>
+    passcodes(entries, s)
+      .map((id) => `${id}\n`)
+      .join('')
   return `#created by Duel Binder\n#main\n${block('main')}#extra\n${block('extra')}!side\n${block('side')}`
 }
 

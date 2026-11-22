@@ -11,7 +11,11 @@ function ygoRank(card: DeckCard | undefined): number {
 }
 
 /** A sorted copy for display and export; entries that tie keep their given order. */
-export function sortEntries(game: GameId, entries: DeckEntry[], cards: Record<number, DeckCard>): DeckEntry[] {
+export function sortEntries(
+  game: GameId,
+  entries: DeckEntry[],
+  cards: Record<number, DeckCard>
+): DeckEntry[] {
   const rank = (e: DeckEntry): number => (game === 'ygo' ? ygoRank(cards[e.card]) : 0)
   return [...entries].sort((a, b) => {
     const r = rank(a) - rank(b)

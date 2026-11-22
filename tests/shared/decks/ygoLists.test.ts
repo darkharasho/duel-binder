@@ -1,12 +1,19 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { detectYgoList, parseYgoList, toYdk, toYdke, toYgoText } from '../../../src/shared/decks/ygo/lists'
+import {
+  detectYgoList,
+  parseYgoList,
+  toYdk,
+  toYdke,
+  toYgoText
+} from '../../../src/shared/decks/ygo/lists'
 import type { ParsedList } from '../../../src/shared/decks/ygo/lists'
 import { sortEntries } from '../../../src/shared/decks/sort'
 import type { DeckCard, DeckEntry } from '../../../src/shared/decks/types'
 
-const fx = (n: string): string => readFileSync(join(__dirname, '../../fixtures/decks/ygo', n), 'utf8')
+const fx = (n: string): string =>
+  readFileSync(join(__dirname, '../../fixtures/decks/ygo', n), 'utf8')
 
 function totals(p: ParsedList): Record<string, number> {
   const t: Record<string, number> = { main: 0, extra: 0, side: 0 }
@@ -18,7 +25,14 @@ function keyed(p: ParsedList): string[] {
 }
 
 const card = (id: number, name: string, type: string): DeckCard => ({
-  id, name, type, frameType: 'normal', imageId: null, owned: 0, price: null, regionPrice: null
+  id,
+  name,
+  type,
+  frameType: 'normal',
+  imageId: null,
+  owned: 0,
+  price: null,
+  regionPrice: null
 })
 const CARDS: Record<number, DeckCard> = {
   1: card(1, 'Ash Blossom & Joyous Spring', 'Tuner Monster'),
@@ -44,15 +58,22 @@ describe('ygo lists', () => {
 
   it('keeps the alternate-art passcode and collapses repeats', () => {
     const p = parseYgoList(fx('yugiohprodeck.ydk'))
-    expect(p.lines.find((l) => 'passcode' in l.ref && l.ref.passcode === 36996508)).toMatchObject({ section: 'main', qty: 1 })
+    expect(p.lines.find((l) => 'passcode' in l.ref && l.ref.passcode === 36996508)).toMatchObject({
+      section: 'main',
+      qty: 1
+    })
     const dm = p.lines.filter((l) => 'passcode' in l.ref && l.ref.passcode === 46986416)
     expect(dm).toHaveLength(1)
     expect(dm[0].qty).toBe(2)
   })
 
   it('ydk and ydke fixtures hold the same deck', () => {
-    expect(keyed(parseYgoList(fx('ydke.txt')))).toEqual(keyed(parseYgoList(fx('yugiohprodeck.ydk'))))
-    expect(keyed(parseYgoList(fx('edopro.ydk')))).toEqual(keyed(parseYgoList(fx('yugiohprodeck.ydk'))))
+    expect(keyed(parseYgoList(fx('ydke.txt')))).toEqual(
+      keyed(parseYgoList(fx('yugiohprodeck.ydk')))
+    )
+    expect(keyed(parseYgoList(fx('edopro.ydk')))).toEqual(
+      keyed(parseYgoList(fx('yugiohprodeck.ydk')))
+    )
   })
 
   it('decodes a hand-built ydke string', () => {
@@ -61,7 +82,9 @@ describe('ygo lists', () => {
       ids.forEach((id, i) => b.writeUInt32LE(id, i * 4))
       return b.toString('base64')
     }
-    const p = parseYgoList(`ydke://${enc([14558128, 14558128, 24224830])}!${enc([86066372])}!${enc([])}!`)
+    const p = parseYgoList(
+      `ydke://${enc([14558128, 14558128, 24224830])}!${enc([86066372])}!${enc([])}!`
+    )
     expect(p.skipped).toEqual([])
     expect(keyed(p)).toEqual(
       [
@@ -101,7 +124,11 @@ describe('ygo lists', () => {
     ]
     expect(keyed(parseYgoList(toYdk(e)))).toEqual(want)
     expect(keyed(parseYgoList(toYdke(e)))).toEqual(want)
-    expect(toYdk(e).startsWith('#created by Duel Binder\n#main\n14558128\n14558128\n14558128\n24224830\n#extra\n86066372\n86066372\n!side\n')).toBe(true)
+    expect(
+      toYdk(e).startsWith(
+        '#created by Duel Binder\n#main\n14558128\n14558128\n14558128\n24224830\n#extra\n86066372\n86066372\n!side\n'
+      )
+    ).toBe(true)
     expect(toYdke(e).startsWith('ydke://')).toBe(true)
     expect(toYdke(e).endsWith('!')).toBe(true)
     expect(toYdke([])).toBe('ydke://!!!')
@@ -116,10 +143,17 @@ describe('ygo lists', () => {
     expect(find('Dark Magician')?.qty).toBe(2)
     expect(find('Magician of Black Chaos')?.qty).toBe(2)
     expect(find('Apollousa, Bow of the Goddess')?.section).toBe('extra')
-    expect(d.lines.find((l) => 'passcode' in l.ref)).toMatchObject({ ref: { passcode: 36996508 }, qty: 1 })
+    expect(d.lines.find((l) => 'passcode' in l.ref)).toMatchObject({
+      ref: { passcode: 36996508 },
+      qty: 1
+    })
     const h = parseYgoList(fx('paste-headers.txt'))
-    expect(h.lines.find((l) => 'name' in l.ref && l.ref.name === 'Apollousa, Bow of the Goddess')).toMatchObject({ section: 'extra', qty: 1 })
-    expect(h.lines.find((l) => 'name' in l.ref && l.ref.name === 'Solemn Judgment')?.section).toBe('side')
+    expect(
+      h.lines.find((l) => 'name' in l.ref && l.ref.name === 'Apollousa, Bow of the Goddess')
+    ).toMatchObject({ section: 'extra', qty: 1 })
+    expect(h.lines.find((l) => 'name' in l.ref && l.ref.name === 'Solemn Judgment')?.section).toBe(
+      'side'
+    )
   })
 
   it('reads CRLF the same as LF', () => {
@@ -136,7 +170,12 @@ describe('ygo lists', () => {
     const p = parseYgoList('lorem ipsum')
     expect(p.skipped).toEqual([])
     expect(p.lines).toHaveLength(1)
-    expect(p.lines[0]).toMatchObject({ section: 'main', qty: 1, ref: { name: 'lorem ipsum' }, line: 1 })
+    expect(p.lines[0]).toMatchObject({
+      section: 'main',
+      qty: 1,
+      ref: { name: 'lorem ipsum' },
+      line: 1
+    })
   })
 
   it('skips only qty 0 or punctuation-only text lines', () => {
@@ -187,7 +226,10 @@ describe('ygo lists', () => {
       { section: 'extra', card: 99, qty: 2 }
     ]
     const p = parseYgoList(toYgoText(e, CARDS))
-    expect(keyed(p)).toEqual(['extra:{"passcode":99}:2', 'main:{"name":"Ash Blossom & Joyous Spring"}:3'])
+    expect(keyed(p)).toEqual([
+      'extra:{"passcode":99}:2',
+      'main:{"name":"Ash Blossom & Joyous Spring"}:3'
+    ])
   })
 })
 
@@ -203,7 +245,11 @@ describe('sortEntries', () => {
     expect(e.map((x) => x.card)).toEqual([99, 3, 2, 1])
   })
   it('breaks ties by name, then id', () => {
-    const cards = { 5: card(5, 'B', 'Effect Monster'), 6: card(6, 'A', 'Effect Monster'), 7: card(7, 'A', 'Effect Monster') }
+    const cards = {
+      5: card(5, 'B', 'Effect Monster'),
+      6: card(6, 'A', 'Effect Monster'),
+      7: card(7, 'A', 'Effect Monster')
+    }
     const e: DeckEntry[] = [5, 7, 6].map((c) => ({ section: 'main' as const, card: c, qty: 1 }))
     expect(sortEntries('ygo', e, cards).map((x) => x.card)).toEqual([6, 7, 5])
   })

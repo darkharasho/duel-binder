@@ -12,6 +12,7 @@ import { createMockApi, renderWithProviders, type DeepPartial } from './mockApi'
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() }, Toaster: () => null }))
 
+type DeckResolution = Awaited<ReturnType<Api['decks']['resolve']>>[number]
 const POT = 55144522
 const MAXX = 23434538
 const card = (
@@ -365,6 +366,125 @@ describe('the deck page', () => {
     expect(screen.queryByText('Side for the mirror')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
     expect(api.decks.markSeen).not.toHaveBeenCalled()
+  })
+})
+
+describe('importing and exporting', () => {
+  const LIST = '3 Pot of Greed\n2 Maxx C\n1 Mystery card\n!!!'
+  const resolutions: DeckResolution[] = [
+    { status: 'matched', card: POT },
+    {
+      status: 'ambiguous',
+      options: [
+        { card: MAXX, name: 'Maxx "C"', imageId: null },
+        { card: 1, name: 'Pricey', imageId: null }
+      ]
+    },
+    { status: 'unmatched' }
+  ]
+  const importApi = (): Api =>
+    apiWith([], pack('2026-11-22'), {
+      decks: { resolve: vi.fn(async () => resolutions) }
+    })
+  const paste = async (dialog: HTMLElement, text: string): Promise<void> => {
+    await userEvent.click(within(dialog).getByLabelText('Deck list'))
+    await userEvent.paste(text)
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Preview' }))
+  }
+
+  it('import preview lists matched, ambiguous and unmatched lines, and save waits for them', async () => {
+    const api = importApi()
+    renderWithProviders(<DecksPage />, { api })
+    await userEvent.click(await screen.findByRole('button', { name: 'Import' }))
+    const dialog = await screen.findByRole('dialog')
+    await paste(dialog, LIST)
+    expect(await within(dialog).findByText('Matched (1)')).toBeInTheDocument()
+    expect(within(dialog).getByText('3 Pot of Greed')).toBeInTheDocument()
+    expect(within(dialog).getByText('Pick one (1)')).toBeInTheDocument()
+    expect(within(dialog).getByLabelText('Pick a card for 2 Maxx C')).toBeInTheDocument()
+    expect(within(dialog).getByText('Not found (2)')).toBeInTheDocument()
+    expect(within(dialog).getByText('1 Mystery card')).toBeInTheDocument()
+    expect(within(dialog).getByText('!!!')).toBeInTheDocument()
+    expect(api.decks.resolve).toHaveBeenCalledTimes(1)
+    expect(api.decks.resolve).toHaveBeenCalledWith([
+      { name: 'Pot of Greed' },
+      { name: 'Maxx C' },
+      { name: 'Mystery card' }
+    ])
+    expect(within(dialog).getByRole('button', { name: 'Import deck' })).toBeDisabled()
+  })
+
+  it('dropping and picking enables save, and the saved deck has exactly the kept cards', async () => {
+    const api = importApi()
+    renderWithProviders(<DecksPage />, { api })
+    await userEvent.click(await screen.findByRole('button', { name: 'Import' }))
+    const dialog = await screen.findByRole('dialog')
+    await paste(dialog, LIST)
+    await within(dialog).findByText('Matched (1)')
+    await userEvent.selectOptions(
+      within(dialog).getByLabelText('Pick a card for 2 Maxx C'),
+      'Maxx "C"'
+    )
+    const save = within(dialog).getByRole('button', { name: 'Import deck' })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Drop 1 Mystery card' }))
+    expect(save).toBeDisabled()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Drop !!!' }))
+    expect(save).toBeEnabled()
+    await userEvent.clear(within(dialog).getByLabelText('Name'))
+    await userEvent.type(within(dialog).getByLabelText('Name'), 'Imported')
+    await userEvent.click(save)
+    await waitFor(() =>
+      expect(api.decks.save).toHaveBeenCalledWith({
+        format: 'advanced',
+        name: 'Imported',
+        notes: '',
+        cover: null,
+        private: false,
+        cards: [
+          { section: 'main', card: POT, qty: 3 },
+          { section: 'main', card: MAXX, qty: 2 }
+        ]
+      })
+    )
+  })
+
+  it('replace asks first', async () => {
+    const api = pageApi(detail(), pack('2026-11-22'), {
+      decks: { resolve: vi.fn(async () => [resolutions[0]]) }
+    })
+    renderWithProviders(<DeckPage uid="d1" onBack={vi.fn()} />, { api })
+    await userEvent.click(await screen.findByRole('button', { name: 'Replace from list' }))
+    const dialog = await screen.findByRole('dialog')
+    await paste(dialog, '3 Pot of Greed')
+    await within(dialog).findByText('Matched (1)')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Replace cards' }))
+    expect(within(dialog).getByText('Replace the 42 cards in Deck?')).toBeInTheDocument()
+    expect(api.decks.save).not.toHaveBeenCalled()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Yes, replace' }))
+    await waitFor(() =>
+      expect(api.decks.save).toHaveBeenCalledWith(
+        expect.objectContaining({ uid: 'd1', cards: [{ section: 'main', card: POT, qty: 3 }] })
+      )
+    )
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
+  it('export copies the text list', async () => {
+    const copy = vi.fn(async () => undefined)
+    const cards: DeckEntry[] = [
+      { section: 'main', card: POT, qty: 3 },
+      { section: 'main', card: MAXX, qty: 2 },
+      { section: 'side', card: 1, qty: 1 }
+    ]
+    const api = pageApi(detail({ cards }), pack('2026-11-22'), { dex: { copy } })
+    renderWithProviders(<DeckPage uid="d1" onBack={vi.fn()} />, { api })
+    await userEvent.click(await screen.findByRole('button', { name: 'Export' }))
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Copy as text' }))
+    await waitFor(() =>
+      expect(copy).toHaveBeenCalledWith(
+        'Main Deck (5)\n2 Maxx "C"\n3 Pot of Greed\n\nSide Deck (1)\n1 Pricey'
+      )
+    )
   })
 })
 

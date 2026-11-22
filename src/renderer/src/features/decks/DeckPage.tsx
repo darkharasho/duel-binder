@@ -28,7 +28,9 @@ import {
 } from './deckEntries'
 import { DeckSearch } from './DeckSearch'
 import { DeckSectionList, type EntryActions } from './DeckSection'
+import { ExportMenu } from './ExportMenu'
 import { FeedbackPanel } from './FeedbackPanel'
+import { ImportDialog } from './ImportDialog'
 import { localToday, useRulesPack } from './useRulesPack'
 
 const SAVE_MS = 600
@@ -145,6 +147,7 @@ export function DeckPage({
 
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [importing, setImporting] = useState(false)
 
   const sections = useMemo(
     () =>
@@ -257,6 +260,7 @@ export function DeckPage({
         <>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
             <span className="text-muted-foreground">{format.label}</span>
+            <ExportMenu name={fields.name} cards={fields.cards} facts={facts} />
             {!readOnly && (
               <>
                 <label className="flex items-center gap-1.5">
@@ -267,6 +271,9 @@ export function DeckPage({
                   />
                   Private
                 </label>
+                <Button variant="ghost" size="sm" onClick={() => setImporting(true)}>
+                  Replace from list
+                </Button>
                 <Button variant="ghost" size="sm" disabled={busy} onClick={() => void duplicate()}>
                   Duplicate
                 </Button>
@@ -365,6 +372,29 @@ export function DeckPage({
               onProblem={showProblem}
             />
           </div>
+          {importing && (
+            <ImportDialog
+              game={game}
+              format={fields.format}
+              replacing={{
+                name: fields.name,
+                count: fields.cards.reduce((n, e) => n + e.qty, 0)
+              }}
+              busy={false}
+              onApply={(r) => {
+                setAdded((a) => ({ ...a, ...Object.fromEntries(r.facts.map((c) => [c.id, c])) }))
+                // Saved now, then read again: the new cards' facts come from the deck's own read.
+                const next = { ...fields, cards: r.cards }
+                setDraft(next)
+                if (timer.current) clearTimeout(timer.current)
+                timer.current = null
+                pending.current = null
+                void save(next).then(() => qc.invalidateQueries({ queryKey: queryKeys.deck(uid) }))
+                setImporting(false)
+              }}
+              onClose={() => setImporting(false)}
+            />
+          )}
         </>
       )}
     </div>

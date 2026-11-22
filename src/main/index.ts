@@ -431,7 +431,14 @@ async function bootstrap(): Promise<void> {
         defaultPath: name,
         filters: [
           {
-            name: ext === 'gif' ? 'GIF' : ext === 'png' ? 'PNG image' : 'Video',
+            name:
+              ext === 'gif'
+                ? 'GIF'
+                : ext === 'png'
+                  ? 'PNG image'
+                  : ext === 'ydk'
+                    ? 'Yu-Gi-Oh! deck'
+                    : 'Video',
             extensions: [ext]
           }
         ]

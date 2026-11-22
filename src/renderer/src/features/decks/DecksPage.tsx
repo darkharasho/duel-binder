@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import type { DeckList } from '@shared/decks/types'
+import type { DeckEntry, DeckList } from '@shared/decks/types'
 import type { NavigateFn } from '@/components/AppShell'
 import { useArtWash } from '@/components/artWashContext'
 import { EmptyHero } from '@/components/EmptyHero'
@@ -10,9 +10,11 @@ import { PAGE_TITLE } from '@/components/pageHeaderContext'
 import { Button } from '@/components/ui/button'
 import { CardGridSkeleton } from '@/components/ui/loading'
 import { api, queryKeys } from '@/lib/api'
+import { errorMessage } from '@/lib/errorMessage'
 import { useGame } from '@/lib/game'
 import { DeckPage } from './DeckPage'
 import { DeckTile } from './DeckTile'
+import { ImportDialog, type ImportResult } from './ImportDialog'
 import { NewDeckDialog } from './NewDeckDialog'
 import { localToday, useRulesPack } from './useRulesPack'
 
@@ -36,6 +38,7 @@ export function DecksPage({
   const pack = useRulesPack(game)
   const [uid, setUid] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
+  const [importing, setImporting] = useState(false)
   const [saving, setSaving] = useState(false)
   const decks = useMemo(() => list.data?.decks ?? [], [list.data])
   const washCards = useMemo(
@@ -47,7 +50,7 @@ export function DecksPage({
   const readOnly = friendId !== undefined
   const today = localToday()
 
-  const create = async (name: string, format: string): Promise<void> => {
+  const create = async (name: string, format: string, cards: DeckEntry[] = []): Promise<void> => {
     setSaving(true)
     try {
       const id = await api.decks.save({
@@ -56,13 +59,14 @@ export function DecksPage({
         notes: '',
         cover: null,
         private: false,
-        cards: []
+        cards
       })
       await qc.invalidateQueries({ queryKey: queryKeys.decks })
       setCreating(false)
+      setImporting(false)
       setUid(id)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not create the deck')
+      toast.error(errorMessage(e, 'Could not create the deck'))
     } finally {
       setSaving(false)
     }
@@ -76,7 +80,12 @@ export function DecksPage({
         <div className="flex items-center justify-between gap-3">
           <h1 className={PAGE_TITLE}>Decks</h1>
           {!readOnly && list.isSuccess && !empty && (
-            <Button onClick={() => setCreating(true)}>New deck</Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setImporting(true)}>
+                Import
+              </Button>
+              <Button onClick={() => setCreating(true)}>New deck</Button>
+            </div>
           )}
         </div>
       </PageHeader>
@@ -89,9 +98,12 @@ export function DecksPage({
             title="Build your first deck"
             blurb="Check a deck against the format's rules and see what's left to buy."
           >
-            <div className="mt-7 flex justify-center">
+            <div className="mt-7 flex justify-center gap-3">
               <Button size="lg" onClick={() => setCreating(true)}>
                 New deck
+              </Button>
+              <Button size="lg" variant="outline" onClick={() => setImporting(true)}>
+                Import
               </Button>
             </div>
           </EmptyHero>
@@ -120,6 +132,15 @@ export function DecksPage({
           busy={saving}
           onCreate={(n, f) => void create(n, f)}
           onClose={() => setCreating(false)}
+        />
+      )}
+      {importing && (
+        <ImportDialog
+          game={game}
+          format="advanced"
+          busy={saving}
+          onApply={(r: ImportResult) => void create(r.name, r.format, r.cards)}
+          onClose={() => setImporting(false)}
         />
       )}
     </div>

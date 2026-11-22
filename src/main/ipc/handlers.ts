@@ -402,14 +402,14 @@ export function createHandlers({
     'app:openDataFolder': () => app.openDataFolder(),
     'app:backupDatabase': () => app.backupDatabase(),
     'app:saveReplay': async (name: unknown, data: unknown) => {
-      // Only a plain replay file name: the dialog picks the folder, the renderer never does.
+      // Only a plain replay or deck file name: the dialog picks the folder, the renderer never does.
       if (
         typeof name !== 'string' ||
-        !/^[\w.-]+\.(mp4|webm|gif|png)$/.test(name) ||
+        !/^[\w.-]+\.(mp4|webm|gif|png|ydk)$/.test(name) ||
         name.startsWith('.')
       )
-        throw new Error('Not a replay file name')
-      if (!(data instanceof Uint8Array)) throw new Error('Not replay bytes')
+        throw new Error('Not a replay or deck file name')
+      if (!(data instanceof Uint8Array)) throw new Error('Not file bytes')
       return app.saveReplay(name, data)
     },
     'app:checkForUpdates': () => app.checkForUpdates(),

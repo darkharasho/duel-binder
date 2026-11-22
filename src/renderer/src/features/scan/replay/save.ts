@@ -23,6 +23,11 @@ function download(blob: Blob, name: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }
 
+/** Puts a small text file (a deck list) on the device the way a replay is: dialog, share or download. */
+export function saveTextFile(text: string, name: string, mime: string): Promise<SaveResult> {
+  return saveReplay(new Blob([text], { type: mime }), name)
+}
+
 /**
  * Puts the replay on the device: a save dialog on desktop, the share sheet in the apps, and on the
  * phone web the share sheet where the browser has one, else a download.

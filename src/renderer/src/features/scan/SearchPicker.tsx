@@ -159,9 +159,11 @@ export const SearchPicker = memo(function SearchPicker({
 
 /**
  * A SearchPicker that picks any number of options: each pick toggles one and leaves the list open
- * for the next. With several picked they show as chips beside it, each with its own remove
- * button; with any picked, a Clear takes them all off. `noneKey` is the option that stands for
- * none picked ("Any set"): listed checked when `values` is just it, and never a chip.
+ * for the next. The trigger keeps its size however many are picked ("3 sets", every name in its
+ * tooltip), so a long pick never pushes the page down; with several picked, the list opens on a
+ * Picked strip of chips, each with its own remove button. With any picked, a Clear beside the
+ * trigger takes them all off. `noneKey` is the option that stands for none picked ("Any set"):
+ * listed checked when `values` is just it, and never a chip.
  */
 export const MultiSearchPicker = memo(function MultiSearchPicker({
   label,
@@ -196,7 +198,7 @@ export const MultiSearchPicker = memo(function MultiSearchPicker({
   const summary =
     picked.length === 0 ? placeholder : picked.length === 1 ? picked[0].label : many(picked.length)
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+    <div className="flex min-w-0 items-center gap-1.5">
       <Popover.Root open={open} onOpenChange={setOpen}>
         <Popover.Trigger asChild>
           <button
@@ -204,6 +206,7 @@ export const MultiSearchPicker = memo(function MultiSearchPicker({
             role="combobox"
             aria-label={label}
             aria-expanded={open}
+            title={picked.length > 1 ? picked.map((o) => o.label).join('\n') : undefined}
             className={cn(
               'flex h-8 items-center justify-between gap-2 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30 dark:hover:bg-input/50',
               className
@@ -221,6 +224,37 @@ export const MultiSearchPicker = memo(function MultiSearchPicker({
             sideOffset={4}
             className="z-50 w-[max(var(--radix-popover-trigger-width),18rem)] max-w-[calc(100vw-1rem)] rounded-md border bg-popover p-0 text-popover-foreground shadow-md"
           >
+            {/* Several picked: each one, so a set can be taken off without hunting the list. */}
+            {picked.length > 1 && (
+              <div className="border-b p-2">
+                <p className="mb-1.5 px-1 text-xs font-medium text-muted-foreground">
+                  Picked ({picked.length})
+                </p>
+                <div
+                  aria-label={`Picked ${label.toLowerCase()}`}
+                  className="flex max-h-24 flex-wrap gap-1.5 overflow-y-auto"
+                >
+                  {picked.map((o) => (
+                    <span
+                      key={o.key}
+                      className="inline-flex h-7 max-w-full items-center gap-1 rounded-full border border-input bg-input/30 pl-2.5 pr-1 text-xs"
+                    >
+                      <span className="truncate" title={o.label}>
+                        {o.label}
+                      </span>
+                      <button
+                        type="button"
+                        aria-label={`Remove ${o.label}`}
+                        onClick={() => onToggle(o.key)}
+                        className="rounded-full p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                      >
+                        <XIcon className="size-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
             <PickerList
               options={options}
               searchPlaceholder={searchPlaceholder}
@@ -231,36 +265,21 @@ export const MultiSearchPicker = memo(function MultiSearchPicker({
           </Popover.Content>
         </Popover.Portal>
       </Popover.Root>
-      {/* Several picked: each one, so a set can be taken off without opening the list. */}
-      {picked.length > 1 &&
-        picked.map((o) => (
-          <span
-            key={o.key}
-            className="inline-flex h-7 max-w-56 items-center gap-1 rounded-full border border-input bg-input/30 pl-2.5 pr-1 text-xs"
-          >
-            <span className="truncate" title={o.label}>
-              {o.label}
-            </span>
-            <button
-              type="button"
-              aria-label={`Remove ${o.label}`}
-              onClick={() => onToggle(o.key)}
-              className="rounded-full p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-            >
-              <XIcon className="size-3" />
-            </button>
-          </span>
-        ))}
-      {picked.length > 0 && (
-        <button
-          type="button"
-          aria-label={`Clear ${label.toLowerCase()}`}
-          onClick={onClear}
-          className="h-7 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-        >
-          Clear
-        </button>
-      )}
+      {/* Always there, hidden with none picked, so picking never shifts the row along. */}
+      <button
+        type="button"
+        aria-label={`Clear ${label.toLowerCase()}`}
+        aria-hidden={!picked.length || undefined}
+        tabIndex={picked.length ? undefined : -1}
+        disabled={!picked.length}
+        onClick={onClear}
+        className={cn(
+          'h-7 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground',
+          !picked.length && 'invisible'
+        )}
+      >
+        Clear
+      </button>
     </div>
   )
 })

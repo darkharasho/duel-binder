@@ -1,5 +1,5 @@
 import worker, { resetTokenCache } from '../src/index.js'
-import { buildGradedQuery, gradedTitleMatches } from '../src/price.js'
+import { buildGradedQuery, gradedTitleMatches, numberForms } from '../src/price.js'
 
 const json = (body, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
@@ -107,7 +107,7 @@ describe('editions', () => {
       false
     )
     expect(buildGradedQuery({ ...pkm, number: '4', edition: '1st' })).toBe(
-      '"Dragonite" 4 1st PSA 7'
+      '"Dragonite" (4,004) 1st PSA 7'
     )
   })
 })
@@ -117,7 +117,54 @@ describe('buildGradedQuery', () => {
     expect(buildGradedQuery({ code: 'LOB-EN001', lang: 'en', company: 'PSA', grade: '10' })).toBe(
       '"LOB-EN001" PSA 10'
     )
-    expect(buildGradedQuery({ ...pkm, lang: 'ja' })).toBe('"Dragonite" 5 PSA 7 Japanese')
+    expect(buildGradedQuery({ ...pkm, lang: 'ja' })).toBe('"Dragonite" (5,005) PSA 7 Japanese')
+  })
+})
+
+describe('how sellers write the number', () => {
+  it('searches padded numbers, padded totals and gallery totals', () => {
+    expect(numberForms('141/86')).toEqual(['141/86', '141/086'])
+    expect(numberForms('271/217')).toEqual(['271/217'])
+    expect(numberForms('GG49/70')).toEqual(['GG49/70', 'GG49/070', 'GG49/GG70'])
+    expect(numberForms('44')).toEqual(['44', '044'])
+    expect(numberForms('SM229')).toEqual(['SM229'])
+    expect(numberForms('')).toEqual([])
+    const q = { name: 'Klinklang', number: '141/86', lang: 'en', company: 'PSA', grade: '9' }
+    expect(buildGradedQuery(q)).toBe('"Klinklang" (141/86,141/086) PSA 9')
+    expect(buildGradedQuery({ ...q, name: 'Mega Dragonite ex', number: '271/217' })).toBe(
+      '"Mega Dragonite ex" 271/217 PSA 9'
+    )
+  })
+
+  it('matches padded and gallery totals, never a number after a slash', () => {
+    const k = { name: 'Klinklang', number: '141/86', lang: 'en', company: 'PSA', grade: '9' }
+    expect(gradedTitleMatches('PSA 9 Klinklang 141/086 Illustration Rare Black Bolt', k)).toBe(true)
+    const d = { name: 'Drapion V', number: 'GG49/70', lang: 'en', company: 'PSA', grade: '9' }
+    expect(gradedTitleMatches('Crown Zenith Drapion V GG49/GG70 PSA 9 Cert', d)).toBe(true)
+    expect(gradedTitleMatches('Drapion V #GG49/GG70 PSA 9', d)).toBe(true)
+    expect(gradedTitleMatches('Drapion V GG49/GG69 PSA 9', d)).toBe(false)
+    const p = { name: 'Surfing Pikachu', number: '28', lang: 'en', company: 'CGC', grade: '8' }
+    expect(gradedTitleMatches('CGC 8 Surfing Pikachu V 021/028 Double Rare', p)).toBe(false)
+  })
+
+  it("asks a promo's listing to say it's a promo", () => {
+    const c = {
+      name: 'Charmander',
+      number: '44',
+      set: 'SVP Black Star Promos',
+      lang: 'en',
+      company: 'PSA',
+      grade: '9'
+    }
+    expect(
+      gradedTitleMatches('2023 Pokemon SVP EN Charmander #044 Obsidian Flames ETB PSA 9', c)
+    ).toBe(true)
+    expect(gradedTitleMatches('PSA 9 Pokemon 2023 Charmander Black Star Promo #044', c)).toBe(true)
+    expect(gradedTitleMatches('Charmander 044 Holo PSA 9', c)).toBe(false)
+    // Not a promo set: no such rule.
+    expect(gradedTitleMatches('Charmander 044 Holo PSA 9', { ...c, set: 'Obsidian Flames' })).toBe(
+      true
+    )
   })
 })
 
@@ -163,12 +210,23 @@ describe('GET /v1/graded-price', () => {
     expect(decodeURIComponent(search)).toContain(
       'filter=conditionIds:{2750},buyingOptions:{FIXED_PRICE}'
     )
-    expect(decodeURIComponent(search).replace(/\+/g, ' ')).toContain('q="Dragonite" 5 PSA 7')
+    expect(decodeURIComponent(search).replace(/\+/g, ' ')).toContain('q="Dragonite" (5,005) PSA 7')
     expect(env.PRICES.store.size).toBe(1)
+    expect(env.PRICES.put.mock.calls[0][2]).toEqual({ expirationTtl: 604800 })
     // The second ask is answered from KV.
     const again = await worker.fetch(req(url()), env)
     expect((await again.json()).price).toBe(45)
     expect(f.calls.filter((c) => c.includes('item_summary')).length).toBe(1)
+  })
+
+  it('keeps a lookup with too few listings for a day only', async () => {
+    vi.stubGlobal(
+      'fetch',
+      makeFetch([json({ itemSummaries: [listing('Dragonite #5 PSA 7', 40)] })])
+    )
+    const res = await worker.fetch(req(url()), env)
+    expect((await res.json()).price).toBe(null)
+    expect(env.PRICES.put.mock.calls[0][2]).toEqual({ expirationTtl: 86400 })
   })
 
   it('refuses a bad grade, grader, game or client', async () => {

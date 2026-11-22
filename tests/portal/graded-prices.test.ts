@@ -100,6 +100,25 @@ describe('graded prices', () => {
     expect(gradedQuery(base, { ...row, set_rarity: 'Holofoil', first_in_set: 0 })).toMatchObject({
       edition: ''
     })
+    // A promo's catalog total isn't on the card: its number alone.
+    expect(
+      gradedQuery(base, {
+        ...row,
+        set_code: 'SVP 044/225',
+        set_name: 'SVP Black Star Promos',
+        set_rarity: 'Promo',
+        first_in_set: 0
+      })
+    ).toMatchObject({ number: '44', set: 'SVP Black Star Promos' })
+    expect(
+      gradedQuery(base, {
+        ...row,
+        set_code: 'SMP SM229/248',
+        set_name: 'SM Black Star Promos',
+        set_rarity: 'Promo',
+        first_in_set: 0
+      })
+    ).toMatchObject({ number: 'SM229' })
     // A grader the Worker doesn't know, or a Yu-Gi-Oh! printing with no code: not searched.
     expect(
       gradedQuery(
@@ -151,6 +170,24 @@ describe('graded prices', () => {
     expect(stored()).toEqual([expect.objectContaining({ price: 120, listing_count: 4 })])
   })
 
+  it('tries an unpriced key again a day later, a priced one a week later', async () => {
+    slab('first')
+    slab('unl')
+    const client: GradedPriceClient & { asked: GradedPriceQuery[] } = {
+      asked: [],
+      lookup: vi.fn(async (q: GradedPriceQuery) => {
+        client.asked.push(q)
+        const price = q.edition === '1st' ? 120 : null
+        return { price, listingCount: price ? 4 : 1, checkedAt: NOW.toISOString() }
+      })
+    }
+    await runGradedPrices(db, client, NOW)
+    expect(client.asked).toHaveLength(2)
+    const tomorrow = new Date(NOW.getTime() + DAY + 1000)
+    await runGradedPrices(db, client, tomorrow)
+    expect(client.asked.slice(2).map((q) => q.edition)).toEqual(['unlimited'])
+  })
+
   it('stops at the day’s cap and the batch, and says more are due', async () => {
     slab('first')
     slab('unl')
@@ -169,7 +206,7 @@ describe('graded prices', () => {
     expect(client.asked).toHaveLength(2)
   })
 
-  it('stores a key it can’t search for unpriced, so it waits a week; a failure backs off a day', async () => {
+  it('stores a key it can’t search for unpriced; it and a failure are due a day later', async () => {
     slab('promo')
     slab('first')
     const client: GradedPriceClient = {
@@ -184,12 +221,32 @@ describe('graded prices', () => {
     const rows = stored()
     expect(rows).toHaveLength(2)
     expect(rows.every((x) => x.price === null)).toBe(true)
-    // The failed one is due again a day later; the unsearchable one isn't.
+    // Neither is due again within the day; both are a day later (the unsearchable one without a call).
+    const soon = fake()
+    await runGradedPrices(db, soon, new Date(NOW.getTime() + DAY - 1000))
+    expect(soon.asked).toHaveLength(0)
     const tomorrow = new Date(NOW.getTime() + DAY + 1000)
     const again = fake()
     await runGradedPrices(db, again, tomorrow)
     expect(again.asked).toHaveLength(1)
     expect(again.asked[0].edition).toBe('1st')
+  })
+
+  it('backs a failed refresh of a priced key off a day, keeping its price', async () => {
+    slab('first')
+    await runGradedPrices(db, fake(120), NOW)
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const down: GradedPriceClient = {
+      lookup: vi.fn(async () => {
+        throw new Error('down')
+      })
+    }
+    const later = new Date(NOW.getTime() + GRADED_PRICE_INTERVAL_MS + DAY)
+    await runGradedPrices(db, down, later)
+    expect(stored()).toEqual([expect.objectContaining({ price: 120 })])
+    const again = fake(130)
+    await runGradedPrices(db, again, new Date(later.getTime() + DAY + 1000))
+    expect(again.asked).toHaveLength(1)
   })
 
   it('answers a device with the prices it knows, and checks the keys', async () => {

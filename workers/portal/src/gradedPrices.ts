@@ -21,6 +21,8 @@ import { MAX_PKEY } from './sync'
 
 /** A slab's price is looked up again after this long. */
 export const GRADED_PRICE_INTERVAL_MS = 7 * 24 * 3600 * 1000
+/** A slab with no price yet (too few listings, or nothing to search for) is tried again after this. */
+export const GRADED_UNPRICED_INTERVAL_MS = 24 * 3600 * 1000
 /** Lookups per alarm run. */
 export const GRADED_BATCH = 10
 /** Browse calls a day for graded prices: one per lookup. */
@@ -80,7 +82,9 @@ export function gradedQuery(c: Candidate, p: PrintingRow): GradedPriceQuery | nu
     if (!/^[A-Z0-9]+-[A-Z]*\d+[A-Z]?$/i.test(p.set_code)) return null
     return { ...base, code: p.set_code, name: p.name, number: '', set: p.set_name, edition: '' }
   }
-  const number = collectorNumber(p.set_code)
+  // A promo's catalog total ("SVP 044/225") isn't printed on the card: search the number alone.
+  const full = collectorNumber(p.set_code)
+  const number = /\bpromo/i.test(p.set_name) ? full.split('/')[0] : full
   if (!number) return null
   const edition = /\b1st Edition\b/i.test(p.set_rarity) ? '1st' : p.first_in_set ? 'unlimited' : ''
   return { ...base, code: '', name: p.name, number, set: p.set_name, edition }
@@ -94,11 +98,12 @@ function readCalls(db: SqlDb, today: string): number {
 }
 
 /**
- * One alarm's worth of graded prices: up to `limit` keys of live slabs with no price yet or one
- * older than GRADED_PRICE_INTERVAL_MS (never priced first), one eBay call each, within the day's
- * GRADED_DAILY_CALLS. A key that can't be searched for is stored unpriced, so it waits a week too.
- * A lookup that finds too few listings keeps the price there was. `more` means keys and budget
- * remain. Never throws for one key's failure.
+ * One alarm's worth of graded prices: up to `limit` keys of live slabs never looked up, unpriced
+ * for GRADED_UNPRICED_INTERVAL_MS or priced longer ago than GRADED_PRICE_INTERVAL_MS (never
+ * looked up first), one eBay call each, within the day's GRADED_DAILY_CALLS. A key that can't be
+ * searched for is stored unpriced, so it waits a day like one with too few listings. A lookup that
+ * finds too few listings keeps the price there was. `more` means keys and budget remain. Never
+ * throws for one key's failure.
  */
 export async function runGradedPrices(
   db: SqlDb,
@@ -114,19 +119,20 @@ export async function runGradedPrices(
   const room = Math.min(opts.limit ?? GRADED_BATCH, daily - used)
   if (room <= 0) return out
   const stale = new Date(now.getTime() - GRADED_PRICE_INTERVAL_MS).toISOString()
+  const unpricedStale = new Date(now.getTime() - GRADED_UNPRICED_INTERVAL_MS).toISOString()
   const due = (limit: number): Candidate[] =>
     db
       .prepare(
-        `SELECT g.game, g.pkey, g.company, g.grade, MAX(gp.checked_at) AS checked
+        `SELECT g.game, g.pkey, g.company, g.grade, MAX(gp.checked_at) AS checked, MAX(gp.price) AS price
          FROM graded_copies g
          LEFT JOIN graded_prices gp ON gp.pkey = g.pkey AND gp.company = g.company AND gp.grade = g.grade
          WHERE g.deleted_at IS NULL
          GROUP BY g.pkey, g.company, g.grade
-         HAVING checked IS NULL OR checked < ?
+         HAVING checked IS NULL OR checked < ? OR (price IS NULL AND checked < ?)
          ORDER BY checked IS NOT NULL, checked
          LIMIT ?`
       )
-      .all(stale, limit) as Candidate[]
+      .all(stale, unpricedStale, limit) as Candidate[]
   const printing = db.prepare(
     `SELECT p.set_code, p.set_name, p.set_rarity, p.language, c.name,
        EXISTS (SELECT 1 FROM card_printings o WHERE o.card_id = p.card_id AND o.set_code = p.set_code
@@ -140,11 +146,19 @@ export async function runGradedPrices(
        listing_count = CASE WHEN excluded.price IS NULL THEN listing_count ELSE excluded.listing_count END,
        checked_at = excluded.checked_at`
   )
+  // A failed lookup: an unpriced key waits the day it would anyway; a priced one keeps its price
+  // and is due again a day later (its checked_at back-dated), so it can't hold the queue's head.
+  const fail = db.prepare(
+    `INSERT INTO graded_prices (pkey, company, grade, price, listing_count, checked_at)
+     VALUES (?, ?, ?, NULL, 0, ?)
+     ON CONFLICT(pkey, company, grade) DO UPDATE SET
+       checked_at = CASE WHEN price IS NULL THEN excluded.checked_at ELSE ? END`
+  )
   for (const c of due(room)) {
     const p = printing.get(c.pkey) as PrintingRow | undefined
     const q = p ? gradedQuery(c, p) : null
     if (!q) {
-      // Nothing to search for (or the printing isn't in the catalog yet): wait a week.
+      // Nothing to search for (or the printing isn't in the catalog yet): wait a day.
       write.run(c.pkey, c.company, c.grade, null, 0, now.toISOString())
       continue
     }
@@ -156,9 +170,8 @@ export async function runGradedPrices(
     } catch (e) {
       out.failed++
       console.error('Graded price failed', e instanceof Error ? e.message : '')
-      // Back off a day: due again tomorrow, so one bad key can't hold the head of the queue.
-      const back = new Date(now.getTime() - GRADED_PRICE_INTERVAL_MS + 24 * 3600 * 1000)
-      write.run(c.pkey, c.company, c.grade, null, 0, back.toISOString())
+      const back = new Date(now.getTime() - GRADED_PRICE_INTERVAL_MS + GRADED_UNPRICED_INTERVAL_MS)
+      fail.run(c.pkey, c.company, c.grade, now.toISOString(), back.toISOString())
     }
   }
   setMeta(db, META_CALLS, `${today}:${used}`)

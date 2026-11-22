@@ -1,6 +1,7 @@
 import type { SqlDb } from '../../../src/main/db/sql'
 import { USERNAME_RE, type SignInProvider } from '../../../src/shared/account'
 import { emailProblem, normalizeEmail } from '../../../src/shared/emailAuth'
+import { spendInvite, takeSeat, type SeatPass } from './seats'
 
 /**
  * Sign-in methods (server-30's `sign_ins`): each account has at most one per provider, and each
@@ -96,14 +97,18 @@ export function refreshLegacyDiscordId(db: SqlDb, userId: number): void {
 
 /**
  * A new account for this sign-in. It keeps the offered username when valid and free, else gets a
- * generated one; either way the name counts as not chosen yet. Call inside a transaction.
+ * generated one; either way the name counts as not chosen yet. It takes a seat first: the pass's
+ * invite (spent here) or a free one, and throws SeatsFull when there is neither. Call inside a
+ * transaction.
  */
 export function createAccount(
   db: SqlDb,
   id: Identity,
   profile: SignInProfile,
-  nowIso: string
+  nowIso: string,
+  pass: SeatPass = {}
 ): number {
+  const invite = takeSeat(db, pass, nowIso)
   const offered = profile.username
   const username =
     offered !== undefined && isValidUsername(offered) && !usernameTaken(db, offered)
@@ -123,22 +128,26 @@ export function createAccount(
     'INSERT INTO sign_ins (provider, subject, user_id, created_at, email) VALUES (?, ?, ?, ?, ?)'
   ).run(id.provider, id.subject, userId, nowIso, profile.email ?? null)
   refreshLegacyDiscordId(db, userId)
+  if (invite !== null) spendInvite(db, invite, userId, nowIso)
   return userId
 }
 
 /**
  * Signs in with this identity, making its account on first use. A Discord sign-in refreshes the
  * display name and avatar; an Apple one only fills an empty display name. Neither touches the
- * username. Call inside a transaction.
+ * username. Only a first use takes a seat (with `pass`), so it alone can throw SeatsFull. Call
+ * inside a transaction.
  */
 export function signInWith(
   db: SqlDb,
   id: Identity,
   profile: SignInProfile,
-  nowIso: string
+  nowIso: string,
+  pass?: SeatPass
 ): { userId: number; created: boolean } {
   const userId = findAccount(db, id)
-  if (userId === null) return { userId: createAccount(db, id, profile, nowIso), created: true }
+  if (userId === null)
+    return { userId: createAccount(db, id, profile, nowIso, pass), created: true }
   // Every Discord or Apple sign-in replaces the stored email. Email sign-ins keep theirs.
   if (id.provider === 'discord' || id.provider === 'apple')
     db.prepare('UPDATE sign_ins SET email = ? WHERE provider = ? AND subject = ?').run(

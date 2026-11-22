@@ -3,6 +3,7 @@ import type { AppDeps } from './app'
 import { revokeAppleToken } from './apple'
 import { clearSessionCookie, currentUser, fromPublicOrigin } from './auth'
 import { mergedFrom } from './merge'
+import { fillSeatsAfterClose } from './seats'
 import { deleteCustomers } from './supporters'
 
 /** The most keys one R2 delete call takes. */
@@ -84,6 +85,7 @@ export async function deleteAccountRoute(req: Request, deps: AppDeps): Promise<R
     }
     deleteUserData(deps.db, userId)
   })()
+  await fillSeatsAfterClose(deps)
   if (deps.training) {
     // R2 deletes up to 1000 keys a call; one call per batch, in turn.
     let failed = 0

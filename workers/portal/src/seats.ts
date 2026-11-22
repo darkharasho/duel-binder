@@ -1,6 +1,6 @@
 import type { SqlDb } from '../../../src/main/db/sql'
 import type { AppDeps } from './app'
-import { randomToken, sha256Hex } from './auth'
+import { randomToken, readCookie, sha256Hex } from './auth'
 import { brandedHtml, escapeHtml, para, small, type EmailMessage } from './emailSend'
 
 /**
@@ -27,12 +27,21 @@ export interface SeatPass {
   verifiedEmail?: string | null
 }
 
+/** The cookie `/invite/<token>` sets: the raw invite token, carried through a web sign-in. */
+export const SEAT_INVITE_COOKIE = 'seat_invite'
+
+/** The raw invite token in the request's `seat_invite` cookie, or null. Hash it with `sha256Hex`. */
+export function readSeatInvite(req: Request): string | null {
+  return readCookie(req, SEAT_INVITE_COOKIE) || null
+}
+
 /** An invite lives two weeks. */
 export const INVITE_DAYS = 14
 const INVITE_MS = INVITE_DAYS * 24 * 60 * 60 * 1000
 
 export function seatCounts(db: SqlDb, nowIso: string): SeatCounts {
-  const cap = (db.prepare('SELECT cap FROM seat_settings WHERE id = 1').get() as { cap: number }).cap
+  const cap = (db.prepare('SELECT cap FROM seat_settings WHERE id = 1').get() as { cap: number })
+    .cap
   const accounts = (
     db.prepare('SELECT COUNT(*) AS n FROM users WHERE closed_at IS NULL').get() as { n: number }
   ).n
@@ -101,8 +110,7 @@ export function joinWaitlist(db: SqlDb, email: string, nowIso: string): void {
 export async function inviteEntry(deps: AppDeps, waitlistId: number): Promise<boolean> {
   const { db } = deps
   const entry = db.prepare('SELECT email FROM waitlist WHERE id = ?').get(waitlistId) as
-    | { email: string }
-    | undefined
+    { email: string } | undefined
   if (!entry) return false
   const now = deps.now()
   const nowIso = now.toISOString()
@@ -161,6 +169,18 @@ export async function fillSeats(deps: AppDeps): Promise<number> {
     if (await inviteEntry(deps, next.id)) sent++
   }
   return sent
+}
+
+/**
+ * After an account closes (its transaction committed): its seat goes to the waitlist. A failure is
+ * only logged, so it never fails the close.
+ */
+export async function fillSeatsAfterClose(deps: AppDeps): Promise<void> {
+  try {
+    await fillSeats(deps)
+  } catch (err) {
+    console.error('filling seats after an account closed failed', err)
+  }
 }
 
 /** A fresh link for an entry (voids its old one). */

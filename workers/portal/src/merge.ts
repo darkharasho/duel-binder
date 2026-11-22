@@ -10,6 +10,7 @@ import type { AppDeps } from './app'
 import { deleteUserData } from './account'
 import { adminWriteAllowed, isAdmin, loadMe, sha256Hex } from './auth'
 import { planCardMerge } from './mergePlan'
+import { fillSeatsAfterClose } from './seats'
 import {
   NEXT_BINDER_EDIT_SEQ,
   NEXT_BINDER_SEQ,
@@ -549,6 +550,7 @@ export async function mergeWithTicket(
     return true
   })()
   if (!done) throw new CollectionError(STALE_TICKET)
+  await fillSeatsAfterClose(deps)
   return loadMe(deps, userId)
 }
 

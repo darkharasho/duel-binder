@@ -18,6 +18,7 @@ import { clientIp } from './authLimits'
 import { EmailAuthError, confirmedSignup, matchedAccount, runEmailStep } from './emailAuth'
 import { claimKey, peekClaim } from './emailClaim'
 import { emailEnabled } from './emailSend'
+import { SEAT_INVITE_COOKIE, readSeatInvite } from './seats'
 import { pageShell } from './home'
 import { esc } from './site/page'
 
@@ -291,6 +292,8 @@ export async function emailFormRoute(req: Request, deps: AppDeps, step: string):
   }
 
   const claimTicket = readCookie(req, EMAIL_CLAIM_COOKIE) ?? undefined
+  const invite = readSeatInvite(req)
+  const inviteHash = invite === null ? null : await sha256Hex(invite)
   try {
     // Pages have no scripts, so the two new-password boxes are compared here.
     if ((step === 'create' || step === 'reset') && f.password !== (f.password_confirm ?? ''))
@@ -298,7 +301,8 @@ export async function emailFormRoute(req: Request, deps: AppDeps, step: string):
     const out = await runEmailStep(deps, step as EmailStep, f, {
       ip: clientIp(req),
       claimKind: 'web',
-      claimTicket
+      claimTicket,
+      inviteHash
     })
     switch (out.next) {
       case 'password':
@@ -326,6 +330,8 @@ export async function emailFormRoute(req: Request, deps: AppDeps, step: string):
         res.headers.append('set-cookie', cookie('session', token, SESSION_MAX_AGE))
         res.headers.append('set-cookie', clearCookie(EMAIL_LINK_COOKIE, EMAIL_LINK_PATH))
         res.headers.append('set-cookie', clearCookie(EMAIL_CLAIM_COOKIE, EMAIL_CLAIM_PATH))
+        if (out.created && invite !== null)
+          res.headers.append('set-cookie', clearCookie(SEAT_INVITE_COOKIE))
         return res
       }
     }
@@ -344,7 +350,7 @@ async function errorPage(
   carry: Carry,
   err: EmailAuthError
 ): Promise<Response> {
-  const status = err.status === 429 ? 429 : 400
+  const status = err.status === 429 || err.status === 403 ? err.status : 400
   const msg = err.message
   const done = (page: Page, cookies: string[] = []): Response =>
     respond(deps, page, status, cookies)

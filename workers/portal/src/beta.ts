@@ -101,7 +101,7 @@ export async function betaSubmitRoute(req: Request, deps: AppDeps): Promise<Resp
  * The form's fields, or null when the body is too big or isn't a urlencoded form. The size is
  * checked a chunk at a time, so a huge body is never held whole.
  */
-async function readForm(req: Request): Promise<URLSearchParams | null> {
+export async function readForm(req: Request): Promise<URLSearchParams | null> {
   if (!(req.headers.get('content-type') ?? '').startsWith('application/x-www-form-urlencoded'))
     return null
   if (!req.body) return new URLSearchParams()

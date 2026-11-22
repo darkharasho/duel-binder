@@ -1,6 +1,7 @@
 import { detectOs, isAndroid } from './os'
 import { renderPage } from './page'
 import { renderBeta } from './beta'
+import { renderWaitlist } from './waitlist'
 import { renderPrivacy } from './privacy'
 import { renderTerms } from './terms'
 import { renderSupport } from './support'
@@ -33,7 +34,7 @@ export async function handleSite(req: Request, deps: SiteDeps): Promise<Response
   }
   // The built web app lives under /app/ and belongs to the app host only.
   if (url.pathname.startsWith('/app/')) return new Response('Not Found', { status: 404 })
-  if (!['/', '/privacy', '/terms', '/beta', '/support'].includes(url.pathname))
+  if (!['/', '/privacy', '/terms', '/beta', '/waitlist', '/support'].includes(url.pathname))
     return deps.assets.fetch(req)
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     return new Response('Method Not Allowed', { status: 405, headers: { allow: 'GET, HEAD' } })
@@ -60,6 +61,15 @@ export async function handleSite(req: Request, deps: SiteDeps): Promise<Response
             : url.searchParams.get('sent') === '1'
               ? 'waiting'
               : null,
+        error: url.searchParams.get('error')
+      })
+    )
+  if (url.pathname === '/waitlist')
+    return html(
+      req,
+      renderWaitlist({
+        appUrl: deps.appUrl,
+        sent: url.searchParams.get('sent') === '1',
         error: url.searchParams.get('error')
       })
     )

@@ -8,6 +8,7 @@ export type LimitKind =
   | 'password-ip'
   | 'check-ip'
   | 'beta-ip'
+  | 'waitlist-ip'
   | 'checkout-user'
 
 const MIN = 60 * 1000
@@ -22,6 +23,8 @@ export const LIMITS: Record<LimitKind, { max: number; windowMs: number }> = {
   'check-ip': { max: 100, windowMs: HOUR },
   // The site's beta form: a household asking for a few phones, not a script.
   'beta-ip': { max: 5, windowMs: 24 * HOUR },
+  // The waitlist form, like the beta form: a household, not a script.
+  'waitlist-ip': { max: 5, windowMs: 24 * HOUR },
   // Supporter checkout starts per account: each makes a Stripe session.
   'checkout-user': { max: 10, windowMs: HOUR }
 }

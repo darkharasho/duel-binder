@@ -24,6 +24,7 @@ npm install -g wrangler        # or npx wrangler
 wrangler kv namespace create PRICES   # paste the printed id into wrangler.toml
 wrangler secret put EBAY_APP_ID
 wrangler secret put EBAY_CERT_ID
+wrangler secret put HARVEST_TOKEN     # optional: enables the token-guarded /v1/titles
 wrangler deploy
 ```
 

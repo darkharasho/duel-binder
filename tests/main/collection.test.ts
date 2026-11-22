@@ -12,6 +12,10 @@ import {
 import { setMeta } from '../../src/main/db/meta'
 import { MAX_NOTES } from '../../src/shared/cloud'
 import { seededDb } from './helpers'
+import { pokemonId } from '../../src/shared/games'
+import { forgetSearchTerms } from '../../src/main/repo/searchTerms'
+import { queryPrintingIds } from '../../src/main/repo/queryPrintings'
+import { LOCAL } from '../../src/main/repo/scope'
 
 let db: Database.Database
 beforeEach(async () => {
@@ -335,4 +339,110 @@ test('every entry shows its printing’s scan, keeping its stored art as the fal
   const b = addEntry(db, { printingId: pid('LOB-EN005'), imageId: 46986415, quantity: 1 })
   expect(getEntry(db, a.id)).toMatchObject({ printingScan: true, imageId: 46986414 })
   expect(getEntry(db, b.id)).toMatchObject({ printingScan: true, imageId: 46986415 })
+})
+
+describe('set, rarity and term words', () => {
+  const pkm = (n: string): number => pokemonId(`test/${n}`)
+
+  /** Mew ex with copies of PAF 216 (Double Rare) and PAF 232 (Special Illustration Rare). */
+  function seedMew(): { paf216: number; paf232: number } {
+    setMeta(db, 'active_game', 'pkm')
+    const id = pkm('mew')
+    db.prepare(
+      `INSERT INTO cards (id, game, name, type, frame_type, race, "desc", updated_at)
+       VALUES (?, 'pkm', 'Mew ex', 'Pokémon', 'pokemon', 'Basic', '', '2026-11-21')`
+    ).run(id)
+    db.prepare(
+      "INSERT INTO card_images (image_id, game, card_id, sort_order) VALUES (?, 'pkm', ?, 0)"
+    ).run(id, id)
+    db.prepare(
+      "INSERT INTO sets (game, language, set_name, set_code, tcg_date) VALUES ('pkm', 'en', 'Paldean Fates', 'PAF', '2024-01-26')"
+    ).run()
+    const printing = db.prepare(
+      `INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity)
+       VALUES ('pkm', ?, 'en', 'Paldean Fates', ?, ?)`
+    )
+    const paf216 = Number(printing.run(id, 'PAF 216/091', 'Double Rare').lastInsertRowid)
+    const paf232 = Number(
+      printing.run(id, 'PAF 232/091', 'Special Illustration Rare').lastInsertRowid
+    )
+    db.exec("INSERT INTO cards_fts(cards_fts) VALUES('rebuild')")
+    addEntry(db, { printingId: paf216, imageId: id, quantity: 1 })
+    addEntry(db, { printingId: paf232, imageId: id, quantity: 1 })
+    return { paf216, paf232 }
+  }
+
+  test('a rarity word beside the name shows only that version’s copies', () => {
+    const { paf216, paf232 } = seedMew()
+    expect(listEntries(db, { ...all, q: 'mew sir' }).map((e) => e.printing.id)).toEqual([paf232])
+    expect(
+      listEntries(db, { ...all, q: 'mew' })
+        .map((e) => e.printing.id)
+        .sort()
+    ).toEqual([paf216, paf232].sort())
+  })
+
+  test('a broad query searches the owned printings, not the newest ones', () => {
+    const { paf232 } = seedMew()
+    // A newer Special Illustration Rare Mew ex the collection doesn't own.
+    db.prepare(
+      "INSERT INTO sets (game, language, set_name, set_code, tcg_date) VALUES ('pkm', 'en', 'Prismatic Evolutions', 'PRE', '2025-01-17')"
+    ).run()
+    const newer = Number(
+      db
+        .prepare(
+          `INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity)
+           VALUES ('pkm', ?, 'en', 'Prismatic Evolutions', 'PRE 151/131', 'Special Illustration Rare')`
+        )
+        .run(pkm('mew')).lastInsertRowid
+    )
+    // Cut at 1, the catalog's newest match pushes the owned copy out; within the owned ones it stays.
+    expect(queryPrintingIds(db, LOCAL, 'mew sir', 1)?.ids).toEqual([newer])
+    expect(queryPrintingIds(db, LOCAL, 'mew sir', 1, { within: [paf232] })?.ids).toEqual([paf232])
+    expect(listEntries(db, { ...all, q: 'mew sir' }).map((e) => e.printing.id)).toEqual([paf232])
+  })
+
+  test('an approved term shows the copies of the versions it names', () => {
+    const { paf232 } = seedMew()
+    const pkey = (
+      db.prepare('SELECT pkey FROM card_printings WHERE id = ?').get(paf232) as { pkey: string }
+    ).pkey
+    db.prepare(
+      `INSERT INTO search_terms (game, phrase, phrase_key, kind, target_kind, target, status, source, created_at)
+       VALUES ('pkm', 'bubble mew', 'bubble mew', 'nickname', 'printing', ?, 'approved', 'owner', '2026-11-21')`
+    ).run(JSON.stringify({ pkeys: [pkey] }))
+    forgetSearchTerms(db)
+    expect(listEntries(db, { ...all, q: 'bubble mew' }).map((e) => e.printing.id)).toEqual([paf232])
+  })
+
+  test('no set words are read when a card name spells the query', () => {
+    // "Dark Beginning 1" would read "dark" as a set and add other Magician cards printed in it.
+    db.prepare(
+      "INSERT INTO sets (game, language, set_name, set_code, tcg_date) VALUES ('ygo', 'en', 'Dark Beginning 1', 'DB1', '2004-12-01')"
+    ).run()
+    db.prepare(
+      `INSERT INTO cards (id, game, name, type, frame_type, race, "desc", updated_at)
+       VALUES (80304126, 'ygo', 'Magician''s Valkyria', 'Normal Monster', 'normal', 'Spellcaster', '', '2026-11-21')`
+    ).run()
+    db.prepare(
+      "INSERT INTO card_images (image_id, game, card_id, sort_order) VALUES (80304126, 'ygo', 80304126, 0)"
+    ).run()
+    const valkyria = Number(
+      db
+        .prepare(
+          "INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity) VALUES ('ygo', 80304126, 'en', 'Dark Beginning 1', 'DB1-EN100', 'Rare')"
+        )
+        .run().lastInsertRowid
+    )
+    db.exec("INSERT INTO cards_fts(cards_fts) VALUES('rebuild')")
+    addEntry(db, { printingId: valkyria, imageId: 80304126, quantity: 1 })
+    addEntry(db, { printingId: pid('SDY-006'), imageId: 46986414, quantity: 1 })
+    expect(listEntries(db, { ...all, q: 'dark magician' }).map((e) => e.card.name)).toEqual([
+      'Dark Magician'
+    ])
+    // Without a name to spell, the set word still finds the Valkyria copy.
+    expect(listEntries(db, { ...all, q: 'dark valkyria' }).map((e) => e.card.name)).toEqual([
+      "Magician's Valkyria"
+    ])
+  })
 })

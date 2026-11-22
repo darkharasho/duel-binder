@@ -388,11 +388,56 @@ async function gradedPrice(env, ctx, q) {
   }
 }
 
+// Constant-time string compare: hashes both sides so length does not leak either.
+async function tokenMatches(given, expected) {
+  const enc = new TextEncoder()
+  const [a, b] = await Promise.all([
+    crypto.subtle.digest('SHA-256', enc.encode(given)),
+    crypto.subtle.digest('SHA-256', enc.encode(expected))
+  ])
+  const x = new Uint8Array(a)
+  const y = new Uint8Array(b)
+  let diff = 0
+  for (let i = 0; i < x.length; i++) diff |= x[i] ^ y[i]
+  return diff === 0
+}
+
 export default {
   async fetch(request, env, ctx) {
     if (request.method !== 'GET') return respond({ error: 'method not allowed' }, 405)
     const url = new URL(request.url)
     const clientOk = CLIENTS.has(request.headers.get('X-Client'))
+    if (url.pathname === '/v1/titles') {
+      // Owner-only term harvest: an unknown token looks like a missing route, and KV is never used.
+      const given = (request.headers.get('Authorization') ?? '').replace(/^Bearer /, '')
+      if (!env.HARVEST_TOKEN || !(await tokenMatches(given, env.HARVEST_TOKEN))) {
+        return respond({ error: 'not found' }, 404)
+      }
+      const q = (url.searchParams.get('q') ?? '').trim()
+      const game = url.searchParams.get('game') ?? ''
+      if (!Object.hasOwn(GRADED_CATEGORIES, game) || !q || q.length > MAX_FIELD) {
+        return respond({ error: 'bad request' }, 400)
+      }
+      try {
+        const found = await search(env, q, { limit: 200, category: GRADED_CATEGORIES[game] })
+        return respond({
+          titles: found.map((i) => ({
+            title: String(i.title ?? ''),
+            seller: i.seller?.username ?? ''
+          }))
+        })
+      } catch (e) {
+        if (e?.status === 429) return respond({ error: 'rate limited' }, 429)
+        console.error(
+          'ebay titles failed',
+          String(e?.message ?? '')
+            .split(' ')
+            .slice(0, 2)
+            .join(' ')
+        )
+        return respond({ error: 'upstream' }, 502)
+      }
+    }
     if (url.pathname === '/v1/quota') {
       if (!clientOk) return respond({ error: 'bad request' }, 400)
       return respond(await lookupQuota(env))

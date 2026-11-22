@@ -178,6 +178,7 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
   return {
     cards: {
       search: call('cards:search'),
+      explain: call('cards:explain'),
       get: call('cards:get'),
       browse: call('cards:browse'),
       browseFacets: call('cards:browseFacets'),

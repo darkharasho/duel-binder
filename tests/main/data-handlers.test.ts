@@ -103,6 +103,7 @@ async function withAccount(opts: { storedGame?: GameId } = {}) {
     push: async () => [],
     pull: async (cursor: number) => ({ entries: [], cursor, more: false }),
     priceChanges: async (since: number) => ({ prices: [], cursor: since, more: false }),
+    searchTerms: async (since: number) => ({ terms: [], deleted: [], cursor: since, more: false }),
     prices: async () => ({ prices: [], status: null }),
     revoke: async () => {},
     rpc: vi.fn(async () => null)

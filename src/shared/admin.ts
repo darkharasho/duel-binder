@@ -4,6 +4,7 @@ import type { SupporterPlan } from './supporter'
  * (workers/portal/src: stats.ts, errors.ts, merge.ts, testers.ts, admins.ts, training.ts).
  */
 import type { GameId } from './games/types'
+import type { SearchTerm, TermEvidence, TermKind, TermTarget, TermTargetKind } from './search/terms'
 import type { TrainingStats } from './training'
 
 /** GET /admin/stats (collectStats). One read counts every table, so it's read only when asked. */
@@ -107,8 +108,22 @@ export interface AdminList {
 
 export type AdminPhotos = TrainingStats
 
+/** A search term as GET /admin/terms lists it: its eBay evidence and a card to show for its target. */
+export type AdminTerm = SearchTerm & {
+  evidence: TermEvidence
+  preview: { cardName: string; imageId: number | null; label: string } | null
+}
+
+/** The fields an owner sets when approving with edits or adding a term. */
+export interface AdminTermFields {
+  phrase: string
+  kind: TermKind
+  targetKind: TermTargetKind
+  target: TermTarget
+}
+
 /** The GitHub workflows the Runs tab watches. */
-export const ADMIN_WORKFLOWS = ['catalog.yml', 'release.yml'] as const
+export const ADMIN_WORKFLOWS = ['catalog.yml', 'release.yml', 'terms.yml'] as const
 export type AdminWorkflow = (typeof ADMIN_WORKFLOWS)[number]
 
 /** The fields of a GitHub Actions run the Runs tab reads. */

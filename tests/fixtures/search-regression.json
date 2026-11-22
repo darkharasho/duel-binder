@@ -1,0 +1,141 @@
+{
+ "ygo: dark magician": [
+  {
+   "id": 46986414,
+   "name": "Dark Magician",
+   "type": "Normal Monster",
+   "defaultImageId": 46986414,
+   "matchedSetCode": null
+  },
+  {
+   "id": 7002,
+   "name": "Dark Magician Girl",
+   "type": "Effect Monster",
+   "defaultImageId": 7002,
+   "matchedSetCode": null
+  }
+ ],
+ "ygo: blue-eyes": [
+  {
+   "id": 7000,
+   "name": "Blue-Eyes White Dragon",
+   "type": "Normal Monster",
+   "defaultImageId": 7000,
+   "matchedSetCode": null
+  },
+  {
+   "id": 7001,
+   "name": "Blue-Eyes Ultimate Dragon",
+   "type": "Fusion Monster",
+   "defaultImageId": 7001,
+   "matchedSetCode": null
+  }
+ ],
+ "ygo: MEP 102": [],
+ "ygo: Victini 102": [],
+ "ygo: fusion": [
+  {
+   "id": 7004,
+   "name": "Fusion Gate",
+   "type": "Spell Card",
+   "defaultImageId": 7004,
+   "matchedSetCode": null
+  }
+ ],
+ "ygo: char": [
+  {
+   "id": 7005,
+   "name": "Charcoal Inpachi",
+   "type": "Normal Monster",
+   "defaultImageId": 7005,
+   "matchedSetCode": null
+  }
+ ],
+ "ygo: LOB-001": [
+  {
+   "id": 7000,
+   "name": "Blue-Eyes White Dragon",
+   "type": "Normal Monster",
+   "defaultImageId": 7000,
+   "matchedSetCode": "LOB-001"
+  }
+ ],
+ "pkm: dark magician": [],
+ "pkm: blue-eyes": [],
+ "pkm: MEP 102": [
+  {
+   "id": 2875594976999690,
+   "name": "Victini",
+   "type": "Pokémon",
+   "defaultImageId": 2875594976999690,
+   "matchedSetCode": "MEP 102"
+  }
+ ],
+ "pkm: Victini 102": [
+  {
+   "id": 2875594976999690,
+   "name": "Victini",
+   "type": "Pokémon",
+   "defaultImageId": 2875594976999690,
+   "matchedSetCode": "MEP 102"
+  }
+ ],
+ "pkm: fusion": [
+  {
+   "id": 2494156002956210,
+   "name": "Fusion Strike Energy",
+   "type": "Pokémon",
+   "defaultImageId": 2494156002956210,
+   "matchedSetCode": null
+  }
+ ],
+ "pkm: char": [
+  {
+   "id": 752428337506684,
+   "name": "Charmander",
+   "type": "Pokémon",
+   "defaultImageId": 752428337506684,
+   "matchedSetCode": null
+  },
+  {
+   "id": 111364107329606,
+   "name": "Charizard",
+   "type": "Pokémon",
+   "defaultImageId": 111364107329606,
+   "matchedSetCode": null
+  }
+ ],
+ "pkm: LOB-001": [],
+ "mtg: dark magician": [],
+ "mtg: blue-eyes": [],
+ "mtg: MEP 102": [],
+ "mtg: Victini 102": [],
+ "mtg: fusion": [],
+ "mtg: char": [
+  {
+   "id": 383183154722,
+   "name": "Char",
+   "type": "Instant",
+   "defaultImageId": 383183154722,
+   "matchedSetCode": null,
+   "language": "en"
+  },
+  {
+   "id": 518926648073,
+   "name": "Char",
+   "type": "Instant",
+   "defaultImageId": 518926648073,
+   "matchedSetCode": null,
+   "language": "de",
+   "localName": "Verkohlen"
+  }
+ ],
+ "mtg: LOB-001": [],
+ "op: dark magician": [],
+ "op: blue-eyes": [],
+ "op: MEP 102": [],
+ "op: Victini 102": [],
+ "op: fusion": [],
+ "op: char": [],
+ "op: LOB-001": []
+}

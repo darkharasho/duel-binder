@@ -757,6 +757,22 @@ export const SCHEMA_V51 = `
 ALTER TABLE graded_copies ADD COLUMN subgrades TEXT NOT NULL DEFAULT '';
 `
 
+/**
+ * Community search terms (aliases and synonyms with the card or filter they stand for). Devices
+ * hold approved rows only; `id` and `seq` are the portal's. cards_fts_vocab feeds the typo
+ * fallback. Desktop-only here, since a fresh server makes it after the desktop steps (see server-51).
+ */
+export const SCHEMA_V52 = `
+CREATE TABLE search_terms (id INTEGER PRIMARY KEY, game TEXT NOT NULL, phrase TEXT NOT NULL,
+  phrase_key TEXT NOT NULL, kind TEXT NOT NULL, target_kind TEXT NOT NULL, target TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending', source TEXT NOT NULL, evidence TEXT NOT NULL DEFAULT '{}',
+  seq INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, decided_at TEXT,
+  UNIQUE (game, phrase_key));
+CREATE INDEX ix_search_terms_seq ON search_terms(seq);
+CREATE INDEX ix_search_terms_game_status ON search_terms(game, status);
+CREATE VIRTUAL TABLE cards_fts_vocab USING fts5vocab(cards_fts, row);
+`
+
 export const MIGRATIONS: Migration[] = [
   { version: 1, sql: SCHEMA_V1 },
   { version: 2, sql: SCHEMA_V2 },
@@ -808,5 +824,6 @@ export const MIGRATIONS: Migration[] = [
   { version: 48, sql: SCHEMA_V48 },
   { version: 49, sql: SCHEMA_V49, server: false },
   { version: 50, sql: SCHEMA_V50 },
-  { version: 51, sql: SCHEMA_V51, server: false }
+  { version: 51, sql: SCHEMA_V51, server: false },
+  { version: 52, sql: SCHEMA_V52, server: false }
 ]

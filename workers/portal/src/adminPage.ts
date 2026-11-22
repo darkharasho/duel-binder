@@ -69,6 +69,7 @@ td.v{text-align:right;font-weight:500}
 .bar div{height:100%;background:var(--accent)}
 .note{color:var(--muted);font-size:12px;margin:4px 0 0}
 h3{font-size:13px;font-weight:600;margin:16px 0 6px}
+.term{border-top:1px solid rgb(255 255 255 / 8%);padding:10px 0}.term p{margin:2px 0}
 .adder{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:16px}
 .adder select,.adder input{height:30px;border-radius:6px;border:1px solid rgb(255 255 255 / 14%);background:var(--card);color:var(--fg);font:inherit;font-size:13px;padding:0 8px}
 .chart{display:flex;align-items:flex-end;gap:3px;height:225px}
@@ -113,6 +114,7 @@ const $ = (id) => document.getElementById(id)
 const FREE = ${FREE_STORAGE_BYTES}
 const TESTER_GAMES = ${JSON.stringify(testerGames())}
 const HOLDER_LABELS = ${JSON.stringify(HOLDER_LABELS)}
+const ALL_GAMES = ${JSON.stringify(GAME_IDS.map((id) => ({ id, name: GAMES[id].name })))}
 const n = (v) => (v ?? 0).toLocaleString()
 const bytes = (b) => b == null ? 'unknown' : b < 1e6 ? (b / 1e3).toFixed(1) + ' KB' : b < 1e9 ? (b / 1e6).toFixed(1) + ' MB' : (b / 1e9).toFixed(2) + ' GB'
 
@@ -661,6 +663,199 @@ async function loadBeta() {
   $('beta').replaceChildren(p)
 }
 
+/** Community search terms: pending proposals to approve, edit or reject, the approved list, rejected terms to restore, and an add form. Phrases, titles and reasons come from eBay and AI output, so they only ever go in as text. */
+const TERM_KINDS = ['nickname', 'abbreviation', 'subset', 'rarity', 'cards']
+const TERM_TARGET_KINDS = ['printing', 'card', 'set', 'rarity', 'cards']
+let termsGame = ${JSON.stringify(GAME_IDS[0])}
+const termList = (s) => s.split(',').map((x) => x.trim()).filter(Boolean)
+const termTargetFrom = (f) => {
+  const target = {}
+  const pkeys = termList(f.pkeys.value)
+  const cardIds = termList(f.cardIds.value).map(Number)
+  const sets = termList(f.sets.value).map((s) => {
+    const i = s.indexOf(':')
+    const language = s.slice(0, i).trim()
+    const setName = s.slice(i + 1).trim()
+    if (i <= 0 || !language || !setName) throw new Error('Sets need language:Set name')
+    return { language, setName }
+  })
+  const rarities = termList(f.rarities.value)
+  if (pkeys.length) target.pkeys = pkeys
+  if (cardIds.length) target.cardIds = cardIds
+  if (sets.length) target.sets = sets
+  if (rarities.length) target.rarities = rarities
+  return target
+}
+const TERM_CLASH = {
+  rejected: 'That phrase is already used by a rejected term in this game. Restore it from the Rejected list.',
+  pending: 'That phrase is already used by a pending term in this game. Approve or edit it there.',
+  approved: 'That phrase is already used by an approved term in this game.'
+}
+const termError = (status, body) => typeof body.error === 'string' && /^duplicate(-|$)/.test(body.error)
+  ? (TERM_CLASH[body.error.slice('duplicate-'.length)] || 'That phrase is already used by another term in this game.')
+  : status === 400 ? 'The portal refused those values. Check the phrase (up to 4 words), the kind, and the list its target kind uses (card ids for card or cards, printing keys, sets or rarities).'
+  : 'Failed: ' + (body.error ?? 'HTTP ' + status)
+async function termPost(path, payload) {
+  const res = await fetch(path, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+  if (res.ok) return null
+  return termError(res.status, await res.json().catch(() => ({})))
+}
+/** The fields form for an edit or a new term; submit calls onSubmit(fields) and shows the refusal it returns. */
+function termForm(t, label, onSubmit) {
+  const form = el('form', null, 'adder')
+  const phrase = el('input')
+  phrase.type = 'text'
+  phrase.required = true
+  phrase.placeholder = 'Phrase'
+  phrase.setAttribute('aria-label', 'Phrase')
+  phrase.value = t ? t.phrase : ''
+  const select = (options, current, name) => {
+    const s = el('select')
+    s.setAttribute('aria-label', name)
+    for (const v of options) {
+      const o = el('option', v)
+      o.value = v
+      s.append(o)
+    }
+    s.value = current
+    return s
+  }
+  const kind = select(TERM_KINDS, t ? t.kind : 'nickname', 'Kind')
+  const targetKind = select(TERM_TARGET_KINDS, t ? t.targetKind : 'card', 'Target kind')
+  const tg = t ? t.target : {}
+  const box = (name, value) => {
+    const i = el('input')
+    i.type = 'text'
+    i.placeholder = name
+    i.setAttribute('aria-label', name)
+    i.value = value
+    return i
+  }
+  const f = {
+    pkeys: box('Printing keys', (tg.pkeys || []).join(', ')),
+    cardIds: box('Card ids', (tg.cardIds || []).join(', ')),
+    sets: box('Sets (language:name)', (tg.sets || []).map((s) => s.language + ':' + s.setName).join(', ')),
+    rarities: box('Rarities', (tg.rarities || []).join(', '))
+  }
+  const go = el('button', label)
+  go.type = 'submit'
+  const msg = el('span', null, 'note')
+  form.append(phrase, kind, targetKind, f.pkeys, f.cardIds, f.sets, f.rarities, go, msg)
+  form.addEventListener('submit', async (ev) => {
+    ev.preventDefault()
+    go.disabled = true
+    msg.textContent = ''
+    try {
+      const refused = await onSubmit({ phrase: phrase.value, kind: kind.value, targetKind: targetKind.value, target: termTargetFrom(f) })
+      if (refused) msg.textContent = refused
+    } catch (e) {
+      msg.textContent = e.message
+    } finally {
+      go.disabled = false
+    }
+  })
+  return form
+}
+function termCard(t) {
+  const pending = t.status === 'pending'
+  const card = el('div', null, 'term')
+  const head = el('p')
+  head.append(el('strong', t.phrase), el('span', ' ' + t.kind + ' / ' + t.targetKind, 'note'))
+  card.append(head, el('p', t.preview ? t.preview.label : 'No card found for this target.', 'note'))
+  if (pending) {
+    if (t.evidence.reason) card.append(el('p', t.evidence.reason))
+    card.append(el('p', t.evidence.count + ' listings, ' + t.evidence.sellers + ' sellers', 'note'))
+    for (const title of t.evidence.titles.slice(0, 5)) card.append(el('p', title, 'note'))
+  }
+  const msg = el('p', null, 'note')
+  const decide = async (status, edit) => {
+    msg.textContent = ''
+    const refused = await termPost('/admin/terms/decide', Object.assign({ id: t.id, status }, edit || {}))
+    if (refused) msg.textContent = refused
+    else loadTerms()
+    return refused
+  }
+  const row = el('div', null, 'adder')
+  if (pending) {
+    const approve = el('button', 'Approve')
+    approve.type = 'button'
+    approve.addEventListener('click', () => decide('approved'))
+    const edit = el('button', 'Edit')
+    edit.type = 'button'
+    let form = null
+    edit.addEventListener('click', () => {
+      if (form) { form.remove(); form = null; return }
+      form = termForm(t, 'Save and approve', (fields) => decide('approved', fields))
+      card.append(form)
+    })
+    const reject = el('button', 'Reject')
+    reject.type = 'button'
+    reject.addEventListener('click', () => {
+      if (confirm('Reject "' + t.phrase + '"? You can restore it from the Rejected list.')) decide('rejected')
+    })
+    row.append(approve, edit, reject)
+  } else if (t.status === 'approved') {
+    const remove = el('button', 'Remove')
+    remove.type = 'button'
+    remove.addEventListener('click', () => {
+      if (confirm('Remove "' + t.phrase + '"? Searches stop using it. You can restore it from the Rejected list.')) decide('rejected')
+    })
+    row.append(remove)
+  } else {
+    const restore = el('button', 'Restore')
+    restore.type = 'button'
+    restore.addEventListener('click', () => decide('approved'))
+    row.append(restore)
+  }
+  card.append(row, msg)
+  return card
+}
+async function loadTerms() {
+  const p = el('section', null, 'panel')
+  p.append(el('h2', 'Terms'))
+  try {
+    const bar = el('div', null, 'adder')
+    const game = el('select')
+    game.setAttribute('aria-label', 'Game')
+    for (const g of ALL_GAMES) {
+      const o = el('option', g.name)
+      o.value = g.id
+      game.append(o)
+    }
+    game.value = termsGame
+    game.addEventListener('change', () => { termsGame = game.value; loadTerms() })
+    const harvest = el('a', 'Run harvest')
+    harvest.href = 'https://github.com/darkharasho/duel-binder/actions/workflows/terms.yml'
+    harvest.target = '_blank'
+    harvest.rel = 'noreferrer'
+    bar.append(game, harvest)
+    p.append(bar)
+    const empty = { pending: 'Nothing waiting.', approved: 'No approved terms yet.', rejected: 'Nothing rejected or removed.' }
+    for (const [status, title] of [['pending', 'Pending'], ['approved', 'Approved'], ['rejected', 'Rejected']]) {
+      const res = await fetch('/admin/terms?status=' + status + '&game=' + encodeURIComponent(termsGame), { credentials: 'same-origin' })
+      if (!res.ok) throw new Error('HTTP ' + res.status)
+      const data = await res.json()
+      p.append(el('h3', title + ' (' + data.terms.length + ')'))
+      if (!data.terms.length) p.append(el('p', empty[status], 'note'))
+      for (const t of data.terms) p.append(termCard(t))
+    }
+    p.append(el('h3', 'Add term'))
+    p.append(termForm(null, 'Add term', async (fields) => {
+      const refused = await termPost('/admin/terms/add', Object.assign({ game: termsGame }, fields))
+      if (!refused) loadTerms()
+      return refused
+    }))
+  } catch (e) {
+    p.append(el('p', 'Could not load terms: ' + e.message, 'note'))
+  }
+  $('terms').replaceChildren(p)
+}
+
 /** Who may use each tester-only game: a table per game, and a form to add an account. */
 async function loadTesters() {
   const p = el('section', null, 'panel')
@@ -1015,7 +1210,7 @@ async function loadSupporters() {
   }
 }
 
-const TABS = ['overview', 'runs', 'people', 'activity', 'costs', 'supporters', 'errors', 'scanner', 'storage', 'merges', 'testers', 'beta', 'admins', 'photos']
+const TABS = ['overview', 'runs', 'people', 'activity', 'costs', 'supporters', 'errors', 'scanner', 'storage', 'merges', 'testers', 'beta', 'admins', 'photos', 'terms']
 
 function showTab() {
   const wanted = location.hash.slice(1)
@@ -1029,7 +1224,7 @@ function showTab() {
 
 window.addEventListener('hashchange', showTab)
 showTab()
-$('refresh').addEventListener('click', () => { load(); loadErrors(); loadRuns(); loadMerges(); loadTesters(); loadBeta(); loadAdmins(); loadPhotos(); loadCosts(); loadSupporters() })
+$('refresh').addEventListener('click', () => { load(); loadErrors(); loadRuns(); loadMerges(); loadTesters(); loadBeta(); loadAdmins(); loadPhotos(); loadCosts(); loadSupporters(); loadTerms() })
 load()
 loadErrors()
 loadRuns()
@@ -1040,6 +1235,7 @@ loadPhotos()
 loadCosts()
 loadSupporters()
 loadBeta()
+loadTerms()
 `
 
 function csp(nonce: string): string {
@@ -1071,7 +1267,7 @@ export function adminPage(): Response {
 <header><div class="wrap">
 <div class="top"><h1>Duel Binder</h1><span class="badge">Admin</span><span class="pulse" id="pulse"></span>
 <span class="grow"></span><span class="at" id="at"></span><a href="/">Back to the app</a><button id="refresh" type="button">Refresh</button></div>
-<nav aria-label="Admin sections"><a href="#overview">Overview</a><a href="#runs">Runs</a><a href="#people">Users</a><a href="#activity">Usage</a><a href="#costs">Costs</a><a href="#supporters">Supporters</a><a href="#errors">Errors</a><a href="#scanner">Scanner &amp; prices</a><a href="#storage">Storage</a><a href="#merges">Merges</a><a href="#testers">Testers</a><a href="#beta">Beta</a><a href="#admins">Admins</a><a href="#photos">Photos</a></nav>
+<nav aria-label="Admin sections"><a href="#overview">Overview</a><a href="#runs">Runs</a><a href="#people">Users</a><a href="#activity">Usage</a><a href="#costs">Costs</a><a href="#supporters">Supporters</a><a href="#errors">Errors</a><a href="#scanner">Scanner &amp; prices</a><a href="#storage">Storage</a><a href="#merges">Merges</a><a href="#testers">Testers</a><a href="#beta">Beta</a><a href="#admins">Admins</a><a href="#photos">Photos</a><a href="#terms">Terms</a></nav>
 </div></header>
 <main class="wrap">
 <section data-tab id="overview">
@@ -1091,6 +1287,7 @@ export function adminPage(): Response {
 <section data-tab id="beta" hidden></section>
 <section data-tab id="admins" hidden></section>
 <section data-tab id="photos" hidden></section>
+<section data-tab id="terms" hidden></section>
 </main>
 <script nonce="${nonce}">${script()}</script>
 </body>

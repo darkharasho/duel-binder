@@ -25,6 +25,7 @@ import {
 import type { GameId } from '../../../src/shared/games'
 import type { AppDeps } from './app'
 import { currentUser, gamesFor } from './auth'
+import { termFeed } from './searchTerms'
 import { requestPrices } from './priceRequests'
 import {
   applyBinderEditPush,
@@ -373,6 +374,7 @@ const POST_PATHS: ReadonlySet<string> = new Set([
 const GET_PATHS: ReadonlySet<string> = new Set([
   'pull',
   'price-changes',
+  'search-terms',
   'wishlist-pull',
   'binders-pull',
   'binder-edits-pull',
@@ -382,7 +384,7 @@ const GET_PATHS: ReadonlySet<string> = new Set([
 ])
 
 /**
- * POST /api/sync/push, GET /api/sync/pull, GET /api/sync/price-changes, POST /api/sync/prices,
+ * POST /api/sync/push, GET /api/sync/pull, GET /api/sync/price-changes, GET /api/sync/search-terms, POST /api/sync/prices,
  * POST /api/sync/price-requests, POST /api/sync/wishlist-push and GET /api/sync/wishlist-pull, and the same
  * pairs for binders (binders-push/-pull), their edits (binder-edits-push/-pull) and favourites
  * (favourites-push/-pull), graded copies (graded-push/-pull, and their prices: graded-prices) and scan sessions (sessions-push/-pull), and POST /api/sync/history (value history);
@@ -424,6 +426,14 @@ export async function syncRoute(req: Request, deps: AppDeps, path: string): Prom
                   ? gradedPullSince
                   : binderEditPullSince
       return json(pull(deps.db, user.id, cursor, MAX_PULL, game))
+    }
+
+    if (path === 'search-terms') {
+      const raw = new URL(req.url).searchParams.get('since') ?? ''
+      const since = /^\d{1,16}$/.test(raw) ? Number(raw) : NaN
+      if (!Number.isSafeInteger(since))
+        throw new CollectionError('since must be a whole number of at least 0')
+      return json(termFeed(deps.db, game, since))
     }
 
     if (path === 'price-changes') {

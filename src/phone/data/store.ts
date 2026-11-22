@@ -208,6 +208,7 @@ const RESET_TABLES = PHONE_TABLES.filter(
  */
 const READ_CHANNELS: ReadonlySet<DataChannel> = new Set<DataChannel>([
   'cards:search',
+  'cards:explain',
   'cards:get',
   'cards:browse',
   'cards:browseFacets',

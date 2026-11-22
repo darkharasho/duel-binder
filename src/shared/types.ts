@@ -106,6 +106,17 @@ export interface CardSearchResult {
   language?: Language
   /** Magic only: the printed name in that language, when it has one. */
   localName?: string
+  /** A version row: the one printing a term or field words named. Absent on a card row. */
+  printingId?: number
+  setName?: string
+  setCode?: string
+  rarity?: string
+  /** That printing's art, as the card panel shows it. */
+  imageId?: number
+  /** The approved term phrase that named the version. */
+  term?: string
+  /** Set when the query was respelt: the corrected words, as searched. */
+  nearMiss?: string
 }
 
 export interface CardDetail {
@@ -309,6 +320,10 @@ export interface BrowseCard {
   language?: Language
   /** A Magic card's printed name in its language, when not English. */
   localName?: string
+  /** Set on a version tile: the printing the search words named ("trainer gallery charizard"). */
+  focusPrintingId?: number
+  /** That printing's set code without its subset tag ("LOR TG03/30"). */
+  focusLabel?: string
 }
 
 export interface BrowsePage {

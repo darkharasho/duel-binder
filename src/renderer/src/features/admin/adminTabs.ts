@@ -14,6 +14,7 @@ export const ADMIN_PAGE_TABS = [
   { value: 'beta', label: 'Beta' },
   { value: 'admins', label: 'Admins' },
   { value: 'photos', label: 'Photos' },
+  { value: 'terms', label: 'Terms' },
   // On this computer only: key frames from a live pack opening, for scanner work.
   { value: 'capture', label: 'Rip capture' }
 ] as const satisfies readonly { value: string; label: string }[]
@@ -31,6 +32,7 @@ export const adminKeys = {
   beta: ['admin', 'beta'] as const,
   admins: ['admin', 'admins'] as const,
   photos: ['admin', 'photos'] as const,
+  terms: (game: string, status: string) => ['admin', 'terms', game, status] as const,
   supporters: ['admin', 'supporters'] as const,
   costs: (days: 7 | 30) => ['admin', 'costs', days] as const
 }

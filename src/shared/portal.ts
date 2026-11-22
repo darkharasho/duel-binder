@@ -3,6 +3,7 @@ import type { InvokeChannel } from './ipc'
 /** The invoke channels the web portal serves (a subset of the desktop's). */
 export const PORTAL_CHANNELS = [
   'cards:search',
+  'cards:explain',
   'cards:get',
   'cards:browse',
   'cards:browseFacets',

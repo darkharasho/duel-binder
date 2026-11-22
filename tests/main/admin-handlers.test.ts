@@ -27,6 +27,64 @@ function make(isAdmin = true) {
   return { h, admin, runs, capture }
 }
 
+const FIELDS = {
+  phrase: ' blue eyes ',
+  kind: 'nickname',
+  targetKind: 'card',
+  target: { cardIds: [4] }
+}
+
+describe('admin handlers: search terms', () => {
+  it('reads a game and status, decides and adds with checked bodies', async () => {
+    const { h, admin } = make()
+    admin.mockResolvedValueOnce({ terms: [{ id: 9 }] })
+    expect(await h['admin:terms']('pkm', 'pending')).toEqual([{ id: 9 }])
+    expect(admin).toHaveBeenLastCalledWith('/admin/terms?status=pending&game=pkm')
+    await h['admin:decideTerm'](9, 'rejected')
+    expect(admin).toHaveBeenLastCalledWith('/admin/terms/decide', { id: 9, status: 'rejected' })
+    await h['admin:decideTerm'](9, 'approved', FIELDS)
+    expect(admin).toHaveBeenLastCalledWith('/admin/terms/decide', {
+      id: 9,
+      status: 'approved',
+      ...FIELDS,
+      phrase: 'blue eyes'
+    })
+    await h['admin:addTerm']('ygo', FIELDS)
+    expect(admin).toHaveBeenLastCalledWith('/admin/terms/add', {
+      game: 'ygo',
+      ...FIELDS,
+      phrase: 'blue eyes'
+    })
+  })
+
+  it('rejects bad arguments before calling the portal', async () => {
+    const { h, admin } = make()
+    await expect(h['admin:decideTerm'](1, 'pending')).rejects.toThrow('Bad status')
+    await expect(h['admin:decideTerm']('1', 'approved')).rejects.toThrow('Bad id')
+    await expect(h['admin:terms']('pkm', 'all')).rejects.toThrow('Bad status')
+    await expect(h['admin:terms']('nope', 'pending')).rejects.toThrow('Bad game')
+    await expect(h['admin:addTerm']('pkm', { ...FIELDS, kind: 'x' })).rejects.toThrow('Bad term')
+    await expect(h['admin:addTerm']('pkm', { ...FIELDS, phrase: 'a b c d e' })).rejects.toThrow(
+      'Bad term'
+    )
+    expect(admin).not.toHaveBeenCalled()
+  })
+
+  it('says why a phrase clash or a refused body failed', async () => {
+    const { h, admin } = make()
+    admin.mockRejectedValueOnce(new Error('duplicate'))
+    await expect(h['admin:addTerm']('pkm', FIELDS)).rejects.toThrow('already used by another term')
+    admin.mockRejectedValueOnce(new Error('duplicate-rejected'))
+    await expect(h['admin:addTerm']('pkm', FIELDS)).rejects.toThrow(
+      'already used by a rejected term in this game. Restore it from the Rejected list.'
+    )
+    admin.mockRejectedValueOnce(new Error('duplicate-pending'))
+    await expect(h['admin:addTerm']('pkm', FIELDS)).rejects.toThrow('a pending term')
+    admin.mockRejectedValueOnce(new Error('Bad request'))
+    await expect(h['admin:decideTerm'](1, 'approved', FIELDS)).rejects.toThrow('refused')
+  })
+})
+
 describe('admin handlers: phone beta', () => {
   it('reads, decides and deletes beta requests', async () => {
     const { h, admin } = make()

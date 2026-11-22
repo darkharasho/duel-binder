@@ -9,6 +9,7 @@ import { ADMIN_PAGE_TABS, ADMIN_QUERY, adminKeys, type AdminPageTab } from './ad
 import { AdminsTab, BetaTab, ErrorsTab, MergesTab, PhotosTab, TestersTab } from './ListTabs'
 import { Failed } from './parts'
 import { CostsTab } from './CostsTab'
+import { TermsTab } from './TermsTab'
 import { SupportersTab } from './SupportersTab'
 import { RipCaptureTab } from './RipCaptureTab'
 import { POLL_MS, loadRuns } from './runs'
@@ -199,6 +200,7 @@ export function AdminPage({
       {tab === 'supporters' && (
         <Show q={supporters} show={(s) => <SupportersTab supporters={s} />} />
       )}
+      {tab === 'terms' && <TermsTab />}
       {tab === 'capture' && <RipCaptureTab />}
     </div>
   )

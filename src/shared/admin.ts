@@ -180,3 +180,19 @@ export interface AdminSupporters {
     showOnSite: boolean
   }[]
 }
+
+/** One waitlist entry as GET /admin/seats lists it. */
+export interface AdminWaitlistEntry {
+  id: number
+  email: string
+  createdAt: string
+  invitedAt: string | null
+  inviteExpiresAt: string | null
+  status: 'waiting' | 'invited' | 'expired' | 'joined'
+}
+
+/** GET /admin/seats: the seat counts and the waitlist. */
+export interface AdminSeats {
+  counts: { cap: number; accounts: number; invited: number; free: number; waiting: number }
+  waitlist: AdminWaitlistEntry[]
+}

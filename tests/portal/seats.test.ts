@@ -207,4 +207,14 @@ describe('seats', () => {
       { email: 'a@x.com', created_at: '2026-11-01T00:00:00.000Z' }
     ])
   })
+
+  it('inviteEntry refuses an entry whose invite was already used', async () => {
+    const id = wait('used@example.com', '2026-11-01T00:00:00.000Z')
+    db.prepare(
+      'INSERT INTO seat_invites (token_hash, waitlist_id, email, created_at, expires_at, used_at) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run('hu', id, 'used@example.com', PAST, FUTURE, PAST)
+    expect(await inviteEntry(deps, id)).toBe(false)
+    expect(sent).toEqual([])
+    expect(db.prepare('SELECT COUNT(*) AS n FROM seat_invites').get()).toEqual({ n: 1 })
+  })
 })

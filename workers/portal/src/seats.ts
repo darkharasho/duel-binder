@@ -1,6 +1,7 @@
+import type { AdminSeats, AdminWaitlistEntry } from '../../../src/shared/admin'
 import type { SqlDb } from '../../../src/main/db/sql'
 import type { AppDeps } from './app'
-import { randomToken, readCookie, sha256Hex } from './auth'
+import { adminWriteAllowed, isAdmin, isJson, randomToken, readCookie, sha256Hex } from './auth'
 import { brandedHtml, escapeHtml, para, small, type EmailMessage } from './emailSend'
 
 /**
@@ -106,12 +107,21 @@ export function joinWaitlist(db: SqlDb, email: string, nowIso: string): void {
   )
 }
 
+/** True when this entry's invite was used, i.e. the person already has an account. */
+export function entryJoined(db: SqlDb, waitlistId: number): boolean {
+  return !!db
+    .prepare('SELECT 1 FROM seat_invites WHERE waitlist_id = ? AND used_at IS NOT NULL LIMIT 1')
+    .get(waitlistId)
+}
+
 /** Invite one waitlist entry, ignoring the cap. False when there's no such entry or no mail went. */
 export async function inviteEntry(deps: AppDeps, waitlistId: number): Promise<boolean> {
   const { db } = deps
   const entry = db.prepare('SELECT email FROM waitlist WHERE id = ?').get(waitlistId) as
     { email: string } | undefined
   if (!entry) return false
+  // Their invite was already used: they have an account, so no second seat.
+  if (entryJoined(db, waitlistId)) return false
   const now = deps.now()
   const nowIso = now.toISOString()
   const expiresAt = new Date(now.getTime() + INVITE_MS).toISOString()
@@ -221,4 +231,82 @@ export function seatInviteMessage(email: string, link: string, expiresAt: string
       'joined the waitlist on duelbinder.com'
     )
   }
+}
+
+const json = (body: unknown, status = 200): Response =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }
+  })
+
+const MAX_CAP = 100000
+
+/** The waitlist as the admin tab lists it: waiting first (oldest first), then invited, then joined. */
+function adminWaitlist(db: SqlDb, nowIso: string): AdminWaitlistEntry[] {
+  const rows = db
+    .prepare(
+      `SELECT w.id, w.email, w.created_at AS createdAt, w.invited_at AS invitedAt,
+         (SELECT MAX(i.expires_at) FROM seat_invites i WHERE i.waitlist_id = w.id AND i.used_at IS NULL) AS inviteExpiresAt,
+         EXISTS (SELECT 1 FROM seat_invites i WHERE i.waitlist_id = w.id AND i.used_at IS NOT NULL) AS joined
+       FROM waitlist w`
+    )
+    .all() as (Omit<AdminWaitlistEntry, 'status'> & { joined: number })[]
+  const entries = rows.map(({ joined, ...r }): AdminWaitlistEntry => {
+    const status = joined
+      ? 'joined'
+      : r.invitedAt === null
+        ? 'waiting'
+        : r.inviteExpiresAt !== null && r.inviteExpiresAt > nowIso
+          ? 'invited'
+          : 'expired'
+    return { ...r, status }
+  })
+  const rank = { waiting: 0, expired: 0, invited: 1, joined: 2 } as const
+  return entries.sort(
+    (a, b) =>
+      rank[a.status] - rank[b.status] ||
+      (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id - b.id)
+  )
+}
+
+/**
+ * GET /admin/seats and the POSTs /admin/seats/{cap,fill,invite,resend,cancel,delete}; owner-only,
+ * otherwise 404. Lowering the cap below the accounts in use removes no one: free just stays 0.
+ */
+export async function adminSeatsRoute(req: Request, deps: AppDeps): Promise<Response> {
+  const { db } = deps
+  const path = new URL(req.url).pathname
+  const notFound = json({ error: 'Not found' }, 404)
+  if (!(await isAdmin(req, deps))) return notFound
+  if (req.method === 'GET' && path === '/admin/seats') {
+    const nowIso = deps.now().toISOString()
+    const body: AdminSeats = { counts: seatCounts(db, nowIso), waitlist: adminWaitlist(db, nowIso) }
+    return json(body)
+  }
+  const action = path.startsWith('/admin/seats/') ? path.slice('/admin/seats/'.length) : ''
+  if (
+    req.method !== 'POST' ||
+    !['cap', 'fill', 'invite', 'resend', 'cancel', 'delete'].includes(action)
+  )
+    return notFound
+  if (!adminWriteAllowed(req, deps)) return notFound
+  if (!isJson(req)) return json({ error: 'unsupported-media-type' }, 415)
+  const body = (await req.json().catch(() => null)) as Record<string, unknown> | null
+  if (action === 'cap') {
+    const cap = body?.cap
+    if (typeof cap !== 'number' || !Number.isInteger(cap) || cap < 0 || cap > MAX_CAP)
+      return json({ error: 'Bad request' }, 400)
+    setCap(db, cap, deps.now().toISOString())
+    return json({ ok: true, invited: await fillSeats(deps) })
+  }
+  if (action === 'fill') return json({ ok: true, invited: await fillSeats(deps) })
+  const id = body?.id
+  if (typeof id !== 'number' || !Number.isInteger(id)) return json({ error: 'Bad request' }, 400)
+  if (!db.prepare('SELECT 1 FROM waitlist WHERE id = ?').get(id)) return notFound
+  if (action === 'cancel') return cancelInvite(db, id) ? json({ ok: true }) : notFound
+  if (action === 'delete') return deleteEntry(db, id) ? json({ ok: true }) : notFound
+  // invite and resend: someone who already joined has their seat.
+  if (entryJoined(db, id)) return json({ error: 'joined' }, 409)
+  const emailed = action === 'invite' ? await inviteEntry(deps, id) : await resendInvite(deps, id)
+  return emailed ? json({ ok: true, emailed }) : json({ error: 'email' }, 502)
 }

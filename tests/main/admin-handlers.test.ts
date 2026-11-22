@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { adminHandlers } from '../../src/main/ipc/adminHandlers'
 import { createAdminRuns } from '../../src/main/adminRuns'
-import { CloudOfflineError } from '../../src/main/cloud/client'
+import { CloudOfflineError, createCloudClient } from '../../src/main/cloud/client'
 
 function make(isAdmin = true) {
   const admin = vi.fn(async (path: string, _body?: unknown): Promise<unknown> => {
@@ -107,9 +107,15 @@ describe('admin handlers: seats', () => {
     await expect(h['admin:seatsAction']({ action: 'nuke' })).rejects.toThrow('Bad action')
     await expect(h['admin:seatsAction']({ action: 'invite', id: 'x' })).rejects.toThrow('Bad id')
     expect(admin).not.toHaveBeenCalled()
-    admin.mockRejectedValueOnce(new CloudOfflineError('The portal refused (409)'))
+    // What the real client throws for the portal's 409 { error: 'joined' }.
+    const client = createCloudClient({
+      baseUrl: 'https://portal.test',
+      token: 't',
+      fetch: (async () => Response.json({ error: 'joined' }, { status: 409 })) as typeof fetch
+    })
+    admin.mockImplementationOnce((path, body) => client.admin(path as `/admin/${string}`, body))
     await expect(h['admin:seatsAction']({ action: 'resend', id: 1 })).rejects.toThrow(
-      'already has an account'
+      'That person already has an account.'
     )
     admin.mockRejectedValueOnce(new CloudOfflineError('The portal failed (502)'))
     await expect(h['admin:seatsAction']({ action: 'invite', id: 1 })).rejects.toThrow(

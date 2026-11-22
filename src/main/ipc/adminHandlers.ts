@@ -185,8 +185,8 @@ export function adminHandlers(
         )
         return typeof res?.invited === 'number' ? { invited: res.invited } : {}
       } catch (e) {
-        // invite and resend: 409 is an entry that already has an account, 502 an email that failed.
-        if (e instanceof CloudOfflineError && e.message.includes('(409)'))
+        // invite and resend: the portal's 409 reaches here as Error('joined'), an entry that already has an account, 502 an email that failed.
+        if (e instanceof Error && e.message === 'joined')
           throw new Error('That person already has an account.', { cause: e })
         if (e instanceof CloudOfflineError && e.message.includes('(502)'))
           throw new Error("The invite email didn't go out. Try again.", { cause: e })

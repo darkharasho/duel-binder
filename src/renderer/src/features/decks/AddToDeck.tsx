@@ -41,7 +41,13 @@ async function factOf(cardId: number, known: DeckCard | undefined): Promise<Deck
 export function AddToDeck({ game, cardId }: { game: GameId; cardId: number }): React.JSX.Element {
   const qc = useQueryClient()
   const pack = useRulesPack(game)
-  const list = useQuery<DeckList>({ queryKey: queryKeys.decks, queryFn: () => api.decks.list() })
+  const [menuOpen, setMenuOpen] = useState(false)
+  // Read when the menu opens, not with every card panel.
+  const list = useQuery<DeckList>({
+    queryKey: queryKeys.decks,
+    queryFn: () => api.decks.list(),
+    enabled: menuOpen
+  })
   const [creating, setCreating] = useState(false)
   const [busy, setBusy] = useState(false)
   const decks = list.data?.decks ?? []
@@ -94,13 +100,14 @@ export function AddToDeck({ game, cardId }: { game: GameId; cardId: number }): R
 
   return (
     <>
-      <DropdownMenu>
+      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm" disabled={busy}>
             Add to deck
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
+          {list.isPending && <DropdownMenuItem disabled>Loading decks…</DropdownMenuItem>}
           {decks.map((d) => (
             <DropdownMenuItem key={d.uid} onSelect={() => void run(() => addTo(d))}>
               {d.name}

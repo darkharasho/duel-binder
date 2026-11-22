@@ -6,6 +6,7 @@ import { AddToDeck } from '@/features/decks/AddToDeck'
 import { FriendBinder } from '@/features/friends/FriendBinder'
 import { DecksPage } from '@/features/decks/DecksPage'
 import { buildPreview, keptEntries } from '@/features/decks/deckImport'
+import { changeSummary, moveEntry } from '@/features/decks/deckEntries'
 import { parseYgoList } from '@shared/decks/ygo/lists'
 import { OFFLINE_MESSAGE } from '@shared/friends'
 import type { PackState } from '@shared/decks/pack'
@@ -133,6 +134,7 @@ describe('the decks page', () => {
     )
     renderWithProviders(<DecksPage />, { api })
     expect(await screen.findByText('Changed with the 2026-12-01 list')).toBeInTheDocument()
+    expect(screen.getByText('3 × Maxx "C": Forbidden in Advanced')).toBeInTheDocument()
     expect(screen.getByText('Not legal')).toBeInTheDocument()
   })
 
@@ -353,6 +355,107 @@ describe('the deck page', () => {
       )
     )
     expect(api.decks.markSeen).toHaveBeenCalledTimes(1)
+  })
+
+  it('an edit that changes the verdict marks the new one seen', async () => {
+    const cards: DeckEntry[] = [...legalCards, { section: 'main', card: POT, qty: 1 }]
+    const api = pageApi(detail({ cards }), pack('2026-11-22'))
+    renderWithProviders(<DeckPage uid="d1" onBack={vi.fn()} />, { api })
+    await waitFor(() =>
+      expect(api.decks.markSeen).toHaveBeenCalledWith(
+        'd1',
+        expect.objectContaining({ status: 'illegal', problems: [`limit:${POT}`] })
+      )
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Remove a copy of Pot of Greed' }))
+    await waitFor(() =>
+      expect(api.decks.markSeen).toHaveBeenLastCalledWith('d1', {
+        status: 'legal',
+        problems: [],
+        packVersion: '2026-11-22'
+      })
+    )
+    // A name edit leaves the verdict as it is: no new mark.
+    await userEvent.type(screen.getByLabelText('Deck name'), '!')
+    expect(api.decks.markSeen).toHaveBeenCalledTimes(2)
+  })
+
+  it('changing the format re-runs the checks and saves it', async () => {
+    const ocg: PackState = {
+      state: 'ready',
+      pack: {
+        schema: 1,
+        game: 'ygo',
+        version: '2026-11-22',
+        builtAt: new Date().toISOString(),
+        sources: [],
+        formats: {
+          advanced: { limits: {}, notReleased: {} },
+          ocg: { limits: { [MAXX]: 1 }, notReleased: {} }
+        }
+      }
+    }
+    const cards: DeckEntry[] = [...fillers(), { section: 'main', card: MAXX, qty: 3 }]
+    const api = pageApi(detail({ cards }), ocg)
+    renderWithProviders(<DeckPage uid="d1" onBack={vi.fn()} />, { api })
+    expect(await screen.findByText('Legal')).toBeInTheDocument()
+    await userEvent.selectOptions(screen.getByLabelText('Format'), 'OCG')
+    expect(screen.getByText('Not legal')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /3 × Maxx "C": Limited to 1 in OCG/ })
+    ).toBeInTheDocument()
+    await waitFor(
+      () =>
+        expect(api.decks.save).toHaveBeenCalledWith(
+          expect.objectContaining({ uid: 'd1', format: 'ocg' })
+        ),
+      SAVE_WAIT
+    )
+  })
+
+  it('a deck in a format this app does not know shows its cards and asks for an update', async () => {
+    const api = pageApi(detail({ format: 'genesys' }), pack('2026-11-22'))
+    renderWithProviders(<DeckPage uid="d1" onBack={vi.fn()} />, { api })
+    expect(await screen.findByText(/needs a newer version of the app/)).toBeInTheDocument()
+    expect(screen.queryByText("This deck isn't here any more.")).not.toBeInTheDocument()
+    expect(screen.getByText('Update to check legality')).toBeInTheDocument()
+    expect(screen.queryByText('Legal')).not.toBeInTheDocument()
+    expect(screen.getByText('Main Deck 42 / 40–60')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Add a copy of/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument()
+  })
+
+  it('moves an entry to another section from its menu', async () => {
+    const api = pageApi(detail(), pack('2026-11-22'))
+    renderWithProviders(<DeckPage uid="d1" onBack={vi.fn()} />, { api })
+    await screen.findByText('Main Deck 42 / 40–60')
+    await userEvent.click(screen.getByRole('button', { name: 'More for Pricey' }))
+    expect(screen.queryByRole('menuitem', { name: 'Move to Main Deck' })).not.toBeInTheDocument()
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Move to Side Deck' }))
+    const side = screen.getByRole('region', { name: 'Side Deck' })
+    expect(within(side).getByText('Pricey')).toBeInTheDocument()
+    expect(screen.getByText('Main Deck 40 / 40–60')).toBeInTheDocument()
+    await waitFor(
+      () =>
+        expect(api.decks.save).toHaveBeenCalledWith(
+          expect.objectContaining({
+            cards: expect.arrayContaining([{ section: 'side', card: 1, qty: 2 }])
+          })
+        ),
+      SAVE_WAIT
+    )
+  })
+
+  it("names a card this catalog doesn't have yet", async () => {
+    const cards: DeckEntry[] = [...legalCards, { section: 'side', card: 777, qty: 1 }]
+    const api = pageApi(detail({ cards }), pack('2026-11-22'))
+    renderWithProviders(<DeckPage uid="d1" onBack={vi.fn()} />, { api })
+    const side = await screen.findByRole('region', { name: 'Side Deck' })
+    expect(within(side).getByText("Card #777 isn't in the catalog here yet")).toBeInTheDocument()
+    const missing = screen.getByRole('list', { name: 'Missing cards' })
+    expect(
+      within(missing).getByText("1 × Card #777 isn't in the catalog here yet")
+    ).toBeInTheDocument()
   })
 
   it('friend view hides edit controls and notes', async () => {
@@ -602,6 +705,37 @@ describe('Decks in the nav', () => {
   })
 })
 
+describe('deck entry helpers', () => {
+  const a: DeckEntry = { section: 'main', card: 1, qty: 2 }
+  const b: DeckEntry = { section: 'side', card: 1, qty: 1 }
+  const pinned: DeckEntry = { section: 'main', card: 1, printing: 'p1', qty: 1 }
+  it('moveEntry moves an entry, or merges it into the same card and pin there', () => {
+    expect(moveEntry([a, pinned], a, 'side')).toEqual([{ ...a, section: 'side' }, pinned])
+    expect(moveEntry([a, b], a, 'side')).toEqual([{ section: 'side', card: 1, qty: 3 }])
+    expect(moveEntry([b, pinned], pinned, 'side')).toEqual([
+      b,
+      { section: 'side', card: 1, printing: 'p1', qty: 1 }
+    ])
+    expect(moveEntry([a], a, 'main')).toEqual([a])
+    expect(
+      moveEntry(
+        [
+          { ...a, qty: 98 },
+          { ...b, qty: 5 }
+        ],
+        b,
+        'main'
+      )
+    ).toEqual([{ ...a, qty: 99 }])
+  })
+  it('changeSummary names the first new problem and how many more', () => {
+    const p = (message: string) => ({ key: message, severity: 'error' as const, message })
+    expect(changeSummary([])).toBeNull()
+    expect(changeSummary([p('One')])).toBe('One')
+    expect(changeSummary([p('One'), p('Two'), p('Three')])).toBe('One and 2 more')
+  })
+})
+
 describe('Add to deck', () => {
   const LINK = 900
   const linkDetail = {
@@ -616,6 +750,8 @@ describe('Add to deck', () => {
   it('Add to deck adds one copy to the default section', async () => {
     const api = addApi()
     renderWithProviders(<AddToDeck game="ygo" cardId={LINK} />, { api })
+    // The deck list is read only once the menu opens.
+    expect(api.decks.list).not.toHaveBeenCalled()
     await userEvent.click(screen.getByRole('button', { name: 'Add to deck' }))
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Deck' }))
     await waitFor(() =>

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { MinusIcon, MoreHorizontalIcon, PinIcon, PlusIcon } from 'lucide-react'
 import type { SectionDef } from '@shared/decks/formats'
-import type { DeckCard, DeckEntry } from '@shared/decks/types'
+import type { DeckCard, DeckEntry, DeckSection } from '@shared/decks/types'
 import { CardArt } from '@/components/CardArt'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -14,13 +14,16 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { api, queryKeys } from '@/lib/api'
 import { cn } from '@/lib/utils'
-import { entryDomId, entryKey } from './deckEntries'
+import { entryDomId, entryKey, unknownCardText } from './deckEntries'
 
 export interface EntryActions {
   onQty: (e: DeckEntry, delta: 1 | -1) => void
   onPin: (e: DeckEntry, printing: string | undefined) => void
   onRemove: (e: DeckEntry) => void
   onCover: (e: DeckEntry) => void
+  onMove: (e: DeckEntry, section: DeckSection) => void
+  /** The format's sections, to move an entry to. */
+  sections: SectionDef[]
 }
 
 /** A section's header count and its entries, already sorted; `actions` absent = read-only. */
@@ -83,7 +86,9 @@ export function DeckSectionList({
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm">{name}</div>
+                  <div className={cn('truncate text-sm', !card && 'text-muted-foreground')}>
+                    {card ? name : unknownCardText(e.card)}
+                  </div>
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     {e.printing && (
                       <span title={`Pinned printing ${e.printing}`} className="flex items-center">
@@ -154,6 +159,13 @@ function EntryControls({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem onSelect={() => actions.onCover(entry)}>Use as cover</DropdownMenuItem>
+          {actions.sections
+            .filter((s) => s.id !== entry.section)
+            .map((s) => (
+              <DropdownMenuItem key={s.id} onSelect={() => actions.onMove(entry, s.id)}>
+                {`Move to ${s.label}`}
+              </DropdownMenuItem>
+            ))}
           <DropdownMenuItem variant="destructive" onSelect={() => actions.onRemove(entry)}>
             Remove from deck
           </DropdownMenuItem>

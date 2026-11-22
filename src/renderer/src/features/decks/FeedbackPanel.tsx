@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { formatUsd } from '@/lib/format'
 import { isPhone } from '@/lib/platform'
 import { cn } from '@/lib/utils'
-import { BADGE } from './deckEntries'
+import { BADGE, unknownCardText } from './deckEntries'
 
 /** A buy search by name: the deck holds cards, not printings to buy. */
 const anyPrinting = (cardId: number, region: 'en' | 'asia'): Printing => ({
@@ -137,7 +137,9 @@ function MissingCards({
         {cost.missing.map((m) => (
           <li key={m.card} className="space-y-1">
             <div className="flex items-baseline justify-between gap-2 text-xs">
-              <span className="min-w-0 truncate">{`${m.copies} × ${nameOf(m.card)}`}</span>
+              <span className="min-w-0 truncate">
+                {`${m.copies} × ${cards[m.card] ? nameOf(m.card) : unknownCardText(m.card)}`}
+              </span>
               <span className="shrink-0 tabular-nums text-muted-foreground">
                 {formatUsd(m.unit)}
               </span>

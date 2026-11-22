@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { checkDeck, verdictMark, type DeckProblem } from '@shared/decks/check'
 import { deckCost } from '@shared/decks/cost'
 import { MAX_DECK_NAME, MAX_DECK_NOTES } from '@shared/decks/fields'
-import { formatOf } from '@shared/decks/formats'
+import { DECK_FORMATS, formatOf } from '@shared/decks/formats'
 import { sortEntries } from '@shared/decks/sort'
 import type { DeckCard, DeckDetail, DeckEntry, DeckFields } from '@shared/decks/types'
 import { PageHeader } from '@/components/PageHeader'
@@ -22,6 +22,7 @@ import {
   changeQty,
   entryDomId,
   entryKey,
+  moveEntry,
   pinEntry,
   removeEntry,
   shareOwned
@@ -71,7 +72,10 @@ export function DeckPage({
   const facts = useMemo(() => ({ ...added, ...detail?.cardFacts }), [added, detail])
   const game = detail?.game ?? 'ygo'
   const pack = useRulesPack(game)
-  const format = fields ? formatOf(game, fields.format) : null
+  const known = fields ? formatOf(game, fields.format) : null
+  // A format from a newer app: the cards still show, in the game's usual sections, read-only.
+  const format = fields ? (known ?? DECK_FORMATS[game][0] ?? null) : null
+  const editable = !readOnly && known !== null
   const today = localToday()
 
   const verdict = useMemo(
@@ -86,17 +90,19 @@ export function DeckPage({
     [fields, format, facts]
   )
 
-  // Marks the verdict seen once on open, as soon as one is made against a pack.
-  const marked = useRef(false)
+  // Marks the verdict seen on open, as soon as one is made against a pack, and again whenever an
+  // edit changes it, so a deck fixed here doesn't read "Changed" once the next list comes out.
+  const marked = useRef<string | null>(null)
   const mark = verdict ? verdictMark(verdict) : null
+  const markKey = mark ? JSON.stringify(mark) : null
   useEffect(() => {
-    if (readOnly || marked.current || !mark) return
-    marked.current = true
+    if (readOnly || !markKey || marked.current === markKey) return
+    marked.current = markKey
     api.decks
-      .markSeen(uid, mark)
+      .markSeen(uid, JSON.parse(markKey))
       .then(() => qc.invalidateQueries({ queryKey: queryKeys.decks, exact: true }))
       .catch(() => {})
-  }, [readOnly, mark, uid, qc])
+  }, [readOnly, markKey, uid, qc])
 
   // Saving: debounced; the latest save's outcome is the one shown.
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -216,14 +222,17 @@ export function DeckPage({
     }
   }
 
-  const actions: EntryActions | undefined = readOnly
-    ? undefined
-    : {
-        onQty: (e, d) => editCards((c) => changeQty(c, e, d)),
-        onPin: (e, p) => editCards((c) => pinEntry(c, e, p)),
-        onRemove: (e) => editCards((c) => removeEntry(c, e)),
-        onCover: (e) => edit({ cover: e.card })
-      }
+  const actions: EntryActions | undefined =
+    editable && format
+      ? {
+          onQty: (e, d) => editCards((c) => changeQty(c, e, d)),
+          onPin: (e, p) => editCards((c) => pinEntry(c, e, p)),
+          onRemove: (e) => editCards((c) => removeEntry(c, e)),
+          onCover: (e) => edit({ cover: e.card }),
+          onMove: (e, section) => editCards((c) => moveEntry(c, e, section)),
+          sections: format.sections
+        }
+      : undefined
   const phone = isPhone()
 
   return (
@@ -234,7 +243,7 @@ export function DeckPage({
             <ChevronLeftIcon className="size-4" />
             Back
           </Button>
-          {readOnly || !fields ? (
+          {!editable || !fields ? (
             <h1 className={cn(PAGE_TITLE, 'min-w-0 truncate')}>{fields?.name ?? ''}</h1>
           ) : (
             <Input
@@ -258,10 +267,30 @@ export function DeckPage({
         <p className="text-sm text-muted-foreground">{"This deck isn't here any more."}</p>
       ) : (
         <>
+          {!known && (
+            <p role="status" className="text-sm text-muted-foreground">
+              {"This deck's format needs a newer version of the app. Update to check or edit it."}
+            </p>
+          )}
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-            <span className="text-muted-foreground">{format.label}</span>
+            {editable ? (
+              <select
+                aria-label="Format"
+                value={fields.format}
+                onChange={(e) => edit({ format: e.target.value })}
+                className="h-8 rounded-md border bg-transparent px-2 text-sm"
+              >
+                {DECK_FORMATS[game].map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.label}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="text-muted-foreground">{known?.label ?? fields.format}</span>
+            )}
             <ExportMenu name={fields.name} cards={fields.cards} facts={facts} />
-            {!readOnly && (
+            {editable && (
               <>
                 <label className="flex items-center gap-1.5">
                   <input
@@ -277,6 +306,10 @@ export function DeckPage({
                 <Button variant="ghost" size="sm" disabled={busy} onClick={() => void duplicate()}>
                   Duplicate
                 </Button>
+              </>
+            )}
+            {!readOnly && (
+              <>
                 {confirmingDelete ? (
                   <span className="flex items-center gap-2">
                     <span>Delete this deck?</span>
@@ -325,7 +358,7 @@ export function DeckPage({
           )}
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
             <div className="min-w-0 space-y-6">
-              {!readOnly && (
+              {editable && (
                 <DeckSearch
                   game={game}
                   format={format}
@@ -348,7 +381,7 @@ export function DeckPage({
                   actions={actions}
                 />
               ))}
-              {!readOnly && (
+              {editable && (
                 <div className="space-y-1.5">
                   <label htmlFor="deck-notes" className="text-sm font-medium">
                     Notes

@@ -6,7 +6,7 @@ import { checkDeck, verdictChange } from '@shared/decks/check'
 import { deckCost } from '@shared/decks/cost'
 import type { PackState } from '@shared/decks/pack'
 import type { DeckCard, DeckSummary } from '@shared/decks/types'
-import { BADGE } from './deckEntries'
+import { BADGE, changeSummary } from './deckEntries'
 
 /** One deck on the list: cover, name, format, counts, legality and what it costs to finish. */
 export function DeckTile({
@@ -25,6 +25,7 @@ export function DeckTile({
   const format = formatOf(deck.game, deck.format)
   const verdict = pack ? checkDeck(deck, cards, pack, today) : null
   const change = verdict ? verdictChange(deck.lastSeen, verdict) : null
+  const changed = change ? changeSummary(change.added) : null
   const count = (s: string): number =>
     deck.cards.reduce((n, e) => (e.section === s ? n + e.qty : n), 0)
   const cost = format ? deckCost(deck.cards, cards, format.priceRegion) : null
@@ -58,7 +59,8 @@ export function DeckTile({
           )}
           {change && (
             <div className="text-xs text-muted-foreground">
-              {`Changed with the ${change.version} list`}
+              <div>{`Changed with the ${change.version} list`}</div>
+              {changed && <div className="truncate">{changed}</div>}
             </div>
           )}
           {cost && (

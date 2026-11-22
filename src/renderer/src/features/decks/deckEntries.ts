@@ -1,3 +1,4 @@
+import type { DeckProblem } from '@shared/decks/check'
 import { MAX_ENTRY_QTY } from '@shared/decks/fields'
 import type { DeckCard, DeckEntry, DeckSection } from '@shared/decks/types'
 
@@ -61,6 +62,29 @@ export function pinEntry(
       entryKey(e) === to ? { ...e, qty: Math.min(MAX_ENTRY_QTY, e.qty + moved.qty) } : e
     )
   return cards.map((e) => (entryKey(e) === from ? moved : e))
+}
+
+/** Moves an entry to another section; an entry already there with its card and pin takes its copies. */
+export function moveEntry(cards: DeckEntry[], entry: DeckEntry, section: DeckSection): DeckEntry[] {
+  const from = entryKey(entry)
+  const moved: DeckEntry = { ...entry, section }
+  const to = entryKey(moved)
+  if (from === to) return cards
+  const rest = cards.filter((e) => entryKey(e) !== from)
+  if (rest.some((e) => entryKey(e) === to))
+    return rest.map((e) =>
+      entryKey(e) === to ? { ...e, qty: Math.min(MAX_ENTRY_QTY, e.qty + entry.qty) } : e
+    )
+  return cards.map((e) => (entryKey(e) === from ? moved : e))
+}
+
+/** A card the deck holds that this device's catalog doesn't have (yet). */
+export const unknownCardText = (id: number): string => `Card #${id} isn't in the catalog here yet`
+
+/** What a newer list changed, short: its first new problem and how many more. */
+export function changeSummary(added: DeckProblem[]): string | null {
+  if (added.length === 0) return null
+  return added.length === 1 ? added[0].message : `${added[0].message} and ${added.length - 1} more`
 }
 
 /** The owned copies of each card shared out over its entries in display order, by entryKey. */

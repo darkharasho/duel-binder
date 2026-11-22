@@ -12,6 +12,7 @@ import { mergeSessionCards, sameSessionCardList } from '../repo/scanSessions'
 import type { ScanSessionCard, WireScanSession } from '../../shared/scanSessions'
 import { isLanguage } from '../../shared/languages'
 import type { GradedPriceKey, WireGradedPrice } from '../../shared/cloud'
+import type { DeckEntry, WireDeck } from '../../shared/decks/types'
 import {
   MAX_NOTES,
   editTime,
@@ -90,6 +91,7 @@ export type SyncStream =
   | 'binderEdits'
   | 'favourites'
   | 'graded'
+  | 'decks'
   | 'sessions'
   | 'history'
   | 'terms'
@@ -131,7 +133,7 @@ export function saveGameCursor(
   ).run(owner, game, stream, cursor)
 }
 
-/** Whether this computer has never-signed-in entries, wishes, binders, favourites or scan sessions (owner 0), tombstones included. */
+/** Whether this computer has never-signed-in entries, wishes, binders, favourites, slabs, decks or scan sessions (owner 0), tombstones included. */
 export function hasLocalData(db: SqlDb): boolean {
   return [
     'collection_entries',
@@ -140,6 +142,7 @@ export function hasLocalData(db: SqlDb): boolean {
     'binder_edits',
     'favourites',
     'graded_copies',
+    'decks',
     'scan_sessions'
   ].some(
     (table) => db.prepare(`SELECT 1 FROM ${table} WHERE owner_id = 0 LIMIT 1`).get() !== undefined
@@ -176,6 +179,8 @@ export function adoptLocalData(db: SqlDb, owner: number): number {
       owner
     )
     db.prepare('DELETE FROM graded_copies WHERE owner_id = 0').run()
+    db.prepare('UPDATE OR IGNORE decks SET owner_id = ?, dirty = 1 WHERE owner_id = 0').run(owner)
+    db.prepare('DELETE FROM decks WHERE owner_id = 0').run()
     db.prepare('UPDATE OR IGNORE scan_sessions SET owner_id = ?, dirty = 1 WHERE owner_id = 0').run(
       owner
     )
@@ -191,6 +196,7 @@ const OWNED_TABLES = [
   'binder_edits',
   'favourites',
   'graded_copies',
+  'decks',
   'scan_sessions',
   'value_snapshots',
   'sync_pending',
@@ -214,7 +220,7 @@ const holdKey = (from: number): `merge_hold:${number}` => `merge_hold:${from}`
  * - Collection: unsent live rows stay held under `from` (never pushed, never shown) until `to` has
  *   pulled the merge (`resolveMergeHolds`), so a carried count is compared with the merged one and
  *   never lowers it. Calling this again before then changes nothing.
- * - Wishes, favourites, graded copies, binders, binder edits and scan sessions keep their keys, and replace `to`'s row on the same
+ * - Wishes, favourites, graded copies, decks, binders, binder edits and scan sessions keep their keys, and replace `to`'s row on the same
  *   key. Their unsent tombstones move too, so a deletion still reaches the server.
  * Everything already sent is dropped, as is the old account's bookkeeping: the server's merged state
  * reaches this device through the normal cursor sync, and a stale row of `from` must never be pushed
@@ -237,6 +243,7 @@ export function adoptMergedData(db: SqlDb, from: number, to: number, now: string
       'binder_edits',
       'favourites',
       'graded_copies',
+      'decks',
       'scan_sessions'
     ]) {
       db.prepare(
@@ -882,6 +889,119 @@ export function purgeCleanGraded(db: SqlDb, owner: number): void {
   db.prepare(
     'DELETE FROM graded_copies WHERE owner_id = ? AND deleted_at IS NOT NULL AND dirty = 0'
   ).run(owner)
+}
+
+/** The synced columns only: last_verdict and last_pack_version are per device and never cross. */
+interface DeckRow {
+  uid: string
+  game: GameId
+  format: string
+  name: string
+  notes: string
+  cover: number | null
+  private: number
+  cards: string
+  created_at: string
+  updated_at: string
+  deleted_at: string | null
+  dirty: number
+}
+
+const DECK_COLS =
+  'uid, game, format, name, notes, cover, private, cards, created_at, updated_at, deleted_at, dirty'
+
+function deckCards(json: string): DeckEntry[] {
+  try {
+    const v = JSON.parse(json) as unknown
+    return Array.isArray(v) ? (v as DeckEntry[]) : []
+  } catch {
+    return []
+  }
+}
+
+const deckToWire = (r: DeckRow): WireDeck => ({
+  uid: r.uid,
+  game: r.game,
+  format: r.format,
+  name: r.name,
+  notes: r.notes,
+  cover: r.cover,
+  private: r.private === 1,
+  cards: deckCards(r.cards),
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+  deletedAt: r.deleted_at
+})
+
+/** Up to `limit` of the owner's unpushed decks, tombstones included, leaving out the uids in `skip`. */
+export function dirtyDecks(
+  db: SqlDb,
+  owner: number,
+  limit: number,
+  skip: ReadonlySet<string>
+): WireDeck[] {
+  const rows = db
+    .prepare(
+      `SELECT ${DECK_COLS} FROM decks
+       WHERE owner_id = ? AND dirty = 1 AND uid NOT IN (SELECT value FROM json_each(?))
+       ORDER BY updated_at, uid LIMIT ?`
+    )
+    .all(owner, JSON.stringify([...skip]), limit) as DeckRow[]
+  return rows.map(deckToWire)
+}
+
+/** Marks a pushed deck clean, unless it was edited again since `d` was read. */
+export function markDecksPushed(db: SqlDb, owner: number, d: WireDeck): void {
+  db.prepare(
+    `UPDATE decks SET dirty = 0
+     WHERE owner_id = ? AND uid = ? AND updated_at = ? AND deleted_at IS ?`
+  ).run(owner, d.uid, d.updatedAt, d.deletedAt)
+}
+
+/**
+ * Applies one server deck, clean; a newer unpushed local edit is kept. This device's last verdict
+ * is never touched: a new row starts with none, an updated one keeps its own. Returns whether it wrote.
+ */
+export function applyRemoteDeck(db: SqlDb, owner: number, d: WireDeck): boolean {
+  const local = db
+    .prepare(`SELECT ${DECK_COLS} FROM decks WHERE owner_id = ? AND uid = ?`)
+    .get(owner, d.uid) as DeckRow | undefined
+  if (!local && d.deletedAt !== null) return false
+  if (local) {
+    const wire = deckToWire(local)
+    if (local.dirty === 0 && JSON.stringify(wire) === JSON.stringify(d)) return false
+    if (local.dirty === 1 && !replaces(d, wire)) return false
+  }
+  db.prepare(
+    `INSERT INTO decks (owner_id, uid, game, format, name, notes, cover, private, cards,
+       created_at, updated_at, deleted_at, dirty)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+     ON CONFLICT(owner_id, uid) DO UPDATE SET game = excluded.game, format = excluded.format,
+       name = excluded.name, notes = excluded.notes, cover = excluded.cover,
+       private = excluded.private, cards = excluded.cards, created_at = excluded.created_at,
+       updated_at = excluded.updated_at, deleted_at = excluded.deleted_at, dirty = 0`
+  ).run(
+    owner,
+    d.uid,
+    d.game,
+    d.format,
+    d.name,
+    d.notes,
+    d.cover,
+    d.private ? 1 : 0,
+    JSON.stringify(d.cards),
+    d.createdAt,
+    d.updatedAt,
+    d.deletedAt
+  )
+  return true
+}
+
+/** Deletes the owner's deck tombstones the server already has. */
+export function purgeCleanDecks(db: SqlDb, owner: number): void {
+  db.prepare('DELETE FROM decks WHERE owner_id = ? AND deleted_at IS NOT NULL AND dirty = 0').run(
+    owner
+  )
 }
 
 interface BinderRow {

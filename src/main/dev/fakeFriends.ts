@@ -177,7 +177,8 @@ export function seedFakeFriends(db: Database.Database, now = new Date()): number
       'binders',
       'binder_edits',
       'scan_sessions',
-      'graded_copies'
+      'graded_copies',
+      'decks'
     ])
       db.prepare(`UPDATE ${t} SET dirty = 0 WHERE owner_id < 0 AND dirty = 1`).run()
   })()

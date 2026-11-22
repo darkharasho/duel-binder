@@ -14,6 +14,7 @@ import { fillSeatsAfterClose } from './seats'
 import {
   NEXT_BINDER_EDIT_SEQ,
   NEXT_BINDER_SEQ,
+  NEXT_DECK_SEQ,
   NEXT_FAVOURITE_SEQ,
   NEXT_GRADED_SEQ,
   NEXT_SESSION_SEQ,
@@ -228,6 +229,25 @@ function mergeGraded(db: SqlDb, a: MergeArgs, nowIso: string): void {
 }
 
 /**
+ * Copies `closed`'s live decks, keeping uids; one the survivor already has (live or not) stays as
+ * it is. The last verdict is per device, so the copy starts with none.
+ */
+function mergeDecks(db: SqlDb, a: MergeArgs, nowIso: string): void {
+  const uids = db
+    .prepare('SELECT uid FROM decks WHERE user_id = ? AND deleted_at IS NULL')
+    .all(a.closed) as { uid: string }[]
+  const copy = db.prepare(
+    `INSERT INTO decks (user_id, uid, game, format, name, notes, cover, private, cards,
+       created_at, updated_at, seq)
+     SELECT ?, uid, game, format, name, notes, cover, private, cards, created_at, ?,
+       ${NEXT_DECK_SEQ}
+       FROM decks WHERE user_id = ? AND uid = ?
+     ON CONFLICT(user_id, uid) DO NOTHING`
+  )
+  for (const d of uids) copy.run(a.survivor, nowIso, a.closed, d.uid)
+}
+
+/**
  * Step 5: `closed`'s friendships, requests and blocks move to `survivor`. A friendship beats a
  * pending request, a block beats both, and anything between the two accounts disappears. Then
  * `closed`'s own rows are deleted, so no one sees the closed account any more.
@@ -358,6 +378,7 @@ function applyMerge(db: SqlDb, a: MergeArgs): void {
   mergeBinders(db, a, nowIso)
   mergeSessions(db, a, nowIso)
   mergeGraded(db, a, nowIso)
+  mergeDecks(db, a, nowIso)
   mergeFriends(db, a, nowIso)
   const { moved, appleToken } = moveSignIns(db, a, nowIso)
   mergeSupporter(db, a.survivor, a.closed)

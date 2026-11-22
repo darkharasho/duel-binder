@@ -421,12 +421,32 @@ describe('merging two accounts', () => {
     await merged(await merge('mine', ticket))
 
     expect(
-      db
-        .prepare('SELECT uid, grade FROM graded_copies WHERE user_id = ? ORDER BY uid')
-        .all(me)
+      db.prepare('SELECT uid, grade FROM graded_copies WHERE user_id = ? ORDER BY uid').all(me)
     ).toEqual([
       { uid: 'g-1', grade: '10' },
       { uid: 'g-me', grade: '9' }
+    ])
+  })
+
+  it('decks are copied over, keeping uids; removed ones stay behind', async () => {
+    const { me, other } = discordAndApple()
+    const deck = db.prepare(
+      `INSERT INTO decks (user_id, uid, game, format, name, cards, last_verdict, created_at, updated_at,
+         deleted_at, seq) VALUES (?, ?, 'ygo', 'advanced', ?, '[]', 'v', 'x', 'x', ?, ?)`
+    )
+    deck.run(me, 'd-me', 'Mine', null, 1)
+    deck.run(other, 'd-1', 'Theirs', null, 2)
+    deck.run(other, 'd-me', 'Clash', null, 3)
+    deck.run(other, 'd-gone', 'Gone', 'x', 4)
+
+    const { ticket } = await appleTicket('mine')
+    await merged(await merge('mine', ticket))
+
+    expect(
+      db.prepare('SELECT uid, name, last_verdict FROM decks WHERE user_id = ? ORDER BY uid').all(me)
+    ).toEqual([
+      { uid: 'd-1', name: 'Theirs', last_verdict: null },
+      { uid: 'd-me', name: 'Mine', last_verdict: 'v' }
     ])
   })
 

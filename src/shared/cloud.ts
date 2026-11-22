@@ -1,6 +1,9 @@
 import type { BinderEditAction, BinderEditLevel } from './binders'
 import { isGameId, type GameId } from './games'
+import type { WireDeck } from './decks/types'
 import type { GradedFields } from './graded'
+
+export type { WireDeck }
 
 /** Limits shared by the desktop sync client and the server's sync endpoints. */
 
@@ -184,6 +187,18 @@ export type GradedPushResult =
 
 export interface GradedPullResponse {
   entries: WireGraded[]
+  cursor: number
+  more: boolean
+}
+
+/** What the server did with one pushed deck; its last verdict never crosses, it stays on each device. */
+export type DeckPushResult =
+  | { uid: string; status: 'applied' | 'skipped' }
+  /** The server kept its newer row for this uid. */
+  | { uid: string; status: 'stale'; current: WireDeck }
+
+export interface DeckPullResponse {
+  entries: WireDeck[]
   cursor: number
   more: boolean
 }

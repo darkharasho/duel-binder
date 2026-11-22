@@ -38,6 +38,7 @@ import {
 import { applySessionPush, checkSessionPush, sessionPullSince } from './scanSessions'
 import { applyWishPush, checkWishPush, wishPullSince } from './wishlist'
 import { applyFavouritePush, checkFavouritePush, favouritePullSince } from './favourites'
+import { applyDecksPush, checkDecksPush, decksPullSince } from './decks'
 import { applyGradedPush, checkGradedPush, gradedPullSince } from './graded'
 import { checkGradedPriceKeys, gradedPricesFor } from './gradedPrices'
 import { NEXT_SEQ, userScope } from './scope'
@@ -368,6 +369,7 @@ const POST_PATHS: ReadonlySet<string> = new Set([
   'favourites-push',
   'graded-push',
   'graded-prices',
+  'decks-push',
   'sessions-push',
   'history'
 ])
@@ -380,6 +382,7 @@ const GET_PATHS: ReadonlySet<string> = new Set([
   'binder-edits-pull',
   'favourites-pull',
   'graded-pull',
+  'decks-pull',
   'sessions-pull'
 ])
 
@@ -387,7 +390,7 @@ const GET_PATHS: ReadonlySet<string> = new Set([
  * POST /api/sync/push, GET /api/sync/pull, GET /api/sync/price-changes, GET /api/sync/search-terms, POST /api/sync/prices,
  * POST /api/sync/price-requests, POST /api/sync/wishlist-push and GET /api/sync/wishlist-pull, and the same
  * pairs for binders (binders-push/-pull), their edits (binder-edits-push/-pull) and favourites
- * (favourites-push/-pull), graded copies (graded-push/-pull, and their prices: graded-prices) and scan sessions (sessions-push/-pull), and POST /api/sync/history (value history);
+ * (favourites-push/-pull), graded copies (graded-push/-pull, and their prices: graded-prices), decks (decks-push/-pull) and scan sessions (sessions-push/-pull), and POST /api/sync/history (value history);
  * desktop tokens only (the phone app has one too).
  */
 export async function syncRoute(req: Request, deps: AppDeps, path: string): Promise<Response> {
@@ -424,7 +427,9 @@ export async function syncRoute(req: Request, deps: AppDeps, path: string): Prom
                 ? favouritePullSince
                 : path === 'graded-pull'
                   ? gradedPullSince
-                  : binderEditPullSince
+                  : path === 'decks-pull'
+                    ? decksPullSince
+                    : binderEditPullSince
       return json(pull(deps.db, user.id, cursor, MAX_PULL, game))
     }
 
@@ -484,6 +489,13 @@ export async function syncRoute(req: Request, deps: AppDeps, path: string): Prom
       // A new or changed slab may need a price: the alarm prices a few a run (gradedPrices.ts).
       if (entries.some((g) => g.deletedAt === null)) await deps.prices.soon({ paced: true })
       return json({ results })
+    }
+
+    if (path === 'decks-push') {
+      const raw = (body as { entries?: unknown } | null)?.entries
+      if (Array.isArray(raw) && raw.length > MAX_PUSH) return json({ error: 'too-many' }, 413)
+      const entries = checkDecksPush(body, deps.now())
+      return json({ results: applyDecksPush(deps.db, user.id, entries, games()) })
     }
 
     if (path === 'graded-prices') return json(gradedPricesFor(deps.db, checkGradedPriceKeys(body)))

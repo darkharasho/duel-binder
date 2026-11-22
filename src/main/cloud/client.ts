@@ -12,6 +12,8 @@ import type {
   BinderEditPushResult,
   BinderPullResponse,
   BinderPushResult,
+  DeckPullResponse,
+  DeckPushResult,
   FavouritePullResponse,
   FavouritePushResult,
   GradedPriceKey,
@@ -27,6 +29,7 @@ import type {
   PushResult,
   WireBinder,
   WireBinderEdit,
+  WireDeck,
   WireEntry,
   WireFavourite,
   WireGraded,
@@ -109,6 +112,10 @@ export interface CloudClient {
   gradedPull(cursor: number, game: GameId): Promise<GradedPullResponse>
   /** eBay's graded prices the server has for `keys`; as `gradedPush` on an old portal. */
   gradedPrices(keys: GradedPriceKey[]): Promise<GradedPricesResponse>
+  /** Pushes decks; a portal without them rejects with CloudNotFoundError. */
+  decksPush(entries: WireDeck[]): Promise<DeckPushResult[]>
+  /** One page of the account's decks of `game` after `cursor`; as `decksPush` on an old portal. */
+  decksPull(cursor: number, game: GameId): Promise<DeckPullResponse>
   /** Pushes scan sessions; a portal without sessions rejects with CloudNotFoundError. */
   sessionsPush(entries: WireScanSession[]): Promise<ScanSessionPushResult[]>
   /** One page of the account's scan sessions of `game` after `cursor`; as `sessionsPush` on an old portal. */
@@ -326,6 +333,11 @@ export function createCloudClient(opts: {
     gradedPull: (cursor, game) =>
       call<GradedPullResponse>(`/api/sync/graded-pull?cursor=${cursor}&game=${game}`, 'GET'),
     gradedPrices: (keys) => call<GradedPricesResponse>('/api/sync/graded-prices', 'POST', { keys }),
+    decksPush: async (entries) =>
+      (await call<{ results: DeckPushResult[] }>('/api/sync/decks-push', 'POST', { entries }))
+        .results,
+    decksPull: (cursor, game) =>
+      call<DeckPullResponse>(`/api/sync/decks-pull?cursor=${cursor}&game=${game}`, 'GET'),
     sessionsPush: async (entries) =>
       (
         await call<{ results: ScanSessionPushResult[] }>('/api/sync/sessions-push', 'POST', {

@@ -26,6 +26,7 @@ import {
   applyRemoteBinderEdit,
   applyRemoteFavourite,
   applyGradedPrices,
+  applyRemoteDeck,
   applyRemoteGraded,
   applyRemoteSession,
   applyRemoteWish,
@@ -34,6 +35,7 @@ import {
   dirtyBinders,
   dirtyEntries,
   dirtyFavourites,
+  dirtyDecks,
   dirtyGraded,
   gradedPriceKeys,
   dirtySessions,
@@ -45,6 +47,7 @@ import {
   markBinderEditPushed,
   markBinderPushed,
   markFavouritePushed,
+  markDecksPushed,
   markGradedPushed,
   markSessionsPushed,
   markPushed,
@@ -56,6 +59,7 @@ import {
   purgeCleanBinderEdits,
   purgeCleanBinders,
   purgeCleanFavourites,
+  purgeCleanDecks,
   purgeCleanGraded,
   purgeCleanSessions,
   purgeCleanTombstones,
@@ -309,6 +313,56 @@ async function syncGraded(
     if (e instanceof CloudAuthError) throw e
     if (!(e instanceof CloudNotFoundError) && !(e instanceof CloudOfflineError))
       console.warn('Graded copies sync failed; they stay queued', e)
+  }
+  return changed
+}
+
+/**
+ * Syncs `owner`'s decks on their own routes, as syncGraded does slabs: pull each game from its own
+ * cursor, then push. Best effort: a portal without them (404) or a failure leaves them dirty for
+ * the next run. Resolves whether anything changed.
+ */
+async function syncDecks(
+  db: SqlDb,
+  owner: number,
+  client: CloudClient,
+  games: GameId[]
+): Promise<boolean> {
+  let changed = false
+  try {
+    for (const game of games) {
+      let cursor = gameCursor(db, owner, game, 'decks')
+      for (;;) {
+        const page = await client.decksPull(cursor, game)
+        db.transaction(() => {
+          for (const d of page.entries) if (applyRemoteDeck(db, owner, d)) changed = true
+          saveGameCursor(db, owner, game, 'decks', page.cursor)
+        })()
+        cursor = page.cursor
+        if (!page.more || page.entries.length === 0) break
+      }
+    }
+
+    const sent = new Set<string>()
+    for (;;) {
+      const batch = dirtyDecks(db, owner, MAX_PUSH, sent)
+      if (batch.length === 0) break
+      for (const d of batch) sent.add(d.uid)
+      const results = await client.decksPush(batch)
+      const byUid = new Map(batch.map((d) => [d.uid, d]))
+      db.transaction(() => {
+        for (const r of results) {
+          const d = byUid.get(r.uid)
+          if (!d || r.status === 'skipped') continue
+          markDecksPushed(db, owner, d)
+          if (r.status === 'stale' && applyRemoteDeck(db, owner, r.current)) changed = true
+        }
+      })()
+    }
+  } catch (e) {
+    if (e instanceof CloudAuthError) throw e
+    if (!(e instanceof CloudNotFoundError) && !(e instanceof CloudOfflineError))
+      console.warn('Decks sync failed; they stay queued', e)
   }
   return changed
 }
@@ -660,7 +714,8 @@ export async function syncOnce(
   // The community's approved search terms, per game.
   // A portal without the route (older, or a test double) just has no terms: the sync carries on.
   try {
-    for (const game of games) if ((await pullSearchTerms(db, client, owner, game)) > 0) changed = true
+    for (const game of games)
+      if ((await pullSearchTerms(db, client, owner, game)) > 0) changed = true
   } catch (e) {
     if (!(e instanceof CloudNotFoundError)) throw e
   }
@@ -684,7 +739,10 @@ export async function syncOnce(
   if (await syncGraded(db, owner, client, games)) changed = true
   if (await syncGradedPrices(db, owner, client, now().getTime())) changed = true
 
-  // 6b. Scan sessions, on their own routes.
+  // 6b. Decks, on their own routes.
+  if (await syncDecks(db, owner, client, games)) changed = true
+
+  // 6c. Scan sessions, on their own routes.
   if (await syncSessions(db, owner, client, games)) changed = true
 
   // 7. Tidy up and record the run.
@@ -695,6 +753,7 @@ export async function syncOnce(
     purgeCleanBinderEdits(db, owner)
     purgeCleanFavourites(db, owner)
     purgeCleanGraded(db, owner)
+    purgeCleanDecks(db, owner)
     purgeCleanSessions(db, owner)
     saveAccountState(db, owner, { syncedAt: now().toISOString() })
     // recordSnapshot writes the active owner's (LOCAL) snapshot.

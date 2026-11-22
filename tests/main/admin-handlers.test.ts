@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { adminHandlers } from '../../src/main/ipc/adminHandlers'
 import { createAdminRuns } from '../../src/main/adminRuns'
-import { CloudOfflineError } from '../../src/main/cloud/client'
+import { CloudOfflineError, createCloudClient } from '../../src/main/cloud/client'
 
 function make(isAdmin = true) {
   const admin = vi.fn(async (path: string, _body?: unknown): Promise<unknown> => {
@@ -26,6 +26,112 @@ function make(isAdmin = true) {
   >
   return { h, admin, runs, capture }
 }
+
+const FIELDS = {
+  phrase: ' blue eyes ',
+  kind: 'nickname',
+  targetKind: 'card',
+  target: { cardIds: [4] }
+}
+
+describe('admin handlers: search terms', () => {
+  it('reads a game and status, decides and adds with checked bodies', async () => {
+    const { h, admin } = make()
+    admin.mockResolvedValueOnce({ terms: [{ id: 9 }] })
+    expect(await h['admin:terms']('pkm', 'pending')).toEqual([{ id: 9 }])
+    expect(admin).toHaveBeenLastCalledWith('/admin/terms?status=pending&game=pkm')
+    await h['admin:decideTerm'](9, 'rejected')
+    expect(admin).toHaveBeenLastCalledWith('/admin/terms/decide', { id: 9, status: 'rejected' })
+    await h['admin:decideTerm'](9, 'approved', FIELDS)
+    expect(admin).toHaveBeenLastCalledWith('/admin/terms/decide', {
+      id: 9,
+      status: 'approved',
+      ...FIELDS,
+      phrase: 'blue eyes'
+    })
+    await h['admin:addTerm']('ygo', FIELDS)
+    expect(admin).toHaveBeenLastCalledWith('/admin/terms/add', {
+      game: 'ygo',
+      ...FIELDS,
+      phrase: 'blue eyes'
+    })
+  })
+
+  it('rejects bad arguments before calling the portal', async () => {
+    const { h, admin } = make()
+    await expect(h['admin:decideTerm'](1, 'pending')).rejects.toThrow('Bad status')
+    await expect(h['admin:decideTerm']('1', 'approved')).rejects.toThrow('Bad id')
+    await expect(h['admin:terms']('pkm', 'all')).rejects.toThrow('Bad status')
+    await expect(h['admin:terms']('nope', 'pending')).rejects.toThrow('Bad game')
+    await expect(h['admin:addTerm']('pkm', { ...FIELDS, kind: 'x' })).rejects.toThrow('Bad term')
+    await expect(h['admin:addTerm']('pkm', { ...FIELDS, phrase: 'a b c d e' })).rejects.toThrow(
+      'Bad term'
+    )
+    expect(admin).not.toHaveBeenCalled()
+  })
+
+  it('says why a phrase clash or a refused body failed', async () => {
+    const { h, admin } = make()
+    admin.mockRejectedValueOnce(new Error('duplicate'))
+    await expect(h['admin:addTerm']('pkm', FIELDS)).rejects.toThrow('already used by another term')
+    admin.mockRejectedValueOnce(new Error('duplicate-rejected'))
+    await expect(h['admin:addTerm']('pkm', FIELDS)).rejects.toThrow(
+      'already used by a rejected term in this game. Restore it from the Rejected list.'
+    )
+    admin.mockRejectedValueOnce(new Error('duplicate-pending'))
+    await expect(h['admin:addTerm']('pkm', FIELDS)).rejects.toThrow('a pending term')
+    admin.mockRejectedValueOnce(new Error('Bad request'))
+    await expect(h['admin:decideTerm'](1, 'approved', FIELDS)).rejects.toThrow('refused')
+  })
+})
+
+describe('admin handlers: seats', () => {
+  it('reads the seats and posts each action to its route', async () => {
+    const { h, admin } = make()
+    await h['admin:seats']()
+    expect(admin).toHaveBeenLastCalledWith('/admin/seats')
+    admin.mockResolvedValueOnce({ ok: true, invited: 3 })
+    await expect(h['admin:seatsAction']({ action: 'cap', cap: 50 })).resolves.toEqual({
+      invited: 3
+    })
+    expect(admin).toHaveBeenLastCalledWith('/admin/seats/cap', { cap: 50 })
+    admin.mockResolvedValueOnce({ ok: true, invited: 25, left: 4 })
+    await expect(h['admin:seatsAction']({ action: 'fill' })).resolves.toEqual({
+      invited: 25,
+      left: 4
+    })
+    expect(admin).toHaveBeenLastCalledWith('/admin/seats/fill', {})
+    await h['admin:seatsAction']({ action: 'invite', id: 4 })
+    expect(admin).toHaveBeenLastCalledWith('/admin/seats/invite', { id: 4 })
+  })
+
+  it('rejects bad arguments and says why an invite failed', async () => {
+    const { h, admin } = make()
+    await expect(h['admin:seatsAction']({ action: 'cap', cap: -1 })).rejects.toThrow('Bad cap')
+    await expect(h['admin:seatsAction']({ action: 'nuke' })).rejects.toThrow('Bad action')
+    await expect(h['admin:seatsAction']({ action: 'invite', id: 'x' })).rejects.toThrow('Bad id')
+    expect(admin).not.toHaveBeenCalled()
+    // What the real client throws for the portal's 409 { error: 'joined' }.
+    const client = createCloudClient({
+      baseUrl: 'https://portal.test',
+      token: 't',
+      fetch: (async () => Response.json({ error: 'joined' }, { status: 409 })) as typeof fetch
+    })
+    admin.mockImplementationOnce((path, body) => client.admin(path as `/admin/${string}`, body))
+    await expect(h['admin:seatsAction']({ action: 'resend', id: 1 })).rejects.toThrow(
+      'That person already has an account.'
+    )
+    // Cancel on an entry that joined gets the same 409.
+    admin.mockImplementationOnce((path, body) => client.admin(path as `/admin/${string}`, body))
+    await expect(h['admin:seatsAction']({ action: 'cancel', id: 1 })).rejects.toThrow(
+      'That person already has an account.'
+    )
+    admin.mockRejectedValueOnce(new CloudOfflineError('The portal failed (502)'))
+    await expect(h['admin:seatsAction']({ action: 'invite', id: 1 })).rejects.toThrow(
+      "invite email didn't go out"
+    )
+  })
+})
 
 describe('admin handlers: phone beta', () => {
   it('reads, decides and deletes beta requests', async () => {

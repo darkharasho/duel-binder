@@ -1,7 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import type { Me } from '../../shared/cloud'
+import { SEATS_FULL_CODE, SEATS_FULL_TEXT, type Me } from '../../shared/cloud'
 
 const TIMED_OUT = 'Sign-in timed out'
 const CANCELLED = 'Sign-in was cancelled'
@@ -9,14 +9,21 @@ const FAILED = "Sign-in didn't go through"
 
 /** Why browser sign-in ended without a token. The message never carries the token or the portal's reply. */
 export class SignInError extends Error {
-  constructor(message: typeof TIMED_OUT | typeof CANCELLED | typeof FAILED) {
+  /** `full` when the portal's seat cap turned the sign-in away. */
+  readonly code?: typeof SEATS_FULL_CODE
+  constructor(
+    message: typeof TIMED_OUT | typeof CANCELLED | typeof FAILED | typeof SEATS_FULL_TEXT
+  ) {
     super(message)
     this.name = 'SignInError'
+    if (message === SEATS_FULL_TEXT) this.code = SEATS_FULL_CODE
   }
 }
 
 const SIGNED_IN_PAGE = "You're signed in. You can close this tab and return to Duel Binder."
 const FAILED_PAGE = "Sign-in didn't go through. Return to Duel Binder and try again."
+
+const FULL_PAGE = `${SEATS_FULL_TEXT} Return to Duel Binder to join the waitlist.`
 
 const DEFAULT_TIMEOUT_MS = 300_000
 const LISTEN_ATTEMPTS = 5
@@ -107,6 +114,7 @@ export async function signInWithBrowser(
     async function exchange(
       params: URLSearchParams
     ): Promise<BrowserSignedIn | BrowserClaim | BrowserLinkCode> {
+      if (params.get('error') === SEATS_FULL_CODE) throw new SignInError(SEATS_FULL_TEXT)
       if (params.has('error')) throw new SignInError(FAILED)
       if (deps.offer && !deps.intent && params.has('claim')) {
         const claim = params.get('claim')
@@ -166,7 +174,8 @@ export async function signInWithBrowser(
           finish({ value })
         },
         (e: unknown) => {
-          reply(res, 400, FAILED_PAGE)
+          const full = e instanceof SignInError && e.code === SEATS_FULL_CODE
+          reply(res, 400, full ? FULL_PAGE : FAILED_PAGE)
           finish({ error: e instanceof SignInError ? e : new SignInError(FAILED) })
         }
       )

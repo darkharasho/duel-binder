@@ -72,6 +72,7 @@ export type MetaKey =
   | 'graded_calls_day'
   /** When the token cards were last read from Yugipedia (ISO). */
   | 'token_cards_synced_at'
+  | 'token_cards_kinds'
   /** Seq of the last server price change applied from the price change feed. */
   | 'price_feed_cursor'
   /** The game this device shows ('ygo' or 'pkm'); absent means 'ygo'. Read in SQL as ACTIVE_GAME. */

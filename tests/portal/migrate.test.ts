@@ -584,7 +584,7 @@ describe('server-42 feeds mtg_cards', () => {
     ])
     expect(
       (db.prepare('SELECT name FROM server_migrations ORDER BY rowid DESC LIMIT 1').get() as { name: string }).name
-    ).toBe('server-50')
+    ).toBe('server-52')
     db.close()
   })
 })
@@ -623,6 +623,21 @@ describe('server-43 (mtg language and face columns)', () => {
     last = seqOf('mtg_images', 'image_id', imageIds[0])
     db.prepare('UPDATE mtg_images SET art_from = ? WHERE image_id = ?').run('en', imageIds[0])
     expect(seqOf('mtg_images', 'image_id', imageIds[0])).toBeGreaterThan(last)
+    db.close()
+  })
+})
+
+describe('server-52 (seat cap)', () => {
+  it('makes the seat tables, the waitlist with its own queue time, and a cap of 100', () => {
+    const db = freshDb()
+    migrateServer(db)
+    const cols = (t: string): string[] =>
+      (db.prepare(`PRAGMA table_info(${t})`).all() as { name: string }[]).map((c) => c.name)
+    expect(cols('waitlist')).toEqual(['id', 'email', 'created_at', 'queued_at', 'invited_at'])
+    expect(cols('seat_invites')).toEqual(
+      expect.arrayContaining(['token_hash', 'waitlist_id', 'email', 'used_at', 'used_by'])
+    )
+    expect(db.prepare('SELECT cap FROM seat_settings').get()).toEqual({ cap: 100 })
     db.close()
   })
 })

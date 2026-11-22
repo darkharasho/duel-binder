@@ -64,6 +64,7 @@ function fakeServer(feeds: {
       const rows = (feeds.prices[game ?? 'ygo'] ?? []).filter((p) => p.seq > since)
       return { prices: rows, cursor: rows.at(-1)?.seq ?? since, more: false }
     },
+    searchTerms: async (since: number) => ({ terms: [], deleted: [], cursor: since, more: false }),
     prices: async () => ({ prices: [], status: null })
   } as unknown as CloudClient
   return state
@@ -116,7 +117,8 @@ describe('per-game syncOnce', () => {
     await syncOnce(db, OWNER, server.client, NOW)
     expect(server.pulls).toEqual([[900, 'ygo']])
     expect(server.priceAsks).toEqual([[800, 'ygo']])
-    expect(gameCursors(db)).toEqual([])
+    // Only the terms feed has a row for ygo (its entries and prices use the legacy cursors).
+    expect(gameCursors(db)).toEqual([{ owner_id: OWNER, game: 'ygo', stream: 'terms', cursor: 0 }])
 
     server.games = ['ygo', 'pkm']
     server.pulls.length = 0
@@ -135,7 +137,9 @@ describe('per-game syncOnce', () => {
     expect(getMeta(db, 'price_feed_cursor')).toBe('800')
     expect(gameCursors(db)).toEqual([
       { owner_id: OWNER, game: 'pkm', stream: 'entries', cursor: 5 },
-      { owner_id: OWNER, game: 'pkm', stream: 'prices', cursor: 4 }
+      { owner_id: OWNER, game: 'pkm', stream: 'prices', cursor: 4 },
+      { owner_id: OWNER, game: 'pkm', stream: 'terms', cursor: 0 },
+      { owner_id: OWNER, game: 'ygo', stream: 'terms', cursor: 0 }
     ])
     // The pulled entry lands under its game, and so does its price.
     expect(

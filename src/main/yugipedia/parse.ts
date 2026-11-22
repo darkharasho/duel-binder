@@ -285,6 +285,18 @@ export interface TokenPage {
   printings: { code: string; setName: string; rarity: string }[]
   /** Whether the page lists a printing in any language: an anime-only token lists none. */
   printed: boolean
+  /** `card_type` as written ("Token", "Spell", "Counter", "Duel Marker"...); null for a monster. */
+  cardType: string | null
+  /** A Spell's or Trap's property ("Normal", "Field"...); null for a monster. */
+  property: string | null
+  /** Every part of `types`: ["Fairy", "Synchro", "Effect"]. */
+  types: string[]
+  /** An Xyz Monster's Rank, which it has in place of a Level. */
+  rank: number | null
+  /** How many Link Arrows a Link Monster has. */
+  linkArrows: number | null
+  /** A Rush Duel card, which the catalog doesn't hold. */
+  rush: boolean
 }
 
 /** Set fields of English printings; old sets give North America and Europe their own. */
@@ -348,7 +360,12 @@ export function parseTokenPage(wikitext: string): TokenPage | null {
     .split(/[\n;]/)
     .map((s) => s.trim())
     .find((s) => IMAGE_FILE.test(s))
-  const race = f.get('types')?.split('/')[0].trim() || null
+  const types = (f.get('types') ?? '')
+    .split('/')
+    .map((t) => t.trim())
+    .filter(Boolean)
+  const race = types[0] ?? null
+  const arrows = (f.get('link_arrows') ?? '').split(',').filter((a) => a.trim() !== '')
   return {
     image: image ?? null,
     attribute: f.get('attribute') || null,
@@ -359,7 +376,14 @@ export function parseTokenPage(wikitext: string): TokenPage | null {
     archetype: f.get('archseries')?.split('\n')[0].trim() || null,
     text: plainText(f.get('text') ?? ''),
     printings,
-    printed
+    printed,
+    cardType: f.get('card_type') || null,
+    property: f.get('property') || null,
+    types,
+    rank: toInt(f.get('rank')),
+    linkArrows: arrows.length > 0 ? arrows.length : null,
+    // Rush Duel pages say so, or carry fields only Rush Duel cards have.
+    rush: f.get('rush_duel') === 'yes' || f.has('requirement') || f.has('maximum_atk')
   }
 }
 

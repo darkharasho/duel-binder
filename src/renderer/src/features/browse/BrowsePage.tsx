@@ -21,6 +21,7 @@ import {
 import { PageHeader } from '@/components/PageHeader'
 import { listNav } from '@/components/panelNav'
 import { SearchInput } from '@/components/SearchInput'
+import { TermNotes } from '@/components/TermNotes'
 import { SortControl } from '@/components/SortControl'
 import { Button } from '@/components/ui/button'
 import { CardGridSkeleton, InlineLoading, Spinner } from '@/components/ui/loading'
@@ -73,6 +74,10 @@ const OWNED = [
 ] as const
 
 const DEFAULTS: Filters = { sort: 'name', dir: 'asc', owned: 'all' }
+
+/** A tile's key: a version tile shares its card's id with the plain tile of that card. */
+const tileKey = (c: BrowseCard): string =>
+  c.focusPrintingId !== undefined ? `p${c.focusPrintingId}` : `c${c.id}`
 
 function statsLine(c: BrowseCard): string {
   if (c.atk === null) return c.race
@@ -169,11 +174,12 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
   // Stepping quickly can overlap lookups of owned cards; only the latest open lands.
   const opening = useRef(0)
   // The owned card whose copies are being looked up, so its tile shows it was clicked.
-  const [pendingId, setPendingId] = useState<number | null>(null)
+  const [pendingId, setPendingId] = useState<string | null>(null)
   const open = async (c: BrowseCard): Promise<void> => {
     const n = ++opening.current
-    if (c.owned > 0) {
-      setPendingId(c.id)
+    // A version tile opens on its printing, owned or not.
+    if (c.owned > 0 && c.focusPrintingId === undefined) {
+      setPendingId(tileKey(c))
       const copies = await qc
         .fetchQuery({
           queryKey: queryKeys.forCard(c.id),
@@ -199,7 +205,9 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
     setUnowned(null)
   }
   const openId = selected?.cardId ?? unowned?.id
-  const openIndex = openId === undefined ? -1 : cards.findIndex((c) => c.id === openId)
+  // A version tile and a plain tile can be the same card, so tiles are told apart by key.
+  const openKey = selected ? `c${selected.cardId}` : unowned ? tileKey(unowned) : undefined
+  const openIndex = openKey === undefined ? -1 : cards.findIndex((c) => tileKey(c) === openKey)
   usePrefetchNeighbours(
     openIndex === -1 ? undefined : cards[openIndex - 1]?.id,
     openIndex === -1 ? undefined : cards[openIndex + 1]?.id
@@ -210,7 +218,7 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
     // listNav only calls this on a step, never during render.
     // eslint-disable-next-line react-hooks/refs
     (c) => void open(c),
-    (c) => c.id
+    tileKey
   )
 
   return (
@@ -261,6 +269,7 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
           />
         </PageHeader>
 
+        <TermNotes q={filters.q ?? ''} />
         {pages.isSuccess && cards.length === 0 ? (
           <div className="flex flex-col items-start gap-3 py-16">
             <p className="text-lg font-medium">
@@ -291,14 +300,14 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
           >
             {cards.map((c) => (
               <li
-                key={c.id}
+                key={tileKey(c)}
                 className={cn(TILE, 'lazy-item [--lazy-h:calc(290px*var(--card-scale,1))]')}
               >
                 <button
                   type="button"
-                  data-nav-key={c.id}
+                  data-nav-key={tileKey(c)}
                   onClick={() => void open(c)}
-                  aria-busy={pendingId === c.id || undefined}
+                  aria-busy={pendingId === tileKey(c) || undefined}
                   className={cn(
                     TILE_BUTTON,
                     'group rounded-md p-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring'
@@ -313,7 +322,7 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
                       alt={c.name}
                       className="w-full rounded-[4px] shadow-[0_8px_20px_rgb(0_0_0/0.45)]"
                     />
-                    {pendingId === c.id && (
+                    {pendingId === tileKey(c) && (
                       <span className="absolute inset-0 flex items-center justify-center rounded-[4px] bg-black/40">
                         <Spinner className="size-6 text-foreground" />
                       </span>
@@ -335,6 +344,7 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
                     )}
                   </div>
                   <div className="mt-0.5 min-w-0 space-y-0.5 font-mono text-[11.5px] font-medium">
+                    {c.focusLabel && <div className="truncate">{c.focusLabel}</div>}
                     <div className="flex justify-between gap-2">
                       <span className="truncate">{statsLine(c)}</span>
                       <span className="shrink-0">
@@ -373,7 +383,14 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
             <CardPanel
               cardId={openId}
               entryId={selected?.entryId}
-              seed={unowned ?? undefined}
+              seed={
+                unowned
+                  ? {
+                      ...unowned,
+                      defaultPrintingId: unowned.focusPrintingId ?? unowned.defaultPrintingId
+                    }
+                  : undefined
+              }
               onSelectEntry={
                 selected
                   ? (entryId) => setSelected({ cardId: selected.cardId, entryId })

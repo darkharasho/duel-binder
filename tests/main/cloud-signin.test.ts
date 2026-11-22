@@ -226,6 +226,20 @@ describe('signInWithBrowser', () => {
     expect(await portIsFree(Number(start.searchParams.get('port')))).toBe(true)
   })
 
+  it('an error=full callback rejects with the full code', async () => {
+    const exchange = vi.fn()
+    const { result, started } = startSignIn({ exchange: exchange as unknown as typeof fetch })
+    const rejected = expect(result).rejects.toMatchObject({
+      message: 'Duel Binder is full for now.',
+      code: 'full'
+    })
+    const start = await started
+    const page = await callback(start, { error: 'full', state: start.searchParams.get('state')! })
+    expect(await page.text()).toContain('full for now')
+    await rejected
+    expect(exchange).not.toHaveBeenCalled()
+  })
+
   it('a failed code exchange rejects without echoing the response', async () => {
     const exchange = vi.fn(async () => Response.json({ error: 'invalid-code' }, { status: 400 }))
     const { result, started } = startSignIn({ exchange: exchange as unknown as typeof fetch })

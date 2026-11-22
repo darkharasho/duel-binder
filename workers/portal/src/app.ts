@@ -7,7 +7,10 @@ import { adminRoute } from './catalogLoad'
 import type { CostMeter } from './meter'
 import { adminMergeRoute } from './merge'
 import { adminTestersRoute } from './testers'
+import { adminTermsRoute } from './searchTerms'
 import { adminBetaRoute, betaSubmitRoute } from './beta'
+import { adminSeatsRoute } from './seats'
+import { fullPage, invitePage, waitlistRoute } from './seatPages'
 import { adminAdminsRoute } from './admins'
 import { rpcRoute } from './rpc'
 import { syncRoute } from './sync'
@@ -175,6 +178,10 @@ async function route(req: Request, deps: AppDeps): Promise<Response> {
   if (req.method === 'GET' && url.pathname === '/scan/fingerprint-refs')
     return getFingerprintRefs(req, deps)
   if (url.pathname === '/beta') return betaSubmitRoute(req, deps)
+  if (url.pathname === '/waitlist') return waitlistRoute(req, deps)
+  if (req.method === 'GET' && url.pathname === '/full') return fullPage(req, deps)
+  if (req.method === 'GET' && url.pathname.startsWith('/invite/'))
+    return invitePage(req, deps, url.pathname.slice('/invite/'.length))
   if (req.method === 'GET' && url.pathname === '/admin')
     return (await isAdmin(req, deps)) ? adminPage() : json({ error: 'Not found' }, 404)
   if (url.pathname === '/admin/open') return adminOpenRoute(req, deps)
@@ -186,6 +193,10 @@ async function route(req: Request, deps: AppDeps): Promise<Response> {
     return adminTestersRoute(req, deps)
   if (url.pathname === '/admin/beta' || url.pathname.startsWith('/admin/beta/'))
     return adminBetaRoute(req, deps)
+  if (url.pathname === '/admin/seats' || url.pathname.startsWith('/admin/seats/'))
+    return adminSeatsRoute(req, deps)
+  if (url.pathname === '/admin/terms' || url.pathname.startsWith('/admin/terms/'))
+    return adminTermsRoute(req, deps)
   if (url.pathname === '/admin/training' || url.pathname.startsWith('/admin/training/'))
     return adminTrainingRoute(req, deps)
   if (url.pathname === '/admin/supporters') return adminSupportersRoute(req, deps)

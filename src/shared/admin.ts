@@ -4,6 +4,7 @@ import type { SupporterPlan } from './supporter'
  * (workers/portal/src: stats.ts, errors.ts, merge.ts, testers.ts, admins.ts, training.ts).
  */
 import type { GameId } from './games/types'
+import type { SearchTerm, TermEvidence, TermKind, TermTarget, TermTargetKind } from './search/terms'
 import type { TrainingStats } from './training'
 
 /** GET /admin/stats (collectStats). One read counts every table, so it's read only when asked. */
@@ -107,6 +108,20 @@ export interface AdminList {
 
 export type AdminPhotos = TrainingStats
 
+/** A search term as GET /admin/terms lists it: its eBay evidence and a card to show for its target. */
+export type AdminTerm = SearchTerm & {
+  evidence: TermEvidence
+  preview: { cardName: string; imageId: number | null; label: string } | null
+}
+
+/** The fields an owner sets when approving with edits or adding a term. */
+export interface AdminTermFields {
+  phrase: string
+  kind: TermKind
+  targetKind: TermTargetKind
+  target: TermTarget
+}
+
 /** The GitHub workflows the Runs tab watches. */
 export const ADMIN_WORKFLOWS = ['catalog.yml', 'release.yml'] as const
 export type AdminWorkflow = (typeof ADMIN_WORKFLOWS)[number]
@@ -165,3 +180,25 @@ export interface AdminSupporters {
     showOnSite: boolean
   }[]
 }
+
+/** One waitlist entry as GET /admin/seats lists it. */
+export interface AdminWaitlistEntry {
+  id: number
+  email: string
+  createdAt: string
+  invitedAt: string | null
+  inviteExpiresAt: string | null
+  status: 'waiting' | 'invited' | 'expired' | 'joined'
+}
+
+/** GET /admin/seats: the seat counts and the waitlist. */
+export interface AdminSeats {
+  counts: { cap: number; accounts: number; invited: number; free: number; waiting: number }
+  waitlist: AdminWaitlistEntry[]
+}
+
+/** One POST /admin/seats/{action}: `cap` carries the new cap; the entry actions carry the waitlist `id`; `fill` neither. */
+export type AdminSeatsAction =
+  | { action: 'cap'; cap: number }
+  | { action: 'fill' }
+  | { action: 'invite' | 'resend' | 'cancel' | 'delete'; id: number }

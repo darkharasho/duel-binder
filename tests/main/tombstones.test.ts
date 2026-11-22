@@ -212,8 +212,8 @@ const SYNC = 'sync, reads and writes tombstones explicitly'
  * times. A new reference must be added here with its kind; a sync file is a one-line entry.
  */
 const ENTRY_REFS: Record<string, [count: number, kind: string]> = {
-  'src/main/repo/browse.ts': [2, SCOPED],
-  'src/main/repo/collection.ts': [7, SCOPED],
+  'src/main/repo/browse.ts': [3, SCOPED],
+  'src/main/repo/collection.ts': [8, SCOPED],
   'src/main/repo/dexImport.ts': [2, SCOPED],
   'src/main/repo/scope.ts': [5, SCOPED],
   'src/main/repo/sets.ts': [6, SCOPED],

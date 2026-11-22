@@ -237,16 +237,43 @@ export const isGrade = (grade) => /^(10|[1-9](\.5)?|Authentic)$/.test(String(gra
 // prints Base Set's Charizard as 4/102 again).
 const REPRINT_LINES = [/\bcelebrations?\b/, /\bclassic collection\b/]
 
+// What a promo's listing says: "Black Star Promo", "SVP", "SWSH Promo".
+const PROMO_WORDS =
+  /\bpromos?\b|black\s*star|\b(?:svp|smp|swshp|xyp|bwp|dpp|hgssp|basep|mep|sv-p|m-p)\b/
+
 // Lots, several copies and fakes: a graded listing of one card says none of these.
 const NOT_ONE_SLAB =
   /\b(lot|bundle|proxy|orica|custom|set of \d+|\d+ copies|choose|pick|you pick|u pick)\b|\b[2-9]\s?x\b|\bx\s?[2-9]\b/i
+
+// eBay matches "141/86" and "141/086" as different words, so the search names each way a seller
+// writes the number: padded to three digits as the card prints it, a gallery total with the
+// number's letters ("GG49/GG70"). One OR group: "(141/86,141/086)".
+const pad3 = (x) => (/^\d{1,2}$/.test(x) ? [x, x.padStart(3, '0')] : [x])
+
+/** Every way a seller writes a collector number ("4/102", "#004/102"), for the search. */
+export function numberForms(number) {
+  const [n, total] = String(number ?? '')
+    .trim()
+    .split('/')
+  if (!n) return []
+  const ns = pad3(n)
+  if (!total) return ns
+  const letters = /^([A-Za-z]+)\d/.exec(n)?.[1]
+  const totals = [...pad3(total), ...(letters && /^\d+$/.test(total) ? [letters + total] : [])]
+  return [...new Set(ns.flatMap((a) => totals.map((b) => `${a}/${b}`)))]
+}
+
+function numberTerm(number) {
+  const forms = numberForms(number)
+  return forms.length > 1 ? `(${forms.join(',')})` : (forms[0] ?? '')
+}
 
 /**
  * The search for one printing in a slab: its code (Yu-Gi-Oh's are unique), or its name and
  * collector number, then the grader and grade, and the language word for a non-English card.
  */
 export function buildGradedQuery({ code, name, number, lang, company, grade, edition }) {
-  const parts = code ? [`"${code}"`] : [`"${name}"`, number]
+  const parts = code ? [`"${code}"`] : [`"${name}"`, numberTerm(number)]
   if (edition === '1st') parts.push('1st')
   parts.push(company, grade === 'Authentic' ? 'Authentic' : grade)
   if (lang && lang !== 'en') parts.push(EBAY_WORDS[lang] ?? '')
@@ -282,13 +309,18 @@ export function gradedTitleMatches(
         .toLowerCase()
         .split('/')
         .map((x) => escape(x.trim().replace(/^0+(?=\d)/, '')))
-      const tail = total ? `\\s*\\/\\s*0*${total}` : ''
-      const re = new RegExp(`(?<![\\w.])(?:#\\s*)?0*${n}${tail}(?![\\w.]|\\.\\d)`)
+      // The total may be padded ("141/086") or carry the number's letters ("GG49/GG70"); the
+      // number itself never follows a slash (that's some other card's total: "021/028").
+      const tail = total ? `\\s*\\/\\s*[a-z]{0,3}0*${total}` : ''
+      const re = new RegExp(`(?<![\\w./])(?:#\\s*)?0*${n}${tail}(?![\\w.]|\\.\\d)`)
       if (!re.test(t)) return false
     }
     // Reprints that print the same name and number: only when they're the printing asked for.
     const asked = String(set ?? '').toLowerCase()
     for (const reprint of REPRINT_LINES) if (reprint.test(t) && !reprint.test(asked)) return false
+    // A promo's catalog total isn't printed on it, so its number alone is all there is to go on:
+    // the listing has to say it's a promo too.
+    if (/\bpromo/.test(asked) && !PROMO_WORDS.test(t)) return false
   }
   const who = GRADER_NAMES[company]
   if (!who) return false

@@ -4,6 +4,7 @@ import { ChevronLeft, XIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import type { CardSearchResult, Printing } from '@shared/types'
 import { api, invalidateAfterEdit, queryKeys } from '@/lib/api'
+import { TermNotes } from '@/components/TermNotes'
 import { track } from '@/lib/usage'
 import { priceFor } from '@shared/pricing'
 import {
@@ -194,7 +195,8 @@ export function AddCardDialog({
 
   const pickCard = (c: CardSearchResult): void => {
     setCard(c)
-    setPreferredId(null)
+    // A version row opens on the printing it named.
+    setPreferredId(c.printingId ?? null)
     setPickedLanguage(null)
     setHighlight(undefined)
     setStep('printing')
@@ -334,22 +336,29 @@ export function AddCardDialog({
                 onValueChange={setText}
               />
               <CommandList className={listClass}>
+                <TermNotes q={settled ? q : ''} className="px-5 pt-2" />
                 {text.trim() !== '' && (!settled || search.isFetching) && (
                   <p className={emptyClass}>Searching…</p>
                 )}
                 {settled && q !== '' && !search.isFetching && (search.data?.length ?? 0) === 0 && (
                   <CommandEmpty className={emptyClass}>No cards found.</CommandEmpty>
                 )}
+                {settled && q !== '' && search.data?.[0]?.nearMiss && (
+                  <p className="px-5 pt-2 text-sm text-foreground">
+                    Showing results for “{search.data[0].nearMiss}”
+                  </p>
+                )}
                 <CommandGroup className="px-3 py-3">
                   {(!settled || q === '' ? [] : (search.data ?? [])).map((c) => (
                     <CommandItem
-                      key={c.id}
-                      value={String(c.id)}
+                      // A version row shares its card's id, so the printing keys it.
+                      key={c.printingId !== undefined ? `p${c.printingId}` : `c${c.id}`}
+                      value={c.printingId !== undefined ? `p${c.printingId}` : `c${c.id}`}
                       onSelect={() => pickCard(c)}
                       className={itemClass}
                     >
                       <CardArt
-                        imageId={c.defaultImageId}
+                        imageId={c.imageId ?? c.defaultImageId}
                         size="small"
                         alt=""
                         className="w-12 shrink-0"
@@ -360,7 +369,11 @@ export function AddCardDialog({
                           {c.language && <LanguageTag language={c.language} className="shrink-0" />}
                         </span>
                         <span className="block truncate font-mono text-xs text-foreground">
-                          {c.localName ? `${c.localName} · ${c.type}` : c.type}
+                          {c.printingId !== undefined && c.setName
+                            ? `${c.setName} · ${c.setCode ?? ''}`
+                            : c.localName
+                              ? `${c.localName} · ${c.type}`
+                              : c.type}
                         </span>
                       </span>
                       {c.matchedSetCode && (

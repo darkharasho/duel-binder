@@ -4,6 +4,7 @@ import { ebayPricesHidden, LOCAL, scopeGame, setEbayPricesHidden } from '../repo
 import { readRollup } from '../repo/rollup'
 import type { BrowseFacets, SetSummary } from '../../shared/types'
 import { rollupJobKey, type RollupJob } from '../repo/rollupJobs'
+import { explainQuery } from '../repo/explainQuery'
 import { borrowedArt, getCardDetail, japaneseArt, searchCards, traditionalArt } from '../repo/cards'
 import { browseCards, browseFacetsFast } from '../repo/browse'
 import { checkLanguage, checkNotesLength } from '../repo/args'
@@ -71,6 +72,7 @@ import type { CollectorNumber } from '@shared/scan/collectorNumber'
 /** The channels whose handlers only need the database, so the phone runs them too. */
 export const DATA_CHANNELS = [
   'cards:search',
+  'cards:explain',
   'cards:get',
   'cards:browse',
   'cards:browseFacets',
@@ -209,6 +211,7 @@ export function createDataHandlers({
   }
   return {
     'cards:search': async (q: string) => searchCards(db, q),
+    'cards:explain': async (q: string) => explainQuery(db, LOCAL, q),
     'cards:get': async (cardId: number) => getCardDetail(db, cardId),
     'cards:browse': async (f) => browseCards(db, f),
     'cards:browseFacets': async (language) => {

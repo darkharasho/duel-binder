@@ -22,6 +22,8 @@ const BROWSE_URL = 'https://api.ebay.com/buy/browse/v1/item_summary/search'
 const OAUTH_BODY =
   'grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope'
 const CACHE_TTL = 604800
+// A graded lookup that found too few listings: tried again a day later.
+const NO_PRICE_TTL = 86400
 const ATTEMPTS = 3
 const MAX_FIELD = 200
 const QUOTA_URL =
@@ -304,7 +306,7 @@ async function lookupQuota(env) {
 
 async function gradedCacheKey(p) {
   const fields = [
-    'g2',
+    'g3',
     p.game,
     p.code,
     p.name.toLowerCase(),
@@ -317,7 +319,7 @@ async function gradedCacheKey(p) {
   ]
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(fields.join('|')))
   const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
-  return `g2:${hex}`
+  return `g3:${hex}`
 }
 
 // One printing's asking price in one grader's slab at one grade: one Browse call over listings in
@@ -369,9 +371,12 @@ async function gradedPrice(env, ctx, q) {
     // KV read failure is a cache miss.
   }
   try {
-    const body = JSON.stringify(await lookupGraded(env, params))
+    const result = await lookupGraded(env, params)
+    const body = JSON.stringify(result)
+    // Too few listings is kept a day, so a new slab's first listings show up soon.
+    const ttl = result.price == null ? NO_PRICE_TTL : CACHE_TTL
     const write = Promise.resolve()
-      .then(() => env.PRICES.put(key, body, { expirationTtl: CACHE_TTL }))
+      .then(() => env.PRICES.put(key, body, { expirationTtl: ttl }))
       .catch(() => {})
     if (ctx?.waitUntil) ctx.waitUntil(write)
     else await write
@@ -388,11 +393,56 @@ async function gradedPrice(env, ctx, q) {
   }
 }
 
+// Constant-time string compare: hashes both sides so length does not leak either.
+async function tokenMatches(given, expected) {
+  const enc = new TextEncoder()
+  const [a, b] = await Promise.all([
+    crypto.subtle.digest('SHA-256', enc.encode(given)),
+    crypto.subtle.digest('SHA-256', enc.encode(expected))
+  ])
+  const x = new Uint8Array(a)
+  const y = new Uint8Array(b)
+  let diff = 0
+  for (let i = 0; i < x.length; i++) diff |= x[i] ^ y[i]
+  return diff === 0
+}
+
 export default {
   async fetch(request, env, ctx) {
     if (request.method !== 'GET') return respond({ error: 'method not allowed' }, 405)
     const url = new URL(request.url)
     const clientOk = CLIENTS.has(request.headers.get('X-Client'))
+    if (url.pathname === '/v1/titles') {
+      // Owner-only term harvest: an unknown token looks like a missing route, and KV is never used.
+      const given = (request.headers.get('Authorization') ?? '').replace(/^Bearer /, '')
+      if (!env.HARVEST_TOKEN || !(await tokenMatches(given, env.HARVEST_TOKEN))) {
+        return respond({ error: 'not found' }, 404)
+      }
+      const q = (url.searchParams.get('q') ?? '').trim()
+      const game = url.searchParams.get('game') ?? ''
+      if (!Object.hasOwn(GRADED_CATEGORIES, game) || !q || q.length > MAX_FIELD) {
+        return respond({ error: 'bad request' }, 400)
+      }
+      try {
+        const found = await search(env, q, { limit: 200, category: GRADED_CATEGORIES[game] })
+        return respond({
+          titles: found.map((i) => ({
+            title: String(i.title ?? ''),
+            seller: i.seller?.username ?? ''
+          }))
+        })
+      } catch (e) {
+        if (e?.status === 429) return respond({ error: 'rate limited' }, 429)
+        console.error(
+          'ebay titles failed',
+          String(e?.message ?? '')
+            .split(' ')
+            .slice(0, 2)
+            .join(' ')
+        )
+        return respond({ error: 'upstream' }, 502)
+      }
+    }
     if (url.pathname === '/v1/quota') {
       if (!clientOk) return respond({ error: 'bad request' }, 400)
       return respond(await lookupQuota(env))

@@ -47,10 +47,24 @@ describe('desktop account section', () => {
     expect(api.account.signIn).toHaveBeenCalledTimes(1)
   })
 
+  it('a sign-in turned away as full links the waitlist', async () => {
+    const api = make({ ...base, error: 'Duel Binder is full for now.' })
+    renderWithProviders(<SettingsPage />, { api })
+    expect(await screen.findByText(/Duel Binder is full for now\./)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Join the waitlist' })).toHaveAttribute(
+      'href',
+      'https://duelbinder.com/waitlist'
+    )
+  })
+
   it('signed out after an account names whose cards are shown', async () => {
-    renderWithProviders(<SettingsPage />, { api: make({ ...base, localOwner: 'Seto', error: 'Sign-in timed out' }) })
+    renderWithProviders(<SettingsPage />, {
+      api: make({ ...base, localOwner: 'Seto', error: 'Sign-in timed out' })
+    })
     expect(
-      await screen.findByText("Showing Seto's cards. Changes are kept and sync when Seto signs in again.")
+      await screen.findByText(
+        "Showing Seto's cards. Changes are kept and sync when Seto signs in again."
+      )
     ).toBeInTheDocument()
     expect(screen.getByText('Sign-in timed out')).toBeInTheDocument()
   })
@@ -68,10 +82,16 @@ describe('desktop account section', () => {
   })
 
   it('shows never, offline and error states', async () => {
-    const { unmount } = renderWithProviders(<SettingsPage />, { api: make(signedIn({ state: 'offline' })) })
-    expect(await screen.findByText("Offline. Changes will sync when you're back online.")).toBeInTheDocument()
+    const { unmount } = renderWithProviders(<SettingsPage />, {
+      api: make(signedIn({ state: 'offline' }))
+    })
+    expect(
+      await screen.findByText("Offline. Changes will sync when you're back online.")
+    ).toBeInTheDocument()
     unmount()
-    renderWithProviders(<SettingsPage />, { api: make(signedIn({ state: 'error', error: 'boom' })) })
+    renderWithProviders(<SettingsPage />, {
+      api: make(signedIn({ state: 'error', error: 'boom' }))
+    })
     expect(await screen.findByText('Sync failed: boom')).toBeInTheDocument()
   })
 

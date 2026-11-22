@@ -1,6 +1,6 @@
 {
   "name": "duel-binder",
-  "version": "0.111.0",
+  "version": "0.114.0",
   "description": "Duel Binder: a local Yu-Gi-Oh! card collection binder",
   "main": "./out/main/index.js",
   "author": "darkharasho",
@@ -31,6 +31,8 @@
     "build:linux": "npm run build && electron-builder --linux",
     "catalog:job": "vite build --config scripts/catalog/vite.config.ts && cross-env ELECTRON_RUN_AS_NODE=1 electron out/catalog/build.mjs",
     "catalog:snapshots": "vite build --config scripts/catalog/vite.config.ts && cross-env ELECTRON_RUN_AS_NODE=1 electron out/catalog/snapshots.mjs",
+    "terms:harvest": "vite build --config scripts/catalog/vite.config.ts && cross-env ELECTRON_RUN_AS_NODE=1 electron out/catalog/terms-harvest.mjs",
+    "terms:post": "vite build --config scripts/catalog/vite.config.ts && cross-env ELECTRON_RUN_AS_NODE=1 electron out/catalog/terms-post.mjs",
     "catalog:thumbs": "vite build --config scripts/catalog/vite.config.ts && node out/catalog/thumbs.mjs",
     "catalog:zh-art": "vite build --config scripts/catalog/vite.config.ts && cross-env ELECTRON_RUN_AS_NODE=1 electron out/catalog/zh-art.mjs",
     "scan:pull-training": "vite build --config scripts/catalog/vite.config.ts && node out/catalog/pull-training.mjs",
@@ -108,6 +110,7 @@
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "vite": "^8.3.4",
-    "vitest": "^5.0.5"
+    "vitest": "^5.0.5",
+    "zod": "^4.6.7"
   }
 }

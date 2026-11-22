@@ -20,6 +20,7 @@ import { magicFacets, magicLocalName, magicWhere, mtgFinishWhere } from './mtgFi
 import { mtgBaseRaritySql } from '../../shared/games/magic'
 import { onePieceFacets, onePieceWhere, opRarityWhere, opVersionWhere } from './opFilters'
 import { twinPrice } from './enTwin'
+import { queryPrintingIds } from './queryPrintings'
 import { marketOnlyGame, setPrice, sweptPrinting } from './priceRule'
 import {
   buildFtsQuery,
@@ -298,6 +299,20 @@ export function listEntries(db: SqlDb, f: CollectionFilters, scope: Scope = LOCA
         parts.push('c.id IN (SELECT rowid FROM cards_fts WHERE cards_fts MATCH ?)')
         params.push(fts)
       }
+    }
+    // Copies of the versions the query's terms and set, rarity or number words name ("mew sir").
+    // Only the owned printings are searched, so a broad query's cut never drops an owned copy.
+    const named = queryPrintingIds(db, scope, text, undefined, {
+      within: () =>
+        (
+          db
+            .prepare(`SELECT DISTINCT e.printing_id AS id FROM collection_entries e WHERE ${scope.where('e')}`)
+            .all() as { id: number }[]
+        ).map((r) => r.id)
+    })
+    if (named && named.ids.length > 0) {
+      parts.push('e.printing_id IN (SELECT value FROM json_each(?))')
+      params.push(JSON.stringify(named.ids))
     }
     where.push(`(${parts.join(' OR ')})`)
   }

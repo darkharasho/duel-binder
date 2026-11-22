@@ -7,6 +7,7 @@ import { isArtVariant, namedVariant } from '../../src/shared/scan/fingerprintRef
 import { rarityFamily } from '../../src/shared/scan/rarity'
 import { ART_FAR_DISTANCE } from '../../src/shared/scan/thresholds'
 import type { RgbaImage } from '../../src/shared/scan/types'
+import { isTokenId } from '../../src/shared/games/ids'
 import { isLanguage } from '../../src/shared/languages'
 import type { YugipediaClient } from '../../src/main/yugipedia/client'
 import { listCardGalleries } from '../../src/main/yugipedia/cardGallery'
@@ -51,17 +52,30 @@ const FOIL = /^(starlight|ghost|collector's) rare/i
  * chibi art in every rarity (BLGG), where Yugipedia may have the Secret Rare's scan and not the
  * Starlight Rare's.
  */
-const NEW_ART_SET = /^(Original Artwork (Duel Set|Collection)|Battles of Legend: Glorious Gallery)\b/i
+const NEW_ART_SET =
+  /^(Original Artwork (Duel Set|Collection)|Battles of Legend: Glorious Gallery)\b/i
+/**
+ * Printing codes of a set's variant art pool, in every rarity: Rarity Collection 5's stamp arts
+ * (EN083–140) and extended arts (EN141–150), which Yugipedia's set list notes only in a
+ * description and YGOPRODeck has no art for.
+ */
+const NEW_ART_CODE = /^RA05-EN(0(8[3-9]|9\d)|1[0-4]\d|150)$/i
 
 /**
  * Whether a printing looks unlike its card's art from YGOPRODeck: an alternate or overframe art
  * (named in its variant or in brackets after its rarity), a printing its set list marks "New
  * artwork" (variant NEW_ART_VARIANT, e.g. LOCR-JP029–038, an art YGOPRODeck doesn't have yet), a
- * printing in a set of new art (NEW_ART_SET), or a foil that
+ * printing in a set of new art (NEW_ART_SET) or a variant art pool (NEW_ART_CODE), or a foil that
  * changes the picture.
  */
-export function wantsReference(rarity: string, variant: string | null, setName = ''): boolean {
+export function wantsReference(
+  rarity: string,
+  variant: string | null,
+  setName = '',
+  setCode = ''
+): boolean {
   if (FOIL.test(rarity.trim()) || NEW_ART_SET.test(setName.trim())) return true
+  if (NEW_ART_CODE.test(setCode.trim())) return true
   return namedVariant(rarity, variant) !== null
 }
 
@@ -206,11 +220,14 @@ export async function buildReferences(opts: ReferenceOptions): Promise<Reference
     .map((p) =>
       p.set_code ? p : { ...p, set_code: setCodes.get(`${p.language}|${p.set_name}`) ?? '' }
     )
-    // Every token: its card art is often the video game's, unlike any printing.
+    // Every token-id card (tokens, cards with no passcode): its card art is often the video
+    // game's or another printing's, unlike this printing.
     .filter(
       (p) =>
         p.set_code &&
-        (p.frame_type === 'token' || wantsReference(p.set_rarity, p.variant, p.set_name))
+        (p.frame_type === 'token' ||
+          isTokenId(p.card_id) ||
+          wantsReference(p.set_rarity, p.variant, p.set_name, p.set_code))
     )
   // Each code's rarities printed in the usual art: an unsuffixed scan of one of those is of that
   // printing, not of an art variant of the same rarity (see fileShowsVariant).

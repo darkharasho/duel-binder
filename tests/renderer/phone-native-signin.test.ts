@@ -74,6 +74,15 @@ describe('nativeSignIn', () => {
     ).rejects.toThrow('signin-failed')
   })
 
+  it('says full for a Discord error=full and an exchange refused as full', async () => {
+    const fetch = tokenFetch() as unknown as typeof globalThis.fetch
+    await expect(nativeSignIn({ start: sheet({ error: 'full' }), fetch })).rejects.toThrow('full')
+    const refused = vi.fn<TokenFetch>(async () => Response.json({ error: 'full' }, { status: 403 }))
+    await expect(
+      nativeSignIn({ start: sheet(), fetch: refused as unknown as typeof globalThis.fetch })
+    ).rejects.toThrow('full')
+  })
+
   it('a closed sheet is a cancel, not a failure', async () => {
     const start = vi.fn(async () => {
       throw Object.assign(new Error('closed'), { code: 'CANCELLED' })
@@ -149,6 +158,16 @@ describe('appleSignIn', () => {
         fetch: tokenFetch(400) as unknown as typeof globalThis.fetch
       })
     ).rejects.toThrow('signin-failed')
+  })
+})
+
+describe('appleSignIn when full', () => {
+  it('rejects with full for a 403 { error: full }', async () => {
+    const open = vi.fn<AppleSheet>(async () => ({ identityToken: 'id.tok.en' }))
+    const fetch = vi.fn<TokenFetch>(async () => Response.json({ error: 'full' }, { status: 403 }))
+    await expect(
+      appleSignIn({ appleSignIn: open, fetch: fetch as unknown as typeof globalThis.fetch })
+    ).rejects.toThrow('full')
   })
 })
 

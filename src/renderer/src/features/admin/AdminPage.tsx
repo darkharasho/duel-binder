@@ -7,6 +7,7 @@ import { UnderlineTabs } from '@/components/UnderlineTabs'
 import { api } from '@/lib/api'
 import { ADMIN_PAGE_TABS, ADMIN_QUERY, adminKeys, type AdminPageTab } from './adminTabs'
 import { AdminsTab, BetaTab, ErrorsTab, MergesTab, PhotosTab, TestersTab } from './ListTabs'
+import { SeatsTab } from './SeatsTab'
 import { Failed } from './parts'
 import { CostsTab } from './CostsTab'
 import { TermsTab } from './TermsTab'
@@ -91,6 +92,12 @@ export function AdminPage({
     enabled: tab === 'beta',
     ...ADMIN_QUERY
   })
+  const seats = useQuery({
+    queryKey: adminKeys.seats,
+    queryFn: () => admin().seats(),
+    enabled: tab === 'seats',
+    ...ADMIN_QUERY
+  })
   const admins = useQuery({
     queryKey: adminKeys.admins,
     queryFn: () => admin().admins(),
@@ -123,6 +130,7 @@ export function AdminPage({
     merges,
     testers,
     beta,
+    seats,
     admins,
     photos,
     costs,
@@ -179,6 +187,7 @@ export function AdminPage({
       {tab === 'merges' && <Show q={merges} show={(m) => <MergesTab merges={m} />} />}
       {tab === 'testers' && <Show q={testers} show={(t) => <TestersTab testers={t} />} />}
       {tab === 'beta' && <Show q={beta} show={(b) => <BetaTab beta={b} />} />}
+      {tab === 'seats' && <Show q={seats} show={(s) => <SeatsTab seats={s} />} />}
       {tab === 'admins' && (
         <Show
           q={admins}

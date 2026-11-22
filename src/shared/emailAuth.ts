@@ -112,7 +112,8 @@ export const EMAIL_COPY = {
     `That account also has ${label(p)}. Sign in to it and remove one first.`,
   linkOnIphone: 'You can link them later from the Duel Binder iPhone app.',
   mergeOnPhone: 'That email belongs to another account. Link it from the Duel Binder phone app.',
-  otherAccount: (p: string): string => `That ${label(p)} account isn't the one using this email.`
+  otherAccount: (p: string): string => `That ${label(p)} account isn't the one using this email.`,
+  full: "Duel Binder is full for now. Join the waitlist at duelbinder.com/waitlist and we'll email you when a seat opens."
 }
 
 export type EmailStep =

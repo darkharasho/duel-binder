@@ -27,6 +27,7 @@ import { logServerError } from './errors'
 import { hashPassword, verifyPassword } from './password'
 import { takeLinkCode } from './link'
 import { bindTesterInvites } from './testers'
+import { SeatsFull, inviteValid, seatCounts, type SeatPass } from './seats'
 import { claimKey, keepAppleToken, peekClaim, spendClaim, type ClaimRow } from './emailClaim'
 import {
   createAccount,
@@ -51,9 +52,9 @@ export type StepOutcome =
 export class EmailAuthError extends Error {
   constructor(
     message: string,
-    readonly status: 400 | 404 | 429,
+    readonly status: 400 | 403 | 404 | 429,
     /** Stable reason, for callers that must not match on the copy. */
-    readonly code: 'expired' | 'other-account' | 'also-has' | 'refused' = 'refused'
+    readonly code: 'expired' | 'other-account' | 'also-has' | 'full' | 'refused' = 'refused'
   ) {
     super(message)
   }
@@ -286,12 +287,15 @@ async function passwordStep(
   throw new EmailAuthError(EMAIL_COPY.wrongPassword, 400)
 }
 
+const seatsFull = (): EmailAuthError => new EmailAuthError(EMAIL_COPY.full, 403, 'full')
+
 async function createStep(
   deps: AppDeps,
   body: Record<string, unknown>,
-  ip: string
+  ctx: StepContext
 ): Promise<StepOutcome> {
   const { db } = deps
+  const { ip } = ctx
   const email = normalizeEmail(text(body, 'email'))
   const password = text(body, 'password')
   const problem = emailProblem(email) ?? passwordProblem(password)
@@ -299,6 +303,15 @@ async function createStep(
   if (hasEmailSignIn(db, email)) throw new EmailAuthError(EMAIL_COPY.emailTaken, 400)
   const now = deps.now()
   const nowIso = now.toISOString()
+  // No code goes out for a sign-up with no seat. Creating the account checks again later. An
+  // address a Discord or Apple account already vouches for is offered that account at confirm
+  // (a link, no new account), so it needs no seat.
+  if (
+    seatCounts(db, nowIso).free === 0 &&
+    !(ctx.inviteHash && inviteValid(db, ctx.inviteHash, nowIso)) &&
+    matchedAccount(db, email) === null
+  )
+    throw seatsFull()
   // Limits first, before the costly hash: a refused request must do no work and leave the
   // pending sign-up and its code alone.
   if (!takeCodeLimits(db, email, ip, now)) throw new EmailAuthError(EMAIL_COPY.tooManyCodes, 429)
@@ -328,14 +341,18 @@ async function createStep(
   return { next: 'code', ticket, email, purpose: 'signup' }
 }
 
-/** Makes the email account a confirmed sign-up asked for and spends the flow. Call inside a transaction. */
-function createFromFlow(db: SqlDb, flow: FlowRow, nowIso: string): number {
+/**
+ * Makes the email account a confirmed sign-up asked for and spends the flow. Takes a seat with
+ * `pass`, so it can throw SeatsFull. Call inside a transaction.
+ */
+function createFromFlow(db: SqlDb, flow: FlowRow, nowIso: string, pass: SeatPass): number {
   if (hasEmailSignIn(db, flow.email)) throw new EmailAuthError(EMAIL_COPY.emailTaken, 400)
   const userId = createAccount(
     db,
     { provider: 'email', subject: flow.email },
     { displayName: null, avatar: null },
-    nowIso
+    nowIso,
+    pass
   )
   db.prepare(
     "UPDATE sign_ins SET email = ?, password_hash = ? WHERE provider = 'email' AND subject = ?"
@@ -424,7 +441,11 @@ export async function attachFromFlow(
   return unwrap(out)
 }
 
-async function confirmStep(deps: AppDeps, body: Record<string, unknown>): Promise<StepOutcome> {
+async function confirmStep(
+  deps: AppDeps,
+  body: Record<string, unknown>,
+  ctx: StepContext
+): Promise<StepOutcome> {
   const { db } = deps
   const ticket = text(body, 'ticket')
   const code = text(body, 'code').trim()
@@ -456,7 +477,11 @@ async function confirmStep(deps: AppDeps, body: Record<string, unknown>): Promis
       ).run(new Date(now.getTime() + CONFIRMED_TTL_MS).toISOString(), ticketHash)
       return { next: 'match', ticket, email: flow.email, providers: matched.providers }
     }
-    return { next: 'signed-in', userId: createFromFlow(db, flow, nowIso), created: true }
+    return {
+      next: 'signed-in',
+      userId: createFromFlow(db, flow, nowIso, { inviteHash: ctx.inviteHash }),
+      created: true
+    }
   })()
   return unwrap(out)
 }
@@ -550,7 +575,11 @@ async function resetStep(deps: AppDeps, body: Record<string, unknown>): Promise<
   return unwrap(out)
 }
 
-async function separateStep(deps: AppDeps, body: Record<string, unknown>): Promise<StepOutcome> {
+async function separateStep(
+  deps: AppDeps,
+  body: Record<string, unknown>,
+  ctx: StepContext
+): Promise<StepOutcome> {
   const { db } = deps
   const ticketHash = await sha256Hex(text(body, 'ticket'))
   const nowIso = deps.now().toISOString()
@@ -558,7 +587,11 @@ async function separateStep(deps: AppDeps, body: Record<string, unknown>): Promi
     const flow = confirmedSignup(db, ticketHash, nowIso)
     if (!flow) return refuse(EMAIL_COPY.codeExpired, 400, 'expired')
     if (hasEmailSignIn(db, flow.email)) return refuse(EMAIL_COPY.emailTaken)
-    return { next: 'signed-in', userId: createFromFlow(db, flow, nowIso), created: true }
+    return {
+      next: 'signed-in',
+      userId: createFromFlow(db, flow, nowIso, { inviteHash: ctx.inviteHash }),
+      created: true
+    }
   })()
   return unwrap(out)
 }
@@ -689,11 +722,16 @@ async function claimSeparateStep(
   const out = db.transaction((): StepOutcome | Refusal => {
     const claim = key && peekClaim(db, key, kind, nowIso)
     if (!claim) return refuse(EMAIL_COPY.codeExpired, 400, 'expired')
+    // As at the Apple sign-in itself, an invite sent to Apple's verified email lets it in.
     const { userId, created } = signInWith(
       db,
       { provider: claim.provider, subject: claim.subject },
       claim.profile,
-      nowIso
+      nowIso,
+      {
+        inviteHash: ctx.inviteHash,
+        verifiedEmail: claim.provider === 'apple' ? claim.email : null
+      }
     )
     keepAppleToken(db, claim, userId, nowIso)
     if (claim.provider === 'discord' && claim.profile.username)
@@ -711,9 +749,25 @@ export interface StepContext {
   claimKind: 'web' | 'desktop'
   /** The web claim's ticket (the `email_claim` cookie); a desktop claim sends it in the body. */
   claimTicket?: string
+  /** The `seat_invite` cookie's token, hashed (web form only): lets a sign-up past the cap. */
+  inviteHash?: string | null
 }
 
 export async function runEmailStep(
+  deps: AppDeps,
+  step: EmailStep,
+  body: Record<string, unknown>,
+  ctx: StepContext
+): Promise<StepOutcome> {
+  try {
+    return await runStep(deps, step, body, ctx)
+  } catch (err) {
+    if (err instanceof SeatsFull) throw seatsFull()
+    throw err
+  }
+}
+
+function runStep(
   deps: AppDeps,
   step: EmailStep,
   body: Record<string, unknown>,
@@ -725,9 +779,9 @@ export async function runEmailStep(
     case 'password':
       return passwordStep(deps, body, ctx.ip)
     case 'create':
-      return createStep(deps, body, ctx.ip)
+      return createStep(deps, body, ctx)
     case 'confirm':
-      return confirmStep(deps, body)
+      return confirmStep(deps, body, ctx)
     case 'resend':
       return resendStep(deps, body, ctx.ip)
     case 'forgot':
@@ -735,7 +789,7 @@ export async function runEmailStep(
     case 'reset':
       return resetStep(deps, body)
     case 'separate':
-      return separateStep(deps, body)
+      return separateStep(deps, body, ctx)
     case 'link-discord':
       return linkDiscordStep(deps, body)
     case 'link-apple':
@@ -796,7 +850,12 @@ export async function emailAuthRoute(req: Request, deps: AppDeps, step: string):
     const token = await mintSession(deps, out.userId, 'desktop', deps.now().toISOString())
     return json({ next: 'signed-in', token, user: loadMe(deps, out.userId), created: out.created })
   } catch (err) {
-    if (err instanceof EmailAuthError) return json({ error: err.message }, err.status)
+    // The default 'refused' is no code: only a set one goes out, for apps to act on.
+    if (err instanceof EmailAuthError)
+      return json(
+        err.code === 'refused' ? { error: err.message } : { error: err.message, code: err.code },
+        err.status
+      )
     throw err
   }
 }

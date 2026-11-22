@@ -63,6 +63,14 @@ export function renderPrivacy(view: PrivacyView): string {
           )
         ],
         [
+          'The waitlist',
+          p(
+            'When Duel Binder is full, the form at <a href="/waitlist">duelbinder.com/waitlist</a> stores the email you enter and when you joined. It is used only to email you an invite link when a seat opens.',
+            'Your waitlist email, and any invite sent to it, are kept until you’re invited and make your account (with the invite link, or signing in with that email), which deletes them, or until we remove you from the list. To be removed sooner, email support@duelbinder.com. Deleting your account also deletes any waitlist entry or invite under its emails.',
+            'Waitlist attempts are counted by IP address to stop floods; those counts are deleted after a day.'
+          )
+        ],
+        [
           'Supporter subscriptions',
           p(
             'If you become a supporter, Stripe takes the payment and keeps your card details; Duel Binder never sees them. The portal stores your Stripe customer and subscription ids, your plan, its status and dates, and whether you chose to show your name on the thanks page. Deleting your account cancels the subscription and deletes these.'

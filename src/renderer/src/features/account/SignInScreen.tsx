@@ -5,9 +5,11 @@ import { Button } from '@/components/ui/button'
 import { api } from '@/lib/api'
 import { useApplyAccountStatus } from '@/lib/account'
 import type { AccountStatus } from '@shared/types'
+import { SEATS_FULL_TEXT } from '@shared/cloud'
 import { EmailClaim } from './EmailClaim'
 import { EmailSignIn } from './EmailSignIn'
 import type { EmailAuthClient } from './emailClient'
+import { SeatsFull } from './SeatsFull'
 
 /** The email flow over the desktop's IPC: the session token stays in the main process. */
 const emailClient: EmailAuthClient = {
@@ -91,7 +93,12 @@ export function SignInScreen({ status }: { status?: AccountStatus }): React.JSX.
                   )}
                 </div>
               )}
-              {status?.error && <p className="text-sm text-destructive">{status.error}</p>}
+              {status?.error &&
+                (status.error === SEATS_FULL_TEXT ? (
+                  <SeatsFull />
+                ) : (
+                  <p className="text-sm text-destructive">{status.error}</p>
+                ))}
             </>
           )}
         </div>

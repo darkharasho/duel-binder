@@ -553,6 +553,102 @@ async function loadMerges() {
   $('merges').replaceChildren(p)
 }
 
+/** The seat cap: who is in, who is invited, and the waitlist. */
+async function loadSeats() {
+  const p = el('section', null, 'panel')
+  p.append(el('h2', 'Seats'))
+  const post = async (action, body, btn) => {
+    if (btn) btn.disabled = true
+    try {
+      const res = await fetch('/admin/seats/' + action, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+      const out = await res.json().catch(() => ({}))
+      if (!res.ok) alert(out.error === 'email' ? "The invite email didn't go out. Try again." : out.error === 'joined' ? 'That person already has an account.' : 'Failed: ' + (out.error ?? 'HTTP ' + res.status))
+      else {
+        if (typeof out.invited === 'number')
+          alert('Invited ' + out.invited + ' from the waitlist.' + (out.left > 0 ? ' ' + out.left + ' more can be invited: press Fill open seats again.' : ''))
+        loadSeats()
+      }
+    } catch (e) {
+      alert('Failed: ' + e.message)
+    } finally {
+      if (btn) btn.disabled = false
+    }
+  }
+  try {
+    const res = await fetch('/admin/seats', { credentials: 'same-origin' })
+    if (!res.ok) throw new Error('HTTP ' + res.status)
+    const data = await res.json()
+    const c = data.counts
+    const form = el('form', null, 'adder')
+    const cap = el('input')
+    cap.type = 'number'
+    cap.min = '0'
+    cap.max = '100000'
+    cap.step = '1'
+    cap.value = String(c.cap)
+    cap.setAttribute('aria-label', 'Seat cap')
+    const save = el('button', 'Save')
+    save.type = 'submit'
+    form.addEventListener('submit', (ev) => {
+      ev.preventDefault()
+      // Number('') is 0: an empty box must not close sign-ups.
+      const raw = cap.value.trim()
+      const n = Number(raw)
+      if (raw === '' || !Number.isInteger(n) || n < 0 || n > 100000) {
+        alert('Enter a whole number from 0 to 100000.')
+        return
+      }
+      post('cap', { cap: n }, save)
+    })
+    form.append(cap, save)
+    const fill = el('button', 'Fill open seats')
+    fill.type = 'button'
+    fill.addEventListener('click', () => post('fill', {}, fill))
+    form.append(fill)
+    p.append(form)
+    p.append(el('p', 'used ' + c.accounts + ' of ' + c.cap + ' \u00b7 invited ' + c.invited + ' \u00b7 free ' + c.free + ' \u00b7 waiting ' + c.waiting, 'note'))
+    if (!data.waitlist.length) p.append(el('p', 'Nobody is on the waitlist.', 'note'))
+    else {
+      const table = el('table', null, 'history')
+      const hr = el('tr')
+      for (const h of ['Email', 'Joined the list', 'Status']) hr.append(el('th', h, 'l'))
+      hr.append(el('th', ''))
+      table.append(hr)
+      const when = (iso) => new Date(iso).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
+      for (const r of data.waitlist) {
+        const cell = el('td', null, 'act')
+        const button = (label, action, confirmText) => {
+          const b = el('button', label)
+          b.type = 'button'
+          b.addEventListener('click', () => {
+            if (!confirmText || confirm(confirmText)) post(action, { id: r.id }, b)
+          })
+          cell.append(b)
+        }
+        if (r.status === 'waiting' || r.status === 'expired') button('Invite now', 'invite')
+        if (r.status === 'invited') {
+          button('Resend', 'resend')
+          button('Cancel', 'cancel', 'Cancel the invite for ' + r.email + '?')
+        }
+        if (r.status !== 'invited' && r.status !== 'joined') button('Delete', 'delete', 'Remove ' + r.email + ' from the waitlist for good?')
+        const label = r.status === 'invited' ? 'Invited until ' + when(r.inviteExpiresAt) : r.status === 'expired' ? 'Invite expired' : r.status === 'joined' ? 'Joined' : 'Waiting'
+        const tr = el('tr')
+        table.append(tr)
+        tr.append(el('td', r.email), el('td', when(r.createdAt), 'v'), el('td', label), cell)
+      }
+      p.append(table)
+    }
+  } catch (e) {
+    p.append(el('p', 'Could not load seats: ' + e.message, 'note'))
+  }
+  $('seats').replaceChildren(p)
+}
+
 /** Phone beta requests from duelbinder.com/beta. Most are let in on their own; the rest wait here to be added in Play Console or TestFlight and marked. */
 async function loadBeta() {
   const p = el('section', null, 'panel')
@@ -1206,7 +1302,7 @@ async function loadSupporters() {
   }
 }
 
-const TABS = ['overview', 'runs', 'people', 'activity', 'costs', 'supporters', 'errors', 'scanner', 'storage', 'merges', 'testers', 'beta', 'admins', 'photos', 'terms']
+const TABS = ['overview', 'runs', 'people', 'activity', 'costs', 'supporters', 'errors', 'scanner', 'storage', 'merges', 'testers', 'beta', 'seats', 'admins', 'photos', 'terms']
 
 function showTab() {
   const wanted = location.hash.slice(1)
@@ -1220,7 +1316,7 @@ function showTab() {
 
 window.addEventListener('hashchange', showTab)
 showTab()
-$('refresh').addEventListener('click', () => { load(); loadErrors(); loadRuns(); loadMerges(); loadTesters(); loadBeta(); loadAdmins(); loadPhotos(); loadCosts(); loadSupporters(); loadTerms() })
+$('refresh').addEventListener('click', () => { load(); loadErrors(); loadRuns(); loadMerges(); loadTesters(); loadBeta(); loadSeats(); loadAdmins(); loadPhotos(); loadCosts(); loadSupporters(); loadTerms() })
 load()
 loadErrors()
 loadRuns()
@@ -1231,6 +1327,7 @@ loadPhotos()
 loadCosts()
 loadSupporters()
 loadBeta()
+loadSeats()
 loadTerms()
 `
 
@@ -1263,7 +1360,7 @@ export function adminPage(): Response {
 <header><div class="wrap">
 <div class="top"><h1>Duel Binder</h1><span class="badge">Admin</span><span class="pulse" id="pulse"></span>
 <span class="grow"></span><span class="at" id="at"></span><a href="/">Back to the app</a><button id="refresh" type="button">Refresh</button></div>
-<nav aria-label="Admin sections"><a href="#overview">Overview</a><a href="#runs">Runs</a><a href="#people">Users</a><a href="#activity">Usage</a><a href="#costs">Costs</a><a href="#supporters">Supporters</a><a href="#errors">Errors</a><a href="#scanner">Scanner &amp; prices</a><a href="#storage">Storage</a><a href="#merges">Merges</a><a href="#testers">Testers</a><a href="#beta">Beta</a><a href="#admins">Admins</a><a href="#photos">Photos</a><a href="#terms">Terms</a></nav>
+<nav aria-label="Admin sections"><a href="#overview">Overview</a><a href="#runs">Runs</a><a href="#people">Users</a><a href="#activity">Usage</a><a href="#costs">Costs</a><a href="#supporters">Supporters</a><a href="#errors">Errors</a><a href="#scanner">Scanner &amp; prices</a><a href="#storage">Storage</a><a href="#merges">Merges</a><a href="#testers">Testers</a><a href="#beta">Beta</a><a href="#seats">Seats</a><a href="#admins">Admins</a><a href="#photos">Photos</a><a href="#terms">Terms</a></nav>
 </div></header>
 <main class="wrap">
 <section data-tab id="overview">
@@ -1281,6 +1378,7 @@ export function adminPage(): Response {
 <section data-tab id="merges" hidden></section>
 <section data-tab id="testers" hidden></section>
 <section data-tab id="beta" hidden></section>
+<section data-tab id="seats" hidden></section>
 <section data-tab id="admins" hidden></section>
 <section data-tab id="photos" hidden></section>
 <section data-tab id="terms" hidden></section>

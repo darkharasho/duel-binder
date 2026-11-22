@@ -35,6 +35,8 @@ describe('seat cap public pages', () => {
       fetch: (async () => new Response('?', { status: 404 })) as unknown as typeof fetch
     }
     addUser(db, '999', 'owner')
+    // Full by default (the owner holds the one seat), so a join goes on the list.
+    setCap(db, 1, NOW.toISOString())
   })
 
   const post = (fields: Record<string, string>, origin = SITE, ip = '1.1.1.1'): Promise<Response> =>
@@ -50,7 +52,8 @@ describe('seat cap public pages', () => {
       }),
       deps
     )
-  const rows = (): number => (db.prepare('SELECT COUNT(*) AS n FROM waitlist').get() as { n: number }).n
+  const rows = (): number =>
+    (db.prepare('SELECT COUNT(*) AS n FROM waitlist').get() as { n: number }).n
 
   it('adds a waitlist row from the site and redirects with sent=1', async () => {
     const res = await post({ email: 'A@Example.com' })
@@ -95,33 +98,66 @@ describe('seat cap public pages', () => {
     expect(rows()).toBe(1)
   })
 
-  it('invites a new joiner straight away while a seat is free', async () => {
+  it('says sign up instead of joining while seats are open and no one waits', async () => {
     const sent: string[] = []
     deps.email = { send: async (m) => void sent.push(m.to) }
-    const res = await post({ email: 'a@example.com' })
-    expect(res.headers.get('location')).toBe(`${SITE}/waitlist?sent=1`)
-    expect(sent).toEqual(['a@example.com'])
-    expect(db.prepare('SELECT COUNT(*) AS n FROM seat_invites WHERE used_at IS NULL').get()).toEqual({ n: 1 })
-  })
-
-  it('invites no one when the seats are full', async () => {
-    const sent: string[] = []
-    deps.email = { send: async (m) => void sent.push(m.to) }
-    setCap(db, 1, NOW.toISOString())
-    await post({ email: 'a@example.com' })
+    setCap(db, 100, NOW.toISOString())
+    for (let i = 0; i < 7; i++) {
+      const res = await post({ email: `u${i}@example.com` })
+      expect(res.headers.get('location')).toBe(`${SITE}/waitlist?open=1`)
+    }
+    expect((await post({ email: 'a@example.com' }, BASE)).headers.get('location')).toBe(
+      `${BASE}/full?open=1`
+    )
+    expect(rows()).toBe(0)
     expect(sent).toEqual([])
-    expect(rows()).toBe(1)
+    expect(db.prepare('SELECT COUNT(*) AS n FROM seat_invites').get()).toEqual({ n: 0 })
   })
 
-  it('a failed fill still answers sent=1 and keeps the entry', async () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
-    // fillSeats breaks on its first statement after the join.
-    db.exec('DROP TABLE seat_invites')
-    const res = await post({ email: 'a@example.com' })
+  it('joins behind people already waiting even with a seat free, and invites no one', async () => {
+    const sent: string[] = []
+    deps.email = { send: async (m) => void sent.push(m.to) }
+    await post({ email: 'first@example.com' })
+    setCap(db, 5, NOW.toISOString())
+    const res = await post({ email: 'second@example.com' })
     expect(res.headers.get('location')).toBe(`${SITE}/waitlist?sent=1`)
-    expect(rows()).toBe(1)
-    expect(logged).toHaveBeenCalled()
-    logged.mockRestore()
+    expect(rows()).toBe(2)
+    expect(sent).toEqual([])
+  })
+
+  it('counts an entry whose invite lapsed as waiting', async () => {
+    await post({ email: 'first@example.com' })
+    const id = (db.prepare('SELECT id FROM waitlist').get() as { id: number }).id
+    db.prepare(
+      `INSERT INTO seat_invites (token_hash, email, waitlist_id, created_at, expires_at)
+       VALUES ('h', 'first@example.com', ?, '2026-11-01T00:00:00.000Z', '2026-11-15T00:00:00.000Z')`
+    ).run(id)
+    db.prepare("UPDATE waitlist SET invited_at = '2026-11-01T00:00:00.000Z'").run()
+    setCap(db, 5, NOW.toISOString())
+    expect((await post({ email: 'second@example.com' })).headers.get('location')).toBe(
+      `${SITE}/waitlist?sent=1`
+    )
+    expect(rows()).toBe(2)
+  })
+
+  it('says sign up when the only entry holds a live invite', async () => {
+    await post({ email: 'first@example.com' })
+    const id = (db.prepare('SELECT id FROM waitlist').get() as { id: number }).id
+    db.prepare(
+      `INSERT INTO seat_invites (token_hash, email, waitlist_id, created_at, expires_at)
+       VALUES ('h', 'first@example.com', ?, '2026-11-20T00:00:00.000Z', '2026-12-04T00:00:00.000Z')`
+    ).run(id)
+    setCap(db, 5, NOW.toISOString())
+    expect((await post({ email: 'second@example.com' })).headers.get('location')).toBe(
+      `${SITE}/waitlist?open=1`
+    )
+  })
+
+  it('shows the open state on /full', async () => {
+    const full = await (await handle(new Request(`${BASE}/full?open=1`), deps)).text()
+    expect(full).toContain('Seats are open')
+    expect(full).toContain('href="/auth/discord/start"')
+    expect(full).not.toContain('name="email"')
   })
 
   it('serves /full with the form', async () => {
@@ -171,7 +207,13 @@ describe('seat cap public pages', () => {
     const res = await handleSite(new Request(SITE + path), {
       appUrl: BASE,
       assets: { fetch: async () => new Response('asset', { status: 404 }) },
-      downloads: async () => ({ version: null, windows: null, mac: null, linux: null, android: null })
+      downloads: async () => ({
+        version: null,
+        windows: null,
+        mac: null,
+        linux: null,
+        android: null
+      })
     })
     return { status: res.status, body: await res.text() }
   }
@@ -181,6 +223,10 @@ describe('seat cap public pages', () => {
     expect(page.status).toBe(200)
     expect(page.body).toContain(`action="${BASE}/waitlist"`)
     expect((await site('/waitlist?sent=1')).body).toContain('on the list')
+    const open = (await site('/waitlist?open=1')).body
+    expect(open).toContain('Seats are open')
+    expect(open).toContain(`href="${BASE}/"`)
+    expect(open).not.toContain('name="email"')
     expect((await site('/privacy')).body.toLowerCase()).toContain('waitlist')
     const privacy = (await site('/privacy')).body
     expect(privacy).toContain('make your account')

@@ -70,6 +70,7 @@ export async function handleSite(req: Request, deps: SiteDeps): Promise<Response
       renderWaitlist({
         appUrl: deps.appUrl,
         sent: url.searchParams.get('sent') === '1',
+        open: url.searchParams.get('open') === '1',
         error: url.searchParams.get('error')
       })
     )

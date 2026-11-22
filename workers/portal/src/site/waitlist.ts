@@ -4,6 +4,8 @@ import { esc } from './page'
 export interface WaitlistView extends LegalView {
   /** The form went through (`?sent=1`). */
   sent: boolean
+  /** Seats were open with no one waiting, so nobody joined (`?open=1`). */
+  open: boolean
   /** The app's `?error=` code from seatPages.ts, when the form came back. */
   error: string | null
 }
@@ -28,9 +30,12 @@ function form(view: WaitlistView): string {
 
 /** duelbinder.com/waitlist: the form to join the waitlist while Duel Binder is full. */
 export function renderWaitlist(view: WaitlistView): string {
-  const ask = view.sent
-    ? '<p>You’re on the list. We’ll email you an invite link when a seat opens.</p>'
-    : form(view)
+  const ask = view.open
+    ? `<p>Seats are open right now, so there’s no need to wait.</p>
+<p><a class="btn" href="${esc(view.appUrl)}/">Sign up</a></p>`
+    : view.sent
+      ? '<p>You’re on the list. We’ll email you an invite link when a seat opens.</p>'
+      : form(view)
   return renderLegal(
     {
       path: '/waitlist',

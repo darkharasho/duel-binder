@@ -3,18 +3,13 @@ import { cookie, sha256Hex } from './auth'
 import { clientIp, takeLimit } from './authLimits'
 import { readForm } from './beta'
 import { pageShell } from './home'
-import {
-  INVITE_DAYS,
-  SEAT_INVITE_COOKIE,
-  inviteValid,
-  joinWaitlist,
-  fillSeats,
-  seatCounts
-} from './seats'
+import { INVITE_DAYS, SEAT_INVITE_COOKIE, inviteValid, joinWaitlist, seatCounts } from './seats'
 import { esc } from './site/page'
 
 /** What the pages explain when they get one back as `?error=`. */
 export type WaitlistError = 'email' | 'limit' | 'bad'
+
+const SIGN_UP = `<div class="actions"><a class="btn pri" href="/auth/discord/start">Continue with Discord</a><a class="btn out" href="/auth/email">Continue with email</a></div>`
 
 const MAX_FIELD = 200
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -50,16 +45,23 @@ export async function waitlistRoute(req: Request, deps: AppDeps): Promise<Respon
   const now = deps.now()
   // Asking again changes nothing and doesn't count against the day's limit.
   if (deps.db.prepare('SELECT 1 FROM waitlist WHERE email = ?').get(email)) return back('sent=1')
+  // Seats are open and nobody is ahead in line: there's nothing to wait for, so say sign up.
+  // Joining never invites by itself, so made-up emails can't hold seats; fills stay the admin's.
+  if (seatsOpen(deps, now.toISOString())) return back('open=1')
   if (!takeLimit(deps.db, 'waitlist-ip', clientIp(req), now)) return back('error=limit')
   joinWaitlist(deps.db, email, now.toISOString())
-  // A seat is free right now: invite from the front of the line (likely this joiner) at once
-  // instead of waiting for the next fill. A failed fill still counts as joined.
-  try {
-    if (seatCounts(deps.db, now.toISOString()).free > 0) await fillSeats(deps)
-  } catch (err) {
-    console.error('filling seats after a waitlist join failed', err)
-  }
   return back('sent=1')
+}
+
+/** A free seat and no one waiting for it (an entry whose invite lapsed is still waiting). */
+function seatsOpen(deps: AppDeps, nowIso: string): boolean {
+  if (seatCounts(deps.db, nowIso).free === 0) return false
+  return !deps.db
+    .prepare(
+      `SELECT 1 FROM waitlist w WHERE NOT EXISTS (SELECT 1 FROM seat_invites i
+       WHERE i.waitlist_id = w.id AND i.used_at IS NULL AND i.expires_at > ?) LIMIT 1`
+    )
+    .get(nowIso)
 }
 
 function waitlistForm(deps: AppDeps, req: Request): string {
@@ -96,11 +98,16 @@ function respond(
 
 /** GET /full: where a sign-up the cap refused lands. */
 export function fullPage(req: Request, deps: AppDeps): Response {
-  const sent = new URL(req.url).searchParams.get('sent') === '1'
-  const inner = sent
-    ? `<h1>You’re on the list</h1>
+  const params = new URL(req.url).searchParams
+  const inner =
+    params.get('open') === '1'
+      ? `<h1>Seats are open</h1>
+<p class="lead">There’s room right now, so there’s no need to wait. Sign up to take a seat.</p>
+${SIGN_UP}`
+      : params.get('sent') === '1'
+        ? `<h1>You’re on the list</h1>
 <p class="lead">We’ll email you an invite link when a seat opens.</p>`
-    : `<h1>Duel Binder is full for now</h1>
+        : `<h1>Duel Binder is full for now</h1>
 <p class="lead">Join the waitlist and we’ll email you an invite link when a seat opens.</p>
 ${waitlistForm(deps, req)}`
   return respond(deps, 'Duel Binder is full for now', inner)
@@ -125,7 +132,7 @@ ${waitlistForm(deps, req)}`,
     'You’re in',
     `<h1>You’re in</h1>
 <p class="lead">A seat is saved for you. Sign in to take it.</p>
-<div class="actions"><a class="btn pri" href="/auth/discord/start">Continue with Discord</a><a class="btn out" href="/auth/email">Continue with email</a></div>`,
+${SIGN_UP}`,
     200,
     [cookie(SEAT_INVITE_COOKIE, token, maxAge)]
   )

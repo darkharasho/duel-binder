@@ -4,7 +4,7 @@ import { browseCards } from '../../src/main/repo/browse'
 import { printingsByCode } from '../../src/main/repo/scan'
 import { refreshIntlSets } from '../../src/main/sync/intl'
 import { runSync } from '../../src/main/sync/sync'
-import { refreshTokens, shouldRefreshTokens } from '../../src/main/sync/tokens'
+import { cardKind, refreshTokens, shouldRefreshTokens } from '../../src/main/sync/tokens'
 import { saveTcgVariants } from '../../src/main/tcgplayer/catalog'
 import type { YugipediaClient } from '../../src/main/yugipedia/client'
 import { parseGalleryCodes, parseTokenPage } from '../../src/main/yugipedia/parse'
@@ -70,7 +70,73 @@ const CARD_PAGES: Record<string, { pageId: number; text: string }> = {
   'Vassal Token': { pageId: 900, text: VASSAL_PAGE },
   'Cynet Token': { pageId: 910, text: ANIME_PAGE }
 }
+const BLS = 'Black Luster Soldier (Normal)'
+const BLS_FILE = 'BlackLusterSoldier-25TH-EN-UR-LE.png'
+const BLS_PAGE = `{{CardTable2
+| ja_name               = カオス・ソルジャー
+| image                 = ${BLS_FILE}
+| attribute             = EARTH
+| types                 = Warrior / Normal
+| level                 = 8
+| atk                   = 3000
+| def                   = 2500
+| password              = none
+| text                  = ''The mightiest [[warrior]], whose abilities equal the [[Blue-Eyes White Dragon]].''
+| en_sets               =
+25TH-EN001; Legendary Collection 25th Anniversary Edition; Ultra Rare
+| jp_sets               =
+YAC1-JP026; Original Artwork Collection; Super Rare, Secret Rare, Ultimate Rare
+}}`
+const STARDUST_PAGE = `{{CardTable2
+| image       = StardustDivinity-EN.png
+| types       = Fairy / Synchro / Tuner / Effect
+| level       = 10
+| en_sets     =
+SDDV-EN001; Stardust Divinity promo; Secret Rare
+}}`
+const COUNTER_PAGE = `{{CardTable2
+| image       = Counter-JP.png
+| card_type   = Counter
+| jp_sets     =
+CNT-JP001; Counters; Common
+}}`
+const RUSH_PAGE = `{{CardTable2
+| main        = Card Destruction
+| rush_duel   = yes
+| image       = CardDestruction-WWRP-JP-C.png
+| card_type   = Spell
+| property    = Normal
+| jp_sets     =
+WWRP-JP001; Wai Wai Rush Party; Common
+}}`
+/** A passcode-less page whose card YGOPRODeck lists under the same name. */
+const LISTED_PAGE = `{{CardTable2
+| image       = DarkMagician-PROMO-EN.png
+| types       = Spellcaster / Normal
+| en_sets     =
+DMPR-EN001; Dark Magician promo; Ultra Rare
+}}`
+const NO_PASSWORD_PAGES: Record<string, { pageId: number; text: string }> = {
+  [BLS]: { pageId: 2000, text: BLS_PAGE },
+  'Stardust Divinity': { pageId: 2010, text: STARDUST_PAGE },
+  'Counter (card)': { pageId: 2020, text: COUNTER_PAGE },
+  'Card Destruction (Wai Wai Rush Party)': { pageId: 2030, text: RUSH_PAGE },
+  'Dark Magician': { pageId: 2040, text: LISTED_PAGE },
+  'Darkness/Monster A': {
+    pageId: 2050,
+    text: `{{CardTable2\n| image = DarknessMonsterA.png\n| types = Effect\n| jp_sets =\nDP-JP001; Darkness pack; Common\n}}`
+  },
+  // A token is in both categories; the token category has it.
+  [NASH]: { pageId: 1200, text: NASH_PAGE }
+}
+
 const FILE_PAGES: Record<string, number> = {
+  [BLS_FILE]: 8000,
+  'StardustDivinity-EN.png': 8010,
+  'Counter-JP.png': 8020,
+  'CardDestruction-WWRP-JP-C.png': 8030,
+  'DarkMagician-PROMO-EN.png': 8040,
+  'DarknessMonsterA.png': 8050,
   [NASH_FILE]: 7000,
   'Token-VF16-JP-C-YuseiStardustDragon.png': 7100,
   'Token-L5DD-EN-ScR-1E-Yusei.png': 7200
@@ -82,13 +148,16 @@ function fake(over: Partial<YugipediaClient> = {}): YugipediaClient {
     fetchImageUrls: async () => new Map(),
     listPageImages: async () => new Map(),
     imageUrlsByPageId: async () => new Map(),
-    listCategoryPages: async () =>
-      Object.entries(CARD_PAGES).map(([title, p]) => ({ title, pageId: p.pageId })),
+    listCategoryPages: async (category) =>
+      Object.entries(
+        category === 'Category:Cards printed without a password' ? NO_PASSWORD_PAGES : CARD_PAGES
+      ).map(([title, p]) => ({ title, pageId: p.pageId })),
     fetchPages: async (titles) =>
       new Map(
         titles.flatMap((t): [string, string][] => {
           if (t === 'Card Gallery:Token (card)') return [[t, GENERIC_GALLERY]]
-          return CARD_PAGES[t] ? [[t, CARD_PAGES[t].text]] : []
+          const page = CARD_PAGES[t] ?? NO_PASSWORD_PAGES[t]
+          return page ? [[t, page.text]] : []
         })
       ),
     filePageIds: async (files) =>
@@ -158,9 +227,108 @@ describe('parseTokenPage', () => {
     })
   })
 
+  test('reads what kind of card a page is', () => {
+    expect(parseTokenPage(BLS_PAGE)).toMatchObject({
+      cardType: null,
+      types: ['Warrior', 'Normal'],
+      level: 8,
+      rush: false,
+      printings: [
+        {
+          code: '25TH-EN001',
+          setName: 'Legendary Collection 25th Anniversary Edition',
+          rarity: 'Ultra Rare'
+        }
+      ]
+    })
+    expect(parseTokenPage(RUSH_PAGE)).toMatchObject({ cardType: 'Spell', rush: true })
+    expect(
+      parseTokenPage(`{{CardTable2\n| types = Dragon / Effect\n| requirement = None\n}}`)?.rush
+    ).toBe(true)
+    expect(
+      parseTokenPage(
+        `{{CardTable2\n| types = Dragon / Link / Effect\n| link_arrows = Top, Bottom-Left, Bottom-Right\n}}`
+      )?.linkArrows
+    ).toBe(3)
+  })
+
   test('tells an unprinted token and a page with no card table', () => {
     expect(parseTokenPage(ANIME_PAGE)?.printed).toBe(false)
     expect(parseTokenPage('Just a list of tokens.')).toBeNull()
+  })
+})
+
+describe('cardKind', () => {
+  const page = (text: string): NonNullable<ReturnType<typeof parseTokenPage>> =>
+    parseTokenPage(`{{CardTable2\n${text}\n}}`)!
+
+  test('stores a token as a token, from either category', () => {
+    expect(cardKind(parseTokenPage(VASSAL_PAGE)!, true)).toMatchObject({
+      type: 'Token',
+      frameType: 'token',
+      race: 'Thunder'
+    })
+  })
+
+  test('names a monster in YGOPRODeck words', () => {
+    expect(cardKind(parseTokenPage(BLS_PAGE)!, false)).toEqual({
+      type: 'Normal Monster',
+      frameType: 'normal',
+      race: 'Warrior',
+      level: 8,
+      linkval: null
+    })
+    expect(cardKind(parseTokenPage(STARDUST_PAGE)!, false)).toMatchObject({
+      type: 'Synchro Tuner Monster',
+      frameType: 'synchro',
+      race: 'Fairy'
+    })
+    expect(
+      cardKind(page('| types = Dragon / Link / Effect\n| link_arrows = Top, Bottom'), false)
+    ).toMatchObject({ type: 'Link Monster', frameType: 'link', linkval: 2 })
+    expect(cardKind(page('| types = Warrior / Xyz / Effect\n| rank = 4'), false)).toMatchObject({
+      type: 'XYZ Monster',
+      frameType: 'xyz',
+      level: 4
+    })
+    expect(cardKind(page('| types = Spellcaster / Pendulum / Effect'), false)).toMatchObject({
+      type: 'Pendulum Effect Monster',
+      frameType: 'effect_pendulum'
+    })
+    // The original Egyptian Gods name only their Type; Darkness's cards only their kind.
+    expect(cardKind(page('| types = Divine-Beast'), false)).toMatchObject({
+      type: 'Effect Monster',
+      frameType: 'effect',
+      race: 'Divine-Beast'
+    })
+    expect(cardKind(page('| types = Effect'), false)).toMatchObject({ race: '' })
+  })
+
+  test('names a Spell or Trap by its property', () => {
+    expect(cardKind(page('| card_type = Spell\n| property = Field'), false)).toEqual({
+      type: 'Spell Card',
+      frameType: 'spell',
+      race: 'Field',
+      level: null,
+      linkval: null
+    })
+    expect(cardKind(page('| card_type = Trap'), false)).toMatchObject({
+      frameType: 'trap',
+      race: 'Normal'
+    })
+  })
+
+  test('leaves out game pieces, tokens and Rush Duel cards', () => {
+    for (const text of [
+      '| card_type = Counter',
+      '| card_type = Counter / Token',
+      '| card_type = Token',
+      '| card_type = Duel Marker',
+      '| card_type = Non-game\n| types = Full Name',
+      '| card_type = Spell\n| rush_duel = yes',
+      '| image = X.png'
+    ])
+      expect(cardKind(page(text), false)).toBeNull()
   })
 })
 
@@ -185,7 +353,7 @@ test('a scan file tells a Token printing apart by the art it names', () => {
 describe('refreshTokens', () => {
   test('adds a character token as a card with its printing and art, findable by code', async () => {
     const out = await refreshTokens(db, fake(), now)
-    expect(out).toMatchObject({ ok: true, addedCards: 3, changed: true, skipped: [] })
+    expect(out).toMatchObject({ ok: true, addedCards: 6, changed: true, skipped: [] })
     const id = tokenId(1200)
     expect(db.prepare('SELECT * FROM cards WHERE id = ?').get(id)).toMatchObject({
       name: NASH,
@@ -210,6 +378,50 @@ describe('refreshTokens', () => {
       )
     ).toContain(id)
     expect(getMeta(db, 'intl_sets_synced_at')).toBeNull()
+  })
+
+  test('adds a card printed with no passcode as the card it is, findable by code', async () => {
+    await refreshTokens(db, fake(), now)
+    const id = tokenId(2000)
+    expect(db.prepare('SELECT * FROM cards WHERE id = ?').get(id)).toMatchObject({
+      name: BLS,
+      type: 'Normal Monster',
+      frame_type: 'normal',
+      race: 'Warrior',
+      attribute: 'EARTH',
+      level: 8,
+      atk: 3000,
+      def: 2500,
+      desc: 'The mightiest warrior, whose abilities equal the Blue-Eyes White Dragon.'
+    })
+    const [found] = printingsByCode(db, '25TH-EN001')
+    expect(found).toMatchObject({
+      cardId: id,
+      name: BLS,
+      imageIds: [tokenId(8000)],
+      frameType: 'normal'
+    })
+    expect(db.prepare('SELECT type FROM cards WHERE id = ?').pluck().get(tokenId(2010))).toBe(
+      'Synchro Tuner Monster'
+    )
+    // A monster whose page names no Type.
+    expect(db.prepare('SELECT race FROM cards WHERE id = ?').pluck().get(tokenId(2050))).toBe('')
+  })
+
+  test('leaves out game pieces, Rush Duel cards and cards YGOPRODeck lists', async () => {
+    await refreshTokens(db, fake(), now)
+    for (const pageId of [2020, 2030, 2040])
+      expect(db.prepare('SELECT 1 FROM cards WHERE id = ?').get(tokenId(pageId))).toBeUndefined()
+    expect(printingsByCode(db, 'DMPR-EN001')).toEqual([])
+    expect(db.prepare('SELECT count(*) FROM cards WHERE name = ?').pluck().get(NASH)).toBe(1)
+  })
+
+  test('runs again at once for an app that learns new kinds of card', async () => {
+    await refreshTokens(db, fake(), now)
+    expect(shouldRefreshTokens(db, now)).toBe(false)
+    // As an older app left it: synced a day ago, tokens only.
+    db.prepare("DELETE FROM meta WHERE key = 'token_cards_kinds'").run()
+    expect(shouldRefreshTokens(db, now)).toBe(true)
   })
 
   test('gives a listed token its English printing, without a new card', async () => {
@@ -239,7 +451,13 @@ describe('refreshTokens', () => {
       }),
       now
     )
-    expect(out.skipped.sort()).toEqual(['Token (Yusei and Stardust Dragon)', 'Token (card)'])
+    expect(out.skipped.sort()).toEqual([
+      BLS,
+      'Darkness/Monster A',
+      'Stardust Divinity',
+      'Token (Yusei and Stardust Dragon)',
+      'Token (card)'
+    ])
     expect(db.prepare("SELECT 1 FROM cards WHERE name = 'Cynet Token'").get()).toBeUndefined()
   })
 
@@ -324,6 +542,7 @@ describe('refreshTokens', () => {
     }
     await runSync(db, client, () => {}, now)
     expect(printings(tokenId(1200))).toHaveLength(1)
+    expect(printings(tokenId(2000))).toHaveLength(1)
     expect(printings(22404676)).toHaveLength(1)
     expect(
       db.prepare('SELECT 1 FROM card_images WHERE image_id = ?').get(tokenId(7000))
@@ -358,6 +577,29 @@ describe('refreshTokens', () => {
     expect(printingsByCode(db, 'TK02-JP014').map((p) => [p.cardId, p.rarity])).toEqual([
       [tokenId(1200), 'Rare'],
       [tokenId(1200), 'Ultra Rare']
+    ])
+  })
+
+  test('the non-English sync finds a card with no passcode in a set list by its title', async () => {
+    await refreshTokens(db, fake(), now)
+    const list = `{{Set list|region=JP|rarities=Super Rare, Secret Rare, Ultimate Rare|\nYAC1-JP026; ${BLS}\n}}`
+    const title = 'Set Card Lists:Original Artwork Collection (OCG-JP)'
+    await refreshIntlSets(
+      db,
+      fake({
+        listSetListTitles: async () => [title],
+        fetchPages: async (t) => new Map(t.filter((x) => x === title).map((x) => [x, list]))
+      }),
+      now
+    )
+    expect(
+      printingsByCode(db, 'YAC1-JP026')
+        .map((p) => [p.cardId, p.rarity])
+        .sort()
+    ).toEqual([
+      [tokenId(2000), 'Secret Rare'],
+      [tokenId(2000), 'Super Rare'],
+      [tokenId(2000), 'Ultimate Rare']
     ])
   })
 })

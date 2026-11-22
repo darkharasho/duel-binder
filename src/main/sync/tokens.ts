@@ -10,6 +10,17 @@ import { deleteOrFlag, normalizeName } from './intl'
 export const TOKEN_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000
 const CATEGORY = 'Category:Monster Tokens'
 /**
+ * Every card printed with no passcode: tokens again, game pieces, Rush Duel cards, and real cards
+ * YGOPRODeck can't key (Black Luster Soldier (Normal), the original Egyptian Gods). Only the real
+ * cards are taken from it (see cardKind).
+ */
+const NO_PASSWORD_CATEGORY = 'Category:Cards printed without a password'
+/**
+ * What the sync brings in; a stored value other than this runs it again at once, so an app
+ * that learns a new kind of card doesn't wait out TOKEN_INTERVAL_MS for it.
+ */
+const TOKEN_SYNC_KINDS = 'tokens+no-password'
+/**
  * The plain "Token" page, whose printings show many different arts. Its other printings go to the
  * cards they show when those have pages, so it comes last.
  */
@@ -18,9 +29,131 @@ const GENERIC_GALLERY = `Card Gallery:${GENERIC_TOKEN}`
 
 export function shouldRefreshTokens(db: Database.Database, now: Date): boolean {
   const last = getMeta(db, 'token_cards_synced_at')
-  if (!last) return true
+  if (!last || getMeta(db, 'token_cards_kinds') !== TOKEN_SYNC_KINDS) return true
   const t = Date.parse(last)
   return Number.isNaN(t) || now.getTime() - t >= TOKEN_INTERVAL_MS
+}
+
+/** Words in `types` that say what kind of monster a card is, not its Type. */
+const MONSTER_KINDS = new Set([
+  'Normal',
+  'Effect',
+  'Ritual',
+  'Fusion',
+  'Synchro',
+  'Xyz',
+  'Link',
+  'Pendulum',
+  'Tuner',
+  'Flip',
+  'Spirit',
+  'Toon',
+  'Union',
+  'Gemini'
+])
+
+interface CardKind {
+  type: string
+  frameType: string
+  /** The monster's Type, the Spell's or Trap's property; '' when the page names none. */
+  race: string
+  level: number | null
+  linkval: number | null
+}
+
+/**
+ * How a page's card is stored, in YGOPRODeck's words ("Synchro Tuner Monster", frame "synchro");
+ * null for a page from NO_PASSWORD_CATEGORY that is no card to collect: a token (the token
+ * category's), a counter, a Duel Marker, an ID card, a Rush Duel card.
+ */
+export function cardKind(page: TokenPage, token: boolean): CardKind | null {
+  if (token) {
+    return {
+      type: 'Token',
+      frameType: 'token',
+      race: page.race ?? 'Token',
+      level: page.level,
+      linkval: null
+    }
+  }
+  if (page.rush) return null
+  if (page.cardType === 'Spell' || page.cardType === 'Trap') {
+    return {
+      type: `${page.cardType} Card`,
+      frameType: page.cardType.toLowerCase(),
+      race: page.property ?? 'Normal',
+      level: null,
+      linkval: null
+    }
+  }
+  if (page.cardType !== null || page.types.length === 0) return null
+  const has = (k: string): boolean => page.types.includes(k)
+  const race = MONSTER_KINDS.has(page.types[0]) ? '' : page.types[0]
+  const effect = has('Effect')
+  const pendulum = has('Pendulum')
+  const base = has('Link')
+    ? 'link'
+    : has('Xyz')
+      ? 'xyz'
+      : has('Synchro')
+        ? 'synchro'
+        : has('Fusion')
+          ? 'fusion'
+          : has('Ritual')
+            ? 'ritual'
+            : has('Normal')
+              ? 'normal'
+              : 'effect'
+  const type = has('Link')
+    ? 'Link Monster'
+    : has('Xyz')
+      ? pendulum
+        ? 'XYZ Pendulum Effect Monster'
+        : 'XYZ Monster'
+      : has('Synchro')
+        ? pendulum
+          ? 'Synchro Pendulum Effect Monster'
+          : has('Tuner')
+            ? 'Synchro Tuner Monster'
+            : 'Synchro Monster'
+        : has('Fusion')
+          ? pendulum
+            ? 'Fusion Pendulum Effect Monster'
+            : 'Fusion Monster'
+          : has('Ritual')
+            ? pendulum
+              ? 'Ritual Pendulum Effect Monster'
+              : effect
+                ? 'Ritual Effect Monster'
+                : 'Ritual Monster'
+            : pendulum
+              ? has('Normal')
+                ? 'Pendulum Normal Monster'
+                : 'Pendulum Effect Monster'
+              : has('Normal')
+                ? has('Tuner')
+                  ? 'Normal Tuner Monster'
+                  : 'Normal Monster'
+                : has('Flip')
+                  ? 'Flip Effect Monster'
+                  : has('Tuner')
+                    ? 'Tuner Monster'
+                    : has('Toon')
+                      ? 'Toon Monster'
+                      : has('Spirit')
+                        ? 'Spirit Monster'
+                        : has('Union')
+                          ? 'Union Effect Monster'
+                          : has('Gemini')
+                            ? 'Gemini Monster'
+                            : 'Effect Monster'
+  return {
+    type,
+    frameType: pendulum && base !== 'link' ? `${base}_pendulum` : base,
+    race,
+    level: page.level ?? page.rank,
+    linkval: page.linkArrows
+  }
 }
 
 export interface TokenSyncResult {
@@ -70,16 +203,22 @@ async function run(
   now: Date,
   result: TokenSyncResult
 ): Promise<void> {
-  const listed = await client.listCategoryPages(CATEGORY)
+  const tokenPages = await client.listCategoryPages(CATEGORY)
+  const noPassword = await client.listCategoryPages(NO_PASSWORD_CATEGORY)
   // An empty listing would otherwise look like "every token vanished".
-  if (listed.length === 0) throw new Error('Yugipedia listed no tokens')
+  if (tokenPages.length === 0) throw new Error('Yugipedia listed no tokens')
+  if (noPassword.length === 0) throw new Error('Yugipedia listed no cards without a password')
+  const tokenIds = new Set(tokenPages.map((p) => p.pageId))
+  const listed = [...tokenPages, ...noPassword.filter((p) => !tokenIds.has(p.pageId))]
   const titles = listed.map((p) => p.title)
   const texts = await client.fetchPages([...titles, GENERIC_GALLERY])
   const pages = listed
     .flatMap((p) => {
       const text = texts.get(p.title)
       const parsed = text === undefined ? null : parseTokenPage(text)
-      return parsed?.printed ? [{ ...p, parsed }] : []
+      const token = tokenIds.has(p.pageId)
+      const kind = parsed?.printed ? cardKind(parsed, token) : null
+      return parsed && kind ? [{ ...p, parsed, kind, token }] : []
     })
     .sort((a, b) => Number(a.title === GENERIC_TOKEN) - Number(b.title === GENERIC_TOKEN))
 
@@ -127,12 +266,15 @@ async function run(
   const upsertCard = db.prepare(`
     INSERT INTO cards (id, name, type, frame_type, race, attribute, level, linkval, atk, def, archetype,
       "desc", tcgplayer_price, updated_at)
-    VALUES (@id, @name, 'Token', 'token', @race, @attribute, @level, NULL, @atk, @def, @archetype,
+    VALUES (@id, @name, @type, @frameType, @race, @attribute, @level, @linkval, @atk, @def, @archetype,
       @text, NULL, @updatedAt)
-    ON CONFLICT(id) DO UPDATE SET name = excluded.name, race = excluded.race,
-      attribute = excluded.attribute, level = excluded.level, atk = excluded.atk, def = excluded.def,
+    ON CONFLICT(id) DO UPDATE SET name = excluded.name, type = excluded.type,
+      frame_type = excluded.frame_type, race = excluded.race, attribute = excluded.attribute,
+      level = excluded.level, linkval = excluded.linkval, atk = excluded.atk, def = excluded.def,
       archetype = excluded.archetype, "desc" = excluded."desc", updated_at = excluded.updated_at
-    WHERE cards.name IS NOT excluded.name OR cards.race IS NOT excluded.race
+    WHERE cards.name IS NOT excluded.name OR cards.type IS NOT excluded.type
+      OR cards.frame_type IS NOT excluded.frame_type OR cards.linkval IS NOT excluded.linkval
+      OR cards.race IS NOT excluded.race
       OR cards."desc" IS NOT excluded."desc" OR cards.attribute IS NOT excluded.attribute OR cards.level IS NOT excluded.level
       OR cards.atk IS NOT excluded.atk OR cards.def IS NOT excluded.def
       OR cards.archetype IS NOT excluded.archetype`)
@@ -189,10 +331,11 @@ async function run(
   const printingCount = db.prepare("SELECT count(*) FROM card_printings WHERE game = 'ygo'").pluck()
   const before = printingCount.get()
   db.transaction(() => {
-    for (const { pageId, title, parsed } of pages) {
+    for (const { pageId, title, parsed, kind, token } of pages) {
       const listedId = known.get(normalizeName(title))
       if (listedId !== undefined) {
-        savePrintings(listedId, parsed, false)
+        // A card YGOPRODeck lists has its own printings; only a token's are filled in.
+        if (token) savePrintings(listedId, parsed, false)
         continue
       }
       const file = parsed.image ? filePages.get(parsed.image) : undefined
@@ -207,9 +350,12 @@ async function run(
       upsertCard.run({
         id,
         name: title,
-        race: parsed.race ?? 'Token',
+        type: kind.type,
+        frameType: kind.frameType,
+        race: kind.race,
         attribute: parsed.attribute,
-        level: parsed.level,
+        level: kind.level,
+        linkval: kind.linkval,
         atk: parsed.atk,
         def: parsed.def,
         archetype: parsed.archetype,
@@ -234,10 +380,12 @@ async function run(
       deleteMeta(db, 'intl_sets_synced_at')
     }
     setMeta(db, 'token_cards_synced_at', iso)
+    setMeta(db, 'token_cards_kinds', TOKEN_SYNC_KINDS)
   })()
   result.changed = result.addedCards > 0 || printingCount.get() !== before
-  if (result.skipped.length > 0) console.warn(`Tokens with no scan: ${result.skipped.join(', ')}`)
+  if (result.skipped.length > 0)
+    console.warn(`Passcode-less cards with no scan: ${result.skipped.join(', ')}`)
   console.info(
-    `Yugipedia: ${result.cards} token cards, ${result.addedCards} new, ${result.printings} English printings`
+    `Yugipedia: ${result.cards} passcode-less cards, ${result.addedCards} new, ${result.printings} English printings`
   )
 }

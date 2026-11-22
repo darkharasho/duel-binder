@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3'
 import { languageForSuffix, type Language } from '@shared/languages'
+import { TOKEN_ID_MAX, TOKEN_ID_MIN } from '@shared/games/ids'
 import { yugipediaImageKey } from '../images/cache'
 import { getMeta, setMeta } from '../db/meta'
 import type { YugipediaClient } from '../yugipedia/client'
@@ -201,7 +202,12 @@ function englishFill(db: Database.Database): {
   const stem = (code: string): string => code.toUpperCase().replace(/\d+$/, '')
 
   const tokens = new Set(
-    db.prepare("SELECT id FROM cards WHERE game = 'ygo' AND frame_type = 'token'").pluck().all()
+    db
+      .prepare(
+        `SELECT id FROM cards WHERE game = 'ygo' AND (frame_type = 'token' OR (id >= ${TOKEN_ID_MIN} AND id < ${TOKEN_ID_MAX}))`
+      )
+      .pluck()
+      .all()
   )
   /** Codes YGOPRODeck, TCGplayer or the token sync hold. */
   const taken = new Set<string>()

@@ -68,6 +68,16 @@ export function parseMtgText(text: string): ParsedList {
   return out
 }
 
+/**
+ * The format a list reads as, for a deck that has no cards yet: Commander for a Commander header of
+ * 1 or 2 cards, or 100 cards in all. Null when the list says nothing about it.
+ */
+export function guessMtgFormat(parsed: ParsedList): 'commander' | null {
+  const count = (lines: ParsedLine[]): number => lines.reduce((n, l) => n + l.qty, 0)
+  const commanders = count(parsed.lines.filter((l) => l.section === 'commander'))
+  return (commanders >= 1 && commanders <= 2) || count(parsed.lines) === 100 ? 'commander' : null
+}
+
 /** Split and aftermath cards keep both halves in a list; every other two-name card is its front face. */
 const keepsBothNames = (card: DeckCard | undefined): boolean =>
   card?.mtgLayout === 'split' || card?.mtgLayout === 'aftermath'

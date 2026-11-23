@@ -1523,7 +1523,8 @@ describe('One Piece on the deck screens', () => {
     ])
     const modern = buildPreview(parsed, res, 'text', 'mtg', 'modern')
     expect(modern.notFound).toEqual([])
-    expect(keptEntries(modern, {}).map((e) => e.section)).toEqual(['commander', 'side', 'main'])
+    // A 60-card deck has no Commander section: the commander is a card of Main there.
+    expect(keptEntries(modern, {}).map((e) => e.section)).toEqual(['main', 'side', 'main'])
   })
 
   it('the import ignores a DON!! card that matched by number', () => {
@@ -1868,6 +1869,113 @@ describe('Magic on the deck screens', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Import deck' }))
     expect(onApply).toHaveBeenCalledWith(
       expect.objectContaining({ cards: [{ section: 'commander', card: 1, qty: 1 }] })
+    )
+  })
+
+  it('a new deck from a Commander list becomes a Commander deck', async () => {
+    const onApply = vi.fn()
+    const resolve = vi.fn(async () => [
+      { status: 'matched' as const, card: 1, name: 'Krenko', frameType: 'mtg' },
+      { status: 'matched' as const, card: 2, name: 'Opt', frameType: 'mtg' }
+    ])
+    mtgImport(resolve, 'standard', onApply)
+    const dialog = await paste('Commander\n1 Krenko\n\nDeck\n1 Opt')
+    await userEvent.click(await within(dialog).findByRole('button', { name: 'Import deck' }))
+    expect(onApply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        format: 'commander',
+        cards: [
+          { section: 'commander', card: 1, qty: 1 },
+          { section: 'main', card: 2, qty: 1 }
+        ]
+      })
+    )
+  })
+
+  it('a 60-card list keeps the picked format', async () => {
+    const onApply = vi.fn()
+    const resolve = vi.fn(async () => [
+      { status: 'matched' as const, card: 2, name: 'Opt', frameType: 'mtg' }
+    ])
+    mtgImport(resolve, 'modern', onApply)
+    const dialog = await paste('Deck\n4 Opt')
+    await userEvent.click(await within(dialog).findByRole('button', { name: 'Import deck' }))
+    expect(onApply).toHaveBeenCalledWith(expect.objectContaining({ format: 'modern' }))
+  })
+
+  it('a format picked by hand stays, even for a Commander list', async () => {
+    const onApply = vi.fn()
+    const resolve = vi.fn(async () => [
+      { status: 'matched' as const, card: 1, name: 'Krenko', frameType: 'mtg' },
+      { status: 'matched' as const, card: 2, name: 'Opt', frameType: 'mtg' }
+    ])
+    mtgImport(resolve, 'standard', onApply)
+    const dialog = await paste('Commander\n1 Krenko\n\nDeck\n1 Opt')
+    await pick(await within(dialog).findByLabelText('Format'), 'Legacy')
+    await waitFor(() => expect(resolve).toHaveBeenCalledTimes(2))
+    await userEvent.click(await within(dialog).findByRole('button', { name: 'Import deck' }))
+    expect(onApply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        format: 'legacy',
+        cards: [
+          { section: 'main', card: 1, qty: 1 },
+          { section: 'main', card: 2, qty: 1 }
+        ]
+      })
+    )
+  })
+
+  it('a Commander list into a deck that has cards keeps its format, the commander in Main', () => {
+    const parsed = parseMtgText('Commander\n1 Krenko\n\nDeck\n1 Opt')
+    const res: DeckResolution[] = [
+      { status: 'matched', card: 1, name: 'Krenko', frameType: 'mtg' },
+      { status: 'matched', card: 2, name: 'Opt', frameType: 'mtg' }
+    ]
+    expect(keptEntries(buildPreview(parsed, res, 'text', 'mtg', 'modern'), {})).toEqual([
+      { section: 'main', card: 1, qty: 1 },
+      { section: 'main', card: 2, qty: 1 }
+    ])
+  })
+
+  it('replacing an empty deck with a Commander list makes it a Commander deck', async () => {
+    const empty = {
+      ...detail(),
+      game: 'mtg' as const,
+      format: 'standard',
+      cards: [],
+      cardFacts: {}
+    }
+    const api = pageApi(
+      empty,
+      { state: 'missing' },
+      {
+        decks: {
+          resolve: vi.fn(async () => [
+            { status: 'matched' as const, card: 1, name: 'Krenko', frameType: 'mtg' },
+            { status: 'matched' as const, card: 2, name: 'Opt', frameType: 'mtg' }
+          ])
+        }
+      }
+    )
+    renderWithProviders(<DeckPage uid="d1" onBack={vi.fn()} />, { api })
+    await screen.findByRole('button', { name: 'More deck actions' })
+    await deckMenu('Replace from list')
+    const dialog = await paste('Commander\n1 Krenko\n\nDeck\n1 Opt')
+    expect(await within(dialog).findByRole('status')).toHaveTextContent(
+      'This list reads as a Commander deck, so the deck becomes one.'
+    )
+    await userEvent.click(await within(dialog).findByRole('button', { name: 'Replace cards' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Yes, replace' }))
+    await waitFor(() =>
+      expect(api.decks.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          format: 'commander',
+          cards: [
+            { section: 'commander', card: 1, qty: 1 },
+            { section: 'main', card: 2, qty: 1 }
+          ]
+        })
+      )
     )
   })
 

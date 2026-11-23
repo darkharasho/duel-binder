@@ -4,7 +4,7 @@ import { MAX_DECK_NAME } from '@shared/decks/fields'
 import type { DeckCard, DeckEntry } from '@shared/decks/types'
 import { OplayError } from '@shared/decks/onepiece/oplay'
 import { parseOpList } from '@shared/decks/onepiece/text'
-import { parseMtgText } from '@shared/decks/magic/text'
+import { guessMtgFormat, parseMtgText } from '@shared/decks/magic/text'
 import { parsePtcgl } from '@shared/decks/pokemon/ptcgl'
 import { detectYgoList, parseYgoList } from '@shared/decks/ygo/lists'
 import type { GameId } from '@shared/games'
@@ -73,6 +73,9 @@ export function ImportDialog({
   const [fileName, setFileName] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [format, setFormat] = useState(initialFormat)
+  // Magic: a deck with no cards yet takes the format the list reads as, until one is picked here.
+  const [formatPicked, setFormatPicked] = useState(false)
+  const empty = !replacing || replacing.count === 0
   const [reading, setReading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [preview, setPreview] = useState<ImportPreview | null>(null)
@@ -82,7 +85,12 @@ export function ImportDialog({
   const file = useRef<HTMLInputElement>(null)
   const formats = DECK_FORMATS[game]
 
-  const read = async (source: string, intoFormat = format): Promise<void> => {
+  /** `guess`: whether the list may set the format (it may not once one is picked by hand). */
+  const read = async (
+    source: string,
+    intoFormat = format,
+    guess = !formatPicked
+  ): Promise<void> => {
     setReading(true)
     setError(null)
     setPreview(null)
@@ -105,6 +113,10 @@ export function ImportDialog({
           : pkm
             ? parsePtcgl(source)
             : parseYgoList(source)
+      if (mtg && empty && guess) {
+        intoFormat = guessMtgFormat(parsed) ?? initialFormat
+        setFormat(intoFormat)
+      }
       const resolutions = parsed.lines.length
         ? await api.decks.resolve(parsed.lines.map((l) => l.ref))
         : []
@@ -350,6 +362,11 @@ export function ImportDialog({
               )}
             </div>
           )}
+          {preview && replacing && format !== initialFormat && (
+            <p role="status" className="text-sm text-muted-foreground">
+              {`This list reads as a ${formatOf(game, format)?.label ?? format} deck, so the deck becomes one.`}
+            </p>
+          )}
           {preview && !replacing && (
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
@@ -374,8 +391,9 @@ export function ImportDialog({
                   value={format}
                   onChange={(f) => {
                     setFormat(f)
+                    setFormatPicked(true)
                     // Whether a Commander deck has a sideboard changes what the list leaves out.
-                    if (game === 'mtg' && text.trim()) void read(text, f)
+                    if (game === 'mtg' && text.trim()) void read(text, f, false)
                   }}
                 />
               </div>

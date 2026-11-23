@@ -1,6 +1,11 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { parseMtgText, toArenaText, toMtgoText } from '../../../src/shared/decks/magic/text'
+import {
+  guessMtgFormat,
+  parseMtgText,
+  toArenaText,
+  toMtgoText
+} from '../../../src/shared/decks/magic/text'
 import type { DeckCard, DeckEntry } from '../../../src/shared/decks/types'
 
 const fixture = (name: string): string =>
@@ -107,6 +112,22 @@ describe('parseMtgText lines', () => {
     expect(p.skipped.map((s) => s.raw)).toEqual(['hello', '0 Island'])
     expect(p.lines).toHaveLength(1)
     expect(p.sectioned).toBe(false)
+  })
+})
+
+describe('guessMtgFormat', () => {
+  it('reads a 1-2 card Commander header or a 100-card list as Commander', () => {
+    expect(guessMtgFormat(parseMtgText('Commander\n1 Krenko\n\nDeck\n4 Opt'))).toBe('commander')
+    expect(guessMtgFormat(parseMtgText('Commander\n1 Thrasios\n1 Tymna\n\nDeck\n1 Opt'))).toBe(
+      'commander'
+    )
+    // MTGO: 99 then the commander after a blank line.
+    expect(guessMtgFormat(parseMtgText('60 Mountain\n39 Opt\n\n1 Krenko'))).toBe('commander')
+  })
+  it('guesses nothing otherwise', () => {
+    expect(guessMtgFormat(parseMtgText('4 Opt\n56 Mountain\n\n4 Duress'))).toBeNull()
+    expect(guessMtgFormat(parseMtgText('Commander\n3 Krenko\n\nDeck\n1 Opt'))).toBeNull()
+    expect(guessMtgFormat(parseMtgText('99 Mountain'))).toBeNull()
   })
 })
 

@@ -95,6 +95,14 @@ export function buildPreview(
     const r = resolutions[i]
     if (r?.status === 'matched' && isDon(r)) return
     if (sideIsCommanders && l.section === 'side') l = { ...l, section: 'commander' }
+    // A Commander header's cards, in a 60-card deck, are just cards of the deck.
+    if (
+      game === 'mtg' &&
+      format !== undefined &&
+      format !== 'commander' &&
+      l.section === 'commander'
+    )
+      l = { ...l, section: 'main' }
     const item: ImportItem = {
       key: `l${i}`,
       text: textOf(l, kind, r?.status === 'matched' ? r.name : undefined),

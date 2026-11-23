@@ -598,7 +598,9 @@ export function DeckPage({
               onApply={(r) => {
                 setAdded((a) => ({ ...a, ...Object.fromEntries(r.facts.map((c) => [c.id, c])) }))
                 // Saved now, then read again: the new cards' facts come from the deck's own read.
-                const next = { ...fields, cards: r.cards }
+                // An empty Magic deck takes the format its list reads as (the dialog keeps it
+                // otherwise).
+                const next = { ...fields, format: r.format, cards: r.cards }
                 setDraft(next)
                 if (timer.current) clearTimeout(timer.current)
                 timer.current = null

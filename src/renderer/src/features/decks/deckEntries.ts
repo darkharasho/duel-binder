@@ -1,4 +1,5 @@
 import type { DeckProblem } from '@shared/decks/check'
+import type { SectionDef } from '@shared/decks/formats'
 import { MAX_ENTRY_QTY } from '@shared/decks/fields'
 import type { DeckCard, DeckEntry, DeckSection } from '@shared/decks/types'
 import type { BrowseCard } from '@shared/types'
@@ -79,6 +80,13 @@ export function moveEntry(cards: DeckEntry[], entry: DeckEntry, section: DeckSec
   return cards.map((e) => (entryKey(e) === from ? moved : e))
 }
 
+/** A section's heading: "Main Deck 40 / 40–60"; a one-card section (the Leader) reads "Leader 1 / 1". */
+export function sectionHeading(def: SectionDef, count: number): string {
+  return def.max === 1
+    ? `${def.label} ${count} / 1`
+    : `${def.label} ${count} / ${def.min}–${def.max}`
+}
+
 /** A card the deck holds that this device's catalog doesn't have (yet). */
 export const unknownCardText = (id: number): string => `Card #${id} isn't in the catalog here yet`
 
@@ -104,7 +112,10 @@ export function shareOwned(
   return out
 }
 
-/** What the deck needs of a search result, until the deck's own read brings the full facts. */
+/**
+ * What the deck needs of a search result, until the deck's own read brings the full facts. A One
+ * Piece card's type line is its card type, so a Leader goes to Leader straight away.
+ */
 export function deckCardOf(c: BrowseCard): DeckCard {
   return {
     id: c.id,
@@ -118,12 +129,15 @@ export function deckCardOf(c: BrowseCard): DeckCard {
     sourceId: null,
     code: null,
     opNumber: null,
-    opCardType: null,
+    opCardType: c.frameType === 'op' ? c.type : null,
     opColors: [],
     opCost: null,
     opBlock: null
   }
 }
+
+/** One Piece card types a deck can hold; searches keep to them, so DON!! never shows. */
+export const OP_DECK_TYPES = ['Leader', 'Character', 'Event', 'Stage']
 
 /** Drag data: a card from the adder's results (a DeckCard as JSON), or a deck entry (its entryKey). */
 export const DRAG_CARD = 'application/x-duel-binder-deck-card'

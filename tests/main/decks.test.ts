@@ -579,11 +579,47 @@ describe('op deck line resolution', () => {
       ],
       op
     )
-    expect(res[0]).toEqual({ status: 'matched', card: 9302, name: 'Nami', frameType: 'op' })
+    expect(res[0]).toEqual({
+      status: 'matched',
+      card: 9302,
+      name: 'Nami',
+      frameType: 'op',
+      opCardType: 'Character'
+    })
     expect(res[1]).toMatchObject({ status: 'matched', card: 9302 })
     expect(res[2]).toMatchObject({ status: 'matched', card: 9304, name: 'Japan Only' })
     expect(res[3]).toMatchObject({ status: 'matched', card: 9305, name: 'Sabo' })
     expect(res[4]).toEqual({ status: 'unmatched' })
+  })
+
+  it('a resolved op Leader carries its card type, by number or by name', async () => {
+    const db = await seededDb()
+    const op = localScope("'op'")
+    db.prepare(
+      `INSERT INTO cards (id, game, name, type, frame_type, race, "desc", updated_at)
+       VALUES (9401, 'op', 'Monkey.D.Luffy', 'Leader', 'op', '', '', '2026-11-22')`
+    ).run()
+    db.prepare(
+      `INSERT INTO onepiece_cards (card_id, number, colors, card_type, cost)
+       VALUES (9401, 'OP01-001', '["Red"]', 'Leader', NULL)`
+    ).run()
+    db.exec("INSERT INTO cards_fts(cards_fts) VALUES('rebuild')")
+    const res = resolveDeckLines(
+      db,
+      [
+        { opNumber: 'OP01-001', name: '' },
+        { opNumber: 'OP99-001', name: 'Monkey.D.Luffy' }
+      ],
+      op
+    )
+    expect(res[0]).toEqual({
+      status: 'matched',
+      card: 9401,
+      name: 'Monkey.D.Luffy',
+      frameType: 'op',
+      opCardType: 'Leader'
+    })
+    expect(res[1]).toMatchObject({ status: 'matched', card: 9401, opCardType: 'Leader' })
   })
 
   it('leaves an op card number unmatched on another game', async () => {

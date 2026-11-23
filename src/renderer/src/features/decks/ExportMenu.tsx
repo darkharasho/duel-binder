@@ -10,7 +10,10 @@ import {
 import type { GameId } from '@shared/games'
 import { exportDeck } from './deckExport'
 
-/** Copy the deck as text or a ydke:// link, or save it as a .ydk file; Pokémon copies its list. */
+/**
+ * Copy the deck as text or a ydke:// link, or save it as a .ydk file; Pokémon copies its list, One
+ * Piece its list, OPlay deck code or OPlay link.
+ */
 export function ExportMenu({
   game = 'ygo',
   name,
@@ -31,7 +34,21 @@ export function ExportMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
-        {game === 'pkm' ? (
+        {game === 'op' ? (
+          <>
+            <DropdownMenuItem onSelect={() => void exportDeck('text', name, cards, facts, game)}>
+              Copy deck list
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void exportDeck('oplay', name, cards, facts, game)}>
+              Copy OPlay deck code
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => void exportDeck('oplayLink', name, cards, facts, game)}
+            >
+              Copy OPlay link
+            </DropdownMenuItem>
+          </>
+        ) : game === 'pkm' ? (
           <DropdownMenuItem onSelect={() => void exportDeck('text', name, cards, facts, game)}>
             Copy deck list
           </DropdownMenuItem>

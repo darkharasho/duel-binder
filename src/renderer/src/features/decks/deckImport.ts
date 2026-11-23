@@ -6,7 +6,15 @@ import type { DeckCard, DeckEntry, DeckSection } from '@shared/decks/types'
 import type { Api } from '@shared/ipc'
 
 export type Resolution = Awaited<ReturnType<Api['decks']['resolve']>>[number]
-export type Option = { card: number; name: string; frameType: string; imageId: number | null }
+export type Option = {
+  card: number
+  name: string
+  frameType: string
+  opCardType?: string | null
+  imageId: number | null
+}
+/** A One Piece DON!! card: never part of a deck list, so an import ignores it. */
+const isDon = (c: { opCardType?: string | null }): boolean => c.opCardType === 'DON!!'
 
 /** One line of an import, as the owner sees it. `key` is stable for the preview's life. */
 export interface ImportItem {
@@ -68,6 +76,7 @@ export function buildPreview(
   }
   parsed.lines.forEach((l, i) => {
     const r = resolutions[i]
+    if (r?.status === 'matched' && isDon(r)) return
     const item: ImportItem = {
       key: `l${i}`,
       text: textOf(l, kind, r?.status === 'matched' ? r.name : undefined),
@@ -86,8 +95,18 @@ export function buildPreview(
         section: placeOf(game, parsed.sectioned, l.section, r),
         card: r.card
       })
-    else if (r?.status === 'ambiguous') out.ambiguous.push({ ...item, options: r.options })
-    else out.notFound.push(item)
+    else if (r?.status === 'ambiguous') {
+      const options = r.options.filter((o) => !isDon(o))
+      if (options.length === 0) return
+      if (options.length === 1)
+        out.matched.push({
+          ...item,
+          text: textOf(l, kind, options[0].name),
+          section: placeOf(game, parsed.sectioned, l.section, options[0]),
+          card: options[0].card
+        })
+      else out.ambiguous.push({ ...item, options })
+    } else out.notFound.push(item)
   })
   parsed.skipped.forEach((s, i) =>
     out.notFound.push({ key: `s${i}`, text: s.raw.trim(), qty: 1, section: 'main' })

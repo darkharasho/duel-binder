@@ -12,6 +12,8 @@ import { DecksPage } from '@/features/decks/DecksPage'
 import { buildPreview, keptEntries } from '@/features/decks/deckImport'
 import { changeSummary, moveEntry } from '@/features/decks/deckEntries'
 import { parseYgoList } from '@shared/decks/ygo/lists'
+import { parseOpText, toOpText } from '@shared/decks/onepiece/text'
+import { encodeOplayV2, oplayLink } from '@shared/decks/onepiece/oplay'
 import { OFFLINE_MESSAGE } from '@shared/friends'
 import type { PackState } from '@shared/decks/pack'
 import type { DeckCard, DeckDetail, DeckEntry, DeckSummary } from '@shared/decks/types'
@@ -1147,5 +1149,309 @@ describe('Pokémon on the deck screens', () => {
     expect(within(dialog).getByText('4 Iono')).toBeInTheDocument()
     expect(resolve).toHaveBeenCalledWith([{ set: 'PAL', number: '185', name: 'Iono' }])
     expect(within(dialog).getByPlaceholderText(/Pokémon TCG Live/)).toBeInTheDocument()
+  })
+})
+
+describe('One Piece on the deck screens', () => {
+  const opCard = (
+    id: number,
+    name: string,
+    opCardType: string,
+    opNumber: string | null,
+    opColors: string[] = ['Red']
+  ): DeckCard => ({
+    id,
+    name,
+    type: opCardType,
+    frameType: 'op',
+    imageId: null,
+    owned: 0,
+    price: null,
+    regionPrice: null,
+    sourceId: null,
+    code: null,
+    opNumber,
+    opCardType,
+    opColors,
+    opCost: opCardType === 'Leader' ? null : 2,
+    opBlock: 1
+  })
+  const opBrowse = (id: number, name: string, type: string) =>
+    ({
+      id,
+      name,
+      type,
+      frameType: 'op',
+      attribute: null,
+      race: '',
+      level: null,
+      linkval: null,
+      atk: null,
+      def: null,
+      imageId: 0,
+      price: null,
+      releasedAt: null,
+      owned: 0,
+      defaultPrintingId: null
+    }) as never
+  const LUFFY = 501
+  const NAMI = 502
+  const opFacts: Record<number, DeckCard> = {
+    [LUFFY]: opCard(LUFFY, 'Monkey.D.Luffy', 'Leader', 'OP01-001'),
+    [NAMI]: opCard(NAMI, 'Nami', 'Character', 'OP01-016'),
+    503: opCard(503, 'Promo Thing', 'Event', null)
+  }
+  const adder = (onAdd = vi.fn(), leaderColors: string[] = ['Red']): React.JSX.Element => (
+    <DeckAdder
+      game="op"
+      format={DECK_FORMATS.op[0]}
+      inDeck={new Map()}
+      tab="add"
+      onTab={vi.fn()}
+      missingCount={0}
+      missing={null}
+      notes={null}
+      onAdd={onAdd}
+      leaderColors={leaderColors}
+    />
+  )
+
+  it('the adder offers Character, Event, Stage and the Leader colours; Event filters by opCardTypes', async () => {
+    const browse = vi.fn(async () => ({ cards: [], total: 0 }))
+    renderWithProviders(adder(), { api: createMockApi({ cards: { browse } }) })
+    const filters = await screen.findByRole('group', { name: 'Filters' })
+    for (const n of ['Character', 'Event', 'Stage', 'Red'])
+      expect(within(filters).getByRole('button', { name: n })).toBeInTheDocument()
+    for (const n of ['Monster', 'Leader', 'DON!!', 'Pokémon'])
+      expect(within(filters).queryByRole('button', { name: n })).not.toBeInTheDocument()
+    // No type chip on: every playable type, never DON!!.
+    await waitFor(() =>
+      expect(browse).toHaveBeenLastCalledWith(
+        expect.objectContaining({ opCardTypes: ['Leader', 'Character', 'Event', 'Stage'] })
+      )
+    )
+    await userEvent.click(within(filters).getByRole('button', { name: 'Event' }))
+    await waitFor(() =>
+      expect(browse).toHaveBeenLastCalledWith(expect.objectContaining({ opCardTypes: ['Event'] }))
+    )
+    await userEvent.click(within(filters).getByRole('button', { name: 'Red' }))
+    await waitFor(() =>
+      expect(browse).toHaveBeenLastCalledWith(
+        expect.objectContaining({ opCardTypes: ['Event'], opColors: ['Red'] })
+      )
+    )
+  })
+
+  it('a Leader from the adder lands in Leader, a Character in the Deck', async () => {
+    const onAdd = vi.fn()
+    const api = createMockApi({
+      cards: {
+        browse: vi.fn(async () => ({
+          cards: [opBrowse(LUFFY, 'Monkey.D.Luffy', 'Leader'), opBrowse(NAMI, 'Nami', 'Character')],
+          total: 2
+        }))
+      }
+    })
+    renderWithProviders(adder(onAdd), { api })
+    await userEvent.click(await screen.findByRole('button', { name: 'Add Monkey.D.Luffy' }))
+    expect(onAdd).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: LUFFY, opCardType: 'Leader' }),
+      'leader'
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Add Nami' }))
+    expect(onAdd).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: NAMI, opCardType: 'Character' }),
+      'main'
+    )
+  })
+
+  it('Add to deck puts a Leader in Leader', async () => {
+    const opDeck = deck({ game: 'op', format: 'standard', name: 'Straw Hats', cards: [] })
+    const api = pageApi(
+      detail({ ...opDeck, cardFacts: {} }),
+      { state: 'missing' },
+      {
+        cards: {
+          get: vi.fn(
+            async () =>
+              ({
+                card: {
+                  id: LUFFY,
+                  name: 'Monkey.D.Luffy',
+                  type: 'Leader',
+                  frameType: 'op',
+                  onePiece: {
+                    cardType: 'Leader',
+                    colors: ['Red'],
+                    cost: null,
+                    life: 5,
+                    power: 5000,
+                    counter: null,
+                    attribute: [],
+                    traits: [],
+                    blockIcon: 1,
+                    number: 'OP01-001'
+                  }
+                }
+              }) as unknown as CardDetail
+          )
+        },
+        decks: {
+          list: vi.fn(async () => ({ decks: [opDeck], cardFacts: {} })),
+          get: vi.fn(async () => ({ ...detail(opDeck), cardFacts: {} }))
+        }
+      }
+    )
+    renderWithProviders(<AddToDeck game="op" cardId={LUFFY} />, { api })
+    await userEvent.click(screen.getByRole('button', { name: 'Add to deck' }))
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Straw Hats' }))
+    await waitFor(() =>
+      expect(api.decks.save).toHaveBeenCalledWith(
+        expect.objectContaining({ cards: [{ section: 'leader', card: LUFFY, qty: 1 }] })
+      )
+    )
+  })
+
+  it('the deck page shows Leader above the Deck and passes the Leader colours to the adder', async () => {
+    const opDetail = detail({
+      game: 'op',
+      format: 'standard',
+      cards: [
+        { section: 'leader', card: LUFFY, qty: 1 },
+        { section: 'main', card: NAMI, qty: 4 }
+      ],
+      cardFacts: opFacts
+    })
+    renderWithProviders(<DeckPage uid="d1" onBack={vi.fn()} />, {
+      api: pageApi(opDetail, { state: 'missing' })
+    })
+    const leader = await screen.findByRole('region', { name: 'Leader' })
+    const main = screen.getByRole('region', { name: 'Deck' })
+    expect(within(leader).getByText('Monkey.D.Luffy')).toBeInTheDocument()
+    expect(within(leader).getByText('Leader 1 / 1')).toBeInTheDocument()
+    expect(leader.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const filters = screen.getAllByRole('group', { name: 'Filters' })[0]
+    expect(within(filters).getByRole('button', { name: 'Red' })).toBeInTheDocument()
+  })
+
+  it('the export menu copies the list, the OPlay code and the OPlay link, leaving out cards without a number', async () => {
+    const copy = vi.fn(async (_text: string) => undefined)
+    const api = createMockApi({ dex: { copy } })
+    const cards: DeckEntry[] = [
+      { section: 'leader', card: LUFFY, qty: 1 },
+      { section: 'main', card: NAMI, qty: 4 },
+      { section: 'main', card: 503, qty: 2 }
+    ]
+    renderWithProviders(<ExportMenu game="op" name="Mine" cards={cards} facts={opFacts} />, {
+      api
+    })
+    const open = async (): Promise<HTMLElement[]> => {
+      await userEvent.click(screen.getByRole('button', { name: 'Export' }))
+      return screen.findAllByRole('menuitem')
+    }
+    const items = await open()
+    expect(items.map((i) => i.textContent)).toEqual([
+      'Copy deck list',
+      'Copy OPlay deck code',
+      'Copy OPlay link'
+    ])
+    const code = encodeOplayV2({ leader: 'OP01-001', entries: [{ code: 'OP01-016', qty: 4 }] })
+    await userEvent.click(items[1])
+    await waitFor(() => expect(copy).toHaveBeenLastCalledWith(code))
+    expect(toast.success).toHaveBeenLastCalledWith(
+      'Copied the OPlay deck code. 1 card without a card number was left out.'
+    )
+    await userEvent.click((await open())[2])
+    await waitFor(() => expect(copy).toHaveBeenLastCalledWith(oplayLink(code)))
+    await userEvent.click((await open())[0])
+    await waitFor(() => expect(copy).toHaveBeenLastCalledWith(toOpText(cards, opFacts)))
+  })
+
+  const opImport = (
+    resolve: Api['decks']['resolve'],
+    onApply = vi.fn()
+  ): { api: Api; onApply: ReturnType<typeof vi.fn> } => {
+    const api = createMockApi({ decks: { resolve } })
+    renderWithProviders(
+      <ImportDialog game="op" format="standard" busy={false} onApply={onApply} onClose={vi.fn()} />,
+      { api }
+    )
+    return { api, onApply }
+  }
+  const pasteOp = async (text: string): Promise<HTMLElement> => {
+    const dialog = await screen.findByRole('dialog')
+    await userEvent.click(within(dialog).getByLabelText('Deck list'))
+    await userEvent.paste(text)
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Preview' }))
+    return dialog
+  }
+
+  it('the import dialog previews 1xOP01-001 and 4xOP01-016 with the Leader in Leader', async () => {
+    const resolve = vi.fn(async () => [
+      {
+        status: 'matched' as const,
+        card: LUFFY,
+        name: 'Monkey.D.Luffy',
+        frameType: 'op',
+        opCardType: 'Leader'
+      },
+      {
+        status: 'matched' as const,
+        card: NAMI,
+        name: 'Nami',
+        frameType: 'op',
+        opCardType: 'Character'
+      }
+    ])
+    const { onApply } = opImport(resolve)
+    const dialog = await pasteOp('1xOP01-001\n4xOP01-016')
+    expect(await within(dialog).findByText('Matched (2)')).toBeInTheDocument()
+    expect(resolve).toHaveBeenCalledWith([
+      { opNumber: 'OP01-001', name: '' },
+      { opNumber: 'OP01-016', name: '' }
+    ])
+    expect(
+      within(dialog).getByPlaceholderText('Paste a deck list, an OPlay deck code or share link')
+    ).toBeInTheDocument()
+    expect(within(dialog).getByLabelText('Deck file')).toHaveAttribute('accept', '.txt')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Import deck' }))
+    expect(onApply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cards: [
+          { section: 'leader', card: LUFFY, qty: 1 },
+          { section: 'main', card: NAMI, qty: 4 }
+        ]
+      })
+    )
+  })
+
+  it('a ?deck= link shows the OPlay message', async () => {
+    const resolve = vi.fn(async () => [])
+    opImport(resolve)
+    const dialog = await pasteOp('https://oplaytcg.com/en/deck-builder?deck=1')
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'That link points to a deck saved on OPlay. Open it there and copy its deck code or share link instead.'
+    )
+    expect(resolve).not.toHaveBeenCalled()
+  })
+
+  it('the import ignores a DON!! card that matched by number', () => {
+    const parsed = parseOpText('1xOP01-001\n10xDON-001\n4xOP01-016')
+    const preview = buildPreview(
+      parsed,
+      [
+        { status: 'matched', card: LUFFY, name: 'Luffy', frameType: 'op', opCardType: 'Leader' },
+        { status: 'matched', card: 9, name: 'DON!! Card', frameType: 'op', opCardType: 'DON!!' },
+        { status: 'matched', card: NAMI, name: 'Nami', frameType: 'op', opCardType: 'Character' }
+      ],
+      'text',
+      'op'
+    )
+    expect(preview.matched.map((m) => [m.card, m.section])).toEqual([
+      [LUFFY, 'leader'],
+      [NAMI, 'main']
+    ])
+    expect(preview.notFound).toEqual([])
+    expect(preview.ambiguous).toEqual([])
   })
 })

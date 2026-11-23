@@ -25,6 +25,7 @@ async function factOf(cardId: number, known: DeckCard | undefined): Promise<Deck
   const detail = await api.cards.get(cardId)
   if (!detail) return undefined
   const c = detail.card
+  const op = c.onePiece
   return {
     id: c.id,
     name: c.name,
@@ -36,11 +37,11 @@ async function factOf(cardId: number, known: DeckCard | undefined): Promise<Deck
     regionPrice: null,
     sourceId: null,
     code: null,
-    opNumber: null,
-    opCardType: null,
-    opColors: [],
-    opCost: null,
-    opBlock: null
+    opNumber: op?.number ?? null,
+    opCardType: op?.cardType ?? (c.frameType === 'op' ? c.type : null),
+    opColors: op?.colors ?? [],
+    opCost: op?.cost ?? null,
+    opBlock: op?.blockIcon ?? null
   }
 }
 

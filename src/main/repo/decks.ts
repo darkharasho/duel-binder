@@ -40,12 +40,21 @@ const BASIC_ENERGY = /^(?:grass|fire|water|lightning|psychic|fighting|darkness|m
 /** An id or pkey list bound as one JSON array, never one parameter per item (the DO caps them). */
 const IN_LIST = '(SELECT value FROM json_each(?))'
 
-/** frameType lets the importer place a card (an Extra Deck monster in Extra) when the list didn't. */
+/**
+ * frameType lets the importer place a card (an Extra Deck monster in Extra) when the list didn't;
+ * opCardType (One Piece only, set on that game's answers) sends a Leader to Leader.
+ */
 export type DeckResolution =
-  | { status: 'matched'; card: number; name: string; frameType: string }
+  | { status: 'matched'; card: number; name: string; frameType: string; opCardType?: string | null }
   | {
       status: 'ambiguous'
-      options: { card: number; name: string; frameType: string; imageId: number | null }[]
+      options: {
+        card: number
+        name: string
+        frameType: string
+        opCardType?: string | null
+        imageId: number | null
+      }[]
     }
   | { status: 'unmatched' }
 
@@ -572,7 +581,12 @@ export function resolveDeckLines(db: SqlDb, refs: unknown, scope: Scope = LOCAL)
   }
 
   // On Pokémon a name only finds cards with an English printing: that's the name deck lists use.
-  const pkm = scopeGame(db, scope) === 'pkm'
+  const game = scopeGame(db, scope)
+  const pkm = game === 'pkm'
+  // On One Piece every answer carries the card's type, read in the same queries as its name.
+  const opGame = game === 'op'
+  const opJoin = opGame ? 'LEFT JOIN onepiece_cards o ON o.card_id = c.id' : ''
+  const opCol = opGame ? ', o.card_type AS op_card_type' : ''
   const englishOnly = pkm
     ? `AND EXISTS (SELECT 1 FROM card_printings p WHERE p.card_id = c.id AND +p.game = ${scope.game} AND p.language = 'en')`
     : ''
@@ -607,7 +621,7 @@ export function resolveDeckLines(db: SqlDb, refs: unknown, scope: Scope = LOCAL)
       lines.flatMap((r) => ('opNumber' in r && r.opNumber ? [r.opNumber.toUpperCase()] : []))
     )
   ]
-  const opScope = lines.some((r) => 'opNumber' in r) && scopeGame(db, scope) === 'op'
+  const opScope = opGame && lines.some((r) => 'opNumber' in r)
   if (opScope && opNumbers.length > 0) {
     const best = new Map<string, { id: number; en: boolean }>()
     for (const r of db
@@ -633,11 +647,18 @@ export function resolveDeckLines(db: SqlDb, refs: unknown, scope: Scope = LOCAL)
   const setHit = (r: DeckLineRef): boolean => 'set' in r && bySetNumber.has(setKey(r.set, r.number))
 
   const named = db.prepare(
-    `SELECT c.id, c.name, c.frame_type FROM cards_fts JOIN cards c ON c.id = cards_fts.rowid
+    `SELECT c.id, c.name, c.frame_type${opCol} FROM cards_fts JOIN cards c ON c.id = cards_fts.rowid
+     ${opJoin}
      WHERE cards_fts MATCH ? AND +c.game = ${scope.game} ${englishOnly}
      ORDER BY length(c.name), c.id LIMIT ${NAME_HITS}`
   )
-  type Hit = { id: number; name: string; frame_type: string }
+  type Hit = { id: number; name: string; frame_type: string; op_card_type?: string | null }
+  type Fact = { name: string; frameType: string; opCardType?: string | null }
+  const factOf = (h: Hit): Fact => ({
+    name: h.name,
+    frameType: h.frame_type,
+    ...(opGame ? { opCardType: h.op_card_type ?? null } : {})
+  })
   const byName = new Map<string, Hit[]>()
   for (const r of lines) {
     if (!('name' in r) || setHit(r)) continue
@@ -664,9 +685,8 @@ export function resolveDeckLines(db: SqlDb, refs: unknown, scope: Scope = LOCAL)
     if (ids.size > 1) for (const id of ids) ambiguousIds.add(id)
   for (const hits of byName.values())
     if (hits.length > 1) for (const h of hits) ambiguousIds.add(h.id)
-  const names = new Map<number, { name: string; frameType: string }>()
-  for (const hits of byName.values())
-    for (const h of hits) names.set(h.id, { name: h.name, frameType: h.frame_type })
+  const names = new Map<number, Fact>()
+  for (const hits of byName.values()) for (const h of hits) names.set(h.id, factOf(h))
   // Every matched card's name too, so the import preview reads in names, not passcodes.
   const wanted = new Set(ambiguousIds)
   for (const id of byPasscode.values()) wanted.add(id)
@@ -677,15 +697,15 @@ export function resolveDeckLines(db: SqlDb, refs: unknown, scope: Scope = LOCAL)
   if (missing.length > 0)
     for (const r of db
       .prepare(
-        `SELECT c.id, c.name, c.frame_type FROM cards c
+        `SELECT c.id, c.name, c.frame_type${opCol} FROM cards c ${opJoin}
          WHERE c.id IN ${IN_LIST} AND +c.game = ${scope.game}`
       )
       .all(JSON.stringify(missing)) as Hit[])
-      names.set(r.id, { name: r.name, frameType: r.frame_type })
+      names.set(r.id, factOf(r))
   const images = firstImages(db, [...ambiguousIds], scope)
 
-  const fact = (card: number): { name: string; frameType: string } =>
-    names.get(card) ?? { name: '', frameType: '' }
+  const fact = (card: number): Fact =>
+    names.get(card) ?? { name: '', frameType: '', ...(opGame ? { opCardType: null } : {}) }
   const resolve = (ids: number[]): DeckResolution =>
     ids.length === 0
       ? { status: 'unmatched' }

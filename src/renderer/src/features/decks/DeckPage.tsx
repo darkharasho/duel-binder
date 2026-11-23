@@ -306,6 +306,11 @@ export function DeckPage({
       }
     return { copies, own, value, kinds }
   }, [sections, have, facts, format, game])
+  // One Piece: the Leader's colours, the adder's colour chips.
+  const leaderColors = useMemo(() => {
+    const leader = fields?.cards.find((e) => e.section === 'leader')
+    return game === 'op' && leader ? (facts[leader.card]?.opColors ?? []) : []
+  }, [fields, facts, game])
   const missingCopies = cost ? cost.missing.reduce((n, m) => n + m.copies, 0) : 0
 
   const wide = (): boolean => !phone && (window.matchMedia?.(WIDE).matches ?? true)
@@ -344,6 +349,7 @@ export function DeckPage({
         missing={missingNode}
         notes={notesNode}
         onAdd={addCard}
+        leaderColors={leaderColors}
         className={className}
       />
     ) : null

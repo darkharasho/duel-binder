@@ -2,6 +2,8 @@ import { useRef, useState } from 'react'
 import { DECK_FORMATS, formatOf } from '@shared/decks/formats'
 import { MAX_DECK_NAME } from '@shared/decks/fields'
 import type { DeckCard, DeckEntry } from '@shared/decks/types'
+import { OplayError } from '@shared/decks/onepiece/oplay'
+import { parseOpList } from '@shared/decks/onepiece/text'
 import { parsePtcgl } from '@shared/decks/pokemon/ptcgl'
 import { detectYgoList, parseYgoList } from '@shared/decks/ygo/lists'
 import type { GameId } from '@shared/games'
@@ -86,14 +88,18 @@ export function ImportDialog({
     setConfirming(false)
     try {
       const pkm = game === 'pkm'
-      const parsed = pkm ? parsePtcgl(source) : parseYgoList(source)
+      const op = game === 'op'
+      const parsed = op ? parseOpList(source) : pkm ? parsePtcgl(source) : parseYgoList(source)
       const resolutions = parsed.lines.length
         ? await api.decks.resolve(parsed.lines.map((l) => l.ref))
         : []
       if (!parsed.lines.length && !parsed.skipped.length) setError('Nothing to import in that.')
-      else setPreview(buildPreview(parsed, resolutions, pkm ? 'text' : detectYgoList(source), game))
+      else
+        setPreview(
+          buildPreview(parsed, resolutions, pkm || op ? 'text' : detectYgoList(source), game)
+        )
     } catch (e) {
-      setError(errorMessage(e, 'Could not read the list'))
+      setError(e instanceof OplayError ? e.message : errorMessage(e, 'Could not read the list'))
     } finally {
       setReading(false)
     }
@@ -186,7 +192,9 @@ export function ImportDialog({
               placeholder={
                 game === 'pkm'
                   ? 'Paste a deck list from Pokémon TCG Live'
-                  : 'Paste a deck list, a .ydk, or a ydke:// link'
+                  : game === 'op'
+                    ? 'Paste a deck list, an OPlay deck code or share link'
+                    : 'Paste a deck list, a .ydk, or a ydke:// link'
               }
               onChange={(e) => {
                 setText(e.target.value)
@@ -215,7 +223,7 @@ export function ImportDialog({
               <input
                 ref={file}
                 type="file"
-                accept={game === 'pkm' ? '.txt' : '.ydk,.txt'}
+                accept={game === 'ygo' ? '.ydk,.txt' : '.txt'}
                 aria-label="Deck file"
                 className="hidden"
                 onChange={(e) => {

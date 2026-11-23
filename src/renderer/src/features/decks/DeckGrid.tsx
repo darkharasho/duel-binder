@@ -12,6 +12,7 @@ import {
   SECTION_HEADING,
   entryDomId,
   entryKey,
+  sectionHeading,
   unknownCardText
 } from './deckEntries'
 import { PrintingPicker, type EntryActions } from './DeckSection'
@@ -105,9 +106,7 @@ export function DeckGrid({
               over === def.id && 'bg-chip/60 ring-2 ring-ring/60'
             )}
           >
-            <h2 className={cn(SECTION_HEADING, 'tabular-nums')}>
-              {`${def.label} ${count} / ${def.min}–${def.max}`}
-            </h2>
+            <h2 className={cn(SECTION_HEADING, 'tabular-nums')}>{sectionHeading(def, count)}</h2>
             {entries.length === 0 ? (
               <p className="rounded-md border border-dashed border-white/15 px-3 py-4 text-center text-xs text-muted-foreground">
                 {actions ? 'No cards yet. Drop cards here.' : 'No cards yet.'}

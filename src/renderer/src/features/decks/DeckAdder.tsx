@@ -11,12 +11,13 @@ import { SearchInput } from '@/components/SearchInput'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { api, queryKeys } from '@/lib/api'
 import { cn } from '@/lib/utils'
-import { DRAG_CARD, SECTION_HEADING, deckCardOf } from './deckEntries'
+import { DRAG_CARD, OP_DECK_TYPES, SECTION_HEADING, deckCardOf } from './deckEntries'
 
 const RESULTS = 60
 
 export type AdderTab = 'add' | 'missing' | 'notes'
-type Kind = 'monster' | 'spell' | 'trap' | 'extra' | 'P' | 'T' | 'E'
+type Kind = 'monster' | 'spell' | 'trap' | 'extra' | 'P' | 'T' | 'E' | OpKind
+type OpKind = 'Character' | 'Event' | 'Stage'
 
 const YGO_KINDS: { id: Kind; label: string }[] = [
   { id: 'monster', label: 'Monster' },
@@ -29,14 +30,24 @@ const PKM_KINDS: { id: Kind; label: string }[] = [
   { id: 'T', label: 'Trainer' },
   { id: 'E', label: 'Energy' }
 ]
+/** One Piece types, filtered by card_type; with none on, OP_DECK_TYPES (never DON!!). */
+const OP_KINDS: { id: Kind; label: string }[] = [
+  { id: 'Character', label: 'Character' },
+  { id: 'Event', label: 'Event' },
+  { id: 'Stage', label: 'Stage' }
+]
+const isOpKind = (kind: Kind): kind is OpKind =>
+  kind === 'Character' || kind === 'Event' || kind === 'Stage'
 const KINDS_OF: Partial<Record<GameId, { id: Kind; label: string }[]>> = {
   ygo: YGO_KINDS,
-  pkm: PKM_KINDS
+  pkm: PKM_KINDS,
+  op: OP_KINDS
 }
 const EXTRA_TYPE = /Fusion|Synchro|XYZ|Link/i
 
 /** Whether a Yu-Gi-Oh! type line ('Effect Monster', 'Spell Card') is of the kind. */
 function typeIs(kind: Kind, type: string): boolean {
+  if (isOpKind(kind)) return type === kind
   if (kind === 'P' || kind === 'T' || kind === 'E') return pkmKind(type) === kind
   const monster = type.includes('Monster')
   switch (kind) {
@@ -53,11 +64,13 @@ function typeIs(kind: Kind, type: string): boolean {
   }
 }
 const cardIs = (kind: Kind, c: BrowseCard): boolean =>
-  kind === 'P' || kind === 'T' || kind === 'E'
-    ? pkmKind(c.type) === kind
-    : kind === 'extra' || kind === 'monster'
-      ? c.type.includes('Monster') && isExtraFrame(c.frameType) === (kind === 'extra')
-      : typeIs(kind, c.type)
+  isOpKind(kind)
+    ? c.type === kind
+    : kind === 'P' || kind === 'T' || kind === 'E'
+      ? pkmKind(c.type) === kind
+      : kind === 'extra' || kind === 'monster'
+        ? c.type.includes('Monster') && isExtraFrame(c.frameType) === (kind === 'extra')
+        : typeIs(kind, c.type)
 
 const TAB =
   'h-7 flex-none rounded-full px-3 font-mono text-xs font-medium after:hidden data-[state=active]:bg-chip data-[state=active]:font-medium'
@@ -75,6 +88,7 @@ export function DeckAdder({
   missing,
   notes,
   onAdd,
+  leaderColors = [],
   className
 }: {
   game: GameId
@@ -88,6 +102,8 @@ export function DeckAdder({
   missing: React.ReactNode
   notes: React.ReactNode
   onAdd: (card: DeckCard, section: DeckSection) => void
+  /** One Piece: the deck's Leader's colours, a filter chip each. */
+  leaderColors?: string[]
   className?: string
 }): React.JSX.Element {
   return (
@@ -108,7 +124,13 @@ export function DeckAdder({
         </TabsTrigger>
       </TabsList>
       <TabsContent value="add" className="flex min-h-0 flex-col">
-        <AdderSearch game={game} format={format} inDeck={inDeck} onAdd={onAdd} />
+        <AdderSearch
+          game={game}
+          format={format}
+          inDeck={inDeck}
+          onAdd={onAdd}
+          leaderColors={leaderColors}
+        />
       </TabsContent>
       <TabsContent value="missing" className="min-h-0 overflow-y-auto pr-1">
         {missing}
@@ -124,19 +146,26 @@ function AdderSearch({
   game,
   format,
   inDeck,
-  onAdd
+  onAdd,
+  leaderColors
 }: {
   game: GameId
   format: DeckFormat
   inDeck: Map<number, number>
   onAdd: (card: DeckCard, section: DeckSection) => void
+  leaderColors: string[]
 }): React.JSX.Element {
   const [text, setText] = useState('')
   const q = text.trim()
   const [owned, setOwned] = useState(false)
   const [kind, setKind] = useState<Kind | null>(null)
+  const [colorPicks, setColorPicks] = useState<string[]>([])
   const input = useRef<HTMLInputElement>(null)
   const kinds = KINDS_OF[game] ?? []
+  const op = game === 'op'
+  // A colour stays picked only while the Leader still has it.
+  const colors = op ? colorPicks.filter((c) => leaderColors.includes(c)) : []
+  const colorKey = colors.join(',')
   const side = format.sections.find((s) => s.id === 'side')
   const labelOf = (id: DeckSection): string => format.sections.find((s) => s.id === id)?.label ?? id
 
@@ -159,26 +188,35 @@ function AdderSearch({
   const facets = useQuery({
     queryKey: queryKeys.browseFacets('all'),
     queryFn: () => api.cards.browseFacets(undefined),
-    enabled: kind !== null
+    enabled: kind !== null && !op
   })
   const cardTypes = useMemo(
-    () => (kind && facets.data ? facets.data.cardTypes.filter((t) => typeIs(kind, t)) : undefined),
-    [kind, facets.data]
+    () =>
+      kind && !op && facets.data ? facets.data.cardTypes.filter((t) => typeIs(kind, t)) : undefined,
+    [kind, op, facets.data]
   )
+  const nothingPicked = kind === null && colors.length === 0
   // With nothing typed or picked, the cards you own: something to add straight away.
-  const yours = owned || (q === '' && kind === null)
+  const yours = owned || (q === '' && nothingPicked)
   const results = useQuery({
-    queryKey: ['browse', 'deckAdder', q, yours, kind, cardTypes?.length ?? 0],
+    queryKey: ['browse', 'deckAdder', q, yours, kind, cardTypes?.length ?? 0, colorKey],
     queryFn: () =>
       api.cards.browse({
         q,
         owned: yours ? 'owned' : 'all',
-        ...(cardTypes && cardTypes.length > 0 ? { cardTypes } : {}),
+        ...(op
+          ? {
+              opCardTypes: kind ? [kind] : OP_DECK_TYPES,
+              ...(colorKey ? { opColors: colorKey.split(',') } : {})
+            }
+          : cardTypes && cardTypes.length > 0
+            ? { cardTypes }
+            : {}),
         sort: 'name',
         dir: 'asc',
         limit: RESULTS
       }),
-    enabled: kind === null || !facets.isPending
+    enabled: kind === null || op || !facets.isPending
   })
   const shown = (results.data?.cards ?? []).filter((c) => !kind || cardIs(kind, c))
 
@@ -215,9 +253,26 @@ function AdderSearch({
             {k.label}
           </button>
         ))}
+        {op &&
+          leaderColors.map((c) => (
+            <button
+              key={c}
+              type="button"
+              aria-pressed={colors.includes(c)}
+              onClick={() =>
+                setColorPicks((cur) => (cur.includes(c) ? cur.filter((x) => x !== c) : [...cur, c]))
+              }
+              className={cn(
+                FILTER,
+                colors.includes(c) ? 'bg-chip-on text-chip-on-ink' : 'bg-chip hover:bg-chip/70'
+              )}
+            >
+              {c}
+            </button>
+          ))}
       </div>
       <div className="-mr-2 min-h-0 flex-1 overflow-y-auto pr-2">
-        {q === '' && kind === null && !owned && shown.length > 0 && (
+        {q === '' && nothingPicked && !owned && shown.length > 0 && (
           <h3 className={cn(SECTION_HEADING, 'mb-2 text-muted-foreground')}>Cards you own</h3>
         )}
         {results.isError ? (
@@ -226,7 +281,7 @@ function AdderSearch({
           <p className="text-xs text-muted-foreground">Searching…</p>
         ) : shown.length === 0 ? (
           <p className="text-xs text-muted-foreground">
-            {q === '' && kind === null
+            {q === '' && nothingPicked
               ? 'Type a card name to find cards to add.'
               : 'No cards found.'}
           </p>

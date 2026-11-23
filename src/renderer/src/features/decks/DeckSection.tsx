@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { api, queryKeys } from '@/lib/api'
 import { cn } from '@/lib/utils'
-import { entryDomId, entryKey, unknownCardText } from './deckEntries'
+import { entryDomId, entryKey, sectionHeading, unknownCardText } from './deckEntries'
 
 export interface EntryActions {
   onQty: (e: DeckEntry, delta: 1 | -1) => void
@@ -50,9 +50,7 @@ export function DeckSectionList({
   const count = entries.reduce((n, e) => n + e.qty, 0)
   return (
     <section aria-label={def.label} id={`deck-section-${def.id}`} className="space-y-2">
-      <h2 className="text-sm font-semibold tabular-nums">
-        {`${def.label} ${count} / ${def.min}–${def.max}`}
-      </h2>
+      <h2 className="text-sm font-semibold tabular-nums">{sectionHeading(def, count)}</h2>
       {entries.length === 0 ? (
         <p className="text-xs text-muted-foreground">No cards yet.</p>
       ) : (

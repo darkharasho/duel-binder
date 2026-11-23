@@ -16,7 +16,7 @@ import {
   SelectValue
 } from '@/components/ui/select'
 import { api } from '@/lib/api'
-import { deckCardOf } from './deckEntries'
+import { OP_DECK_TYPES, deckCardOf } from './deckEntries'
 
 const TYPE_MS = 250
 const RESULTS = 20
@@ -45,6 +45,8 @@ export function DeckSearch({
       api.cards.browse({
         q,
         owned: ownedOnly ? 'owned' : 'all',
+        // One Piece: never DON!!, which no deck holds.
+        ...(game === 'op' ? { opCardTypes: OP_DECK_TYPES } : {}),
         sort: 'name',
         dir: 'asc',
         limit: RESULTS

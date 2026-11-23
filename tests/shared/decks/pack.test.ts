@@ -102,6 +102,12 @@ describe('parseRulesPack op', () => {
     const badBan = withStandard({ banned: [{ card: 'OP14-020', from: '27 Nov' }] })
     expect(parseRulesPack(badBan)).toEqual({ state: 'missing' })
   })
+  it('rejects an op pack with an impossible date', () => {
+    for (const from of ['2026-13-45', '2026-02-30'])
+      expect(parseRulesPack(withStandard({ banned: [{ card: 'OP14-020', from }] }))).toEqual({
+        state: 'missing'
+      })
+  })
   it("rejects an op pack whose restricted count isn't 0–3", () => {
     expect(parseRulesPack(withStandard({ restricted: { 'OP01-016': 5 } }))).toEqual({
       state: 'missing'

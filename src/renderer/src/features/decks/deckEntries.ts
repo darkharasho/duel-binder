@@ -1,5 +1,5 @@
 import type { DeckProblem } from '@shared/decks/check'
-import type { SectionDef } from '@shared/decks/formats'
+import type { DeckFormat, SectionDef } from '@shared/decks/formats'
 import { MAX_ENTRY_QTY } from '@shared/decks/fields'
 import type { DeckCard, DeckEntry, DeckSection } from '@shared/decks/types'
 import type { BrowseCard } from '@shared/types'
@@ -78,6 +78,19 @@ export function moveEntry(cards: DeckEntry[], entry: DeckEntry, section: DeckSec
       entryKey(e) === to ? { ...e, qty: Math.min(MAX_ENTRY_QTY, e.qty + entry.qty) } : e
     )
   return cards.map((e) => (entryKey(e) === from ? moved : e))
+}
+
+/**
+ * The deck's cards for another format: entries in a section the format lacks (a Magic Sideboard in
+ * Commander, Commander in a 60-card format) go to Main, into an entry there with the same card and
+ * pin if there is one. The same array when nothing moves, as for formats that share sections.
+ */
+export function entriesForFormat(cards: DeckEntry[], format: DeckFormat): DeckEntry[] {
+  const has = new Set(format.sections.map((s) => s.id))
+  if (cards.every((e) => has.has(e.section))) return cards
+  let out = cards.filter((e) => has.has(e.section))
+  for (const e of cards) if (!has.has(e.section)) out = moveEntry([...out, e], e, 'main')
+  return out
 }
 
 /** A section's heading: "Main Deck 40 / 40–60"; a one-card section (the Leader) reads "Leader 1 / 1". */

@@ -20,6 +20,7 @@ import { DeckAdder, type AdderTab } from './DeckAdder'
 import {
   addEntry,
   changeQty,
+  entriesForFormat,
   entryDomId,
   entryKey,
   moveEntry,
@@ -410,7 +411,11 @@ export function DeckPage({
             confirmingDelete={confirmingDelete}
             onBack={onBack}
             onName={(name) => edit({ name })}
-            onFormat={(format) => edit({ format })}
+            onFormat={(id) => {
+              // Cards in a section the new format lacks go to Main, so none hide or block a save.
+              const to = formatOf(game, id)
+              edit({ format: id, ...(to ? { cards: entriesForFormat(fields.cards, to) } : {}) })
+            }}
             onBadge={openProblems}
             menu={{
               onReplace: () => setImporting(true),

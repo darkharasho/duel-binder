@@ -10,7 +10,7 @@ import { AddToDeck } from '@/features/decks/AddToDeck'
 import { FriendBinder } from '@/features/friends/FriendBinder'
 import { DecksPage } from '@/features/decks/DecksPage'
 import { buildPreview, keptEntries } from '@/features/decks/deckImport'
-import { changeSummary, moveEntry } from '@/features/decks/deckEntries'
+import { changeSummary, entriesForFormat, moveEntry } from '@/features/decks/deckEntries'
 import { parseYgoList } from '@shared/decks/ygo/lists'
 import { parseMtgText, toMtgoText } from '@shared/decks/magic/text'
 import { pinsOf } from '@/features/decks/deckExport'
@@ -938,6 +938,37 @@ describe('deck entry helpers', () => {
         'main'
       )
     ).toEqual([{ ...a, qty: 99 }])
+  })
+  it('entriesForFormat folds sections the format lacks into Main, merging the same card and pin', () => {
+    const modern = DECK_FORMATS.mtg.find((f) => f.id === 'modern')!
+    const commander = DECK_FORMATS.mtg.find((f) => f.id === 'commander')!
+    const cards: DeckEntry[] = [
+      { section: 'main', card: 1, qty: 2 },
+      { section: 'side', card: 1, qty: 1 },
+      { section: 'side', card: 1, printing: 'p1', qty: 1 },
+      { section: 'side', card: 2, qty: 3 }
+    ]
+    expect(entriesForFormat(cards, modern)).toBe(cards)
+    expect(entriesForFormat(cards, commander)).toEqual([
+      { section: 'main', card: 1, qty: 3 },
+      { section: 'main', card: 1, printing: 'p1', qty: 1 },
+      { section: 'main', card: 2, qty: 3 }
+    ])
+    const cmd: DeckEntry[] = [
+      { section: 'commander', card: 5, qty: 1 },
+      { section: 'main', card: 1, qty: 98 },
+      { section: 'commander', card: 1, qty: 3 }
+    ]
+    expect(entriesForFormat(cmd, modern)).toEqual([
+      { section: 'main', card: 1, qty: 99 },
+      { section: 'main', card: 5, qty: 1 }
+    ])
+    // Other games' formats share their sections: nothing moves.
+    const ygo: DeckEntry[] = [
+      { section: 'extra', card: 1, qty: 1 },
+      { section: 'side', card: 2, qty: 1 }
+    ]
+    expect(entriesForFormat(ygo, DECK_FORMATS.ygo[1])).toBe(ygo)
   })
   it('changeSummary names the first new problem and how many more', () => {
     const p = (message: string) => ({ key: message, severity: 'error' as const, message })
@@ -1869,6 +1900,36 @@ describe('Magic on the deck screens', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Import deck' }))
     expect(onApply).toHaveBeenCalledWith(
       expect.objectContaining({ cards: [{ section: 'commander', card: 1, qty: 1 }] })
+    )
+  })
+
+  it('switching a Modern deck to Commander moves its Sideboard into Main and saves', async () => {
+    const facts = { 1: mtgCard(1, 'Opt', 'Instant'), 2: mtgCard(2, 'Duress', 'Sorcery') }
+    const modernDeck = {
+      ...detail(),
+      game: 'mtg' as const,
+      format: 'modern',
+      cards: [
+        { section: 'main' as const, card: 1, qty: 4 },
+        { section: 'side' as const, card: 2, qty: 2 }
+      ],
+      cardFacts: facts
+    }
+    const api = pageApi(modernDeck, { state: 'missing' })
+    renderWithProviders(<DeckPage uid="d1" onBack={vi.fn()} />, { api })
+    await pick(await screen.findByLabelText('Format'), 'Commander')
+    await waitFor(
+      () =>
+        expect(api.decks.save).toHaveBeenCalledWith(
+          expect.objectContaining({
+            format: 'commander',
+            cards: [
+              { section: 'main', card: 1, qty: 4 },
+              { section: 'main', card: 2, qty: 2 }
+            ]
+          })
+        ),
+      SAVE_WAIT
     )
   })
 

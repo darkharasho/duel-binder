@@ -29,7 +29,7 @@ export type ExportKind = 'text' | 'link' | 'ydk' | 'oplay' | 'oplayLink'
 
 /**
  * The deck's OPlay code, from the Leader's and the Deck's card numbers; `left` counts the entries
- * without one (left out).
+ * without one (left out): cards just added, whose facts the deck hasn't read back yet.
  */
 export function oplayCodeOf(
   cards: DeckEntry[],
@@ -64,7 +64,7 @@ export async function exportDeck(
         const what = kind === 'oplay' ? 'Copied the OPlay deck code' : 'Copied the OPlay link'
         toast.success(
           left > 0
-            ? `${what}. ${left} ${left === 1 ? 'card' : 'cards'} without a card number ${left === 1 ? 'was' : 'were'} left out.`
+            ? `${what}. ${left} ${left === 1 ? 'card' : 'cards'} left out — try again in a moment.`
             : what
         )
         return

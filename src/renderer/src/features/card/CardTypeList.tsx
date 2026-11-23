@@ -23,6 +23,8 @@ import { printingSummary } from './printingGroupData'
 interface CardTypeListProps {
   cardId: number
   cardName: string
+  /** The card's type once its details load ('DON!!' hides Add to deck). */
+  cardType?: string
   rows: CardTypeRow[]
   copies: EntryView[] | undefined
   /** The row the panel shows. */
@@ -94,6 +96,7 @@ const ownedIn = (card: ChecklistCard | undefined, printingId: number): number | 
 export function CardTypeList({
   cardId,
   cardName,
+  cardType,
   rows,
   copies,
   selectedKey,
@@ -386,7 +389,7 @@ export function CardTypeList({
             : undefined
         }
       />
-      {decksAvailable(def.id) && <AddToDeck game={def.id} cardId={cardId} />}
+      {decksAvailable(def.id) && <AddToDeck game={def.id} cardId={cardId} cardType={cardType} />}
     </section>
   )
 }

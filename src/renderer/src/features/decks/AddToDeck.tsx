@@ -45,8 +45,22 @@ async function factOf(cardId: number, known: DeckCard | undefined): Promise<Deck
   }
 }
 
-/** A menu of the game's decks (and a new one) to put one copy of the card into. */
-export function AddToDeck({ game, cardId }: { game: GameId; cardId: number }): React.JSX.Element {
+const DON = 'DON!!'
+
+/**
+ * A menu of the game's decks (and a new one) to put one copy of the card into. Not shown for a One
+ * Piece DON!! card (`cardType`), which never goes in a deck; one whose type isn't known yet is
+ * refused on add.
+ */
+export function AddToDeck({
+  game,
+  cardId,
+  cardType
+}: {
+  game: GameId
+  cardId: number
+  cardType?: string | null
+}): React.JSX.Element | null {
   const qc = useQueryClient()
   const pack = useRulesPack(game)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -63,6 +77,7 @@ export function AddToDeck({ game, cardId }: { game: GameId; cardId: number }): R
   /** Saves the draft with one more copy of the card, then says so (and what is wrong, if anything). */
   const add = async (base: DeckDraft & { uid?: string }, name: string): Promise<void> => {
     const fact = await factOf(cardId, list.data?.cardFacts[cardId])
+    if (game === 'op' && fact?.opCardType === DON) throw new Error("DON!! cards don't go in a deck")
     const cards: DeckEntry[] = addEntry(base.cards, cardId, defaultSection(game, fact))
     await api.decks.save({ ...base, cards })
     const facts = { ...list.data?.cardFacts, ...(fact ? { [cardId]: fact } : {}) }
@@ -106,6 +121,7 @@ export function AddToDeck({ game, cardId }: { game: GameId; cardId: number }): R
     }
   }
 
+  if (game === 'op' && cardType === DON) return null
   return (
     <>
       <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>

@@ -216,6 +216,7 @@ export function CardPanel({
       key={cardId}
       cardId={cardId}
       cardName={name ?? ''}
+      cardType={detail.data?.card.type}
       rows={rows}
       copies={copies.data}
       selectedKey={selected?.key}

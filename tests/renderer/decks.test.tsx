@@ -1312,6 +1312,52 @@ describe('One Piece on the deck screens', () => {
     )
   })
 
+  it('Add to deck is hidden on a DON!! card and refuses one whose type it only learns on add', async () => {
+    const DON = 600
+    const opDeck = deck({ game: 'op', format: 'standard', name: 'Straw Hats', cards: [] })
+    const donDetail = {
+      card: {
+        id: DON,
+        name: 'DON!!',
+        type: 'DON!!',
+        frameType: 'op',
+        onePiece: {
+          cardType: 'DON!!',
+          colors: [],
+          cost: null,
+          life: null,
+          power: null,
+          counter: null,
+          attribute: [],
+          traits: [],
+          blockIcon: null,
+          number: 'DON!!'
+        }
+      }
+    } as unknown as CardDetail
+    const api = pageApi(
+      detail({ ...opDeck, cardFacts: {} }),
+      { state: 'missing' },
+      {
+        cards: { get: vi.fn(async () => donDetail) },
+        decks: {
+          list: vi.fn(async () => ({ decks: [opDeck], cardFacts: {} })),
+          get: vi.fn(async () => ({ ...detail(opDeck), cardFacts: {} }))
+        }
+      }
+    )
+    const { unmount } = renderWithProviders(<AddToDeck game="op" cardId={DON} cardType="DON!!" />, {
+      api
+    })
+    expect(screen.queryByRole('button', { name: 'Add to deck' })).not.toBeInTheDocument()
+    unmount()
+    renderWithProviders(<AddToDeck game="op" cardId={DON} />, { api })
+    await userEvent.click(screen.getByRole('button', { name: 'Add to deck' }))
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Straw Hats' }))
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("DON!! cards don't go in a deck"))
+    expect(api.decks.save).not.toHaveBeenCalled()
+  })
+
   it('the deck page shows Leader above the Deck and passes the Leader colours to the adder', async () => {
     const opDetail = detail({
       game: 'op',
@@ -1359,7 +1405,7 @@ describe('One Piece on the deck screens', () => {
     await userEvent.click(items[1])
     await waitFor(() => expect(copy).toHaveBeenLastCalledWith(code))
     expect(toast.success).toHaveBeenLastCalledWith(
-      'Copied the OPlay deck code. 1 card without a card number was left out.'
+      'Copied the OPlay deck code. 1 card left out — try again in a moment.'
     )
     await userEvent.click((await open())[2])
     await waitFor(() => expect(copy).toHaveBeenLastCalledWith(oplayLink(code)))

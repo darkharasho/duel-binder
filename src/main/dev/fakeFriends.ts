@@ -346,6 +346,10 @@ export function createFakeFriends(
       if (u) blocked.set(u.id, u)
     },
     'friends:unblock': (id) => void blocked.delete(id as number),
+    // Reports go nowhere here; "Also block" still blocks, as the portal does.
+    'friends:report': (id, report) => {
+      if ((report as { block?: boolean } | undefined)?.block) handlers['friends:block']?.(id)
+    },
     'friends:collection': (id, f) =>
       listEntries(db, { ...(f as CollectionFilters), favourites: undefined }, scopeOf(id)).map(
         (e) => ({

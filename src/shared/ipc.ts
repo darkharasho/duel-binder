@@ -1,3 +1,4 @@
+import type { UserReportInput } from './friends'
 import type {
   AdminSupporters,
   AdminErrorGroup,
@@ -136,6 +137,8 @@ export interface Api {
     /** Also ends any friendship or request with them. */
     block(userId: number): Promise<void>
     unblock(userId: number): Promise<void>
+    /** Sends the owner a report about them; with `block`, blocks them too. */
+    report(userId: number, report: UserReportInput): Promise<void>
     /** An accepted friend's live entries, notes always ''. */
     collection(userId: number, f: CollectionFilters): Promise<EntryView[]>
     facets(userId: number): Promise<Facets>
@@ -563,6 +566,7 @@ export const INVOKE_CHANNELS = [
   'friends:remove',
   'friends:block',
   'friends:unblock',
+  'friends:report',
   'friends:collection',
   'friends:facets',
   'friends:stats',

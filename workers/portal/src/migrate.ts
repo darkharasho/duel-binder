@@ -1017,6 +1017,19 @@ CREATE TABLE decks (user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASC
 CREATE UNIQUE INDEX ux_decks_seq ON decks(seq);
 CREATE INDEX ix_decks_user_seq ON decks(user_id, seq);
 `
+  },
+  // Reports about other users (App Review guideline 1.2). Names are kept as they were reported;
+  // a deleted reporter leaves the report, a deleted reported account takes its reports with it.
+  {
+    name: 'server-54',
+    sql: `
+CREATE TABLE user_reports (id INTEGER PRIMARY KEY,
+  reporter_id INTEGER REFERENCES users(id) ON DELETE SET NULL, reporter_name TEXT NOT NULL,
+  reported_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, reported_name TEXT NOT NULL,
+  reason TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, handled_at TEXT);
+CREATE INDEX ix_user_reports_reporter ON user_reports(reporter_id, created_at);
+CREATE INDEX ix_user_reports_reported ON user_reports(reported_id);
+`
   }
 ]
 

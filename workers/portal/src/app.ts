@@ -9,6 +9,7 @@ import { adminMergeRoute } from './merge'
 import { adminTestersRoute } from './testers'
 import { adminTermsRoute } from './searchTerms'
 import { adminBetaRoute, betaSubmitRoute } from './beta'
+import { adminReportsRoute } from './reports'
 import { adminSeatsRoute } from './seats'
 import { fullPage, invitePage, waitlistRoute } from './seatPages'
 import { adminAdminsRoute } from './admins'
@@ -193,6 +194,8 @@ async function route(req: Request, deps: AppDeps): Promise<Response> {
     return adminTestersRoute(req, deps)
   if (url.pathname === '/admin/beta' || url.pathname.startsWith('/admin/beta/'))
     return adminBetaRoute(req, deps)
+  if (url.pathname === '/admin/reports' || url.pathname.startsWith('/admin/reports/'))
+    return adminReportsRoute(req, deps)
   if (url.pathname === '/admin/seats' || url.pathname.startsWith('/admin/seats/'))
     return adminSeatsRoute(req, deps)
   if (url.pathname === '/admin/terms' || url.pathname.startsWith('/admin/terms/'))

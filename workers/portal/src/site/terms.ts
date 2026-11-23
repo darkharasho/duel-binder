@@ -12,7 +12,7 @@ export function renderTerms(view: LegalView): string {
       description: 'The terms for using Duel Binder, its apps and its web portal.',
       heading: 'Terms of Service',
       lead: 'The rules for using Duel Binder: the desktop app, the phone app and the web portal.',
-      updated: 'Last updated November 16, 2026',
+      updated: 'Last updated November 22, 2026',
       sections: [
         [
           'Agreeing to these terms',
@@ -23,7 +23,7 @@ export function renderTerms(view: LegalView): string {
         [
           'The service',
           p(
-            'Duel Binder is a free, personal project for keeping track of a Yu-Gi-Oh! or Pokémon card collection. It may change, gain or lose features, or stop running, at any time and without notice.'
+            'Duel Binder is a free, personal project for keeping track of a Yu-Gi-Oh!, Pokémon, Magic: The Gathering or One Piece card collection. It may change, gain or lose features, or stop running, at any time and without notice.'
           )
         ],
         [
@@ -41,7 +41,7 @@ export function renderTerms(view: LegalView): string {
         [
           'Your account',
           p(
-            'You sign in with Discord or Apple, and their terms also apply to that account. You’re responsible for what happens while you’re signed in. You can delete your Duel Binder account at any time in Settings → Delete account.'
+            'You sign in with an email address and password, Discord or Apple; Discord’s and Apple’s terms also apply to those sign-ins. You’re responsible for what happens while you’re signed in. You can delete your Duel Binder account at any time in Settings → Delete account.'
           )
         ],
         [
@@ -57,11 +57,19 @@ export function renderTerms(view: LegalView): string {
           )
         ],
         [
+          'Objectionable content',
+          p(
+            'There is no tolerance for objectionable content or abusive users. Names, profile pictures, photos, notes and anything else other people can see must not be offensive, sexual, hateful, violent, harassing or illegal.',
+            'You can report anyone on your Friends page, or from a friend’s binder, with Report, and block them with Block. Reports go to us and are reviewed within 24 hours; content that breaks these rules is removed, and the account that posted it may be removed too. You can also email <a href="mailto:support@duelbinder.com">support@duelbinder.com</a>.'
+          )
+        ],
+        [
           'Card data, prices and trademarks',
           p(
             'Yu-Gi-Oh! and its card names, text and art belong to Konami. Duel Binder is not affiliated with or endorsed by Konami. Card data and images come from YGOPRODeck and Yugipedia; prices come from public listings.',
             'Pokémon and its card names, text and art belong to The Pokémon Company, Nintendo, Creatures and GAME FREAK. Duel Binder is not affiliated with or endorsed by them. Pokémon card data comes from TCGdex; booster pack images from the Bulbagarden Archives and TCGplayer, and set logos from TCGdex and the Pokémon TCG API.',
             `${MAGIC_FAN_CONTENT} ${SCRYFALL_CREDIT}.`,
+            'One Piece Card Game and its card names, text and art belong to Eiichiro Oda, Shueisha, Toei Animation and Bandai. Duel Binder is not affiliated with or endorsed by them.',
             'Prices and collection values are estimates and may be wrong or out of date. Don’t rely on them for buying, selling or insuring cards.'
           )
         ],

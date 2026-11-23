@@ -24,6 +24,7 @@ export const PORTAL_CHANNELS = [
   'friends:remove',
   'friends:block',
   'friends:unblock',
+  'friends:report',
   'friends:collection',
   'friends:facets',
   'friends:stats',

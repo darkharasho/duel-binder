@@ -202,3 +202,16 @@ export type AdminSeatsAction =
   | { action: 'cap'; cap: number }
   | { action: 'fill' }
   | { action: 'invite' | 'resend' | 'cancel' | 'delete'; id: number }
+
+/** One report from GET /admin/reports. Names are as they were when the report was made. */
+export interface AdminUserReport {
+  id: number
+  reporterId: number | null
+  reporterName: string
+  reportedId: number
+  reportedName: string
+  reason: 'name' | 'photo' | 'harassment' | 'other'
+  note: string
+  createdAt: string
+  handledAt: string | null
+}

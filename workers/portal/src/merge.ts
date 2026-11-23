@@ -318,6 +318,10 @@ function mergeFriends(db: SqlDb, a: MergeArgs, nowIso: string): void {
 
   db.prepare('DELETE FROM friendships WHERE requester_id = ? OR addressee_id = ?').run(c, c)
   db.prepare('DELETE FROM friend_blocks WHERE blocker_id = ? OR blocked_id = ?').run(c, c)
+  // Reports either way follow the account to the survivor (a report on yourself is dropped).
+  db.prepare('UPDATE user_reports SET reporter_id = ? WHERE reporter_id = ?').run(s, c)
+  db.prepare('UPDATE user_reports SET reported_id = ? WHERE reported_id = ?').run(s, c)
+  db.prepare('DELETE FROM user_reports WHERE reporter_id = reported_id').run()
 }
 
 /** Step 6: every sign-in of `closed` moves to `survivor`, with its Apple refresh token. */

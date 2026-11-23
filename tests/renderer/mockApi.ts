@@ -91,6 +91,7 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
       remove: vi.fn(async () => undefined),
       block: vi.fn(async () => undefined),
       unblock: vi.fn(async () => undefined),
+      report: vi.fn(async () => undefined),
       collection: vi.fn(async () => []),
       stats: vi.fn(async () => ({
         totalCards: 0,

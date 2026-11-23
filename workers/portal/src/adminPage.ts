@@ -649,6 +649,62 @@ async function loadSeats() {
   $('seats').replaceChildren(p)
 }
 
+const REPORT_REASONS = { name: 'Offensive name or picture', photo: 'Inappropriate photos', harassment: 'Harassment or spam', other: 'Something else' }
+
+/** User reports (App Review guideline 1.2: act on them within 24 hours). Each is also emailed to support. */
+async function loadReports() {
+  const p = el('section', null, 'panel')
+  p.append(el('h2', 'Reports'))
+  try {
+    const res = await fetch('/admin/reports', { credentials: 'same-origin' })
+    if (!res.ok) throw new Error('HTTP ' + res.status)
+    const data = await res.json()
+    const open = data.reports.filter((r) => !r.handledAt)
+    p.append(el('p', open.length + ' open. Remove what breaks the rules within 24 hours (rename, delete photos or the account), then mark it handled.', 'note'))
+    if (!data.reports.length) p.append(el('p', 'No reports yet.', 'note'))
+    else {
+      const table = el('table', null, 'history')
+      const hr = el('tr')
+      for (const h of ['Reported', 'By', 'Reason', 'Note', 'When', 'Status']) hr.append(el('th', h, 'l'))
+      hr.append(el('th', ''))
+      table.append(hr)
+      for (const r of data.reports) {
+        const tr = el('tr')
+        const cell = el('td', null, 'act')
+        const btn = el('button', r.handledAt ? 'Reopen' : 'Mark handled')
+        btn.type = 'button'
+        btn.addEventListener('click', async () => {
+          btn.disabled = true
+          try {
+            const res = await fetch('/admin/reports/handle', {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ id: r.id, handled: !r.handledAt })
+            })
+            if (!res.ok) alert('Failed: HTTP ' + res.status)
+            else loadReports()
+          } catch (e) {
+            alert('Failed: ' + e.message)
+          } finally {
+            btn.disabled = false
+          }
+        })
+        cell.append(btn)
+        tr.append(el('td', '@' + r.reportedName + ' (#' + r.reportedId + ')'), el('td', '@' + r.reporterName),
+          el('td', REPORT_REASONS[r.reason] || r.reason), el('td', r.note || '-'),
+          el('td', new Date(r.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }), 'v'),
+          el('td', r.handledAt ? 'Handled' : 'Open'), cell)
+        table.append(tr)
+      }
+      p.append(table)
+    }
+  } catch (e) {
+    p.append(el('p', 'Could not load reports: ' + e.message, 'note'))
+  }
+  $('reports').replaceChildren(p)
+}
+
 /** Phone beta requests from duelbinder.com/beta. Most are let in on their own; the rest wait here to be added in Play Console or TestFlight and marked. */
 async function loadBeta() {
   const p = el('section', null, 'panel')
@@ -1302,7 +1358,7 @@ async function loadSupporters() {
   }
 }
 
-const TABS = ['overview', 'runs', 'people', 'activity', 'costs', 'supporters', 'errors', 'scanner', 'storage', 'merges', 'testers', 'beta', 'seats', 'admins', 'photos', 'terms']
+const TABS = ['overview', 'runs', 'people', 'activity', 'costs', 'supporters', 'errors', 'scanner', 'storage', 'merges', 'testers', 'beta', 'seats', 'admins', 'photos', 'reports', 'terms']
 
 function showTab() {
   const wanted = location.hash.slice(1)
@@ -1316,7 +1372,7 @@ function showTab() {
 
 window.addEventListener('hashchange', showTab)
 showTab()
-$('refresh').addEventListener('click', () => { load(); loadErrors(); loadRuns(); loadMerges(); loadTesters(); loadBeta(); loadSeats(); loadAdmins(); loadPhotos(); loadCosts(); loadSupporters(); loadTerms() })
+$('refresh').addEventListener('click', () => { load(); loadErrors(); loadRuns(); loadMerges(); loadTesters(); loadBeta(); loadSeats(); loadAdmins(); loadPhotos(); loadCosts(); loadSupporters(); loadReports(); loadTerms() })
 load()
 loadErrors()
 loadRuns()
@@ -1328,6 +1384,7 @@ loadCosts()
 loadSupporters()
 loadBeta()
 loadSeats()
+loadReports()
 loadTerms()
 `
 
@@ -1360,7 +1417,7 @@ export function adminPage(): Response {
 <header><div class="wrap">
 <div class="top"><h1>Duel Binder</h1><span class="badge">Admin</span><span class="pulse" id="pulse"></span>
 <span class="grow"></span><span class="at" id="at"></span><a href="/">Back to the app</a><button id="refresh" type="button">Refresh</button></div>
-<nav aria-label="Admin sections"><a href="#overview">Overview</a><a href="#runs">Runs</a><a href="#people">Users</a><a href="#activity">Usage</a><a href="#costs">Costs</a><a href="#supporters">Supporters</a><a href="#errors">Errors</a><a href="#scanner">Scanner &amp; prices</a><a href="#storage">Storage</a><a href="#merges">Merges</a><a href="#testers">Testers</a><a href="#beta">Beta</a><a href="#seats">Seats</a><a href="#admins">Admins</a><a href="#photos">Photos</a><a href="#terms">Terms</a></nav>
+<nav aria-label="Admin sections"><a href="#overview">Overview</a><a href="#runs">Runs</a><a href="#people">Users</a><a href="#activity">Usage</a><a href="#costs">Costs</a><a href="#supporters">Supporters</a><a href="#errors">Errors</a><a href="#scanner">Scanner &amp; prices</a><a href="#storage">Storage</a><a href="#merges">Merges</a><a href="#testers">Testers</a><a href="#beta">Beta</a><a href="#seats">Seats</a><a href="#admins">Admins</a><a href="#photos">Photos</a><a href="#reports">Reports</a><a href="#terms">Terms</a></nav>
 </div></header>
 <main class="wrap">
 <section data-tab id="overview">
@@ -1381,6 +1438,7 @@ export function adminPage(): Response {
 <section data-tab id="seats" hidden></section>
 <section data-tab id="admins" hidden></section>
 <section data-tab id="photos" hidden></section>
+<section data-tab id="reports" hidden></section>
 <section data-tab id="terms" hidden></section>
 </main>
 <script nonce="${nonce}">${script()}</script>

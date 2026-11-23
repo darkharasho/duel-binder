@@ -196,6 +196,60 @@ describe('friends page', () => {
     )
   })
 
+  it('reports a friend with a reason and note, blocking them by default', async () => {
+    const user = userEvent.setup()
+    const api = make({ friends: [bob], incoming: [], blocked: [] })
+    renderWithProviders(<FriendsPage />, { api })
+    await screen.findByText('Bob')
+    await user.click(screen.getByRole('button', { name: 'Report' }))
+    const dialog = await screen.findByRole('dialog')
+    const send = within(dialog).getByRole('button', { name: 'Send report' })
+    // A reason has to be picked first.
+    expect(send).toBeDisabled()
+    await user.click(within(dialog).getByLabelText('Inappropriate photos'))
+    await user.type(within(dialog).getByLabelText('More detail (optional)'), ' rude ')
+    expect(within(dialog).getByRole('checkbox', { name: 'Also block Bob' })).toBeChecked()
+    await user.click(send)
+    expect(api.friends.report).toHaveBeenCalledWith(2, {
+      reason: 'photo',
+      note: 'rude',
+      block: true
+    })
+    expect(await screen.findByText('Thanks for reporting')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Done' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
+  it('reports without blocking when the box is cleared, and offers no block for blocked users', async () => {
+    const user = userEvent.setup()
+    const api = make({ friends: [bob], incoming: [], blocked: [alice(3)] })
+    renderWithProviders(<FriendsPage />, { api })
+    await screen.findByText('Bob')
+    const [friendReport, blockedReport] = screen.getAllByRole('button', { name: 'Report' })
+    await user.click(friendReport)
+    let dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByLabelText('Harassment or spam'))
+    await user.click(within(dialog).getByRole('checkbox', { name: 'Also block Bob' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Send report' }))
+    expect(api.friends.report).toHaveBeenLastCalledWith(2, {
+      reason: 'harassment',
+      note: '',
+      block: false
+    })
+    await user.click(await screen.findByRole('button', { name: 'Done' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await user.click(blockedReport)
+    dialog = await screen.findByRole('dialog')
+    expect(within(dialog).queryByRole('checkbox')).toBeNull()
+    await user.click(within(dialog).getByLabelText('Offensive name or picture'))
+    await user.click(within(dialog).getByRole('button', { name: 'Send report' }))
+    expect(api.friends.report).toHaveBeenLastCalledWith(3, {
+      reason: 'name',
+      note: '',
+      block: false
+    })
+  })
+
   it('accepts and ignores incoming requests, then refetches', async () => {
     const user = userEvent.setup()
     const api = make({

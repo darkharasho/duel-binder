@@ -812,7 +812,7 @@ describe('server-42 feeds mtg_cards', () => {
           name: string
         }
       ).name
-    ).toBe('server-53')
+    ).toBe('server-54')
     db.close()
   })
 })
@@ -879,6 +879,37 @@ describe('server-52 (seat cap)', () => {
       expect.arrayContaining(['token_hash', 'waitlist_id', 'email', 'used_at', 'used_by'])
     )
     expect(db.prepare('SELECT cap FROM seat_settings').get()).toEqual({ cap: 100 })
+    db.close()
+  })
+})
+
+describe('server-54 (user reports)', () => {
+  it('keeps a report when the reporter goes and drops it with the reported account', () => {
+    const db = freshDb()
+    migrateServer(db)
+    db.pragma('foreign_keys = ON')
+    const add = (d: string, u: string): number =>
+      Number(
+        db
+          .prepare(
+            "INSERT INTO users (discord_id, username, created_at, updated_at) VALUES (?, ?, 'x', 'x')"
+          )
+          .run(d, u).lastInsertRowid
+      )
+    const a = add('1', 'a')
+    const b = add('2', 'b')
+    const c = add('3', 'c')
+    const report = db.prepare(
+      `INSERT INTO user_reports (reporter_id, reporter_name, reported_id, reported_name, reason, created_at)
+        VALUES (?, '', ?, '', 'other', 'x')`
+    )
+    report.run(a, b)
+    report.run(a, c)
+    db.prepare('DELETE FROM users WHERE id = ?').run(a)
+    db.prepare('DELETE FROM users WHERE id = ?').run(c)
+    expect(db.prepare('SELECT reporter_id, reported_id FROM user_reports').all()).toEqual([
+      { reporter_id: null, reported_id: b }
+    ])
     db.close()
   })
 })

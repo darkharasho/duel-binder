@@ -17,6 +17,7 @@ import type { Friend, FriendUser } from '@shared/types'
 import { AddFriendForm } from './AddFriendForm'
 import { FriendAvatar } from './FriendAvatar'
 import { FriendBinder } from './FriendBinder'
+import { ReportDialog } from './ReportDialog'
 
 type Confirming = { id: number; action: 'unfriend' | 'block' }
 
@@ -57,6 +58,7 @@ export function FriendsPage(): React.JSX.Element {
   const overview = useFriendsOverview()
   const [viewing, setViewing] = useState<Friend | null>(null)
   const [confirming, setConfirming] = useState<Confirming | null>(null)
+  const [reporting, setReporting] = useState<{ user: FriendUser; blocked: boolean } | null>(null)
   const refresh = (): Promise<void> => qc.invalidateQueries({ queryKey: queryKeys.friends })
   const act = useMutation({
     mutationFn: (fn: () => Promise<unknown>) => fn(),
@@ -94,6 +96,11 @@ export function FriendsPage(): React.JSX.Element {
       onClick={() => setConfirming({ id: user.id, action: 'block' })}
     >
       Block
+    </Button>
+  )
+  const reportButton = (user: FriendUser, blocked = false): React.JSX.Element => (
+    <Button size="sm" variant="ghost" onClick={() => setReporting({ user, blocked })}>
+      Report
     </Button>
   )
 
@@ -154,6 +161,7 @@ export function FriendsPage(): React.JSX.Element {
             >
               Cancel request
             </Button>
+            {reportButton(r)}
           </li>
         ))}
       </ul>
@@ -212,6 +220,7 @@ export function FriendsPage(): React.JSX.Element {
                       Ignore
                     </Button>
                     {blockButton(r)}
+                    {reportButton(r)}
                   </>
                 )}
               </li>
@@ -274,6 +283,7 @@ export function FriendsPage(): React.JSX.Element {
                         Unfriend
                       </Button>
                       {blockButton(f)}
+                      {reportButton(f)}
                     </>
                   )}
                 </li>
@@ -302,10 +312,18 @@ export function FriendsPage(): React.JSX.Element {
                 >
                   Unblock
                 </Button>
+                {reportButton(b, true)}
               </li>
             ))}
           </ul>
         </section>
+      )}
+      {reporting && (
+        <ReportDialog
+          user={reporting.user}
+          blocked={reporting.blocked}
+          onClose={() => setReporting(null)}
+        />
       )}
     </div>
   )

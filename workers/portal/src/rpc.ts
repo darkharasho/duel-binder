@@ -100,6 +100,7 @@ import { openManage, showOnSite, startCheckout, supporterStatus } from './suppor
 import { dismissLinkHint, listSignIns, removeSignIn, setUsername } from './accountRpc'
 import { linkApple, linkCode } from './link'
 import { mergeWithTicket } from './merge'
+import { checkReport, reportUser } from './reports'
 import { GAME_HEADER } from '../../../src/shared/cloud'
 import {
   decksForFriends,
@@ -250,6 +251,8 @@ const HANDLERS: { [C in Exclude<PortalChannel, AccountLinkChannel>]: Handler<C> 
   'friends:block': ({ db, userId, now }, _s, id) =>
     blockUser(db, userId, checkId(id, 'userId'), now()),
   'friends:unblock': ({ db, userId }, _s, id) => unblockUser(db, userId, checkId(id, 'userId')),
+  'friends:report': (deps, _s, id, report) =>
+    reportUser(deps, deps.userId, checkId(id, 'userId'), checkReport(report), deps.now()),
   // A friend's binder shows the caller's game; a friend who can't use it simply has no rows there.
   'friends:collection': ({ db, userId, game }, _s, id, f) => {
     const friend = friendId(db, userId, id)

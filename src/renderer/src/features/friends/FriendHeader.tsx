@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { SupporterHeart } from '@/components/SupporterHeart'
 import { ArrowLeft } from 'lucide-react'
 import type { Friend } from '@shared/types'
@@ -5,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { UnderlineTabs } from '@/components/UnderlineTabs'
 import { formatRelative } from '@/lib/format'
 import { FriendAvatar } from './FriendAvatar'
+import { ReportDialog } from './ReportDialog'
 
 export type BinderTab =
   'dashboard' | 'collection' | 'sets' | 'wishlist' | 'graded' | 'binders' | 'decks' | 'sessions'
@@ -47,6 +49,7 @@ export function FriendHeader({
   /** Whether they share any decks in this game; the Decks tab is hidden otherwise. */
   showDecks?: boolean
 }): React.JSX.Element {
+  const [reporting, setReporting] = useState(false)
   return (
     <>
       <div className="flex items-center gap-3">
@@ -64,7 +67,25 @@ export function FriendHeader({
             @{friend.username} · Updated {formatRelative(friend.updatedAt)}
           </p>
         </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="ml-auto shrink-0 text-muted-foreground"
+          onClick={() => setReporting(true)}
+        >
+          Report
+        </Button>
       </div>
+      {reporting && (
+        <ReportDialog
+          user={friend}
+          onClose={(blockedThem) => {
+            setReporting(false)
+            // Blocked: their binder can't be read any more, so back to the list.
+            if (blockedThem) onBack()
+          }}
+        />
+      )}
       <div className="flex items-end justify-between gap-4">
         <UnderlineTabs
           label="Collection"

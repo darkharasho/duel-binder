@@ -221,6 +221,7 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       remove: call('friends:remove'),
       block: call('friends:block'),
       unblock: call('friends:unblock'),
+      report: call('friends:report'),
       collection: call('friends:collection'),
       facets: call('friends:facets'),
       stats: call('friends:stats'),

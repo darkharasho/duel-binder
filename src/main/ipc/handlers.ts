@@ -14,6 +14,7 @@ import type {
 import { MAX_DEX_ROWS, type DexRow } from '@shared/dex/parse'
 import { checkPlaceholderRequest } from '@shared/placeholders'
 import type { GradedCopy } from '@shared/graded'
+import type { UserReportInput } from '@shared/friends'
 import type { ScanSession } from '@shared/scanSessions'
 import {
   friendBinder,
@@ -224,6 +225,8 @@ export function createHandlers({
     'friends:remove': async (userId: number) => account.portal('friends:remove', [userId]),
     'friends:block': async (userId: number) => account.portal('friends:block', [userId]),
     'friends:unblock': async (userId: number) => account.portal('friends:unblock', [userId]),
+    'friends:report': async (userId: number, report: UserReportInput) =>
+      account.portal('friends:report', [userId, report]),
     // A friend's printing ids are the server's: each is looked up in this catalog (friendPrintings.ts).
     'friends:collection': async (userId: number, f: CollectionFilters) => {
       const entries = await account.portal<EntryView[]>('friends:collection', [userId, f])

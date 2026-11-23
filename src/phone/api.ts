@@ -253,6 +253,7 @@ export function createPhoneApi(deps: {
       remove: portal('friends:remove'),
       block: portal('friends:block'),
       unblock: portal('friends:unblock'),
+      report: portal('friends:report'),
       // A friend's printing ids are the server's: each is looked up in this catalog (friendPrintings.ts).
       collection: async (userId: number, f: CollectionFilters) => {
         const entries = await store.portal<EntryView[]>('friends:collection', [userId, f])

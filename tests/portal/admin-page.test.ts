@@ -51,6 +51,13 @@ describe('admin page', () => {
     expect(html).not.toMatch(/innerHTML/)
   })
 
+  it('has a Reports tab', async () => {
+    const html = await adminPage().text()
+    expect(html).toContain('href="#reports"')
+    expect(html).toContain('id="reports"')
+    expect(html).toContain("fetch('/admin/reports'")
+  })
+
   it('has a Photos tab', async () => {
     const html = await adminPage().text()
     expect(html).toContain('href="#photos"')

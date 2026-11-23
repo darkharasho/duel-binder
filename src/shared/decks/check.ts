@@ -1,5 +1,6 @@
 import { formatOf } from './formats'
 import type { PackState } from './pack'
+import { checkPkm } from './pokemon/check'
 import { checkYgo } from './ygo/check'
 import type { DeckCard, DeckSection, DeckVerdictMark, VerdictStatus, WireDeck } from './types'
 
@@ -30,7 +31,20 @@ export function daysBetween(from: string, to: string): number {
 
 /** Sort rank within a severity: counts, copies, limits, placement, region, stale. */
 function rank(key: string): number {
-  const order = ['count', 'copies', 'limit', 'place', 'region', 'stale']
+  const order = [
+    'count',
+    'copies',
+    'limit',
+    'ace',
+    'radiant',
+    'basic',
+    'legal',
+    'banned',
+    'unsure',
+    'place',
+    'region',
+    'stale'
+  ]
   const i = order.indexOf(key.split(':')[0])
   return i < 0 ? order.length : i
 }
@@ -62,6 +76,19 @@ export function checkDeck(
           key: 'stale',
           severity: 'warning',
           message: `The ban list here is from ${ready.builtAt.slice(0, 10)} and may be out of date`
+        })
+      }
+    }
+  } else if (deck.game === 'pkm') {
+    const ready = pack.state === 'ready' && pack.pack.game === 'pkm' ? pack.pack : null
+    problems.push(...checkPkm(deck, format, cards, ready))
+    if (ready) {
+      packVersion = ready.version
+      if (daysBetween(ready.builtAt, today) > STALE_DAYS) {
+        problems.push({
+          key: 'stale',
+          severity: 'warning',
+          message: `The rules here are from ${ready.builtAt.slice(0, 10)} and may be out of date`
         })
       }
     }

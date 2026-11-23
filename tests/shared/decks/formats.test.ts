@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultSection } from '../../../src/shared/decks/formats'
+import { DECK_FORMATS, decksAvailable, defaultSection } from '../../../src/shared/decks/formats'
 import type { DeckCard } from '../../../src/shared/decks/types'
 
 const c = (frameType: string): DeckCard => ({
@@ -30,5 +30,14 @@ describe('defaultSection', () => {
     for (const f of ['effect', 'normal', 'ritual', 'effect_pendulum', 'spell', 'trap', 'token'])
       expect(defaultSection('ygo', c(f))).toBe('main')
     expect(defaultSection('ygo', undefined)).toBe('main')
+  })
+})
+
+describe('pkm formats', () => {
+  it('has Standard and Expanded with one 60-card section', () => {
+    expect(DECK_FORMATS.pkm.map((f) => f.id)).toEqual(['standard', 'expanded'])
+    for (const f of DECK_FORMATS.pkm)
+      expect(f.sections).toEqual([{ id: 'main', label: 'Deck', min: 60, max: 60 }])
+    expect(decksAvailable('pkm')).toBe(true)
   })
 })

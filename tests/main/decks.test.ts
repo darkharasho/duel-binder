@@ -104,9 +104,12 @@ describe('decks repo', () => {
          VALUES ('pkm', 9001, 'en', ?, ?, 'Common')`
       ).run(`Set ${code}`, code)
     const pkm = localScope("'pkm'")
-    // Pokémon formats are not defined yet, so move a saved deck over by hand.
-    const uid = saveDeck(db, draft({ cards: [{ section: 'main', card: 9001, qty: 1 }] }), T1)
-    db.prepare("UPDATE decks SET game = 'pkm' WHERE uid = ?").run(uid)
+    const uid = saveDeck(
+      db,
+      draft({ format: 'standard', cards: [{ section: 'main', card: 9001, qty: 1 }] }),
+      T1,
+      pkm
+    )
     expect(getDeck(db, uid, pkm)!.cardFacts[9001]).toMatchObject({
       sourceId: 'en/sv01-057',
       code: 'PAL 001/193'

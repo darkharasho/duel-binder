@@ -23,12 +23,17 @@ const YGO_SECTIONS: SectionDef[] = [
   { id: 'side', label: 'Side Deck', min: 0, max: 15 }
 ]
 
+const PKM_SECTIONS: SectionDef[] = [{ id: 'main', label: 'Deck', min: 60, max: 60 }]
+
 export const DECK_FORMATS: Record<GameId, readonly DeckFormat[]> = {
   ygo: [
     { id: 'advanced', label: 'Advanced (TCG)', sections: YGO_SECTIONS, priceRegion: 'en' },
     { id: 'ocg', label: 'OCG', sections: YGO_SECTIONS, priceRegion: 'asia' }
   ],
-  pkm: [],
+  pkm: [
+    { id: 'standard', label: 'Standard', sections: PKM_SECTIONS, priceRegion: 'en' },
+    { id: 'expanded', label: 'Expanded', sections: PKM_SECTIONS, priceRegion: 'en' }
+  ],
   op: [],
   mtg: []
 }

@@ -56,8 +56,9 @@ describe('checkDeckFields', () => {
     expect(r.cards[0].card).toBe(99999999)
   })
 
-  it('decksAvailable is true only for ygo in step 1', () => {
+  it('decksAvailable is true for ygo and pkm', () => {
     expect(decksAvailable('ygo')).toBe(true)
-    for (const g of ['pkm', 'op', 'mtg'] as const) expect(decksAvailable(g)).toBe(false)
+    expect(decksAvailable('pkm')).toBe(true)
+    for (const g of ['op', 'mtg'] as const) expect(decksAvailable(g)).toBe(false)
   })
 })

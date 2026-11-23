@@ -1,4 +1,5 @@
 import type { GameId } from '../games'
+import { pkmKind } from './pokemon/keys'
 import type { DeckCard, DeckEntry } from './types'
 
 /** Monsters 0, spells 1, traps 2, anything else (or a card missing from the map) 3. */
@@ -10,13 +11,20 @@ function ygoRank(card: DeckCard | undefined): number {
   return 3
 }
 
+/** Pokémon 0, Trainer 1, Energy 2, anything else (or a card missing from the map) 3. */
+function pkmRank(card: DeckCard | undefined): number {
+  const k = card ? pkmKind(card.type) : null
+  return k === 'P' ? 0 : k === 'T' ? 1 : k === 'E' ? 2 : 3
+}
+
 /** A sorted copy for display and export; entries that tie keep their given order. */
 export function sortEntries(
   game: GameId,
   entries: DeckEntry[],
   cards: Record<number, DeckCard>
 ): DeckEntry[] {
-  const rank = (e: DeckEntry): number => (game === 'ygo' ? ygoRank(cards[e.card]) : 0)
+  const rank = (e: DeckEntry): number =>
+    game === 'ygo' ? ygoRank(cards[e.card]) : game === 'pkm' ? pkmRank(cards[e.card]) : 0
   return [...entries].sort((a, b) => {
     const r = rank(a) - rank(b)
     if (r !== 0) return r

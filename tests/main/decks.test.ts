@@ -544,6 +544,67 @@ describe('pkm basic Energy resolution', () => {
   })
 })
 
+describe('op deck line resolution', () => {
+  it('matches a card number, English twin first, else falls back to the name', async () => {
+    const db = await seededDb()
+    const op = localScope("'op'")
+    const card = (id: number, name: string, number: string, lang: string): void => {
+      db.prepare(
+        `INSERT INTO cards (id, game, name, type, frame_type, race, "desc", updated_at)
+         VALUES (?, 'op', ?, 'Character', 'op', '', '', '2026-11-22')`
+      ).run(id, name)
+      db.prepare(
+        `INSERT INTO onepiece_cards (card_id, number, colors, card_type, cost)
+         VALUES (?, ?, '["Red"]', 'Character', 2)`
+      ).run(id, number)
+      db.prepare(
+        `INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity)
+         VALUES ('op', ?, ?, 'Set', ?, 'Common')`
+      ).run(id, lang, number)
+    }
+    card(9301, 'Nami', 'OP01-016', 'ja')
+    card(9302, 'Nami', 'OP01-016', 'en')
+    card(9303, 'Nami', 'OP01-016', 'en')
+    card(9304, 'Japan Only', 'OP14-001', 'ja')
+    card(9305, 'Sabo', 'OP13-086', 'en')
+    db.exec("INSERT INTO cards_fts(cards_fts) VALUES('rebuild')")
+    const res = resolveDeckLines(
+      db,
+      [
+        { opNumber: 'OP01-016', name: '' },
+        { opNumber: 'op01-016', name: 'Whatever' },
+        { opNumber: 'OP14-001', name: '' },
+        { opNumber: 'OP99-999', name: 'Sabo' },
+        { opNumber: 'OP99-999', name: '' }
+      ],
+      op
+    )
+    expect(res[0]).toEqual({ status: 'matched', card: 9302, name: 'Nami', frameType: 'op' })
+    expect(res[1]).toMatchObject({ status: 'matched', card: 9302 })
+    expect(res[2]).toMatchObject({ status: 'matched', card: 9304, name: 'Japan Only' })
+    expect(res[3]).toMatchObject({ status: 'matched', card: 9305, name: 'Sabo' })
+    expect(res[4]).toEqual({ status: 'unmatched' })
+  })
+
+  it('leaves an op card number unmatched on another game', async () => {
+    const db = await seededDb()
+    expect(
+      resolveDeckLines(db, [{ opNumber: 'OP01-016', name: 'Dark Magician' }], localScope("'ygo'"))
+    ).toEqual([{ status: 'unmatched' }])
+  })
+
+  it('checks op card number lengths', async () => {
+    const db = await seededDb()
+    const op = localScope("'op'")
+    expect(() => resolveDeckLines(db, [{ opNumber: 'X'.repeat(33), name: '' }], op)).toThrow(
+      CollectionError
+    )
+    expect(() =>
+      resolveDeckLines(db, [{ opNumber: 'OP01-001', name: 'n'.repeat(201) }], op)
+    ).toThrow(CollectionError)
+  })
+})
+
 describe('decks repo on the server', () => {
   it('saves, lists, marks and tombstones one user’s decks by seq', async () => {
     const db = await seededServerDb()

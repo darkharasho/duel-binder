@@ -23,6 +23,7 @@ const MAX_UID = 64
 const MAX_PACK_VERSION = 32
 const MAX_REFS = 300
 const MAX_REF_TEXT = 200
+const MAX_OP_NUMBER = 32
 /** Name matches read per import line: a whole-name match is among the shortest names hit. */
 const NAME_HITS = 200
 const VERDICT_STATUSES: readonly VerdictStatus[] = [
@@ -499,6 +500,16 @@ function checkRefs(v: unknown): DeckLineRef[] {
       return { passcode: o.passcode }
     if (typeof o.setCode === 'string' && o.setCode.length <= MAX_REF_TEXT)
       return { setCode: o.setCode.trim() }
+    if (o.opNumber !== undefined) {
+      // A One Piece line's card number, with its name ('' when the line had none).
+      if (
+        typeof o.opNumber !== 'string' ||
+        o.opNumber.length > MAX_OP_NUMBER ||
+        (o.name !== undefined && (typeof o.name !== 'string' || o.name.length > MAX_REF_TEXT))
+      )
+        throw new CollectionError('A deck line has a bad card number or name')
+      return { opNumber: o.opNumber.trim(), name: typeof o.name === 'string' ? o.name : '' }
+    }
     if (typeof o.name === 'string' && o.name.length <= MAX_REF_TEXT) {
       // A Pokémon line's set and number; malformed ones are dropped and the name alone is used.
       if (
@@ -510,14 +521,16 @@ function checkRefs(v: unknown): DeckLineRef[] {
         return { set: o.set, number: o.number, name: o.name }
       return { name: o.name }
     }
-    throw new CollectionError('A deck line needs a passcode, set code or name')
+    throw new CollectionError('A deck line needs a passcode, set code, card number or name')
   })
 }
 
 /**
  * Finds the scope's card for each imported deck line: a passcode is a card id or an alternate
  * art's image id; a set code is any printing's (cards sharing one are ambiguous); a name must equal
- * a card's whole name once both are normalised, so a partial name is unmatched.
+ * a card's whole name once both are normalised, so a partial name is unmatched. A One Piece card
+ * number finds the lowest id with an English printing, else the lowest id (twins share the rules),
+ * else falls back to the line's name; on another game it is unmatched.
  */
 export function resolveDeckLines(db: SqlDb, refs: unknown, scope: Scope = LOCAL): DeckResolution[] {
   const lines = checkRefs(refs)
@@ -587,6 +600,36 @@ export function resolveDeckLines(db: SqlDb, refs: unknown, scope: Scope = LOCAL)
       }
   }
 
+  // One Piece card numbers, case ignored: the lowest id with an English printing, else the lowest.
+  const byOpNumber = new Map<string, number>()
+  const opNumbers = [
+    ...new Set(
+      lines.flatMap((r) => ('opNumber' in r && r.opNumber ? [r.opNumber.toUpperCase()] : []))
+    )
+  ]
+  const opScope = lines.some((r) => 'opNumber' in r) && scopeGame(db, scope) === 'op'
+  if (opScope && opNumbers.length > 0) {
+    const best = new Map<string, { id: number; en: boolean }>()
+    for (const r of db
+      .prepare(
+        `SELECT o.number, o.card_id,
+                EXISTS (SELECT 1 FROM card_printings p WHERE p.card_id = o.card_id
+                        AND +p.game = ${scope.game} AND p.language = 'en') AS en
+         FROM onepiece_cards o JOIN cards c ON c.id = o.card_id AND +c.game = ${scope.game}
+         WHERE o.number COLLATE NOCASE IN ${IN_LIST}`
+      )
+      .all(JSON.stringify(opNumbers)) as { number: string; card_id: number; en: number }[]) {
+      const key = r.number.toUpperCase()
+      const en = r.en === 1
+      const have = best.get(key)
+      if (!have || (en && !have.en) || (en === have.en && r.card_id < have.id))
+        best.set(key, { id: r.card_id, en })
+    }
+    for (const [k, v] of best) byOpNumber.set(k, v.id)
+  }
+  const opHit = (r: DeckLineRef): number | undefined =>
+    opScope && 'opNumber' in r ? byOpNumber.get(r.opNumber.toUpperCase()) : undefined
+
   const setHit = (r: DeckLineRef): boolean => 'set' in r && bySetNumber.has(setKey(r.set, r.number))
 
   const named = db.prepare(
@@ -598,6 +641,7 @@ export function resolveDeckLines(db: SqlDb, refs: unknown, scope: Scope = LOCAL)
   const byName = new Map<string, Hit[]>()
   for (const r of lines) {
     if (!('name' in r) || setHit(r)) continue
+    if ('opNumber' in r && (!opScope || opHit(r) !== undefined)) continue
     const want = normalName(r.name)
     if (byName.has(want)) continue
     const tokens = want.split(/[^\p{L}\p{N}]+/u).filter(Boolean)
@@ -628,6 +672,7 @@ export function resolveDeckLines(db: SqlDb, refs: unknown, scope: Scope = LOCAL)
   for (const id of byPasscode.values()) wanted.add(id)
   for (const ids of byCode.values()) for (const id of ids) wanted.add(id)
   for (const ids of bySetNumber.values()) for (const id of ids) wanted.add(id)
+  for (const id of byOpNumber.values()) wanted.add(id)
   const missing = [...wanted].filter((id) => !names.has(id))
   if (missing.length > 0)
     for (const r of db
@@ -664,6 +709,11 @@ export function resolveDeckLines(db: SqlDb, refs: unknown, scope: Scope = LOCAL)
     }
     if ('setCode' in r)
       return resolve([...(byCode.get(r.setCode.toLowerCase()) ?? [])].sort((a, b) => a - b))
+    if ('opNumber' in r) {
+      if (!opScope) return { status: 'unmatched' }
+      const card = opHit(r)
+      if (card !== undefined) return { status: 'matched', card, ...fact(card) }
+    }
     const byNameIds = (): number[] => (byName.get(normalName(r.name)) ?? []).map((h) => h.id)
     // Basic Energy is interchangeable: of several cards, take the SVE one, else the lowest id.
     const byBasicName = (): DeckResolution => {

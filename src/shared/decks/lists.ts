@@ -1,10 +1,14 @@
 import type { DeckSection } from './types'
 
-/** One imported line's reference to a card; Pokémon lines carry a set and number when they have them. */
+/**
+ * One imported line's reference to a card; Pokémon lines carry a set and number when they have them,
+ * One Piece lines a card number (name '' when the line has none).
+ */
 export type DeckLineRef =
   | { passcode: number }
   | { setCode: string }
   | { set: string; number: string; name: string }
+  | { opNumber: string; name: string }
   | { name: string }
 export interface ParsedLine {
   line: number

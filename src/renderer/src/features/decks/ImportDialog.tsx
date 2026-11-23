@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { DECK_FORMATS, formatOf } from '@shared/decks/formats'
 import { MAX_DECK_NAME } from '@shared/decks/fields'
 import type { DeckCard, DeckEntry } from '@shared/decks/types'
+import { parsePtcgl } from '@shared/decks/pokemon/ptcgl'
 import { detectYgoList, parseYgoList } from '@shared/decks/ygo/lists'
 import type { GameId } from '@shared/games'
 import { Button } from '@/components/ui/button'
@@ -84,12 +85,13 @@ export function ImportDialog({
     setSearching(null)
     setConfirming(false)
     try {
-      const parsed = parseYgoList(source)
+      const pkm = game === 'pkm'
+      const parsed = pkm ? parsePtcgl(source) : parseYgoList(source)
       const resolutions = parsed.lines.length
         ? await api.decks.resolve(parsed.lines.map((l) => l.ref))
         : []
       if (!parsed.lines.length && !parsed.skipped.length) setError('Nothing to import in that.')
-      else setPreview(buildPreview(parsed, resolutions, detectYgoList(source), game))
+      else setPreview(buildPreview(parsed, resolutions, pkm ? 'text' : detectYgoList(source), game))
     } catch (e) {
       setError(errorMessage(e, 'Could not read the list'))
     } finally {
@@ -181,7 +183,11 @@ export function ImportDialog({
               id="deck-list"
               value={text}
               rows={6}
-              placeholder="Paste a deck list, a .ydk, or a ydke:// link"
+              placeholder={
+                game === 'pkm'
+                  ? 'Paste a deck list from Pokémon TCG Live'
+                  : 'Paste a deck list, a .ydk, or a ydke:// link'
+              }
               onChange={(e) => {
                 setText(e.target.value)
                 // A preview is of the text it read; an edit after it needs a new one.
@@ -209,7 +215,7 @@ export function ImportDialog({
               <input
                 ref={file}
                 type="file"
-                accept=".ydk,.txt"
+                accept={game === 'pkm' ? '.txt' : '.ydk,.txt'}
                 aria-label="Deck file"
                 className="hidden"
                 onChange={(e) => {

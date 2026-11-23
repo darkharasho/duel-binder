@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { defaultSection, type DeckFormat } from '@shared/decks/formats'
 import type { DeckCard, DeckSection } from '@shared/decks/types'
+import { pkmKind } from '@shared/decks/pokemon/keys'
 import { isExtraFrame } from '@shared/decks/ygo/check'
 import type { GameId } from '@shared/games'
 import type { BrowseCard } from '@shared/types'
@@ -15,18 +16,28 @@ import { DRAG_CARD, SECTION_HEADING, deckCardOf } from './deckEntries'
 const RESULTS = 60
 
 export type AdderTab = 'add' | 'missing' | 'notes'
-type Kind = 'monster' | 'spell' | 'trap' | 'extra'
+type Kind = 'monster' | 'spell' | 'trap' | 'extra' | 'P' | 'T' | 'E'
 
-const KINDS: { id: Kind; label: string }[] = [
+const YGO_KINDS: { id: Kind; label: string }[] = [
   { id: 'monster', label: 'Monster' },
   { id: 'spell', label: 'Spell' },
   { id: 'trap', label: 'Trap' },
   { id: 'extra', label: 'Extra' }
 ]
+const PKM_KINDS: { id: Kind; label: string }[] = [
+  { id: 'P', label: 'Pokémon' },
+  { id: 'T', label: 'Trainer' },
+  { id: 'E', label: 'Energy' }
+]
+const KINDS_OF: Partial<Record<GameId, { id: Kind; label: string }[]>> = {
+  ygo: YGO_KINDS,
+  pkm: PKM_KINDS
+}
 const EXTRA_TYPE = /Fusion|Synchro|XYZ|Link/i
 
 /** Whether a Yu-Gi-Oh! type line ('Effect Monster', 'Spell Card') is of the kind. */
 function typeIs(kind: Kind, type: string): boolean {
+  if (kind === 'P' || kind === 'T' || kind === 'E') return pkmKind(type) === kind
   const monster = type.includes('Monster')
   switch (kind) {
     case 'monster':
@@ -37,12 +48,16 @@ function typeIs(kind: Kind, type: string): boolean {
       return type.includes('Spell')
     case 'trap':
       return type.includes('Trap')
+    default:
+      return false
   }
 }
 const cardIs = (kind: Kind, c: BrowseCard): boolean =>
-  kind === 'extra' || kind === 'monster'
-    ? c.type.includes('Monster') && isExtraFrame(c.frameType) === (kind === 'extra')
-    : typeIs(kind, c.type)
+  kind === 'P' || kind === 'T' || kind === 'E'
+    ? pkmKind(c.type) === kind
+    : kind === 'extra' || kind === 'monster'
+      ? c.type.includes('Monster') && isExtraFrame(c.frameType) === (kind === 'extra')
+      : typeIs(kind, c.type)
 
 const TAB =
   'h-7 flex-none rounded-full px-3 font-mono text-xs font-medium after:hidden data-[state=active]:bg-chip data-[state=active]:font-medium'
@@ -121,7 +136,7 @@ function AdderSearch({
   const [owned, setOwned] = useState(false)
   const [kind, setKind] = useState<Kind | null>(null)
   const input = useRef<HTMLInputElement>(null)
-  const ygo = game === 'ygo'
+  const kinds = KINDS_OF[game] ?? []
   const side = format.sections.find((s) => s.id === 'side')
   const labelOf = (id: DeckSection): string => format.sections.find((s) => s.id === id)?.label ?? id
 
@@ -186,21 +201,20 @@ function AdderSearch({
         >
           Owned
         </button>
-        {ygo &&
-          KINDS.map((k) => (
-            <button
-              key={k.id}
-              type="button"
-              aria-pressed={kind === k.id}
-              onClick={() => setKind((cur) => (cur === k.id ? null : k.id))}
-              className={cn(
-                FILTER,
-                kind === k.id ? 'bg-chip-on text-chip-on-ink' : 'bg-chip hover:bg-chip/70'
-              )}
-            >
-              {k.label}
-            </button>
-          ))}
+        {kinds.map((k) => (
+          <button
+            key={k.id}
+            type="button"
+            aria-pressed={kind === k.id}
+            onClick={() => setKind((cur) => (cur === k.id ? null : k.id))}
+            className={cn(
+              FILTER,
+              kind === k.id ? 'bg-chip-on text-chip-on-ink' : 'bg-chip hover:bg-chip/70'
+            )}
+          >
+            {k.label}
+          </button>
+        ))}
       </div>
       <div className="-mr-2 min-h-0 flex-1 overflow-y-auto pr-2">
         {q === '' && kind === null && !owned && shown.length > 0 && (

@@ -68,7 +68,9 @@ export function DeckSearch({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="auto">Main or Extra, by card</SelectItem>
+              <SelectItem value="auto">
+                {game === 'ygo' ? 'Main or Extra, by card' : 'Where the card goes'}
+              </SelectItem>
               {format.sections.map((s) => (
                 <SelectItem key={s.id} value={s.id}>
                   {s.label}

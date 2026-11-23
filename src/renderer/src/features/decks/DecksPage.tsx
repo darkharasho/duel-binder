@@ -14,6 +14,7 @@ import { errorMessage } from '@/lib/errorMessage'
 import { useGame } from '@/lib/game'
 import { DeckPage } from './DeckPage'
 import { DeckTile } from './DeckTile'
+import { DECK_FORMATS, formatOf } from '@shared/decks/formats'
 import { ImportDialog, type ImportResult } from './ImportDialog'
 import { NewDeckDialog } from './NewDeckDialog'
 import { localToday, useRulesPack } from './useRulesPack'
@@ -141,7 +142,7 @@ export function DecksPage({
       {importing && (
         <ImportDialog
           game={game}
-          format="advanced"
+          format={formatOf(game, 'advanced') ? 'advanced' : (DECK_FORMATS[game][0]?.id ?? '')}
           busy={saving}
           onApply={(r: ImportResult) => void create(r.name, r.format, r.cards)}
           onClose={() => setImporting(false)}

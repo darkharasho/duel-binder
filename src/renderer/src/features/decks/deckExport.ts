@@ -1,6 +1,8 @@
 import { toast } from 'sonner'
+import { toPtcgl } from '@shared/decks/pokemon/ptcgl'
 import { toYdk, toYdke, toYgoText } from '@shared/decks/ygo/lists'
 import type { DeckCard, DeckEntry } from '@shared/decks/types'
+import type { GameId } from '@shared/games'
 import { api } from '@/lib/api'
 import { errorMessage } from '@/lib/errorMessage'
 import { isWeb } from '@/lib/platform'
@@ -28,9 +30,15 @@ export async function exportDeck(
   kind: ExportKind,
   name: string,
   cards: DeckEntry[],
-  facts: Record<number, DeckCard>
+  facts: Record<number, DeckCard>,
+  game: GameId = 'ygo'
 ): Promise<void> {
   try {
+    if (game === 'pkm') {
+      await copyText(toPtcgl(cards, facts))
+      toast.success('Copied the deck list')
+      return
+    }
     if (kind === 'ydk') {
       const r = await saveTextFile(toYdk(cards), ydkFileName(name), 'text/plain')
       if (r.saved) toast.success(r.where ? `Saved ${r.where}` : 'Saved the deck file')

@@ -138,7 +138,7 @@ export function DeckHeader({
             </span>
           ) : (
             <>
-              <ExportMenu name={fields.name} cards={fields.cards} facts={facts} />
+              <ExportMenu game={game} name={fields.name} cards={fields.cards} facts={facts} />
               {!readOnly && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>

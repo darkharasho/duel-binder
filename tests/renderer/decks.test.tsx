@@ -2,6 +2,10 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from '@/App'
 import { DeckPage } from '@/features/decks/DeckPage'
+import { DeckAdder } from '@/features/decks/DeckAdder'
+import { ImportDialog } from '@/features/decks/ImportDialog'
+import { ExportMenu } from '@/features/decks/ExportMenu'
+import { DECK_FORMATS } from '@shared/decks/formats'
 import { AddToDeck } from '@/features/decks/AddToDeck'
 import { FriendBinder } from '@/features/friends/FriendBinder'
 import { DecksPage } from '@/features/decks/DecksPage'
@@ -892,8 +896,9 @@ describe('Decks in the nav', () => {
     const names = await nav('ygo')
     expect(names[names.indexOf('Binders') + 1]).toBe('Decks')
   })
-  it('is not in the nav for Pokémon', async () => {
-    expect(await nav('pkm')).not.toContain('Decks')
+  it('is after Binders for Pokémon too', async () => {
+    const names = await nav('pkm')
+    expect(names[names.indexOf('Binders') + 1]).toBe('Decks')
   })
 })
 
@@ -1006,5 +1011,131 @@ describe('the friend Decks tab', () => {
     const api = openFriend([])
     await waitFor(() => expect(api.friends.decks).toHaveBeenCalled())
     expect(screen.queryByRole('radio', { name: 'Decks' })).not.toBeInTheDocument()
+  })
+})
+
+describe('Pokémon on the deck screens', () => {
+  const pkmCard = (id: number, name: string, type: string, owned = 0): DeckCard => ({
+    id,
+    name,
+    type,
+    frameType: 'pokemon',
+    imageId: null,
+    owned,
+    price: null,
+    regionPrice: null,
+    sourceId: null,
+    code: null
+  })
+  const browseCard = (id: number, name: string, type: string) =>
+    ({
+      id,
+      name,
+      type,
+      frameType: 'pokemon',
+      attribute: null,
+      race: '',
+      level: null,
+      linkval: null,
+      atk: null,
+      def: null,
+      imageId: 0,
+      price: null,
+      releasedAt: null,
+      owned: 0,
+      defaultPrintingId: null
+    }) as never
+
+  it('the adder offers Pokémon, Trainer and Energy chips, and Trainer keeps only Trainers', async () => {
+    const api = createMockApi({
+      cards: {
+        browse: vi.fn(async () => ({
+          cards: [
+            browseCard(1, 'Pikachu', 'Pokémon'),
+            browseCard(2, 'Iono', 'Trainer'),
+            browseCard(3, 'Fire Energy', 'Energy')
+          ],
+          total: 3
+        })),
+        browseFacets: vi.fn(async () => ({
+          cardTypes: ['Pokémon', 'Trainer', 'Energy'],
+          attributes: [],
+          races: [],
+          archetypes: [],
+          setNames: [],
+          rarities: [],
+          languages: []
+        }))
+      }
+    })
+    renderWithProviders(
+      <DeckAdder
+        game="pkm"
+        format={DECK_FORMATS.pkm[0]}
+        inDeck={new Map()}
+        tab="add"
+        onTab={vi.fn()}
+        missingCount={0}
+        missing={null}
+        notes={null}
+        onAdd={vi.fn()}
+      />,
+      { api }
+    )
+    const filters = await screen.findByRole('group', { name: 'Filters' })
+    for (const n of ['Pokémon', 'Trainer', 'Energy'])
+      expect(within(filters).getByRole('button', { name: n })).toBeInTheDocument()
+    expect(within(filters).queryByRole('button', { name: 'Monster' })).not.toBeInTheDocument()
+    await userEvent.click(within(filters).getByRole('button', { name: 'Trainer' }))
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Add Iono' })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Add Pikachu' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Add Fire Energy' })).not.toBeInTheDocument()
+    })
+  })
+
+  it('the export menu has one item, Copy deck list, which copies PTCGL text', async () => {
+    const copy = vi.fn(async (_text: string) => undefined)
+    const api = createMockApi({ dex: { copy } })
+    renderWithProviders(
+      <ExportMenu
+        game="pkm"
+        name="Mine"
+        cards={[{ section: 'main', card: 2, qty: 4 }]}
+        facts={{ 2: { ...pkmCard(2, 'Iono', 'Trainer'), sourceId: 'en/sv2-185' } }}
+      />,
+      { api }
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Export' }))
+    const items = await screen.findAllByRole('menuitem')
+    expect(items.map((i) => i.textContent)).toEqual(['Copy deck list'])
+    await userEvent.click(items[0])
+    await waitFor(() => expect(copy).toHaveBeenCalledTimes(1))
+    expect(copy.mock.calls[0][0]).toContain('4 Iono')
+  })
+
+  it('the import dialog previews 4 Iono PAL 185 as one line', async () => {
+    const resolve = vi.fn(async () => [
+      { status: 'matched' as const, card: 2, name: 'Iono', frameType: 'pokemon' }
+    ])
+    const api = createMockApi({ decks: { resolve } })
+    renderWithProviders(
+      <ImportDialog
+        game="pkm"
+        format="standard"
+        busy={false}
+        onApply={vi.fn()}
+        onClose={vi.fn()}
+      />,
+      { api }
+    )
+    const dialog = await screen.findByRole('dialog')
+    await userEvent.click(within(dialog).getByLabelText('Deck list'))
+    await userEvent.paste('4 Iono PAL 185')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Preview' }))
+    expect(await within(dialog).findByText('Matched (1)')).toBeInTheDocument()
+    expect(within(dialog).getByText('4 Iono')).toBeInTheDocument()
+    expect(resolve).toHaveBeenCalledWith([{ set: 'PAL', number: '185', name: 'Iono' }])
+    expect(within(dialog).getByPlaceholderText(/Pokémon TCG Live/)).toBeInTheDocument()
   })
 })

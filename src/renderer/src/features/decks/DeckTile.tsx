@@ -52,7 +52,9 @@ export function DeckTile({
           <div className="truncate font-medium">{deck.name}</div>
           <div className="text-xs text-muted-foreground">{format?.label ?? deck.format}</div>
           <div className="text-xs tabular-nums">
-            {`Main ${count('main')} · Extra ${count('extra')} · Side ${count('side')}`}
+            {format && deck.game !== 'ygo'
+              ? format.sections.map((s) => `${s.label} ${count(s.id)}`).join(' · ')
+              : `Main ${count('main')} · Extra ${count('extra')} · Side ${count('side')}`}
           </div>
           {verdict && (
             <div className={cn('text-xs font-medium', BADGE[verdict.status])}>{verdict.badge}</div>

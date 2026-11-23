@@ -206,9 +206,9 @@ describe('desktop game switch', () => {
     await renderDesktop(desktopApi(['ygo', 'pkm'], 'pkm'))
     await screen.findByRole('button', { name: /switch game/i })
     await waitFor(() => expect(navNames()).toContain('Pokédex'))
-    // Right after Binders, in My cards.
+    // After Binders and Decks, in My cards.
     const names = navNames()
-    expect(names[names.indexOf('Binders') + 1]).toBe('Pokédex')
+    expect(names[names.indexOf('Decks') + 1]).toBe('Pokédex')
   })
 
   it('Yu-Gi-Oh! has no Pokédex', async () => {

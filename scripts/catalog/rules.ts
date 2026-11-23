@@ -17,7 +17,11 @@ import { gzipSync } from 'node:zlib'
 import Database from 'better-sqlite3'
 import { parseRulesPack, type RulesPack } from '../../src/shared/decks/pack'
 import manual from '../../src/shared/decks/rules/pokemon-manual.json'
-import { buildPkmPack, type PkmManual, type PkmPackCard } from '../../src/shared/decks/pokemon/buildPack'
+import {
+  buildPkmPack,
+  type PkmManual,
+  type PkmPackCard
+} from '../../src/shared/decks/pokemon/buildPack'
 import { buildYgoPack, type YgoPackCard } from '../../src/shared/decks/ygo/buildPack'
 
 const CARD_INFO_URL = 'https://db.ygoprodeck.com/api/v7/cardinfo.php?misc=yes'
@@ -35,20 +39,29 @@ async function fetchCards(): Promise<YgoPackCard[]> {
 export function readEnglishCards(cachePath: string): PkmPackCard[] {
   const db = new Database(cachePath, { readonly: true })
   try {
-    const rows = db.prepare("SELECT json FROM td_cards WHERE lang = 'en'").all() as { json: string }[]
-    return rows.map(({ json }) => {
-      const c = JSON.parse(json) as PkmPackCard & { attacks?: { name: string }[] }
-      return {
-        id: c.id,
-        name: c.name,
-        category: c.category,
-        stage: c.stage,
-        rarity: c.rarity,
-        energyType: c.energyType,
-        legal: c.legal,
-        attacks: c.attacks?.map((a) => ({ name: a.name })),
-        abilities: c.abilities?.map((a) => ({ name: a.name }))
-      }
+    const rows = db.prepare("SELECT json FROM td_cards WHERE lang = 'en'").all() as {
+      json: string
+    }[]
+    // TCGdex leaves a few old attacks and abilities unnamed (dp6-136, dp2-116): they name nothing,
+    // so they're left out of the card key. A card with no name can't be keyed at all.
+    const named = (xs?: { name?: unknown }[]): { name: string }[] | undefined =>
+      xs?.flatMap((a) => (typeof a.name === 'string' ? [{ name: a.name }] : []))
+    return rows.flatMap(({ json }) => {
+      const c = JSON.parse(json) as PkmPackCard & { attacks?: { name?: unknown }[] }
+      if (typeof c.name !== 'string') return []
+      return [
+        {
+          id: c.id,
+          name: c.name,
+          category: c.category,
+          stage: c.stage,
+          rarity: c.rarity,
+          energyType: c.energyType,
+          legal: c.legal,
+          attacks: named(c.attacks),
+          abilities: named(c.abilities)
+        }
+      ]
     })
   } finally {
     db.close()

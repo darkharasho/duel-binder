@@ -1,4 +1,4 @@
-import { normalCardName } from '../names'
+import { normalCardName, trainerBaseName } from '../names'
 import {
   PKM_FLAG,
   PKM_LEGAL,
@@ -24,6 +24,8 @@ export interface PkmPackCard {
 export interface PkmManual {
   banned: { standard: string[]; expanded: string[] }
   override: Record<string, { standard?: boolean; expanded?: boolean }>
+  /** ACE SPECs TCGdex prints as plain "Rare" (the Black & White era); flags the whole card key. */
+  aceSpec?: string[]
 }
 
 /** Fewer English cards than this means the fetch was partial; the pack isn't published. */
@@ -35,16 +37,21 @@ const names = (xs?: { name: string }[]): string =>
     .sort()
     .join(',')
 
+/** The name rules go by: a Trainer's subtitle in brackets is dropped. */
+const ruleName = (c: PkmPackCard): string =>
+  c.category === 'Trainer' ? trainerBaseName(c.name) : c.name
+
 /** One rules identity: the name, its attacks and its abilities, so reprints share it. */
 export function cardKeyOf(c: PkmPackCard): string {
-  const key = `${normalCardName(c.name)}|${names(c.attacks)}|${names(c.abilities)}`
+  const key = `${normalCardName(ruleName(c))}|${names(c.attacks)}|${names(c.abilities)}`
   // Old sets print a Special Energy under the basic one's name.
   return c.category === 'Energy' ? `${key}|${c.energyType === 'Normal' ? 'basic' : 'special'}` : key
 }
 
 function flagsOf(c: PkmPackCard): number {
   let f = 0
-  if (c.stage === 'Basic') f |= PKM_FLAG.basic
+  // TCGdex gives older basic Energy stage "Basic" too.
+  if (c.category === 'Pokemon' && c.stage === 'Basic') f |= PKM_FLAG.basic
   if (c.rarity === 'ACE SPEC Rare' || c.rarity === 'Rare ACE') f |= PKM_FLAG.aceSpec
   if (c.name.startsWith('Radiant ')) f |= PKM_FLAG.radiant
   if (c.category === 'Energy' && c.energyType === 'Normal') f |= PKM_FLAG.basicEnergy
@@ -70,7 +77,7 @@ export function buildPkmPack(
     if (i === undefined) {
       i = keys.length
       index.set(ck, i)
-      keys.push({ n: c.name, k: KIND[c.category ?? ''] ?? 'P', f: 0, l: 0 })
+      keys.push({ n: ruleName(c), k: KIND[c.category ?? ''] ?? 'P', f: 0, l: 0 })
     }
     keys[i].f |= flagsOf(c)
     if (c.legal?.standard) keys[i].l |= PKM_LEGAL.standard
@@ -86,6 +93,7 @@ export function buildPkmPack(
   const banned = (list: string[]): number[] => [...new Set(list.map(keyOf))]
   const standard = banned(manual.banned.standard)
   const expanded = banned(manual.banned.expanded)
+  for (const i of new Set((manual.aceSpec ?? []).map(keyOf))) keys[i].f |= PKM_FLAG.aceSpec
   for (const [id, o] of Object.entries(manual.override)) {
     const i = keyOf(id)
     if (o.standard !== undefined)

@@ -41,7 +41,7 @@ The owner approved approach 1 (2026-11-22).
 
 - **Card data.** Add `legal`, `regulationMark`, `trainerType`, `energyType` (and keep `rarity`) to the catalog's `TdCard` type. The raw JSON is already in the `td_cards` cache, so no new fetching.
 - **Card key.** The normalized English name plus the sorted attack names and ability names, built from TCGdex's English cards only.
-- **How a card finds its key (Claude's call, changed while planning).** A pack listing every catalog card id in every language would be hundreds of KB gzipped (European languages alone multiply the count), so the pack is keyed by TCGdex's *English card id* instead, and the client works out the rest:
+- **How a card finds its key (Claude's call, changed while planning).** A pack listing every catalog card id in every language would be hundreds of KB gzipped (European languages alone multiply the count), so the pack is keyed by TCGdex's _English card id_ instead, and the client works out the rest:
   - English and European cards: their `pokemon_cards.source_id` (`fr/sv01-196`) shares TCGdex's id with the English card (`sv01-196`), so they look it up directly.
   - Japanese, Chinese and anything else: by English name (`cards.name`, which the catalog already sets in English for most of them). One key with that name: that key. Several: the card is legal if any of them is, the Basic/ACE SPEC/Radiant flags come from them, and the deck shows a warning, "Pin an English printing to check exactly". None: no legal printing.
   - No catalog schema change and no full re-pull.
@@ -51,7 +51,7 @@ The owner approved approach 1 (2026-11-22).
   - per format, the banned key indexes.
   - Target under 100 KB gzipped; measured in the dry run.
   - ACE SPEC comes from the rarity ("ACE SPEC Rare", and the Black & White era's "Rare ACE"). Radiant comes from the name ("Radiant ..."). Basic Pokémon comes from stage "Basic". Basic Energy comes from `energyType` "Normal". Legality is TCGdex's `legal`, OR'd over a key's printings.
-- **Manual file.** `src/shared/decks/rules/pokemon-manual.json`: `{ banned: { standard: [TCGdex ids], expanded: [TCGdex ids] }, override: { "<TCGdex id>": { standard?: boolean, expanded?: boolean } } }`. A ban or override on one printing applies to its whole card key, since the official list bans by card (Unown LOT 90 and 91 are different keys). As of 2026-11-22, pokemon.com lists no Standard bans and 26 Expanded ones.
+- **Manual file.** `src/shared/decks/rules/pokemon-manual.json`: `{ banned: { standard: [TCGdex ids], expanded: [TCGdex ids] }, override: { "<TCGdex id>": { standard?: boolean, expanded?: boolean } }, aceSpec: [TCGdex ids] }`. `aceSpec` lists the ACE SPECs TCGdex prints as plain "Rare" (the 13 Black & White ones, e.g. Computer Search bw7-137, plus their Scarlet & Violet reprints). A ban, override or ACE SPEC entry on one printing applies to its whole card key, since the official list bans by card (Unown LOT 90 and 91 are different keys). As of 2026-11-22, pokemon.com lists no Standard bans and 26 Expanded ones.
 - **Checks.** `src/shared/decks/pokemon/check.ts`, pure functions, one test per rule, plugged into the shared `check.ts` the same way Yu-Gi-Oh! is.
 - **Import/export.** `src/shared/decks/pokemon/ptcgl.ts`, using the shared import preview (matched / ambiguous / unmatched).
 

@@ -144,3 +144,48 @@ describe('ids grouped by set', () => {
     expect(packKeyOfId(p, 'constructor-1')).toBeUndefined()
   })
 })
+
+describe('final review fixes', () => {
+  it('a basic Energy with TCGdex stage "Basic" is no Basic Pokémon', () => {
+    // base1-98 and bw1-105 as TCGdex serves them.
+    const p = build([
+      c('base1-98', 'Fire Energy', { category: 'Energy', stage: 'Basic', energyType: 'Normal' }),
+      c('bw1-105', 'Grass Energy', { category: 'Energy', stage: 'Basic', energyType: 'Normal' })
+    ])
+    for (const k of p.keys) {
+      expect(k.f & PKM_FLAG.basic).toBe(0)
+      expect(k.f & PKM_FLAG.basicEnergy).toBe(PKM_FLAG.basicEnergy)
+    }
+  })
+  it('a "Rare" card in the manual aceSpec list is an ACE SPEC, with its reprints', () => {
+    const t = { category: 'Trainer', rarity: 'Rare' }
+    const p = build(
+      [
+        c('bw7-137', 'Computer Search', t),
+        c('bw8-129', 'Scramble Switch', t),
+        c('sv08-186', 'Scramble Switch', { category: 'Trainer', rarity: 'ACE SPEC Rare' }),
+        c('bw7-136', 'Ultra Ball', t)
+      ],
+      { ...none, aceSpec: ['bw7-137', 'bw8-129'] }
+    )
+    const f = (id: string) => p.keys[packKeyOfId(p, id)!].f & PKM_FLAG.aceSpec
+    expect(f('bw7-137')).toBe(PKM_FLAG.aceSpec)
+    expect(f('bw8-129')).toBe(PKM_FLAG.aceSpec)
+    expect(packKeyOfId(p, 'sv08-186')).toBe(packKeyOfId(p, 'bw8-129'))
+    expect(f('bw7-136')).toBe(0)
+  })
+  it('an aceSpec id missing from the cards throws', () => {
+    expect(() => build([c('a-1', 'X')], { ...none, aceSpec: ['zz-1'] })).toThrow(/zz-1/)
+  })
+  it('a subtitled Trainer shares its key with the plain printing', () => {
+    const t = { category: 'Trainer' }
+    const magnolia = c('swsh1-178', "Professor's Research (Professor Magnolia)", t)
+    const plain = c('sv01-189', "Professor's Research", t)
+    expect(cardKeyOf(magnolia)).toBe(cardKeyOf(plain))
+    const p = build([magnolia, plain, c('swsh2-154', "Boss's Orders (Giovanni)", t)])
+    expect(p.keys.map((k) => k.n)).toEqual(["Professor's Research", "Boss's Orders"])
+  })
+  it('a Pokémon keeps brackets in its name', () => {
+    expect(cardKeyOf(c('x-1', 'Pikachu (Flying)'))).not.toBe(cardKeyOf(c('x-2', 'Pikachu')))
+  })
+})

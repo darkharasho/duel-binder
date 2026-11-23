@@ -9,3 +9,8 @@ export function normalCardName(s: string): string {
     .replace(/\s+/g, ' ')
     .trim()
 }
+
+/** "Professor's Research (Professor Magnolia)" is "Professor's Research": a Trainer's subtitle names no new card. */
+export function trainerBaseName(s: string): string {
+  return s.replace(/\s*\([^()]*\)\s*$/, '')
+}

@@ -53,3 +53,29 @@ describe('pokemon keys', () => {
     expect(pkmKind('Entrenador')).toBe('T')
   })
 })
+
+describe('pokemon keys: localized basic Energy and subtitles', () => {
+  const p = {
+    ...pack,
+    keys: [
+      { n: 'Water Energy', k: 'E', f: 0, l: 1 },
+      { n: 'Water Energy', k: 'E', f: 8, l: 3 },
+      { n: "Professor's Research", k: 'T', f: 0, l: 3 }
+    ],
+    ids: {}
+  } as PkmRulesPack
+  const index = keyIndex(p)
+  it('a Japanese "Basic Water Energy" is the basic Water Energy key', () => {
+    const ja = { ...card('Basic Water Energy', 'ja/SV1-103'), type: 'エネルギー' }
+    expect(keyOfCard(ja, p, index)).toEqual({ key: 1 })
+  })
+  it('a plain "Water Energy" stays unsure', () => {
+    const ja = { ...card('Water Energy', 'ja/SV1-103'), type: 'エネルギー' }
+    expect(keyOfCard(ja, p, index)).toEqual({ unsure: [0, 1] })
+  })
+  it('a subtitled Trainer name finds the plain key', () => {
+    expect(keyOfCard(card("Professor's Research (Professor Sada)", null), p, index)).toEqual({
+      key: 2
+    })
+  })
+})

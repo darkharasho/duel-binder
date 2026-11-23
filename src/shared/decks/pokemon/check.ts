@@ -1,6 +1,6 @@
 import { MAX_PROBLEM_KEY, type DeckProblem } from '../check'
 import type { DeckFormat } from '../formats'
-import { normalCardName } from '../names'
+import { normalCardName, trainerBaseName } from '../names'
 import { PKM_FLAG, PKM_LEGAL, type PkmRulesPack } from '../pack'
 import type { DeckCard, WireDeck } from '../types'
 import { keyIndex, keyOfCard, pkmKind } from './keys'
@@ -64,7 +64,8 @@ export function checkPkm(
   for (const f of facts) {
     const name = f.card?.name ?? nameOf(f.id)
     const keyed = !f.unsure && f.keys.length === 1 && pack
-    const norm = normalCardName(keyed ? pack.keys[f.keys[0]].n : name)
+    const unkeyed = f.card && pkmKind(f.card.type) === 'T' ? trainerBaseName(name) : name
+    const norm = normalCardName(keyed ? pack.keys[f.keys[0]].n : unkeyed)
     const byName =
       !!f.card && pkmKind(f.card.type) === 'E' && BASIC_ENERGY_NAME.test(normalCardName(name))
     const basicEnergy =

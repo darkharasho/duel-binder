@@ -1,6 +1,7 @@
 import { packKeyOfId, type PkmRulesPack } from '../pack'
 import type { DeckCard } from '../types'
-import { normalCardName } from '../names'
+import { normalCardName, trainerBaseName } from '../names'
+import { PKM_FLAG } from '../pack'
 
 export type KeyHit = { key: number } | { unsure: number[] } | { none: true }
 export interface KeyIndex {
@@ -25,7 +26,17 @@ export function keyOfCard(card: DeckCard, pack: PkmRulesPack, index: KeyIndex): 
     const key = packKeyOfId(pack, card.sourceId.slice(slash + 1))
     if (key !== undefined) return { key }
   }
-  const hits = index.byName.get(normalCardName(card.name))
+  const kind = pkmKind(card.type)
+  let name = normalCardName(kind === 'T' ? trainerBaseName(card.name) : card.name)
+  // Japanese and Traditional Chinese catalogs name basic Energy "Basic Water Energy"; TCGdex's
+  // English name is "Water Energy", which old sets also give a Special Energy.
+  const basic = kind === 'E' && name.startsWith('basic ')
+  if (basic) name = name.slice('basic '.length)
+  let hits = index.byName.get(name)
+  if (basic && hits) {
+    const flagged = hits.filter((i) => (pack.keys[i].f & PKM_FLAG.basicEnergy) !== 0)
+    if (flagged.length > 0) hits = flagged
+  }
   if (!hits || hits.length === 0) return { none: true }
   if (hits.length === 1) return { key: hits[0] }
   return { unsure: [...hits].sort((a, b) => a - b) }

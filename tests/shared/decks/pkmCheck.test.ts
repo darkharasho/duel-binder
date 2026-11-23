@@ -199,3 +199,88 @@ describe('pkm sort', () => {
     expect(sortEntries('pkm', [e(en), e(tr), e(po)], reg).map((x) => x.card)).toEqual([po, tr, en])
   })
 })
+
+describe('pkm final review fixes', () => {
+  const T = 'Trainer'
+  const real = buildPkmPack(
+    [
+      { id: 'sv01-25', name: 'Pawmi', category: 'Pokemon', stage: 'Basic', legal: L },
+      // TCGdex gives older basic Energy stage "Basic".
+      {
+        id: 'bw1-110',
+        name: 'Water Energy',
+        category: 'Energy',
+        stage: 'Basic',
+        energyType: 'Normal',
+        legal: L
+      },
+      { id: 'xy1-9', name: 'Water Energy', category: 'Energy', energyType: 'Special', legal: L },
+      {
+        id: 'swsh1-178',
+        name: "Professor's Research (Professor Magnolia)",
+        category: T,
+        rarity: 'Holo Rare',
+        legal: { standard: false, expanded: true }
+      },
+      { id: 'sv01-189', name: "Professor's Research", category: T, rarity: 'Rare', legal: L },
+      {
+        id: 'bw7-137',
+        name: 'Computer Search',
+        category: T,
+        rarity: 'Rare',
+        legal: { expanded: true }
+      },
+      {
+        id: 'bw8-128',
+        name: 'Dowsing Machine',
+        category: T,
+        rarity: 'Rare',
+        legal: { expanded: true }
+      }
+    ],
+    { banned: { standard: [], expanded: [] }, override: {}, aceSpec: ['bw7-137', 'bw8-128'] },
+    new Date('2026-11-22T03:00:00Z'),
+    0
+  )
+  const rp: PackState = { state: 'ready', pack: real }
+  const PAWMI = mk('Pawmi', 'Pokémon', 'en/sv01-25')
+  const WATER = mk('Water Energy', 'Energy', 'en/bw1-110')
+  const JWATER = mk('Basic Water Energy', 'エネルギー', 'ja/SV1-103')
+  const MAG = mk("Professor's Research (Professor Magnolia)", T, 'en/swsh1-178')
+  const SADA = mk("Professor's Research (Professor Sada)", T, 'ja/SV4a-190')
+  const CS = mk('Computer Search', T, 'en/bw7-137')
+  const DM = mk('Dowsing Machine', T, 'en/bw8-128')
+  const ck = (cs: DeckEntry[], format = 'standard') =>
+    checkDeck({ game: 'pkm', format, cards: cs }, reg, rp, today).problems.map((x) => x.key)
+
+  it('20 Japanese "Basic Water Energy" are legal with no copies error', () => {
+    expect(ck([e(PAWMI, 4), e(JWATER, 20), e(WATER, 36)])).toEqual([])
+  })
+  it('a deck of only basic Energy has no Basic Pokémon', () => {
+    expect(ck([e(WATER, 60)])).toEqual(['basic'])
+  })
+  it('two Black & White ACE SPECs are an ace error', () => {
+    expect(ck([e(PAWMI, 4), e(CS), e(DM), e(WATER, 54)], 'expanded')).toEqual(['ace'])
+  })
+  it('a subtitled Professor’s Research is legal in Standard through its reprint', () => {
+    expect(ck([e(PAWMI, 4), e(MAG, 4), e(WATER, 52)])).toEqual([])
+  })
+  it('4 Magnolia + 4 Sada is a copies error', () => {
+    expect(ck([e(PAWMI, 4), e(MAG, 4), e(SADA, 4), e(WATER, 48)])).toEqual([
+      "copies:professor's research"
+    ])
+  })
+  it('4 Magnolia + 4 Sada without a pack is a copies error too', () => {
+    const k = checkDeck(
+      {
+        game: 'pkm',
+        format: 'standard',
+        cards: [e(PAWMI, 4), e(MAG, 4), e(SADA, 4), e(WATER, 48)]
+      },
+      reg,
+      { state: 'missing' },
+      today
+    ).problems.map((x) => x.key)
+    expect(k).toEqual(["copies:professor's research"])
+  })
+})

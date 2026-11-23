@@ -5,11 +5,13 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { FormatSelect } from './FormatSelect'
 
 const NAME_MAX = 80
 
@@ -33,7 +35,7 @@ export function NewDeckDialog({
   const ok = name.trim().length > 0 && !busy
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-sm">
         <form
           className="space-y-4"
           onSubmit={(e) => {
@@ -43,6 +45,9 @@ export function NewDeckDialog({
         >
           <DialogHeader>
             <DialogTitle>New deck</DialogTitle>
+            <DialogDescription>
+              {"Cards are checked against the format's limits as you build."}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-1.5">
             <label htmlFor="deck-name" className="text-sm font-medium">
@@ -60,18 +65,7 @@ export function NewDeckDialog({
             <label htmlFor="deck-format" className="text-sm font-medium">
               Format
             </label>
-            <select
-              id="deck-format"
-              value={format}
-              onChange={(e) => setFormat(e.target.value)}
-              className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
-            >
-              {formats.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.label}
-                </option>
-              ))}
-            </select>
+            <FormatSelect id="deck-format" game={game} value={format} onChange={setFormat} />
           </div>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={onClose}>

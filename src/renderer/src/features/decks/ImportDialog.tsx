@@ -13,6 +13,13 @@ import {
   DialogTitle
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select'
 import { api } from '@/lib/api'
 import { errorMessage } from '@/lib/errorMessage'
 import {
@@ -26,6 +33,7 @@ import {
   type Pick
 } from './deckImport'
 import { DeckSearch } from './DeckSearch'
+import { FormatSelect } from './FormatSelect'
 
 export interface ImportResult {
   name: string
@@ -240,11 +248,10 @@ export function ImportDialog({
                         : row(
                             a,
                             <>
-                              <select
-                                aria-label={`Pick a card for ${a.text}`}
+                              <Select
                                 value=""
-                                onChange={(e) => {
-                                  const o = a.options.find((x) => x.card === Number(e.target.value))
+                                onValueChange={(v) => {
+                                  const o = a.options.find((x) => x.card === Number(v))
                                   if (o)
                                     choose(a.key, {
                                       card: o.card,
@@ -252,15 +259,18 @@ export function ImportDialog({
                                       name: o.name
                                     })
                                 }}
-                                className="h-9 rounded-md border bg-transparent px-2 text-sm"
                               >
-                                <option value="">Choose a card</option>
-                                {a.options.map((o) => (
-                                  <option key={o.card} value={o.card}>
-                                    {o.name}
-                                  </option>
-                                ))}
-                              </select>
+                                <SelectTrigger aria-label={`Pick a card for ${a.text}`}>
+                                  <SelectValue placeholder="Choose a card" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {a.options.map((o) => (
+                                    <SelectItem key={o.card} value={String(o.card)}>
+                                      {o.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
                               {drop(a)}
                             </>
                           )
@@ -320,18 +330,7 @@ export function ImportDialog({
                 <label htmlFor="import-format" className="text-sm font-medium">
                   Format
                 </label>
-                <select
-                  id="import-format"
-                  value={format}
-                  onChange={(e) => setFormat(e.target.value)}
-                  className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
-                >
-                  {formats.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.label}
-                    </option>
-                  ))}
-                </select>
+                <FormatSelect id="import-format" game={game} value={format} onChange={setFormat} />
               </div>
             </div>
           )}

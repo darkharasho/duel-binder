@@ -31,6 +31,7 @@ import { DeckSearch } from './DeckSearch'
 import { DeckSectionList, type EntryActions } from './DeckSection'
 import { ExportMenu } from './ExportMenu'
 import { FeedbackPanel } from './FeedbackPanel'
+import { FormatSelect } from './FormatSelect'
 import { ImportDialog } from './ImportDialog'
 import { localToday, useRulesPack } from './useRulesPack'
 
@@ -274,18 +275,13 @@ export function DeckPage({
           )}
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
             {editable ? (
-              <select
-                aria-label="Format"
+              <FormatSelect
+                game={game}
+                size="sm"
                 value={fields.format}
-                onChange={(e) => edit({ format: e.target.value })}
-                className="h-8 rounded-md border bg-transparent px-2 text-sm"
-              >
-                {DECK_FORMATS[game].map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.label}
-                  </option>
-                ))}
-              </select>
+                onChange={(format) => edit({ format })}
+                className="w-auto"
+              />
             ) : (
               <span className="text-muted-foreground">{known?.label ?? fields.format}</span>
             )}

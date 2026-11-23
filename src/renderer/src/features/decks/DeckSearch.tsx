@@ -7,7 +7,15 @@ import type { GameId } from '@shared/games'
 import type { BrowseCard } from '@shared/types'
 import { CardArt } from '@/components/CardArt'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select'
 import { api } from '@/lib/api'
 
 const TYPE_MS = 250
@@ -67,28 +75,24 @@ export function DeckSearch({
           onChange={(e) => setText(e.target.value)}
           className="min-w-48 flex-1"
         />
+        <div className="flex items-center gap-1.5 text-sm">
+          <span aria-hidden>Add to</span>
+          <Select value={target} onValueChange={(v) => setTarget(v as DeckSection | 'auto')}>
+            <SelectTrigger aria-label="Add to">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="auto">Main or Extra, by card</SelectItem>
+              {format.sections.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <label className="flex items-center gap-1.5 text-sm">
-          Add to
-          <select
-            aria-label="Add to"
-            value={target}
-            onChange={(e) => setTarget(e.target.value as DeckSection | 'auto')}
-            className="h-9 rounded-md border bg-transparent px-2 text-sm"
-          >
-            <option value="auto">Main or Extra, by card</option>
-            {format.sections.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex items-center gap-1.5 text-sm">
-          <input
-            type="checkbox"
-            checked={ownedOnly}
-            onChange={(e) => setOwnedOnly(e.target.checked)}
-          />
+          <Checkbox checked={ownedOnly} onCheckedChange={(c) => setOwnedOnly(c === true)} />
           Only cards I own
         </label>
       </div>

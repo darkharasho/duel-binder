@@ -16,6 +16,12 @@ import type { AccountStatus, CardDetail, Friend } from '@shared/types'
 import { toast } from 'sonner'
 import { createMockApi, renderWithProviders, type DeepPartial } from './mockApi'
 
+/** Opens one of the app's dropdowns and picks an option by its text. */
+async function pick(trigger: HTMLElement, option: string): Promise<void> {
+  await userEvent.click(trigger)
+  await userEvent.click(await screen.findByRole('option', { name: option }))
+}
+
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() }, Toaster: () => null }))
 
 type DeckResolution = Awaited<ReturnType<Api['decks']['resolve']>>[number]
@@ -143,9 +149,9 @@ describe('the decks page', () => {
     renderWithProviders(<DecksPage />, { api })
     await userEvent.click(await screen.findByRole('button', { name: 'New deck' }))
     const dialog = await screen.findByRole('dialog')
-    expect(within(dialog).getByLabelText('Format')).toHaveValue('advanced')
+    expect(within(dialog).getByLabelText('Format')).toHaveTextContent('Advanced (TCG)')
     await userEvent.type(within(dialog).getByLabelText('Name'), 'Branded')
-    await userEvent.selectOptions(within(dialog).getByLabelText('Format'), 'ocg')
+    await pick(within(dialog).getByLabelText('Format'), 'OCG')
     await userEvent.click(within(dialog).getByRole('button', { name: 'Create deck' }))
     await waitFor(() =>
       expect(api.decks.save).toHaveBeenCalledWith(
@@ -399,7 +405,7 @@ describe('the deck page', () => {
     const api = pageApi(detail({ cards }), ocg)
     renderWithProviders(<DeckPage uid="d1" onBack={vi.fn()} />, { api })
     expect(await screen.findByText('Legal')).toBeInTheDocument()
-    await userEvent.selectOptions(screen.getByLabelText('Format'), 'OCG')
+    await pick(screen.getByLabelText('Format'), 'OCG')
     expect(screen.getByText('Not legal')).toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: /3 × Maxx "C": Limited to 1 in OCG/ })
@@ -529,10 +535,7 @@ describe('importing and exporting', () => {
     const dialog = await screen.findByRole('dialog')
     await paste(dialog, LIST)
     await within(dialog).findByText('Matched (1)')
-    await userEvent.selectOptions(
-      within(dialog).getByLabelText('Pick a card for 2 Maxx C'),
-      'Maxx "C"'
-    )
+    await pick(within(dialog).getByLabelText('Pick a card for 2 Maxx C'), 'Maxx "C"')
     const save = within(dialog).getByRole('button', { name: 'Import deck' })
     await userEvent.click(within(dialog).getByRole('button', { name: 'Drop 1 Mystery card' }))
     expect(save).toBeDisabled()
@@ -581,10 +584,7 @@ describe('importing and exporting', () => {
     const dialog = await screen.findByRole('dialog')
     await paste(dialog, LIST)
     await within(dialog).findByText('Matched (1)')
-    await userEvent.selectOptions(
-      within(dialog).getByLabelText('Pick a card for 2 Maxx C'),
-      'Maxx "C"'
-    )
+    await pick(within(dialog).getByLabelText('Pick a card for 2 Maxx C'), 'Maxx "C"')
     await userEvent.type(within(dialog).getByLabelText('Deck list'), 'x')
     expect(within(dialog).queryByText('Matched (1)')).not.toBeInTheDocument()
     expect(within(dialog).getByRole('button', { name: 'Import deck' })).toBeDisabled()

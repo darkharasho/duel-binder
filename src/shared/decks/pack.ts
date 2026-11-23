@@ -37,9 +37,22 @@ export interface PkmRulesPack {
   builtAt: string
   sources: { name: string; fetchedAt: string }[]
   keys: PkmKey[]
-  /** TCGdex English card id ("sv01-196") → index into keys */
-  ids: Record<string, number>
+  /** TCGdex English card id "sv01-196" → ids.sv01["196"] = index into keys; grouped by set to keep the pack small */
+  ids: Record<string, Record<string, number>>
   formats: { standard: { banned: number[] }; expanded: { banned: number[] } }
+}
+
+/** Splits a TCGdex card id at its last dash: "sv01-196" → ["sv01", "196"]; "tk-xy-latia-1" → ["tk-xy-latia", "1"]. */
+export function splitCardId(id: string): [string, string] {
+  const i = id.lastIndexOf('-')
+  return i < 0 ? ['', id] : [id.slice(0, i), id.slice(i + 1)]
+}
+
+/** The key index a pack holds for a TCGdex card id, if any. */
+export function packKeyOfId(pack: PkmRulesPack, id: string): number | undefined {
+  const [set, local] = splitCardId(id)
+  const group = Object.prototype.hasOwnProperty.call(pack.ids, set) ? pack.ids[set] : undefined
+  return group && Object.prototype.hasOwnProperty.call(group, local) ? group[local] : undefined
 }
 
 export type RulesPack = YgoRulesPack | PkmRulesPack
@@ -68,7 +81,10 @@ function validPkm(raw: Record<string, unknown>): boolean {
   const max = raw.keys.length
   const inRange = (i: unknown): boolean =>
     Number.isInteger(i) && (i as number) >= 0 && (i as number) < max
-  for (const i of Object.values(raw.ids)) if (!inRange(i)) return false
+  for (const set of Object.values(raw.ids)) {
+    if (!isObj(set)) return false
+    for (const i of Object.values(set)) if (!inRange(i)) return false
+  }
   for (const f of ['standard', 'expanded']) {
     const fm = raw.formats[f]
     if (!isObj(fm) || !Array.isArray(fm.banned) || !fm.banned.every(inRange)) return false

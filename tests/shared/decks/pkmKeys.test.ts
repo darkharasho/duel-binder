@@ -15,7 +15,7 @@ const pack = {
     { n: 'Pikachu', k: 'P', f: 1, l: 3 },
     { n: 'Boss’s Orders', k: 'T', f: 0, l: 3 }
   ],
-  ids: { 'sv01-196': 0 },
+  ids: { sv01: { '196': 0 } },
   formats: { standard: { banned: [] }, expanded: { banned: [] } }
 } as PkmRulesPack
 const card = (name: string, sourceId: string | null): DeckCard => ({

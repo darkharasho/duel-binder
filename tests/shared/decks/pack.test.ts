@@ -39,7 +39,7 @@ describe('parseRulesPack pkm', () => {
     builtAt: '2026-11-22T03:00:00Z',
     sources: [{ name: 'x', fetchedAt: '2026-11-22T02:00:00Z' }],
     keys: [{ n: 'Ultra Ball', k: 'T', f: 0, l: 3 }],
-    ids: { 'sv01-196': 0 },
+    ids: { sv01: { '196': 0 } },
     formats: { standard: { banned: [] as number[] }, expanded: { banned: [] as number[] } }
   }
   it('parses a valid pkm pack', () => {
@@ -47,8 +47,11 @@ describe('parseRulesPack pkm', () => {
     expect(r.state).toBe('ready')
     if (r.state === 'ready') expect(r.pack.game).toBe('pkm')
   })
+  it('rejects a pkm pack whose ids are not grouped by set', () => {
+    expect(parseRulesPack({ ...pkm, ids: { 'sv01-196': 0 } })).toEqual({ state: 'missing' })
+  })
   it('rejects a pkm pack whose ids point past keys', () => {
-    expect(parseRulesPack({ ...pkm, ids: { x: 5 } })).toEqual({ state: 'missing' })
+    expect(parseRulesPack({ ...pkm, ids: { x: { '1': 5 } } })).toEqual({ state: 'missing' })
   })
   it('rejects a pkm key with a bad kind', () => {
     expect(parseRulesPack({ ...pkm, keys: [{ n: 'A', k: 'X', f: 0, l: 3 }] })).toEqual({

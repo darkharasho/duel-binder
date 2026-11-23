@@ -1,4 +1,4 @@
-import type { PkmRulesPack } from '../pack'
+import { packKeyOfId, type PkmRulesPack } from '../pack'
 import type { DeckCard } from '../types'
 import { normalCardName } from '../names'
 
@@ -22,7 +22,7 @@ export function keyIndex(pack: PkmRulesPack): KeyIndex {
 export function keyOfCard(card: DeckCard, pack: PkmRulesPack, index: KeyIndex): KeyHit {
   if (card.sourceId) {
     const slash = card.sourceId.indexOf('/')
-    const key = pack.ids[card.sourceId.slice(slash + 1)]
+    const key = packKeyOfId(pack, card.sourceId.slice(slash + 1))
     if (key !== undefined) return { key }
   }
   const hits = index.byName.get(normalCardName(card.name))

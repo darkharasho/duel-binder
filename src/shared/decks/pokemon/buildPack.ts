@@ -1,5 +1,13 @@
 import { normalCardName } from '../names'
-import { PKM_FLAG, PKM_LEGAL, RULES_SCHEMA, type PkmKey, type PkmRulesPack } from '../pack'
+import {
+  PKM_FLAG,
+  PKM_LEGAL,
+  RULES_SCHEMA,
+  packKeyOfId,
+  splitCardId,
+  type PkmKey,
+  type PkmRulesPack
+} from '../pack'
 
 export interface PkmPackCard {
   id: string
@@ -55,7 +63,7 @@ export function buildPkmPack(
     throw new Error(`Only ${cards.length} Pokémon cards; expected at least ${minCards}`)
   const index = new Map<string, number>()
   const keys: PkmKey[] = []
-  const ids: Record<string, number> = {}
+  const ids: PkmRulesPack['ids'] = {}
   for (const c of cards) {
     const ck = cardKeyOf(c)
     let i = index.get(ck)
@@ -67,10 +75,11 @@ export function buildPkmPack(
     keys[i].f |= flagsOf(c)
     if (c.legal?.standard) keys[i].l |= PKM_LEGAL.standard
     if (c.legal?.expanded) keys[i].l |= PKM_LEGAL.expanded
-    ids[c.id] = i
+    const [set, local] = splitCardId(c.id)
+    ;(ids[set] ??= {})[local] = i
   }
   const keyOf = (id: string): number => {
-    const i = ids[id]
+    const i = packKeyOfId({ ids } as PkmRulesPack, id)
     if (i === undefined) throw new Error(`Manual list names ${id}, which isn't in the cards`)
     return i
   }

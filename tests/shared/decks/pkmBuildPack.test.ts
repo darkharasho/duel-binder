@@ -5,7 +5,13 @@ import {
   type PkmManual,
   type PkmPackCard
 } from '../../../src/shared/decks/pokemon/buildPack'
-import { PKM_FLAG, PKM_LEGAL, parseRulesPack } from '../../../src/shared/decks/pack'
+import {
+  PKM_FLAG,
+  PKM_LEGAL,
+  packKeyOfId,
+  parseRulesPack,
+  splitCardId
+} from '../../../src/shared/decks/pack'
 
 const now = new Date('2026-11-22T03:00:00Z')
 const none: PkmManual = { banned: { standard: [], expanded: [] }, override: {} }
@@ -25,8 +31,8 @@ describe('buildPkmPack', () => {
     ])
     expect(p.keys).toHaveLength(1)
     expect(p.keys[0].l).toBe(3)
-    expect(p.ids['a-1']).toBe(0)
-    expect(p.ids['b-2']).toBe(0)
+    expect(packKeyOfId(p, 'a-1')!).toBe(0)
+    expect(packKeyOfId(p, 'b-2')!).toBe(0)
   })
   it('different attacks are different keys', () => {
     const p = build([
@@ -49,7 +55,7 @@ describe('buildPkmPack', () => {
       c('5', 'Fire Energy', { category: 'Energy', energyType: 'Normal' }),
       c('6', 'Double Turbo', { category: 'Energy', energyType: 'Special' })
     ])
-    const f = (id: string) => p.keys[p.ids[id]].f
+    const f = (id: string) => p.keys[packKeyOfId(p, id)!].f
     expect(f('1')).toBe(PKM_FLAG.basic)
     expect(f('2')).toBe(PKM_FLAG.aceSpec)
     expect(f('3')).toBe(PKM_FLAG.aceSpec)
@@ -73,8 +79,8 @@ describe('buildPkmPack', () => {
       ],
       { ...none, banned: { standard: [], expanded: ['sm8-90'] } }
     )
-    expect(p.formats.expanded.banned).toEqual([p.ids['sm8-90']])
-    expect(p.formats.expanded.banned).not.toContain(p.ids['x-1'])
+    expect(p.formats.expanded.banned).toEqual([packKeyOfId(p, 'sm8-90')!])
+    expect(p.formats.expanded.banned).not.toContain(packKeyOfId(p, 'x-1')!)
     expect(p.formats.standard.banned).toEqual([])
   })
   it('override wins over TCGdex', () => {
@@ -107,8 +113,8 @@ describe('buildPkmPack', () => {
       c('2', 'Darkness Energy', { category: 'Energy', energyType: 'Special' })
     ])
     expect(p.keys).toHaveLength(2)
-    expect(p.keys[p.ids['1']].f).toBe(PKM_FLAG.basicEnergy)
-    expect(p.keys[p.ids['2']].f).toBe(0)
+    expect(p.keys[packKeyOfId(p, '1')!].f).toBe(PKM_FLAG.basicEnergy)
+    expect(p.keys[packKeyOfId(p, '2')!].f).toBe(0)
   })
   it('an override with standard false clears the bit', () => {
     const p = build([c('a-1', 'X', { legal: { standard: true } })], {
@@ -121,5 +127,20 @@ describe('buildPkmPack', () => {
     expect(() =>
       build([c('a', 'A')], { ...none, override: { 'zz-7': { standard: true } } })
     ).toThrow(/zz-7/)
+  })
+})
+
+describe('ids grouped by set', () => {
+  it('splits at the last dash, so set ids with dashes work', () => {
+    expect(splitCardId('sv01-196')).toEqual(['sv01', '196'])
+    expect(splitCardId('tk-xy-latia-1')).toEqual(['tk-xy-latia', '1'])
+    expect(splitCardId('1')).toEqual(['', '1'])
+  })
+  it('nests ids by set and finds them back', () => {
+    const p = buildPkmPack([c('tk-xy-latia-1', 'Bagon'), c('sv01-2', 'Pikachu')], none, now, 0)
+    expect(Object.keys(p.ids).sort()).toEqual(['sv01', 'tk-xy-latia'])
+    expect(packKeyOfId(p, 'tk-xy-latia-1')).toBe(0)
+    expect(packKeyOfId(p, 'sv01-9')).toBeUndefined()
+    expect(packKeyOfId(p, 'constructor-1')).toBeUndefined()
   })
 })

@@ -188,6 +188,24 @@ function deckCards(
       }[]
     ).map((r) => [r.card_id, r])
   )
+  const sourceIds = new Map<number, string>()
+  const codes = new Map<number, string>()
+  if (scopeGame(db, scope) === 'pkm') {
+    const ids2 = cards.map((c) => c.id)
+    const l2 = JSON.stringify(ids2)
+    for (const r of db
+      .prepare(`SELECT card_id, source_id FROM pokemon_cards WHERE card_id IN ${IN_LIST}`)
+      .all(l2) as { card_id: number; source_id: string }[])
+      sourceIds.set(r.card_id, r.source_id)
+    for (const r of db
+      .prepare(
+        `SELECT p.card_id, MIN(p.set_code) AS code FROM card_printings p
+         WHERE p.card_id IN ${IN_LIST} AND +p.game = ${scope.game} AND p.language = 'en'
+         GROUP BY p.card_id`
+      )
+      .all(l2) as { card_id: number; code: string }[])
+      codes.set(r.card_id, r.code)
+  }
   for (const c of cards) {
     const p = prices.get(c.id)
     const price = p ? (p.en ?? p.anyp) : null
@@ -199,7 +217,9 @@ function deckCards(
       imageId: images.get(c.id) ?? null,
       owned: owned.get(c.id) ?? 0,
       price,
-      regionPrice: p?.region ?? price
+      regionPrice: p?.region ?? price,
+      sourceId: sourceIds.get(c.id) ?? null,
+      code: codes.get(c.id) ?? null
     }
   }
   return facts

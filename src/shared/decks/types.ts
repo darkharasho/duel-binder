@@ -37,6 +37,10 @@ export interface DeckCard {
   owned: number
   price: number | null
   regionPrice: number | null
+  /** pokemon_cards.source_id ("lang/tcgdexId") for a Pokémon card, else null */
+  sourceId: string | null
+  /** A Pokémon card's lowest English printing set code, else null */
+  code: string | null
 }
 
 export type VerdictStatus = 'legal' | 'warnings' | 'illegal' | 'unknown' | 'update'

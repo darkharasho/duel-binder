@@ -41,7 +41,9 @@ const card = (
   imageId: null,
   owned,
   price,
-  regionPrice: price
+  regionPrice: price,
+  sourceId: null,
+  code: null
 })
 const facts: Record<number, DeckCard> = {
   [POT]: card(POT, 'Pot of Greed', 3, 1, 'spell'),

@@ -114,7 +114,9 @@ export function deckCardOf(c: BrowseCard): DeckCard {
     imageId: c.imageId,
     owned: c.owned,
     price: c.price,
-    regionPrice: null
+    regionPrice: null,
+    sourceId: null,
+    code: null
   }
 }
 

@@ -33,7 +33,9 @@ async function factOf(cardId: number, known: DeckCard | undefined): Promise<Deck
     imageId: null,
     owned: 0,
     price: null,
-    regionPrice: null
+    regionPrice: null,
+    sourceId: null,
+    code: null
   }
 }
 

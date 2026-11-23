@@ -11,6 +11,7 @@ import {
 } from '../../src/main/repo/decks'
 import { saveGraded } from '../../src/main/repo/graded'
 import { CollectionError } from '../../src/main/repo/collection'
+import { localScope } from '../../src/main/repo/scope'
 import { userScope } from '../../workers/portal/src/scope'
 import type { DeckDraft, DeckEntry, DeckVerdictMark } from '../../src/shared/decks/types'
 import { acceptFriend, requestFriend } from '../../workers/portal/src/friends'
@@ -87,6 +88,35 @@ describe('decks repo', () => {
 
   beforeEach(async () => {
     db = await seededDb()
+  })
+
+  it('deckCards gives a pkm card its source id and lowest English code', () => {
+    db.prepare(
+      `INSERT INTO cards (id, game, name, type, frame_type, race, "desc", updated_at)
+       VALUES (9001, 'pkm', 'Pikachu', 'Pokémon', '', '', '', '2026-11-22')`
+    ).run()
+    db.prepare(
+      "INSERT INTO pokemon_cards (card_id, category, source_id) VALUES (9001, 'Pokemon', 'en/sv01-057')"
+    ).run()
+    for (const code of ['SVI 057/198', 'PAL 001/193'])
+      db.prepare(
+        `INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity)
+         VALUES ('pkm', 9001, 'en', ?, ?, 'Common')`
+      ).run(`Set ${code}`, code)
+    const pkm = localScope("'pkm'")
+    // Pokémon formats are not defined yet, so move a saved deck over by hand.
+    const uid = saveDeck(db, draft({ cards: [{ section: 'main', card: 9001, qty: 1 }] }), T1)
+    db.prepare("UPDATE decks SET game = 'pkm' WHERE uid = ?").run(uid)
+    expect(getDeck(db, uid, pkm)!.cardFacts[9001]).toMatchObject({
+      sourceId: 'en/sv01-057',
+      code: 'PAL 001/193'
+    })
+    const ygo = localScope("'ygo'")
+    const y = saveDeck(db, draft(), T1, ygo)
+    expect(getDeck(db, y, ygo)!.cardFacts[DARK_MAGICIAN]).toMatchObject({
+      sourceId: null,
+      code: null
+    })
   })
 
   it('migration 53 is desktop-only', () => {

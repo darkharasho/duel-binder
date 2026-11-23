@@ -83,7 +83,14 @@ export function AddToDeck({
   const add = async (base: DeckDraft & { uid?: string }, name: string): Promise<void> => {
     const fact = await factOf(cardId, list.data?.cardFacts[cardId])
     if (game === 'op' && fact?.opCardType === DON) throw new Error("DON!! cards don't go in a deck")
-    const cards: DeckEntry[] = addEntry(base.cards, cardId, defaultSection(game, fact))
+    const cards: DeckEntry[] = addEntry(
+      base.cards,
+      cardId,
+      defaultSection(game, fact, {
+        format: base.format,
+        commanders: base.cards.filter((e) => e.section === 'commander').length
+      })
+    )
     await api.decks.save({ ...base, cards })
     const facts = { ...list.data?.cardFacts, ...(fact ? { [cardId]: fact } : {}) }
     const verdict = checkDeck(

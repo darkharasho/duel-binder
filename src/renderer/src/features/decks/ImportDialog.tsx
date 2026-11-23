@@ -4,6 +4,7 @@ import { MAX_DECK_NAME } from '@shared/decks/fields'
 import type { DeckCard, DeckEntry } from '@shared/decks/types'
 import { OplayError } from '@shared/decks/onepiece/oplay'
 import { parseOpList } from '@shared/decks/onepiece/text'
+import { parseMtgText } from '@shared/decks/magic/text'
 import { parsePtcgl } from '@shared/decks/pokemon/ptcgl'
 import { detectYgoList, parseYgoList } from '@shared/decks/ygo/lists'
 import type { GameId } from '@shared/games'
@@ -37,6 +38,8 @@ import {
 } from './deckImport'
 import { DeckSearch } from './DeckSearch'
 import { FormatSelect } from './FormatSelect'
+
+const MTGO_DEK_MESSAGE = 'Export as text from MTGO instead'
 
 export interface ImportResult {
   name: string
@@ -79,7 +82,7 @@ export function ImportDialog({
   const file = useRef<HTMLInputElement>(null)
   const formats = DECK_FORMATS[game]
 
-  const read = async (source: string): Promise<void> => {
+  const read = async (source: string, intoFormat = format): Promise<void> => {
     setReading(true)
     setError(null)
     setPreview(null)
@@ -89,14 +92,32 @@ export function ImportDialog({
     try {
       const pkm = game === 'pkm'
       const op = game === 'op'
-      const parsed = op ? parseOpList(source) : pkm ? parsePtcgl(source) : parseYgoList(source)
+      const mtg = game === 'mtg'
+      // An MTGO .dek is XML; only its text export reads here.
+      if (mtg && /^\s*<(\?xml|deck)/i.test(source)) {
+        setError(MTGO_DEK_MESSAGE)
+        return
+      }
+      const parsed = mtg
+        ? parseMtgText(source)
+        : op
+          ? parseOpList(source)
+          : pkm
+            ? parsePtcgl(source)
+            : parseYgoList(source)
       const resolutions = parsed.lines.length
         ? await api.decks.resolve(parsed.lines.map((l) => l.ref))
         : []
       if (!parsed.lines.length && !parsed.skipped.length) setError('Nothing to import in that.')
       else
         setPreview(
-          buildPreview(parsed, resolutions, pkm || op ? 'text' : detectYgoList(source), game)
+          buildPreview(
+            parsed,
+            resolutions,
+            pkm || op || mtg ? 'text' : detectYgoList(source),
+            game,
+            intoFormat
+          )
         )
     } catch (e) {
       setError(e instanceof OplayError ? e.message : errorMessage(e, 'Could not read the list'))
@@ -192,9 +213,11 @@ export function ImportDialog({
               placeholder={
                 game === 'pkm'
                   ? 'Paste a deck list from Pokémon TCG Live'
-                  : game === 'op'
-                    ? 'Paste a deck list, an OPlay deck code or share link'
-                    : 'Paste a deck list, a .ydk, or a ydke:// link'
+                  : game === 'mtg'
+                    ? 'Paste an Arena or MTGO deck list'
+                    : game === 'op'
+                      ? 'Paste a deck list, an OPlay deck code or share link'
+                      : 'Paste a deck list, a .ydk, or a ydke:// link'
               }
               onChange={(e) => {
                 setText(e.target.value)
@@ -223,7 +246,7 @@ export function ImportDialog({
               <input
                 ref={file}
                 type="file"
-                accept={game === 'ygo' ? '.ydk,.txt' : '.txt'}
+                accept={game === 'ygo' ? '.ydk,.txt' : game === 'mtg' ? '.txt,.dek' : '.txt'}
                 aria-label="Deck file"
                 className="hidden"
                 onChange={(e) => {
@@ -344,7 +367,16 @@ export function ImportDialog({
                 <label htmlFor="import-format" className="text-sm font-medium">
                   Format
                 </label>
-                <FormatSelect id="import-format" game={game} value={format} onChange={setFormat} />
+                <FormatSelect
+                  id="import-format"
+                  game={game}
+                  value={format}
+                  onChange={(f) => {
+                    setFormat(f)
+                    // Whether a Commander deck has a sideboard changes what the list leaves out.
+                    if (game === 'mtg' && text.trim()) void read(text, f)
+                  }}
+                />
               </div>
             </div>
           )}

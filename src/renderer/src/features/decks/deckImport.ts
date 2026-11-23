@@ -80,9 +80,21 @@ export function buildPreview(
     ambiguous: [],
     notFound: []
   }
+  // MTGO text has no Commander header and writes the commanders where the sideboard goes: for a
+  // Commander deck, one or two such cards are its commanders.
+  const sideLines = parsed.lines.filter((l) => l.section === 'side')
+  const sideCards = sideLines.reduce((n, l) => n + l.qty, 0)
+  const sideIsCommanders =
+    game === 'mtg' &&
+    format === 'commander' &&
+    parsed.headed === false &&
+    sideCards >= 1 &&
+    sideCards <= 2 &&
+    !parsed.lines.some((l) => l.section === 'commander')
   parsed.lines.forEach((l, i) => {
     const r = resolutions[i]
     if (r?.status === 'matched' && isDon(r)) return
+    if (sideIsCommanders && l.section === 'side') l = { ...l, section: 'commander' }
     const item: ImportItem = {
       key: `l${i}`,
       text: textOf(l, kind, r?.status === 'matched' ? r.name : undefined),

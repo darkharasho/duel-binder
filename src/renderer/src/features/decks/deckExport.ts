@@ -1,5 +1,6 @@
 import { toast } from 'sonner'
 import { encodeOplayV2, oplayLink } from '@shared/decks/onepiece/oplay'
+import { toArenaText, toMtgoText } from '@shared/decks/magic/text'
 import { toOpText } from '@shared/decks/onepiece/text'
 import { toPtcgl } from '@shared/decks/pokemon/ptcgl'
 import { toYdk, toYdke, toYgoText } from '@shared/decks/ygo/lists'
@@ -25,7 +26,23 @@ async function copyText(text: string): Promise<void> {
   else await api.dex.copy(text)
 }
 
-export type ExportKind = 'text' | 'link' | 'ydk' | 'oplay' | 'oplayLink'
+export type ExportKind = 'text' | 'link' | 'ydk' | 'oplay' | 'oplayLink' | 'arena' | 'mtgo'
+
+/**
+ * The set code and collector number of each entry's pinned printing. A Magic pkey is
+ * `en|<card>|<set code> <number>|<rarity>`, another language's `<lang>|<card>|<set name>|<set code> <number>|<rarity>`.
+ */
+export function pinsOf(cards: DeckEntry[]): Record<string, { set: string; number: string }> {
+  const pins: Record<string, { set: string; number: string }> = {}
+  for (const e of cards) {
+    if (!e.printing || pins[e.printing]) continue
+    const parts = e.printing.split('|')
+    const label = parts[0] === 'en' ? parts[2] : parts[3]
+    const at = label?.indexOf(' ') ?? -1
+    if (label && at > 0) pins[e.printing] = { set: label.slice(0, at), number: label.slice(at + 1) }
+  }
+  return pins
+}
 
 /**
  * The deck's OPlay code, from the Leader's and the Deck's card numbers; `left` counts the entries
@@ -70,6 +87,13 @@ export async function exportDeck(
         return
       }
       await copyText(toOpText(cards, facts))
+      toast.success('Copied the deck list')
+      return
+    }
+    if (game === 'mtg') {
+      await copyText(
+        kind === 'mtgo' ? toMtgoText(cards, facts) : toArenaText(cards, facts, pinsOf(cards))
+      )
       toast.success('Copied the deck list')
       return
     }

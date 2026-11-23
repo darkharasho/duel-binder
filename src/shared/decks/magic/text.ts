@@ -21,7 +21,7 @@ function faceName(name: string): string {
 
 /** An Arena or MTGO deck list; a list with no headers puts everything in Main. */
 export function parseMtgText(text: string): ParsedList {
-  const out: ParsedList = { lines: [], skipped: [], sectioned: false }
+  const out: ParsedList = { lines: [], skipped: [], sectioned: false, headed: false }
   let section: DeckSection = 'main'
   let headed = false
   let cards = 0
@@ -42,6 +42,7 @@ export function parseMtgText(text: string): ParsedList {
       const header = HEADER.exec(s)
       if (header) {
         headed = true
+        out.headed = true
         out.sectioned = true
         section = HEADER_SECTION[header[1].toLowerCase()] ?? section
         return

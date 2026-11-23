@@ -134,7 +134,8 @@ export function deckCardOf(c: BrowseCard): DeckCard {
     opCost: null,
     opBlock: null,
     mtgName: null,
-    mtgTypeLine: null,
+    // A Magic card's type is its type line: a legendary creature can go straight to Commander.
+    mtgTypeLine: c.frameType === 'mtg' ? c.type : null,
     mtgColorIdentity: [],
     mtgManaValue: null,
     mtgLayout: null

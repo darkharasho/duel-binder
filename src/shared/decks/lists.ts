@@ -26,4 +26,6 @@ export interface ParsedList {
   lines: ParsedLine[]
   skipped: { line: number; raw: string }[]
   sectioned: boolean
+  /** Magic: the list named its sections (an Arena list); MTGO text has no names, only a blank line. */
+  headed?: boolean
 }

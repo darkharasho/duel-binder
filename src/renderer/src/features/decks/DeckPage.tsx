@@ -311,6 +311,24 @@ export function DeckPage({
     const leader = fields?.cards.find((e) => e.section === 'leader')
     return game === 'op' && leader ? (facts[leader.card]?.opColors ?? []) : []
   }, [fields, facts, game])
+  // Magic Commander: how many commanders there are, and the colours they share.
+  const commanders = useMemo(
+    () =>
+      game === 'mtg'
+        ? (fields?.cards ?? [])
+            .filter((e) => e.section === 'commander')
+            .reduce((n, e) => n + e.qty, 0)
+        : 0,
+    [fields, game]
+  )
+  const identity = useMemo(() => {
+    if (game !== 'mtg' || fields?.format !== 'commander' || commanders === 0) return undefined
+    const colors = new Set<string>()
+    for (const e of fields.cards)
+      if (e.section === 'commander')
+        for (const c of facts[e.card]?.mtgColorIdentity ?? []) colors.add(c)
+    return [...colors]
+  }, [fields, facts, game, commanders])
   const missingCopies = cost ? cost.missing.reduce((n, m) => n + m.copies, 0) : 0
 
   const wide = (): boolean => !phone && (window.matchMedia?.(WIDE).matches ?? true)
@@ -350,6 +368,8 @@ export function DeckPage({
         notes={notesNode}
         onAdd={addCard}
         leaderColors={leaderColors}
+        identity={identity}
+        commanders={commanders}
         className={className}
       />
     ) : null

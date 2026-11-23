@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { defaultSection, type DeckFormat } from '@shared/decks/formats'
 import type { DeckCard, DeckSection } from '@shared/decks/types'
+import { MTG_COLOR_NAMES } from '@shared/games/magic'
 import { pkmKind } from '@shared/decks/pokemon/keys'
 import { isExtraFrame } from '@shared/decks/ygo/check'
 import type { GameId } from '@shared/games'
@@ -16,7 +17,8 @@ import { DRAG_CARD, OP_DECK_TYPES, SECTION_HEADING, deckCardOf } from './deckEnt
 const RESULTS = 60
 
 export type AdderTab = 'add' | 'missing' | 'notes'
-type Kind = 'monster' | 'spell' | 'trap' | 'extra' | 'P' | 'T' | 'E' | OpKind
+type Kind = 'monster' | 'spell' | 'trap' | 'extra' | 'P' | 'T' | 'E' | OpKind | MtgKind
+type MtgKind = 'Creature' | 'InstantSorcery' | 'Land'
 type OpKind = 'Character' | 'Event' | 'Stage'
 
 const YGO_KINDS: { id: Kind; label: string }[] = [
@@ -36,12 +38,31 @@ const OP_KINDS: { id: Kind; label: string }[] = [
   { id: 'Event', label: 'Event' },
   { id: 'Stage', label: 'Stage' }
 ]
+/** Magic types, filtered by the card's types (mtgTypes). */
+const MTG_KINDS: { id: Kind; label: string; types: string[] }[] = [
+  { id: 'Creature', label: 'Creature', types: ['Creature'] },
+  { id: 'InstantSorcery', label: 'Instant/Sorcery', types: ['Instant', 'Sorcery'] },
+  { id: 'Land', label: 'Land', types: ['Land'] }
+]
+const isMtgKind = (kind: Kind): kind is MtgKind =>
+  kind === 'Creature' || kind === 'InstantSorcery' || kind === 'Land'
+/** The colour chips (mtgColors), in colour-wheel order. */
+const MTG_COLORS = [...Object.values(MTG_COLOR_NAMES), 'Colorless']
+/** A colour identity as chip names: 'R' or 'Red' both read as Red, and Colorless is always in. */
+function identityChips(identity: string[]): string[] {
+  const names: string[] = Object.values(MTG_COLOR_NAMES)
+  const picks = identity
+    .map((c) => MTG_COLOR_NAMES[c as keyof typeof MTG_COLOR_NAMES] ?? c)
+    .filter((c) => names.includes(c))
+  return [...new Set([...picks, 'Colorless'])]
+}
 const isOpKind = (kind: Kind): kind is OpKind =>
   kind === 'Character' || kind === 'Event' || kind === 'Stage'
 const KINDS_OF: Partial<Record<GameId, { id: Kind; label: string }[]>> = {
   ygo: YGO_KINDS,
   pkm: PKM_KINDS,
-  op: OP_KINDS
+  op: OP_KINDS,
+  mtg: MTG_KINDS
 }
 const EXTRA_TYPE = /Fusion|Synchro|XYZ|Link/i
 
@@ -64,13 +85,15 @@ function typeIs(kind: Kind, type: string): boolean {
   }
 }
 const cardIs = (kind: Kind, c: BrowseCard): boolean =>
-  isOpKind(kind)
-    ? c.type === kind
-    : kind === 'P' || kind === 'T' || kind === 'E'
-      ? pkmKind(c.type) === kind
-      : kind === 'extra' || kind === 'monster'
-        ? c.type.includes('Monster') && isExtraFrame(c.frameType) === (kind === 'extra')
-        : typeIs(kind, c.type)
+  isMtgKind(kind)
+    ? true
+    : isOpKind(kind)
+      ? c.type === kind
+      : kind === 'P' || kind === 'T' || kind === 'E'
+        ? pkmKind(c.type) === kind
+        : kind === 'extra' || kind === 'monster'
+          ? c.type.includes('Monster') && isExtraFrame(c.frameType) === (kind === 'extra')
+          : typeIs(kind, c.type)
 
 const TAB =
   'h-7 flex-none rounded-full px-3 font-mono text-xs font-medium after:hidden data-[state=active]:bg-chip data-[state=active]:font-medium'
@@ -89,6 +112,8 @@ export function DeckAdder({
   notes,
   onAdd,
   leaderColors = [],
+  identity,
+  commanders = 0,
   className
 }: {
   game: GameId
@@ -104,6 +129,10 @@ export function DeckAdder({
   onAdd: (card: DeckCard, section: DeckSection) => void
   /** One Piece: the deck's Leader's colours, a filter chip each. */
   leaderColors?: string[]
+  /** Magic Commander: the commanders' colour identity; those colour chips (and Colorless) start on. */
+  identity?: string[]
+  /** Magic Commander: cards in the Commander section; an empty one takes a legendary creature. */
+  commanders?: number
   className?: string
 }): React.JSX.Element {
   return (
@@ -130,6 +159,8 @@ export function DeckAdder({
           inDeck={inDeck}
           onAdd={onAdd}
           leaderColors={leaderColors}
+          identity={identity}
+          commanders={commanders}
         />
       </TabsContent>
       <TabsContent value="missing" className="min-h-0 overflow-y-auto pr-1">
@@ -147,24 +178,37 @@ function AdderSearch({
   format,
   inDeck,
   onAdd,
-  leaderColors
+  leaderColors,
+  identity,
+  commanders
 }: {
   game: GameId
   format: DeckFormat
   inDeck: Map<number, number>
   onAdd: (card: DeckCard, section: DeckSection) => void
   leaderColors: string[]
+  identity?: string[]
+  commanders: number
 }): React.JSX.Element {
   const [text, setText] = useState('')
   const q = text.trim()
   const [owned, setOwned] = useState(false)
   const [kind, setKind] = useState<Kind | null>(null)
-  const [colorPicks, setColorPicks] = useState<string[]>([])
+  const [colorPicks, setColorPicks] = useState<{ start: string; picks: string[] } | null>(null)
+  const op = game === 'op'
+  const mtg = game === 'mtg'
+  // Magic: the chips start on the commanders' colours, and again whenever the commanders change.
+  const start = mtg && identity ? identityChips(identity).join(',') : ''
+  const mtgColors =
+    colorPicks && colorPicks.start === start ? colorPicks.picks : start ? start.split(',') : []
   const input = useRef<HTMLInputElement>(null)
   const kinds = KINDS_OF[game] ?? []
-  const op = game === 'op'
   // A colour stays picked only while the Leader still has it.
-  const colors = op ? colorPicks.filter((c) => leaderColors.includes(c)) : []
+  const colors = op
+    ? (colorPicks?.picks ?? []).filter((c) => leaderColors.includes(c))
+    : mtg
+      ? mtgColors
+      : []
   const colorKey = colors.join(',')
   const side = format.sections.find((s) => s.id === 'side')
   const labelOf = (id: DeckSection): string => format.sections.find((s) => s.id === id)?.label ?? id
@@ -188,12 +232,14 @@ function AdderSearch({
   const facets = useQuery({
     queryKey: queryKeys.browseFacets('all'),
     queryFn: () => api.cards.browseFacets(undefined),
-    enabled: kind !== null && !op
+    enabled: kind !== null && !op && !mtg
   })
   const cardTypes = useMemo(
     () =>
-      kind && !op && facets.data ? facets.data.cardTypes.filter((t) => typeIs(kind, t)) : undefined,
-    [kind, op, facets.data]
+      kind && !op && !mtg && facets.data
+        ? facets.data.cardTypes.filter((t) => typeIs(kind, t))
+        : undefined,
+    [kind, op, mtg, facets.data]
   )
   const nothingPicked = kind === null && colors.length === 0
   // With nothing typed or picked, the cards you own: something to add straight away.
@@ -209,14 +255,19 @@ function AdderSearch({
               opCardTypes: kind ? [kind] : OP_DECK_TYPES,
               ...(colorKey ? { opColors: colorKey.split(',') } : {})
             }
-          : cardTypes && cardTypes.length > 0
-            ? { cardTypes }
-            : {}),
+          : mtg
+            ? {
+                ...(kind ? { mtgTypes: MTG_KINDS.find((k) => k.id === kind)?.types } : {}),
+                ...(colorKey ? { mtgColors: colorKey.split(',') } : {})
+              }
+            : cardTypes && cardTypes.length > 0
+              ? { cardTypes }
+              : {}),
         sort: 'name',
         dir: 'asc',
         limit: RESULTS
       }),
-    enabled: kind === null || op || !facets.isPending
+    enabled: kind === null || op || mtg || !facets.isPending
   })
   const shown = (results.data?.cards ?? []).filter((c) => !kind || cardIs(kind, c))
 
@@ -253,14 +304,18 @@ function AdderSearch({
             {k.label}
           </button>
         ))}
-        {op &&
-          leaderColors.map((c) => (
+        {(op ? leaderColors : mtg ? MTG_COLORS : []).map((c) => {
+          const cur = op ? (colorPicks?.picks ?? []) : mtgColors
+          return (
             <button
               key={c}
               type="button"
               aria-pressed={colors.includes(c)}
               onClick={() =>
-                setColorPicks((cur) => (cur.includes(c) ? cur.filter((x) => x !== c) : [...cur, c]))
+                setColorPicks({
+                  start,
+                  picks: cur.includes(c) ? cur.filter((x) => x !== c) : [...cur, c]
+                })
               }
               className={cn(
                 FILTER,
@@ -269,7 +324,8 @@ function AdderSearch({
             >
               {c}
             </button>
-          ))}
+          )
+        })}
       </div>
       <div className="-mr-2 min-h-0 flex-1 overflow-y-auto pr-2">
         {q === '' && nothingPicked && !owned && shown.length > 0 && (
@@ -289,7 +345,11 @@ function AdderSearch({
           <ul aria-label="Search results" className="grid grid-cols-3 gap-x-2 gap-y-3">
             {shown.map((c) => {
               const card = deckCardOf(c)
-              const home = defaultSection(game, card)
+              const home = defaultSection(
+                game,
+                card,
+                mtg ? { format: format.id, commanders } : undefined
+              )
               const n = inDeck.get(c.id) ?? 0
               return (
                 <li key={c.id} className="group/result relative min-w-0">

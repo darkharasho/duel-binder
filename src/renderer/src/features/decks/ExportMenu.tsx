@@ -48,6 +48,15 @@ export function ExportMenu({
               Copy OPlay link
             </DropdownMenuItem>
           </>
+        ) : game === 'mtg' ? (
+          <>
+            <DropdownMenuItem onSelect={() => void exportDeck('arena', name, cards, facts, game)}>
+              Copy Arena list
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void exportDeck('mtgo', name, cards, facts, game)}>
+              Copy MTGO list
+            </DropdownMenuItem>
+          </>
         ) : game === 'pkm' ? (
           <DropdownMenuItem onSelect={() => void exportDeck('text', name, cards, facts, game)}>
             Copy deck list

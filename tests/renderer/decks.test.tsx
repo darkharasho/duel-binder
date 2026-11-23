@@ -12,7 +12,8 @@ import { DecksPage } from '@/features/decks/DecksPage'
 import { buildPreview, keptEntries } from '@/features/decks/deckImport'
 import { changeSummary, moveEntry } from '@/features/decks/deckEntries'
 import { parseYgoList } from '@shared/decks/ygo/lists'
-import { parseMtgText } from '@shared/decks/magic/text'
+import { parseMtgText, toMtgoText } from '@shared/decks/magic/text'
+import { pinsOf } from '@/features/decks/deckExport'
 import { parseOpText, toOpText } from '@shared/decks/onepiece/text'
 import { encodeOplayV2, oplayLink } from '@shared/decks/onepiece/oplay'
 import { OFFLINE_MESSAGE } from '@shared/friends'
@@ -1543,5 +1544,291 @@ describe('One Piece on the deck screens', () => {
     ])
     expect(preview.notFound).toEqual([])
     expect(preview.ambiguous).toEqual([])
+  })
+})
+
+describe('Magic on the deck screens', () => {
+  const mtgCard = (
+    id: number,
+    name: string,
+    typeLine: string,
+    identity: string[] = []
+  ): DeckCard => ({
+    id,
+    name,
+    type: typeLine,
+    frameType: 'mtg',
+    imageId: null,
+    owned: 0,
+    price: null,
+    regionPrice: null,
+    sourceId: null,
+    code: null,
+    opNumber: null,
+    opCardType: null,
+    opColors: [],
+    opCost: null,
+    opBlock: null,
+    mtgName: name,
+    mtgTypeLine: typeLine,
+    mtgColorIdentity: identity,
+    mtgManaValue: 2,
+    mtgLayout: 'normal'
+  })
+  const browseCard = (id: number, name: string, type: string) =>
+    ({
+      id,
+      name,
+      type,
+      frameType: 'mtg',
+      attribute: null,
+      race: '',
+      level: null,
+      linkval: null,
+      atk: null,
+      def: null,
+      imageId: 0,
+      price: null,
+      releasedAt: null,
+      owned: 0,
+      defaultPrintingId: null
+    }) as never
+  const commanderFormat = DECK_FORMATS.mtg.find((f) => f.id === 'commander')!
+  const adder = (
+    props: Partial<React.ComponentProps<typeof DeckAdder>> = {}
+  ): React.JSX.Element => (
+    <DeckAdder
+      game="mtg"
+      format={DECK_FORMATS.mtg[0]}
+      inDeck={new Map()}
+      tab="add"
+      onTab={vi.fn()}
+      missingCount={0}
+      missing={null}
+      notes={null}
+      onAdd={vi.fn()}
+      {...props}
+    />
+  )
+
+  it('the adder offers Creature, Instant/Sorcery, Land and the six colour chips', async () => {
+    const browse = vi.fn(async () => ({ cards: [], total: 0 }))
+    renderWithProviders(adder(), { api: createMockApi({ cards: { browse } }) })
+    const filters = await screen.findByRole('group', { name: 'Filters' })
+    for (const n of [
+      'Owned',
+      'Creature',
+      'Instant/Sorcery',
+      'Land',
+      'White',
+      'Blue',
+      'Black',
+      'Red',
+      'Green',
+      'Colorless'
+    ])
+      expect(within(filters).getByRole('button', { name: n })).toBeInTheDocument()
+    for (const n of ['Monster', 'Character', 'Pokémon'])
+      expect(within(filters).queryByRole('button', { name: n })).not.toBeInTheDocument()
+    await userEvent.click(within(filters).getByRole('button', { name: 'Instant/Sorcery' }))
+    await waitFor(() =>
+      expect(browse).toHaveBeenLastCalledWith(
+        expect.objectContaining({ mtgTypes: ['Instant', 'Sorcery'] })
+      )
+    )
+    await userEvent.click(within(filters).getByRole('button', { name: 'Blue' }))
+    await waitFor(() =>
+      expect(browse).toHaveBeenLastCalledWith(
+        expect.objectContaining({ mtgTypes: ['Instant', 'Sorcery'], mtgColors: ['Blue'] })
+      )
+    )
+  })
+
+  it('in a Commander deck with a red commander, Red and Colorless start on', async () => {
+    const browse = vi.fn(async () => ({ cards: [], total: 0 }))
+    renderWithProviders(adder({ format: commanderFormat, identity: ['R'], commanders: 1 }), {
+      api: createMockApi({ cards: { browse } })
+    })
+    const filters = await screen.findByRole('group', { name: 'Filters' })
+    const on = (n: string): string | null =>
+      within(filters).getByRole('button', { name: n }).getAttribute('aria-pressed')
+    expect([on('Red'), on('Colorless'), on('Blue'), on('Green')]).toEqual([
+      'true',
+      'true',
+      'false',
+      'false'
+    ])
+    await waitFor(() =>
+      expect(browse).toHaveBeenLastCalledWith(
+        expect.objectContaining({ mtgColors: ['Red', 'Colorless'] })
+      )
+    )
+    // A pick sticks; Red off leaves Colorless.
+    await userEvent.click(within(filters).getByRole('button', { name: 'Red' }))
+    expect(on('Red')).toBe('false')
+    await waitFor(() =>
+      expect(browse).toHaveBeenLastCalledWith(expect.objectContaining({ mtgColors: ['Colorless'] }))
+    )
+  })
+
+  it('a legendary creature goes to Commander while it is empty, else to Main', async () => {
+    const api = createMockApi({
+      cards: {
+        browse: vi.fn(async () => ({
+          cards: [
+            browseCard(1, 'Krenko', 'Legendary Creature — Goblin'),
+            browseCard(2, 'Lightning Bolt', 'Instant')
+          ],
+          total: 2
+        }))
+      }
+    })
+    const onAdd = vi.fn()
+    const { unmount } = renderWithProviders(adder({ format: commanderFormat, onAdd }), { api })
+    await userEvent.click(await screen.findByRole('button', { name: 'Add Krenko' }))
+    expect(onAdd).toHaveBeenLastCalledWith(expect.objectContaining({ id: 1 }), 'commander')
+    await userEvent.click(screen.getByRole('button', { name: 'Add Lightning Bolt' }))
+    expect(onAdd).toHaveBeenLastCalledWith(expect.objectContaining({ id: 2 }), 'main')
+    unmount()
+    renderWithProviders(adder({ format: commanderFormat, onAdd, commanders: 1 }), { api })
+    await userEvent.click(await screen.findByRole('button', { name: 'Add Krenko' }))
+    expect(onAdd).toHaveBeenLastCalledWith(expect.objectContaining({ id: 1 }), 'main')
+  })
+
+  it('the export menu copies the Arena list, with a pinned printing, and the MTGO list', async () => {
+    const copy = vi.fn(async (_text: string) => undefined)
+    const facts = { 1: mtgCard(1, 'Lightning Bolt', 'Instant'), 2: mtgCard(2, 'Opt', 'Instant') }
+    const cards: DeckEntry[] = [
+      { section: 'main', card: 1, qty: 4, printing: 'en|1|2X2 117|U' },
+      { section: 'main', card: 2, qty: 2 }
+    ]
+    renderWithProviders(<ExportMenu game="mtg" name="Mine" cards={cards} facts={facts} />, {
+      api: createMockApi({ dex: { copy } })
+    })
+    const open = async (): Promise<HTMLElement[]> => {
+      await userEvent.click(screen.getByRole('button', { name: 'Export' }))
+      return screen.findAllByRole('menuitem')
+    }
+    const items = await open()
+    expect(items.map((i) => i.textContent)).toEqual(['Copy Arena list', 'Copy MTGO list'])
+    await userEvent.click(items[0])
+    await waitFor(() => expect(copy).toHaveBeenCalledTimes(1))
+    expect(copy.mock.calls[0][0]).toContain('4 Lightning Bolt (2X2) 117')
+    expect(copy.mock.calls[0][0]).toContain('2 Opt')
+    await userEvent.click((await open())[1])
+    await waitFor(() => expect(copy).toHaveBeenCalledTimes(2))
+    expect(copy.mock.calls[1][0]).toBe('4 Lightning Bolt\n2 Opt')
+  })
+
+  it('pinsOf reads the set and number from English and other-language pkeys', () => {
+    expect(
+      pinsOf([
+        { section: 'main', card: 1, qty: 1, printing: 'en|1|2X2 117|U' },
+        { section: 'main', card: 2, qty: 1, printing: 'ja|2|Modern Horizons 2|MH2 290|R' },
+        { section: 'main', card: 3, qty: 1 }
+      ])
+    ).toEqual({
+      'en|1|2X2 117|U': { set: '2X2', number: '117' },
+      'ja|2|Modern Horizons 2|MH2 290|R': { set: 'MH2', number: '290' }
+    })
+  })
+
+  const mtgImport = (
+    resolve: Api['decks']['resolve'],
+    format = 'commander',
+    onApply = vi.fn()
+  ): void => {
+    renderWithProviders(
+      <ImportDialog game="mtg" format={format} busy={false} onApply={onApply} onClose={vi.fn()} />,
+      { api: createMockApi({ decks: { resolve } }) }
+    )
+  }
+  const paste = async (text: string): Promise<HTMLElement> => {
+    const dialog = await screen.findByRole('dialog')
+    const box = within(dialog).getByLabelText('Deck list')
+    expect(box).toHaveAttribute('placeholder', 'Paste an Arena or MTGO deck list')
+    await userEvent.click(box)
+    await userEvent.paste(text)
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Preview' }))
+    return dialog
+  }
+
+  it('the import dialog places an Arena Commander header card in Commander', async () => {
+    const onApply = vi.fn()
+    const resolve = vi.fn(async () => [
+      { status: 'matched' as const, card: 1, name: 'Krenko', frameType: 'mtg' },
+      { status: 'matched' as const, card: 2, name: 'Opt', frameType: 'mtg' }
+    ])
+    mtgImport(resolve, 'commander', onApply)
+    const dialog = await paste('Commander\n1 Krenko\n\nDeck\n1 Opt')
+    await userEvent.click(await within(dialog).findByRole('button', { name: 'Import deck' }))
+    expect(onApply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cards: [
+          { section: 'commander', card: 1, qty: 1 },
+          { section: 'main', card: 2, qty: 1 }
+        ]
+      })
+    )
+  })
+
+  it('a Companion in a Commander deck is listed as left out, with the reason', async () => {
+    const resolve = vi.fn(async () => [
+      { status: 'matched' as const, card: 1, name: 'Krenko', frameType: 'mtg' },
+      { status: 'matched' as const, card: 2, name: 'Lurrus', frameType: 'mtg' }
+    ])
+    mtgImport(resolve)
+    const dialog = await paste('Commander\n1 Krenko\n\nCompanion\n1 Lurrus')
+    const notFound = await within(dialog).findByRole('region', { name: 'Not found' })
+    expect(notFound).toHaveTextContent('Commander decks here have no sideboard')
+    expect(within(notFound).queryByRole('button', { name: /Search for/ })).not.toBeInTheDocument()
+  })
+
+  it('an MTGO .dek file points to the text export', async () => {
+    const resolve = vi.fn(async () => [])
+    mtgImport(resolve, 'modern')
+    const dialog = await paste(
+      '<?xml version="1.0"?>\n<Deck><Cards CatID="1" Quantity="4" Name="Opt"/></Deck>'
+    )
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'Export as text from MTGO instead'
+    )
+    expect(resolve).not.toHaveBeenCalled()
+  })
+
+  it('a Commander deck exported as MTGO text imports back with the same commanders and main', () => {
+    const facts = {
+      1: mtgCard(1, 'Krenko', 'Legendary Creature — Goblin'),
+      2: mtgCard(2, 'Opt', 'Instant'),
+      3: mtgCard(3, 'Mountain', 'Basic Land — Mountain')
+    }
+    const entries: DeckEntry[] = [
+      { section: 'commander', card: 1, qty: 1 },
+      { section: 'main', card: 2, qty: 1 },
+      { section: 'main', card: 3, qty: 30 }
+    ]
+    const text = toMtgoText(entries, facts)
+    const ids: Record<string, number> = { Krenko: 1, Opt: 2, Mountain: 3 }
+    const parsed = parseMtgText(text)
+    const res: DeckResolution[] = parsed.lines.map((l) => {
+      const name = 'name' in l.ref ? l.ref.name : ''
+      return { status: 'matched', card: ids[name], name, frameType: 'mtg' }
+    })
+    const preview = buildPreview(parsed, res, 'text', 'mtg', 'commander')
+    expect(preview.notFound).toEqual([])
+    expect(keptEntries(preview, {})).toEqual(expect.arrayContaining(entries.map((e) => ({ ...e }))))
+    expect(keptEntries(preview, {})).toHaveLength(3)
+    // Into a 60-card format the same text keeps it as a sideboard.
+    const modern = buildPreview(parsed, res, 'text', 'mtg', 'modern')
+    expect(keptEntries(modern, {}).find((e) => e.card === 1)?.section).toBe('side')
+  })
+
+  it('MTGO text with a three-card sideboard is not taken for commanders', () => {
+    const parsed = parseMtgText('4 Opt\n\n3 Krenko')
+    const res: DeckResolution[] = [
+      { status: 'matched', card: 2, name: 'Opt', frameType: 'mtg' },
+      { status: 'matched', card: 1, name: 'Krenko', frameType: 'mtg' }
+    ]
+    expect(buildPreview(parsed, res, 'text', 'mtg', 'commander').notFound).toHaveLength(1)
   })
 })

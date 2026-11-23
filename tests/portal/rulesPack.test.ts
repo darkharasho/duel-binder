@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { rulesPackRoute } from '../../workers/portal/src/rulesPack'
+import { buildOpPack, type OpRulesFile } from '../../src/shared/decks/onepiece/buildPack'
+import onepieceRules from '../../src/shared/decks/rules/onepiece.json'
 import type { SnapshotBucket } from '../../workers/portal/src/catalogSnapshot'
 
 const ORIGIN = 'https://app.duelbinder.com'
@@ -90,6 +92,21 @@ describe('rulesPackRoute', () => {
 
   it('PUT a pkm pack to /ygo is 400', async () => {
     expect((await put(bucket(), '/api/admin/rules/ygo', pack('pkm')))!.status).toBe(400)
+  })
+
+  it('PUT /api/admin/rules/op accepts an op pack and GET serves it', async () => {
+    const b = bucket()
+    const op = buildOpPack(onepieceRules as OpRulesFile, new Date('2026-11-23T03:00:00Z'))
+    expect((await put(b, '/api/admin/rules/op', op))!.status).toBe(200)
+    const res = (await call(b, '/api/rules/op'))!
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual(op)
+  })
+
+  it('PUT a pkm pack to /op is 400 bad-pack', async () => {
+    const res = (await put(bucket(), '/api/admin/rules/op', pack('pkm')))!
+    expect(res.status).toBe(400)
+    expect(await res.text()).toContain('bad-pack')
   })
 
   it('PUT a pack of a too-new schema is 400', async () => {

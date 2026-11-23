@@ -8,6 +8,9 @@
  *   npm run catalog:rules -- --game pkm [--cache <path>] [--dry-run]
  *                                        The Pokémon pack, from the catalog stage's card cache
  *                                        (default catalog-work/pokemon-src.sqlite)
+ *   npm run catalog:rules -- --game op [--dry-run]
+ *                                        The One Piece pack, from the hand-kept
+ *                                        src/shared/decks/rules/onepiece.json (no cache, no network)
  *
  * Exits 1 on any failure.
  */
@@ -16,12 +19,14 @@ import { pathToFileURL } from 'node:url'
 import { gzipSync } from 'node:zlib'
 import Database from 'better-sqlite3'
 import { parseRulesPack, type RulesPack } from '../../src/shared/decks/pack'
+import opRules from '../../src/shared/decks/rules/onepiece.json'
 import manual from '../../src/shared/decks/rules/pokemon-manual.json'
 import {
   buildPkmPack,
   type PkmManual,
   type PkmPackCard
 } from '../../src/shared/decks/pokemon/buildPack'
+import { buildOpPack, type OpRulesFile } from '../../src/shared/decks/onepiece/buildPack'
 import { buildYgoPack, type YgoPackCard } from '../../src/shared/decks/ygo/buildPack'
 
 const CARD_INFO_URL = 'https://db.ygoprodeck.com/api/v7/cardinfo.php?misc=yes'
@@ -68,7 +73,7 @@ export function readEnglishCards(cachePath: string): PkmPackCard[] {
   }
 }
 
-async function publish(game: 'ygo' | 'pkm', pack: RulesPack): Promise<void> {
+async function publish(game: 'ygo' | 'pkm' | 'op', pack: RulesPack): Promise<void> {
   const dryRun = process.argv.includes('--dry-run')
   const portalUrl = process.env['PORTAL_URL']
   const token = process.env['PORTAL_ADMIN_TOKEN']
@@ -107,10 +112,12 @@ async function main(): Promise<void> {
   if (game === 'pkm') {
     const cache = argValue('--cache') ?? 'catalog-work/pokemon-src.sqlite'
     await publish('pkm', buildPkmPack(readEnglishCards(cache), manual as PkmManual, new Date()))
+  } else if (game === 'op') {
+    await publish('op', buildOpPack(opRules as OpRulesFile, new Date()))
   } else if (game === 'ygo') {
     await publish('ygo', buildYgoPack(await fetchCards(), new Date()))
   } else {
-    throw new Error(`Unknown --game ${game}; expected ygo or pkm`)
+    throw new Error(`Unknown --game ${game}; expected ygo, pkm or op`)
   }
 }
 

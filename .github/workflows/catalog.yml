@@ -177,6 +177,14 @@ jobs:
       - name: Flag failed Pokémon rules pack
         if: steps.pkmrules.outcome == 'failure'
         run: echo "CATALOG_PROBLEMS=1" >> "$GITHUB_ENV"
+      - name: One Piece deck rules pack
+        id: oprules
+        timeout-minutes: 5
+        continue-on-error: true
+        run: npm run catalog:rules -- --game op
+      - name: Flag failed One Piece rules pack
+        if: steps.oprules.outcome == 'failure'
+        run: echo "CATALOG_PROBLEMS=1" >> "$GITHUB_ENV"
       # Bounded and never blocks the upload: a hang or crash here still lets Yu-Gi-Oh and Pokémon
       # upload, and the next step turns the night red.
       - name: Refresh One Piece

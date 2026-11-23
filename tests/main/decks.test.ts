@@ -417,6 +417,50 @@ describe('decks repo', () => {
   })
 })
 
+describe('pkm deck line resolution', () => {
+  it('matches by set and number, falls back to name, and only sees English cards', async () => {
+    const db = await seededDb()
+    const pkm = localScope("'pkm'")
+    const card = (id: number, name: string, lang: string, code: string): void => {
+      db.prepare(
+        `INSERT INTO cards (id, game, name, type, frame_type, race, "desc", updated_at)
+         VALUES (?, 'pkm', ?, 'Pokémon', '', '', '', '2026-11-22')`
+      ).run(id, name)
+      db.prepare(
+        `INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity)
+         VALUES ('pkm', ?, ?, ?, ?, 'Common')`
+      ).run(id, lang, `Set ${code}`, code)
+    }
+    card(9101, 'Pikachu ex', 'en', 'SVI 057/198')
+    card(9102, 'Twin Mon', 'en', 'PAL 010/193')
+    card(9103, 'Twin Mon', 'en', 'OBF 010/197')
+    card(9104, 'Twin Mon', 'ja', 'SV1S 010/078')
+    card(9105, 'Japan Only', 'ja', 'SV1S 011/078')
+    db.exec("INSERT INTO cards_fts(cards_fts) VALUES('rebuild')")
+    const res = resolveDeckLines(
+      db,
+      [
+        { set: 'SVI', number: '57', name: 'Pikachu ex' },
+        { set: 'svi', number: '057', name: 'Whatever' },
+        { set: 'ZZZ', number: '1', name: 'Pikachu ex' },
+        { name: 'Twin Mon' },
+        { name: 'Japan Only' },
+        { set: 'PAL', number: '10', name: 'Twin Mon' }
+      ],
+      pkm
+    )
+    expect(res[0]).toMatchObject({ status: 'matched', card: 9101 })
+    expect(res[1]).toMatchObject({ status: 'matched', card: 9101 })
+    expect(res[2]).toMatchObject({ status: 'matched', card: 9101 })
+    expect(res[3].status).toBe('ambiguous')
+    expect((res[3] as { options: { card: number }[] }).options.map((o) => o.card)).toEqual([
+      9102, 9103
+    ])
+    expect(res[4]).toEqual({ status: 'unmatched' })
+    expect(res[5]).toMatchObject({ status: 'matched', card: 9102 })
+  })
+})
+
 describe('decks repo on the server', () => {
   it('saves, lists, marks and tombstones one user’s decks by seq', async () => {
     const db = await seededServerDb()

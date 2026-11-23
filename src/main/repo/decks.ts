@@ -11,7 +11,7 @@ import type {
   DeckVerdictMark,
   VerdictStatus
 } from '../../shared/decks/types'
-import type { DeckLineRef } from '../../shared/decks/ygo/lists'
+import type { DeckLineRef } from '../../shared/decks/lists'
 import { normalCardName as normalName } from '../../shared/decks/names'
 import { checkObject } from './args'
 import { printingArtImageId, type PrintingDbRow } from './cards'
@@ -450,7 +450,17 @@ function checkRefs(v: unknown): DeckLineRef[] {
       return { passcode: o.passcode }
     if (typeof o.setCode === 'string' && o.setCode.length <= MAX_REF_TEXT)
       return { setCode: o.setCode.trim() }
-    if (typeof o.name === 'string' && o.name.length <= MAX_REF_TEXT) return { name: o.name }
+    if (typeof o.name === 'string' && o.name.length <= MAX_REF_TEXT) {
+      // A Pokémon line's set and number; malformed ones are dropped and the name alone is used.
+      if (
+        typeof o.set === 'string' &&
+        typeof o.number === 'string' &&
+        /^[A-Za-z][A-Za-z0-9-]{1,7}$/.test(o.set) &&
+        /^[A-Za-z]*\d+[A-Za-z]?$/.test(o.number)
+      )
+        return { set: o.set, number: o.number, name: o.name }
+      return { name: o.name }
+    }
     throw new CollectionError('A deck line needs a passcode, set code or name')
   })
 }
@@ -499,9 +509,38 @@ export function resolveDeckLines(db: SqlDb, refs: unknown, scope: Scope = LOCAL)
     }
   }
 
+  // On Pokémon a name only finds cards with an English printing: that's the name deck lists use.
+  const pkm = scopeGame(db, scope) === 'pkm'
+  const englishOnly = pkm
+    ? `AND EXISTS (SELECT 1 FROM card_printings p WHERE p.card_id = c.id AND +p.game = ${scope.game} AND p.language = 'en')`
+    : ''
+  // Pokémon "set number" refs: English printings of the set whose number matches, zeros ignored.
+  const bySetNumber = new Map<string, Set<number>>()
+  const stripZeros = (n: string): string => n.toLowerCase().replace(/^([a-z]*)0+(?=\d)/, '$1')
+  const setKey = (set: string, number: string): string =>
+    `${set.toLowerCase()} ${stripZeros(number)}`
+  const sets = [...new Set(lines.flatMap((r) => ('set' in r ? [r.set.toLowerCase()] : [])))]
+  if (sets.length > 0) {
+    const stmt = db.prepare(
+      `SELECT DISTINCT p.set_code, p.card_id FROM card_printings p
+       WHERE p.set_code LIKE ? COLLATE NOCASE AND p.language = 'en' AND +p.game = ${scope.game}`
+    )
+    for (const set of sets)
+      for (const r of stmt.all(`${set} %`) as { set_code: string; card_id: number }[]) {
+        const num = r.set_code
+          .slice(set.length + 1)
+          .split('/')[0]
+          .trim()
+        const key = setKey(set, num)
+        const ids = bySetNumber.get(key) ?? new Set<number>()
+        ids.add(r.card_id)
+        bySetNumber.set(key, ids)
+      }
+  }
+
   const named = db.prepare(
     `SELECT c.id, c.name, c.frame_type FROM cards_fts JOIN cards c ON c.id = cards_fts.rowid
-     WHERE cards_fts MATCH ? AND +c.game = ${scope.game}
+     WHERE cards_fts MATCH ? AND +c.game = ${scope.game} ${englishOnly}
      ORDER BY length(c.name), c.id LIMIT ${NAME_HITS}`
   )
   type Hit = { id: number; name: string; frame_type: string }
@@ -526,6 +565,8 @@ export function resolveDeckLines(db: SqlDb, refs: unknown, scope: Scope = LOCAL)
 
   const ambiguousIds = new Set<number>()
   for (const ids of byCode.values()) if (ids.size > 1) for (const id of ids) ambiguousIds.add(id)
+  for (const ids of bySetNumber.values())
+    if (ids.size > 1) for (const id of ids) ambiguousIds.add(id)
   for (const hits of byName.values())
     if (hits.length > 1) for (const h of hits) ambiguousIds.add(h.id)
   const names = new Map<number, { name: string; frameType: string }>()
@@ -535,6 +576,7 @@ export function resolveDeckLines(db: SqlDb, refs: unknown, scope: Scope = LOCAL)
   const wanted = new Set(ambiguousIds)
   for (const id of byPasscode.values()) wanted.add(id)
   for (const ids of byCode.values()) for (const id of ids) wanted.add(id)
+  for (const ids of bySetNumber.values()) for (const id of ids) wanted.add(id)
   const missing = [...wanted].filter((id) => !names.has(id))
   if (missing.length > 0)
     for (const r of db
@@ -571,6 +613,11 @@ export function resolveDeckLines(db: SqlDb, refs: unknown, scope: Scope = LOCAL)
     }
     if ('setCode' in r)
       return resolve([...(byCode.get(r.setCode.toLowerCase()) ?? [])].sort((a, b) => a - b))
-    return resolve((byName.get(normalName(r.name)) ?? []).map((h) => h.id))
+    const byNameIds = (): number[] => (byName.get(normalName(r.name)) ?? []).map((h) => h.id)
+    if ('set' in r) {
+      const ids = [...(bySetNumber.get(setKey(r.set, r.number)) ?? [])].sort((a, b) => a - b)
+      return resolve(ids.length > 0 ? ids : byNameIds())
+    }
+    return resolve(byNameIds())
   })
 }

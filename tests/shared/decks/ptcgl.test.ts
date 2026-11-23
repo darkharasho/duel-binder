@@ -91,3 +91,33 @@ describe('toPtcgl', () => {
     expect(text).toBe('Pokémon: 5\n2 Pikachu ex SVI 57\n3 #77\n\nTotal Cards: 5')
   })
 })
+
+describe('toPtcgl edge cases', () => {
+  it('a card of an unknown type goes under Pokémon and counts', () => {
+    const text = toPtcgl(
+      [
+        { section: 'main', card: 1, qty: 2 },
+        { section: 'main', card: 2, qty: 3 }
+      ],
+      {
+        1: card(1, 'Pikachu ex', 'Pokémon', 'SVI 057/198'),
+        2: card(2, 'Odd Thing', 'Spell Card', null)
+      }
+    )
+    expect(text).toBe('Pokémon: 5\n2 Pikachu ex SVI 57\n3 Odd Thing\n\nTotal Cards: 5')
+  })
+  it('only all-digit numbers lose their zeros', () => {
+    const text = toPtcgl(
+      [
+        { section: 'main', card: 1, qty: 1 },
+        { section: 'main', card: 2, qty: 1 }
+      ],
+      {
+        1: card(1, 'Pikachu', 'Pokémon', 'SVI 057/198'),
+        2: card(2, 'Pikachu V', 'Pokémon', 'LOR TG05/TG30')
+      }
+    )
+    expect(text).toContain('1 Pikachu SVI 57\n')
+    expect(text).toContain('1 Pikachu V LOR TG05')
+  })
+})

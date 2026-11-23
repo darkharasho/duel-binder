@@ -72,12 +72,14 @@ export function parsePtcgl(text: string): ParsedList {
 
 const KIND_LABEL = { P: 'Pokémon', T: 'Trainer', E: 'Energy' } as const
 
-/** "PAL 001/193" becomes "PAL 1": the set, then the number without zeros or the set total. */
+/** "PAL 001/193" becomes "PAL 1": the set, then the number without zeros or the set total.
+ * Only all-digit numbers lose zeros; "TG05" stays "TG05". */
 function exportCode(code: string | null): string | null {
   if (!code) return null
   const [set, rest] = code.split(/\s+/, 2)
   if (!set || !rest) return null
-  const num = rest.split('/')[0].replace(/^([A-Za-z]*)0+(?=\d)/, '$1')
+  const raw = rest.split('/')[0]
+  const num = /^\d+$/.test(raw) ? raw.replace(/^0+(?=\d)/, '') : raw
   return `${set} ${num}`
 }
 
@@ -97,8 +99,8 @@ export function toPtcgl(entries: DeckEntry[], cards: Record<number, DeckCard>): 
       counts.P += e.qty
       continue
     }
-    const kind = pkmKind(card.type)
-    if (!kind) continue
+    // A type we can't place goes under Pokémon, like an unknown card, so the totals stay right.
+    const kind = pkmKind(card.type) ?? 'P'
     const code = exportCode(card.code)
     groups[kind].push(`${e.qty} ${card.name}${code ? ` ${code}` : ''}`)
     counts[kind] += e.qty

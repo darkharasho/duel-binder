@@ -215,6 +215,8 @@ export interface CollectionFilters {
   opBlocks?: string[]
   /** Magic only. */
   mtgColors?: string[]
+  /** Cards whose colour identity is within these colours (Colorless: also none at all). */
+  mtgIdentityIn?: string[]
   mtgTypes?: string[]
   mtgFinishes?: string[]
   manaValueMin?: number
@@ -276,6 +278,8 @@ export interface BrowseFilters {
   opBlocks?: string[]
   /** Magic only. */
   mtgColors?: string[]
+  /** Cards whose colour identity is within these colours (Colorless: also none at all). */
+  mtgIdentityIn?: string[]
   mtgTypes?: string[]
   mtgFinishes?: string[]
   manaValueMin?: number

@@ -1694,14 +1694,20 @@ describe('Magic on the deck screens', () => {
     ])
     await waitFor(() =>
       expect(browse).toHaveBeenLastCalledWith(
-        expect.objectContaining({ mtgColors: ['Red', 'Colorless'] })
+        expect.objectContaining({ mtgIdentityIn: ['Red', 'Colorless'] })
       )
+    )
+    // Within the identity, not "any of these colours": a Rakdos card has no place in mono-red.
+    expect(browse).not.toHaveBeenLastCalledWith(
+      expect.objectContaining({ mtgColors: expect.anything() })
     )
     // A pick sticks; Red off leaves Colorless.
     await userEvent.click(within(filters).getByRole('button', { name: 'Red' }))
     expect(on('Red')).toBe('false')
     await waitFor(() =>
-      expect(browse).toHaveBeenLastCalledWith(expect.objectContaining({ mtgColors: ['Colorless'] }))
+      expect(browse).toHaveBeenLastCalledWith(
+        expect.objectContaining({ mtgIdentityIn: ['Colorless'] })
+      )
     )
   })
 

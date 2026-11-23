@@ -9,6 +9,7 @@ import type { Scope } from './scope'
 
 export interface MagicFilterFields {
   mtgColors?: string[]
+  mtgIdentityIn?: string[]
   mtgTypes?: string[]
   manaValueMin?: number
   manaValueMax?: number
@@ -48,6 +49,16 @@ export function magicWhere(f: MagicFilterFields): { sql: string; args: unknown[]
         : '0'
     )
     parts.push(`(${any.join(' OR ')})`)
+    args.push(...codes)
+  }
+  // A Commander deck's cards: every colour of the identity is one of these. Colorless lets in
+  // cards with no colour identity at all.
+  if (f.mtgIdentityIn?.length) {
+    const codes = f.mtgIdentityIn.flatMap((n) => CODE_OF.get(n) ?? [])
+    parts.push(
+      `(NOT EXISTS (SELECT 1 FROM json_each(mc.color_identity) j WHERE j.value NOT IN (${marks(codes)}))` +
+        (f.mtgIdentityIn.includes(COLORLESS) ? ')' : ` AND mc.color_identity != '[]')`)
+    )
     args.push(...codes)
   }
   if (f.mtgTypes?.length) {

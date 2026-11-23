@@ -86,6 +86,22 @@ describe('Magic filters, facets, stats and details', () => {
     }
   })
 
+  it("keeps to a commander's colour identity: identity within the colours, Colorless for none", () => {
+    // Walker casts for colourless but its ability costs {G}.
+    db.prepare(`UPDATE mtg_cards SET color_identity = '["U"]' WHERE card_id = ?`).run(instant)
+    db.prepare(`UPDATE mtg_cards SET color_identity = '["G"]' WHERE card_id = ?`).run(artifact)
+    for (const run of [browse, owned]) {
+      expect(run({ mtgIdentityIn: ['White', 'Blue', 'Colorless'] })).toEqual(['Opt', 'Serra Angel'])
+      expect(run({ mtgIdentityIn: ['Blue'] })).toEqual(['Opt'])
+      expect(run({ mtgIdentityIn: ['Green', 'Colorless'] })).toEqual(['Walker'])
+      expect(run({ mtgIdentityIn: ['Red'] })).toEqual([])
+    }
+    db.prepare(`UPDATE mtg_cards SET color_identity = '[]' WHERE card_id = ?`).run(artifact)
+    expect(browse({ mtgIdentityIn: ['Red', 'Colorless'] })).toEqual(['Walker'])
+    expect(browse({ mtgIdentityIn: ['Colorless'] })).toEqual(['Walker'])
+    expect(browse({ mtgIdentityIn: ['Red'] })).toEqual([])
+  })
+
   it('filters the collection by finish', () => {
     expect(owned({ mtgFinishes: ['Foil'] })).toEqual(['Serra Angel'])
     expect(owned({ mtgFinishes: ['Nonfoil'] })).toEqual(['Opt', 'Walker'])

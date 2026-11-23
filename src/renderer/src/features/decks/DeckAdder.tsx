@@ -214,6 +214,8 @@ function AdderSearch({
       ? mtgColors
       : []
   const colorKey = colors.join(',')
+  // Magic Commander: the chips keep to a colour identity (Scryfall's id<=), not any of the colours.
+  const identityMode = mtg && format.id === 'commander'
   const side = format.sections.find((s) => s.id === 'side')
   const labelOf = (id: DeckSection): string => format.sections.find((s) => s.id === id)?.label ?? id
 
@@ -249,7 +251,16 @@ function AdderSearch({
   // With nothing typed or picked, the cards you own: something to add straight away.
   const yours = owned || (q === '' && nothingPicked)
   const results = useQuery({
-    queryKey: ['browse', 'deckAdder', q, yours, kind, cardTypes?.length ?? 0, colorKey],
+    queryKey: [
+      'browse',
+      'deckAdder',
+      q,
+      yours,
+      kind,
+      cardTypes?.length ?? 0,
+      colorKey,
+      identityMode
+    ],
     queryFn: () =>
       api.cards.browse({
         q,
@@ -262,7 +273,11 @@ function AdderSearch({
           : mtg
             ? {
                 ...(kind ? { mtgTypes: MTG_KINDS.find((k) => k.id === kind)?.types } : {}),
-                ...(colorKey ? { mtgColors: colorKey.split(',') } : {})
+                ...(colorKey
+                  ? identityMode
+                    ? { mtgIdentityIn: colorKey.split(',') }
+                    : { mtgColors: colorKey.split(',') }
+                  : {})
               }
             : cardTypes && cardTypes.length > 0
               ? { cardTypes }

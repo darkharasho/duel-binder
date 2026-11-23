@@ -17,7 +17,12 @@ const c = (frameType: string): DeckCard => ({
   opCardType: null,
   opColors: [],
   opCost: null,
-  opBlock: null
+  opBlock: null,
+  mtgName: null,
+  mtgTypeLine: null,
+  mtgColorIdentity: [],
+  mtgManaValue: null,
+  mtgLayout: null
 })
 
 describe('defaultSection', () => {
@@ -65,5 +70,44 @@ describe('op formats', () => {
   it('puts a Leader in Leader and a Character in the Deck', () => {
     expect(defaultSection('op', { frameType: 'op', opCardType: 'Leader' })).toBe('leader')
     expect(defaultSection('op', { frameType: 'op', opCardType: 'Character' })).toBe('main')
+  })
+})
+
+describe('mtg formats', () => {
+  it('has the seven formats in order with their sections', () => {
+    expect(DECK_FORMATS.mtg.map((f) => f.id)).toEqual([
+      'standard',
+      'pioneer',
+      'modern',
+      'legacy',
+      'vintage',
+      'pauper',
+      'commander'
+    ])
+    const modern = DECK_FORMATS.mtg.find((f) => f.id === 'modern')!
+    expect(modern.sections).toEqual([
+      { id: 'main', label: 'Main', min: 60, max: Infinity },
+      { id: 'side', label: 'Sideboard', min: 0, max: 15 }
+    ])
+    const cmd = DECK_FORMATS.mtg.find((f) => f.id === 'commander')!
+    expect(cmd.sections.map((s) => [s.id, s.min, s.max])).toEqual([
+      ['commander', 1, 2],
+      ['main', 0, Infinity]
+    ])
+    expect(DECK_FORMATS.mtg.every((f) => f.priceRegion === 'en')).toBe(true)
+  })
+  it('sends the first legendary creature of a Commander deck to Commander', () => {
+    const legend = { ...c('mtg'), mtgTypeLine: 'Legendary Creature — Elf // Land' }
+    expect(defaultSection('mtg', legend, { format: 'commander', commanders: 0 })).toBe('commander')
+    expect(defaultSection('mtg', legend, { format: 'commander', commanders: 1 })).toBe('main')
+    expect(defaultSection('mtg', legend, { format: 'modern', commanders: 0 })).toBe('main')
+    expect(
+      defaultSection(
+        'mtg',
+        { ...c('mtg'), mtgTypeLine: 'Legendary Artifact' },
+        { format: 'commander', commanders: 0 }
+      )
+    ).toBe('main')
+    expect(defaultSection('mtg', undefined)).toBe('main')
   })
 })

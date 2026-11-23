@@ -9,7 +9,8 @@ const SECTION_LABEL: Record<DeckSection, string> = {
   main: 'Main Deck',
   extra: 'Extra Deck',
   side: 'Side Deck',
-  leader: 'Leader'
+  leader: 'Leader',
+  commander: 'Commander'
 }
 
 function splitLines(text: string): string[] {

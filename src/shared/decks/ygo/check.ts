@@ -35,7 +35,13 @@ export function checkYgo(
   const short = SHORT[deck.format] ?? { label: format.label, region: 'the TCG' }
   const nameOf = (id: number): string => cards[id]?.name ?? `Card #${id}`
 
-  const perSection: Record<DeckSection, number> = { main: 0, extra: 0, side: 0, leader: 0 }
+  const perSection: Record<DeckSection, number> = {
+    main: 0,
+    extra: 0,
+    side: 0,
+    leader: 0,
+    commander: 0
+  }
   const perCard = new Map<number, number>()
   for (const e of deck.cards) {
     perSection[e.section] += e.qty

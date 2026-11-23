@@ -34,6 +34,30 @@ function opOrder(a: DeckCard | undefined, b: DeckCard | undefined): number {
   return an === bn ? 0 : an < bn ? -1 : 1
 }
 
+const MTG_TYPES = [
+  'Creature',
+  'Planeswalker',
+  'Battle',
+  'Instant',
+  'Sorcery',
+  'Artifact',
+  'Enchantment',
+  'Land'
+]
+
+/** The first of the main Magic types in the front face's type line, else 8. */
+function mtgRank(card: DeckCard | undefined): number {
+  const i = MTG_TYPES.findIndex((t) => card?.mtgTypeLine?.includes(t))
+  return i < 0 ? 8 : i
+}
+
+/** Magic within a rank: mana value ascending (none last); 0 = tie. */
+function mtgOrder(a: DeckCard | undefined, b: DeckCard | undefined): number {
+  const am = a?.mtgManaValue ?? Infinity
+  const bm = b?.mtgManaValue ?? Infinity
+  return am === bm ? 0 : am < bm ? -1 : 1
+}
+
 /** A sorted copy for display and export; entries that tie keep their given order. */
 export function sortEntries(
   game: GameId,
@@ -41,16 +65,22 @@ export function sortEntries(
   cards: Record<number, DeckCard>
 ): DeckEntry[] {
   const rank = (e: DeckEntry): number =>
-    game === 'ygo'
-      ? ygoRank(cards[e.card])
-      : game === 'pkm'
-        ? pkmRank(cards[e.card])
-        : game === 'op'
-          ? opRank(cards[e.card])
-          : 0
+    game === 'mtg'
+      ? (e.section === 'commander' ? 0 : 9) + mtgRank(cards[e.card])
+      : game === 'ygo'
+        ? ygoRank(cards[e.card])
+        : game === 'pkm'
+          ? pkmRank(cards[e.card])
+          : game === 'op'
+            ? opRank(cards[e.card])
+            : 0
   return [...entries].sort((a, b) => {
     const r = rank(a) - rank(b)
     if (r !== 0) return r
+    if (game === 'mtg') {
+      const o = mtgOrder(cards[a.card], cards[b.card])
+      if (o !== 0) return o
+    }
     if (game === 'op') {
       const o = opOrder(cards[a.card], cards[b.card])
       if (o !== 0) return o

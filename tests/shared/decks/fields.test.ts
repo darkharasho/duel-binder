@@ -66,10 +66,30 @@ describe('checkDeckFields', () => {
     bad({ cards: [{ section: 'leader', card: 501, qty: 1 }] })
   })
 
-  it('decksAvailable is true for ygo, pkm and op', () => {
+  it('decksAvailable is true for every game', () => {
     expect(decksAvailable('ygo')).toBe(true)
     expect(decksAvailable('pkm')).toBe(true)
     expect(decksAvailable('op')).toBe(true)
-    expect(decksAvailable('mtg')).toBe(false)
+    expect(decksAvailable('mtg')).toBe(true)
+  })
+})
+
+describe('checkDeckFields for Magic', () => {
+  const mtg = {
+    ...base,
+    format: 'commander',
+    cards: [
+      { section: 'commander', card: 1, qty: 1 },
+      { section: 'main', card: 2, qty: 1 }
+    ]
+  }
+  it('accepts a commander section in a Commander deck', () => {
+    expect(checkDeckFields(mtg, 'mtg').cards).toHaveLength(2)
+  })
+  it('rejects a format that is not in the list', () => {
+    expect(() => checkDeckFields({ ...mtg, format: 'brawl' }, 'mtg')).toThrow(DeckFieldError)
+  })
+  it('rejects a commander section in a 60-card format', () => {
+    expect(() => checkDeckFields({ ...mtg, format: 'modern' }, 'mtg')).toThrow(DeckFieldError)
   })
 })

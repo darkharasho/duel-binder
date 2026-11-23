@@ -1,5 +1,6 @@
 import type { SqlDb } from '../db/sql'
 import type { GameId } from '../../shared/games'
+import { mtgCardId } from '../../shared/games/ids'
 import { MAX_MARK_PROBLEMS, MAX_PROBLEM_KEY } from '../../shared/decks/check'
 import { DeckFieldError, MAX_DECKS_PER_GAME, checkDeckFields } from '../../shared/decks/fields'
 import type {
@@ -217,8 +218,44 @@ function deckCards(
     { number: string; card_type: string; colors: string; cost: number | null }
   >()
   const opBlocks = new Map<number, number>()
+  const mtgFacts = new Map<
+    number,
+    { name: string; typeLine: string; identity: string[]; value: number | null; layout: string }
+  >()
   const game = scopeGame(db, scope)
-  if (game === 'pkm') {
+  if (game === 'mtg') {
+    const l2 = JSON.stringify(cards.map((c) => c.id))
+    const mtg = db
+      .prepare(
+        `SELECT card_id, oracle_id, type_line, color_identity, mana_value, layout FROM mtg_cards
+         WHERE card_id IN ${IN_LIST}`
+      )
+      .all(l2) as {
+      card_id: number
+      oracle_id: string
+      type_line: string
+      color_identity: string
+      mana_value: number | null
+      layout: string
+    }[]
+    // The English card of the same oracle id names the card, whatever language the row is in.
+    const enIds = mtg.map((m) => mtgCardId('en', m.oracle_id))
+    const enNames = new Map<number, string>()
+    if (enIds.length > 0)
+      for (const r of db
+        .prepare(`SELECT id, name FROM cards WHERE id IN ${IN_LIST} AND +game = ${scope.game}`)
+        .all(JSON.stringify(enIds)) as { id: number; name: string }[])
+        enNames.set(r.id, r.name)
+    const own = new Map(cards.map((c) => [c.id, c.name]))
+    for (const m of mtg)
+      mtgFacts.set(m.card_id, {
+        name: enNames.get(mtgCardId('en', m.oracle_id)) ?? own.get(m.card_id) ?? '',
+        typeLine: m.type_line.split(' // ')[0],
+        identity: colorsOf(m.color_identity),
+        value: m.mana_value,
+        layout: m.layout
+      })
+  } else if (game === 'pkm') {
     const ids2 = cards.map((c) => c.id)
     const l2 = JSON.stringify(ids2)
     for (const r of db
@@ -263,6 +300,7 @@ function deckCards(
     const p = prices.get(c.id)
     const price = p ? (p.en ?? p.anyp) : null
     const o = opFacts.get(c.id)
+    const m = mtgFacts.get(c.id)
     facts[c.id] = {
       id: c.id,
       name: c.name,
@@ -278,7 +316,12 @@ function deckCards(
       opCardType: o?.card_type ?? null,
       opColors: o ? colorsOf(o.colors) : [],
       opCost: o?.cost ?? null,
-      opBlock: opBlocks.get(c.id) ?? null
+      opBlock: opBlocks.get(c.id) ?? null,
+      mtgName: m?.name ?? null,
+      mtgTypeLine: m?.typeLine ?? null,
+      mtgColorIdentity: m?.identity ?? [],
+      mtgManaValue: m?.value ?? null,
+      mtgLayout: m?.layout ?? null
     }
   }
   return facts

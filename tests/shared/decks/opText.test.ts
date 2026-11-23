@@ -23,7 +23,12 @@ const op = (
   opCardType,
   opColors: ['Red'],
   opCost,
-  opBlock: 1
+  opBlock: 1,
+  mtgName: null,
+  mtgTypeLine: null,
+  mtgColorIdentity: [],
+  mtgManaValue: null,
+  mtgLayout: null
 })
 
 describe('OP_CODE', () => {

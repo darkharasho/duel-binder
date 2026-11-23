@@ -23,7 +23,12 @@ const op = (
   opCardType,
   opColors: ['Red'],
   opCost,
-  opBlock: 1
+  opBlock: 1,
+  mtgName: null,
+  mtgTypeLine: null,
+  mtgColorIdentity: [],
+  mtgManaValue: null,
+  mtgLayout: null
 })
 
 describe('sortEntries for op', () => {
@@ -53,5 +58,42 @@ describe('sortEntries for op', () => {
     }
     const entries: DeckEntry[] = [1, 2, 3, 5, 4].map((card) => ({ section: 'main', card, qty: 1 }))
     expect(sortEntries('op', entries, cards).map((e) => e.card)).toEqual([4, 5, 3, 2, 1])
+  })
+})
+
+describe('sortEntries for mtg', () => {
+  const mtg = (id: number, name: string, typeLine: string, mv: number | null): DeckCard => ({
+    ...op(id, name, '', null, ''),
+    opCardType: null,
+    opNumber: null,
+    opBlock: null,
+    opColors: [],
+    mtgName: name,
+    mtgTypeLine: typeLine,
+    mtgManaValue: mv
+  })
+  it('puts the commander first, then types in order, each by mana value', () => {
+    const cards: Record<number, DeckCard> = {
+      1: mtg(1, 'Forest', 'Basic Land — Forest', 0),
+      2: mtg(2, 'Shock', 'Instant', 1),
+      3: mtg(3, 'Grizzly Bears', 'Creature — Bear', 3),
+      4: mtg(4, 'Llanowar Elves', 'Creature — Elf Druid', 1),
+      5: mtg(5, 'Atraxa', 'Legendary Creature — Phyrexian Angel Horror', 4)
+    }
+    const entries: DeckEntry[] = [1, 2, 3, 4, 5].map((card) => ({
+      section: card === 5 ? 'commander' : 'main',
+      card,
+      qty: 1
+    }))
+    expect(sortEntries('mtg', entries, cards).map((e) => e.card)).toEqual([5, 4, 3, 2, 1])
+  })
+  it('ranks an unknown type 8 and a missing mana value last', () => {
+    const cards: Record<number, DeckCard> = {
+      1: mtg(1, 'A', 'Kindred', 0),
+      2: mtg(2, 'B', 'Land', null),
+      3: mtg(3, 'C', 'Land', 2)
+    }
+    const entries: DeckEntry[] = [1, 2, 3].map((card) => ({ section: 'main', card, qty: 1 }))
+    expect(sortEntries('mtg', entries, cards).map((e) => e.card)).toEqual([3, 2, 1])
   })
 })

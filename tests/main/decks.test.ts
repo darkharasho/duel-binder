@@ -11,6 +11,7 @@ import {
 } from '../../src/main/repo/decks'
 import { saveGraded } from '../../src/main/repo/graded'
 import { CollectionError } from '../../src/main/repo/collection'
+import { mtgCardId } from '../../src/shared/games/ids'
 import { localScope } from '../../src/main/repo/scope'
 import { userScope } from '../../workers/portal/src/scope'
 import type { DeckDraft, DeckEntry, DeckVerdictMark } from '../../src/shared/decks/types'
@@ -174,6 +175,85 @@ describe('decks repo', () => {
       opColors: [],
       opCost: null,
       opBlock: null
+    })
+  })
+
+  it('deckCards gives an mtg card its English name, type line, identity, mana value and layout', () => {
+    const add = (
+      id: number,
+      lang: string,
+      name: string,
+      oracle: string,
+      typeLine: string,
+      identity: string,
+      mv: number,
+      layout: string
+    ): void => {
+      db.prepare(
+        `INSERT INTO cards (id, game, name, type, frame_type, race, "desc", updated_at)
+         VALUES (?, 'mtg', ?, ?, 'mtg', '', '', '2026-11-23')`
+      ).run(id, name, typeLine)
+      db.prepare(
+        `INSERT INTO mtg_cards (card_id, oracle_id, lang, layout, type_line, color_identity, mana_value)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      ).run(id, oracle, lang, layout, typeLine, identity, mv)
+    }
+    const en = mtgCardId('en', 'bolt-oracle')
+    const ja = mtgCardId('ja', 'bolt-oracle')
+    const delver = mtgCardId('en', 'delver-oracle')
+    add(en, 'en', 'Lightning Bolt', 'bolt-oracle', 'Instant', '["R"]', 1, 'normal')
+    add(ja, 'ja', '稲妻', 'bolt-oracle', 'Instant', '["R"]', 1, 'normal')
+    add(
+      delver,
+      'en',
+      'Delver of Secrets // Insectile Aberration',
+      'delver-oracle',
+      'Creature — Human Wizard // Creature — Human Insect',
+      '["U"]',
+      1,
+      'transform'
+    )
+    const mtg = localScope("'mtg'")
+    const uid = saveDeck(
+      db,
+      draft({
+        format: 'modern',
+        cards: [en, ja, delver].map((card) => ({ section: 'main' as const, card, qty: 1 }))
+      }),
+      T1,
+      mtg
+    )
+    const facts = getDeck(db, uid, mtg)!.cardFacts
+    for (const id of [en, ja])
+      expect(facts[id]).toMatchObject({
+        mtgName: 'Lightning Bolt',
+        mtgTypeLine: 'Instant',
+        mtgColorIdentity: ['R'],
+        mtgManaValue: 1,
+        mtgLayout: 'normal'
+      })
+    expect(facts[delver]).toMatchObject({
+      mtgName: 'Delver of Secrets // Insectile Aberration',
+      mtgTypeLine: 'Creature — Human Wizard',
+      mtgLayout: 'transform'
+    })
+    db.prepare(
+      `INSERT INTO cards (id, game, name, type, frame_type, race, "desc", updated_at)
+       VALUES (9201, 'pkm', 'Pikachu', 'Pokémon', '', '', '', '2026-11-23')`
+    ).run()
+    const pkm = localScope("'pkm'")
+    const p = saveDeck(
+      db,
+      draft({ format: 'standard', cards: [{ section: 'main', card: 9201, qty: 1 }] }),
+      T1,
+      pkm
+    )
+    expect(getDeck(db, p, pkm)!.cardFacts[9201]).toMatchObject({
+      mtgName: null,
+      mtgTypeLine: null,
+      mtgColorIdentity: [],
+      mtgManaValue: null,
+      mtgLayout: null
     })
   })
 

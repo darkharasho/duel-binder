@@ -132,7 +132,12 @@ export function deckCardOf(c: BrowseCard): DeckCard {
     opCardType: c.frameType === 'op' ? c.type : null,
     opColors: [],
     opCost: null,
-    opBlock: null
+    opBlock: null,
+    mtgName: null,
+    mtgTypeLine: null,
+    mtgColorIdentity: [],
+    mtgManaValue: null,
+    mtgLayout: null
   }
 }
 

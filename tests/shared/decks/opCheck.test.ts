@@ -49,7 +49,12 @@ function mk(
     opCardType: type,
     opColors: colors,
     opCost: null,
-    opBlock: block
+    opBlock: block,
+    mtgName: null,
+    mtgTypeLine: null,
+    mtgColorIdentity: [],
+    mtgManaValue: null,
+    mtgLayout: null
   }
   return id
 }

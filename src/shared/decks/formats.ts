@@ -30,6 +30,16 @@ const OP_SECTIONS: SectionDef[] = [
   { id: 'main', label: 'Deck', min: 50, max: 50 }
 ]
 
+const MTG_SECTIONS: SectionDef[] = [
+  { id: 'main', label: 'Main', min: 60, max: Infinity },
+  { id: 'side', label: 'Sideboard', min: 0, max: 15 }
+]
+
+const MTG_COMMANDER_SECTIONS: SectionDef[] = [
+  { id: 'commander', label: 'Commander', min: 1, max: 2 },
+  { id: 'main', label: 'Main', min: 0, max: Infinity }
+]
+
 export const DECK_FORMATS: Record<GameId, readonly DeckFormat[]> = {
   ygo: [
     { id: 'advanced', label: 'Advanced (TCG)', sections: YGO_SECTIONS, priceRegion: 'en' },
@@ -43,7 +53,15 @@ export const DECK_FORMATS: Record<GameId, readonly DeckFormat[]> = {
     { id: 'standard', label: 'Standard', sections: OP_SECTIONS, priceRegion: 'en' },
     { id: 'extra', label: 'Extra Regulation', sections: OP_SECTIONS, priceRegion: 'en' }
   ],
-  mtg: []
+  mtg: [
+    { id: 'standard', label: 'Standard', sections: MTG_SECTIONS, priceRegion: 'en' },
+    { id: 'pioneer', label: 'Pioneer', sections: MTG_SECTIONS, priceRegion: 'en' },
+    { id: 'modern', label: 'Modern', sections: MTG_SECTIONS, priceRegion: 'en' },
+    { id: 'legacy', label: 'Legacy', sections: MTG_SECTIONS, priceRegion: 'en' },
+    { id: 'vintage', label: 'Vintage', sections: MTG_SECTIONS, priceRegion: 'en' },
+    { id: 'pauper', label: 'Pauper', sections: MTG_SECTIONS, priceRegion: 'en' },
+    { id: 'commander', label: 'Commander', sections: MTG_COMMANDER_SECTIONS, priceRegion: 'en' }
+  ]
 }
 
 export function formatOf(game: GameId, id: string): DeckFormat | null {
@@ -56,12 +74,24 @@ export function decksAvailable(game: GameId): boolean {
 
 /**
  * Where a card goes when added without a section picked: Extra Deck monsters to Extra, a One Piece
- * Leader to Leader, else Main.
+ * Leader to Leader, a Magic Commander deck's first legendary creature to Commander, else Main.
  */
 export function defaultSection(
   game: GameId,
-  card: Pick<DeckCard, 'frameType' | 'opCardType'> | undefined
+  card:
+    | (Pick<DeckCard, 'frameType' | 'opCardType'> & Partial<Pick<DeckCard, 'mtgTypeLine'>>)
+    | undefined,
+  ctx?: { format: string; commanders: number }
 ): DeckSection {
+  if (game === 'mtg') {
+    const front = card?.mtgTypeLine?.split(' // ')[0] ?? ''
+    return ctx?.format === 'commander' &&
+      ctx.commanders === 0 &&
+      front.includes('Legendary') &&
+      front.includes('Creature')
+      ? 'commander'
+      : 'main'
+  }
   if (game === 'op') return card?.opCardType === 'Leader' ? 'leader' : 'main'
   return game === 'ygo' && card && isExtraFrame(card.frameType) ? 'extra' : 'main'
 }

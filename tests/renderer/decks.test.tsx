@@ -54,7 +54,12 @@ const card = (
   opCardType: null,
   opColors: [],
   opCost: null,
-  opBlock: null
+  opBlock: null,
+  mtgName: null,
+  mtgTypeLine: null,
+  mtgColorIdentity: [],
+  mtgManaValue: null,
+  mtgLayout: null
 })
 const facts: Record<number, DeckCard> = {
   [POT]: card(POT, 'Pot of Greed', 3, 1, 'spell'),
@@ -1037,7 +1042,12 @@ describe('Pokémon on the deck screens', () => {
     opCardType: null,
     opColors: [],
     opCost: null,
-    opBlock: null
+    opBlock: null,
+    mtgName: null,
+    mtgTypeLine: null,
+    mtgColorIdentity: [],
+    mtgManaValue: null,
+    mtgLayout: null
   })
   const browseCard = (id: number, name: string, type: string) =>
     ({
@@ -1174,7 +1184,12 @@ describe('One Piece on the deck screens', () => {
     opCardType,
     opColors,
     opCost: opCardType === 'Leader' ? null : 2,
-    opBlock: 1
+    opBlock: 1,
+    mtgName: null,
+    mtgTypeLine: null,
+    mtgColorIdentity: [],
+    mtgManaValue: null,
+    mtgLayout: null
   })
   const opBrowse = (id: number, name: string, type: string) =>
     ({

@@ -205,7 +205,11 @@ export function DeckStatChips({
             <span className="text-muted-foreground">{s.label.replace(/ Deck$/, '')}</span>
             <span className={cn('font-semibold', out && 'text-destructive')}>{n}</span>
             <span className="text-muted-foreground">
-              {s.min > 0 ? `/ ${s.min}–${s.max}` : `/ ${s.max}`}
+              {s.max === Infinity
+                ? `/ ${s.min}+`
+                : s.min > 0
+                  ? `/ ${s.min}–${s.max}`
+                  : `/ ${s.max}`}
             </span>
           </span>
         )

@@ -1,7 +1,7 @@
 import type { GameId } from '../games'
 
 /** Where a deck entry sits; later games widen this union. */
-export type DeckSection = 'main' | 'extra' | 'side' | 'leader'
+export type DeckSection = 'main' | 'extra' | 'side' | 'leader' | 'commander'
 
 export interface DeckEntry {
   section: DeckSection
@@ -47,6 +47,12 @@ export interface DeckCard {
   opColors: string[]
   opCost: number | null
   opBlock: number | null
+  /** Magic only, else null / []: the English name (through oracle_id), front-face type line, colour identity codes, mana value and Scryfall layout */
+  mtgName: string | null
+  mtgTypeLine: string | null
+  mtgColorIdentity: string[]
+  mtgManaValue: number | null
+  mtgLayout: string | null
 }
 
 export type VerdictStatus = 'legal' | 'warnings' | 'illegal' | 'unknown' | 'update'

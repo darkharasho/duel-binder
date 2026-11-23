@@ -41,7 +41,12 @@ async function factOf(cardId: number, known: DeckCard | undefined): Promise<Deck
     opCardType: op?.cardType ?? (c.frameType === 'op' ? c.type : null),
     opColors: op?.colors ?? [],
     opCost: op?.cost ?? null,
-    opBlock: op?.blockIcon ?? null
+    opBlock: op?.blockIcon ?? null,
+    mtgName: null,
+    mtgTypeLine: null,
+    mtgColorIdentity: [],
+    mtgManaValue: null,
+    mtgLayout: null
   }
 }
 

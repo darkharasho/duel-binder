@@ -36,7 +36,13 @@ export function checkOp(
   /** Card facts not read yet (a card just added from search): no number, block or colours. */
   const unread = (c: DeckCard): boolean => c.opNumber === null
 
-  const perSection: Record<DeckSection, number> = { main: 0, extra: 0, side: 0, leader: 0 }
+  const perSection: Record<DeckSection, number> = {
+    main: 0,
+    extra: 0,
+    side: 0,
+    leader: 0,
+    commander: 0
+  }
   /** card id → copies, per section, in deck order */
   const inLeader = new Map<number, number>()
   const inMain = new Map<number, number>()

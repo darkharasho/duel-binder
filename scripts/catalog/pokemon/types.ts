@@ -26,6 +26,11 @@ export interface TdCard {
   englishTwin?: { setCode: string; number: string; mark: string }
   /** Built from TCGplayer's rows (upcoming.ts), so its name is already English and plain. */
   fromTcgplayer?: boolean
+  /** TCGdex's format legality of this printing. */
+  legal?: { standard?: boolean; expanded?: boolean }
+  regulationMark?: string
+  trainerType?: string
+  energyType?: string
   set: { id: string; name: string }
 }
 export interface TdSet {

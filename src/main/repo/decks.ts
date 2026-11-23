@@ -12,6 +12,7 @@ import type {
   VerdictStatus
 } from '../../shared/decks/types'
 import type { DeckLineRef } from '../../shared/decks/ygo/lists'
+import { normalCardName as normalName } from '../../shared/decks/names'
 import { checkObject } from './args'
 import { printingArtImageId, type PrintingDbRow } from './cards'
 import { CollectionError } from './collection'
@@ -418,18 +419,6 @@ export function markDeckSeen(db: SqlDb, uid: unknown, mark: unknown, scope: Scop
   db.prepare(
     `UPDATE decks AS d SET last_verdict = ?, last_pack_version = ? WHERE d.uid = ? AND ${scope.where('d')}`
   ).run(JSON.stringify(m), m.packVersion, id)
-}
-
-/** A name as compared: NFKD, no combining marks, lowercase, straight quotes, single spaces. */
-function normalName(s: string): string {
-  return s
-    .normalize('NFKD')
-    .replace(/\p{M}/gu, '')
-    .toLowerCase()
-    .replace(/[‘’‚‛′]/g, "'")
-    .replace(/[“”„‟″]/g, '"')
-    .replace(/\s+/g, ' ')
-    .trim()
 }
 
 function checkRefs(v: unknown): DeckLineRef[] {

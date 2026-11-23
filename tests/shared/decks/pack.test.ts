@@ -137,3 +137,34 @@ describe('parseRulesPack op', () => {
     ).toEqual({ state: 'missing' })
   })
 })
+
+describe('parseRulesPack mtg', () => {
+  const mtg = {
+    schema: 1,
+    game: 'mtg',
+    version: '2026-11-23T09:00:00+00:00',
+    builtAt: '2026-11-23T10:00:00.000Z',
+    sources: [{ name: 'Scryfall', fetchedAt: '2026-11-23T09:00:00+00:00' }],
+    formats: ['standard', 'pioneer', 'modern', 'legacy', 'vintage', 'pauper', 'commander'],
+    legal: { 'Black Lotus': 2 * 4 ** 4 + 3 * 4 ** 3 + 3 * 4 ** 6 },
+    anyNumber: { 'Relentless Rats': 0 },
+    commander: { 'Thrasios, Triton Hero': 'partner' },
+    upcoming: { 'Future Card': '2027-01-01' }
+  }
+  it('parses a valid mtg pack', () => {
+    const r = parseRulesPack(mtg)
+    expect(r.state).toBe('ready')
+    if (r.state === 'ready') expect(r.pack.game).toBe('mtg')
+  })
+  it('rejects an mtg pack whose formats differ', () => {
+    expect(parseRulesPack({ ...mtg, formats: ['standard', 'modern'] })).toEqual({
+      state: 'missing'
+    })
+  })
+  it('rejects a legal value over 4^7-1', () => {
+    expect(parseRulesPack({ ...mtg, legal: { X: 4 ** 7 } })).toEqual({ state: 'missing' })
+  })
+  it('rejects a bad upcoming date', () => {
+    expect(parseRulesPack({ ...mtg, upcoming: { X: '2027-1-1' } })).toEqual({ state: 'missing' })
+  })
+})

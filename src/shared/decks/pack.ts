@@ -97,7 +97,51 @@ export interface OpRulesPack {
   unlimited?: string[]
 }
 
-export type RulesPack = YgoRulesPack | PkmRulesPack | OpRulesPack
+export const MTG_FORMATS = [
+  'standard',
+  'pioneer',
+  'modern',
+  'legacy',
+  'vintage',
+  'pauper',
+  'commander'
+] as const
+export type MtgFormat = (typeof MTG_FORMATS)[number]
+/** The two bits a format holds in a card's `legal` value. */
+export const MTG_LEGALITY = { notLegal: 0, legal: 1, restricted: 2, banned: 3 } as const
+
+/** '' alone only | 'partner' | `partner-with:${name}` | 'friends' | 'background-chooser' | 'background' | 'companion' | 'doctor' | `variant:${text}` */
+export type MtgCommanderKind = string
+
+export interface MtgRulesPack {
+  schema: number
+  game: 'mtg'
+  version: string
+  builtAt: string
+  sources: { name: string; fetchedAt: string }[]
+  /** MTG_FORMATS at build time, in bit order */
+  formats: string[]
+  /** English name → 2 bits per format (format i at bits 2i) */
+  legal: Record<string, number>
+  /** name → cap, 0 = no cap */
+  anyNumber: Record<string, number>
+  commander: Record<string, MtgCommanderKind>
+  /** name → YYYY-MM-DD release */
+  upcoming: Record<string, string>
+}
+
+/** A card's legality in a format; null when the pack doesn't know the name. */
+export function mtgLegality(
+  pack: MtgRulesPack,
+  name: string,
+  format: MtgFormat
+): 0 | 1 | 2 | 3 | null {
+  if (!Object.prototype.hasOwnProperty.call(pack.legal, name)) return null
+  const i = MTG_FORMATS.indexOf(format)
+  return ((pack.legal[name] >> (2 * i)) & 3) as 0 | 1 | 2 | 3
+}
+
+export type RulesPack = YgoRulesPack | PkmRulesPack | OpRulesPack | MtgRulesPack
 
 export type PackState =
   { state: 'ready'; pack: RulesPack } | { state: 'missing' } | { state: 'tooNew' }
@@ -174,17 +218,38 @@ function validOp(raw: Record<string, unknown>): boolean {
   return true
 }
 
+function validMtg(raw: Record<string, unknown>): boolean {
+  const formats = raw.formats
+  if (!Array.isArray(formats) || formats.length !== MTG_FORMATS.length) return false
+  if (!MTG_FORMATS.every((f, i) => formats[i] === f)) return false
+  if (!isObj(raw.legal) || !isObj(raw.anyNumber) || !isObj(raw.commander) || !isObj(raw.upcoming))
+    return false
+  const max = 4 ** MTG_FORMATS.length - 1
+  for (const n of Object.values(raw.legal))
+    if (!Number.isInteger(n) || (n as number) < 0 || (n as number) > max) return false
+  for (const n of Object.values(raw.anyNumber))
+    if (!Number.isInteger(n) || (n as number) < 0) return false
+  for (const k of Object.values(raw.commander)) if (typeof k !== 'string') return false
+  for (const d of Object.values(raw.upcoming)) if (!isDay(d)) return false
+  return true
+}
+
 /** Malformed → missing; a schema newer than this app reads → tooNew. */
 export function parseRulesPack(raw: unknown): PackState {
   if (!isObj(raw) || typeof raw.schema !== 'number') return { state: 'missing' }
   if (raw.schema > RULES_SCHEMA) return { state: 'tooNew' }
   if (
-    (raw.game !== 'ygo' && raw.game !== 'pkm' && raw.game !== 'op') ||
+    (raw.game !== 'ygo' && raw.game !== 'pkm' && raw.game !== 'op' && raw.game !== 'mtg') ||
     typeof raw.version !== 'string' ||
     typeof raw.builtAt !== 'string'
   )
     return { state: 'missing' }
-  if (!Array.isArray(raw.sources) || !isObj(raw.formats)) return { state: 'missing' }
+  if (!Array.isArray(raw.sources)) return { state: 'missing' }
+  if (raw.game === 'mtg')
+    return validMtg(raw)
+      ? { state: 'ready', pack: raw as unknown as MtgRulesPack }
+      : { state: 'missing' }
+  if (!isObj(raw.formats)) return { state: 'missing' }
   if (raw.game === 'pkm')
     return validPkm(raw)
       ? { state: 'ready', pack: raw as unknown as PkmRulesPack }

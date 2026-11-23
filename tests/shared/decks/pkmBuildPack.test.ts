@@ -101,4 +101,25 @@ describe('buildPkmPack', () => {
     expect(p.sources).toEqual([{ name: 'TCGdex', fetchedAt: now.toISOString() }])
     expect(parseRulesPack(p).state).toBe('ready')
   })
+  it('keeps basic and special Energy of the same name apart', () => {
+    const p = build([
+      c('1', 'Darkness Energy', { category: 'Energy', energyType: 'Normal' }),
+      c('2', 'Darkness Energy', { category: 'Energy', energyType: 'Special' })
+    ])
+    expect(p.keys).toHaveLength(2)
+    expect(p.keys[p.ids['1']].f).toBe(PKM_FLAG.basicEnergy)
+    expect(p.keys[p.ids['2']].f).toBe(0)
+  })
+  it('an override with standard false clears the bit', () => {
+    const p = build([c('a-1', 'X', { legal: { standard: true } })], {
+      ...none,
+      override: { 'a-1': { standard: false } }
+    })
+    expect(p.keys[0].l & PKM_LEGAL.standard).toBe(0)
+  })
+  it('throws on an override id not in the cards', () => {
+    expect(() =>
+      build([c('a', 'A')], { ...none, override: { 'zz-7': { standard: true } } })
+    ).toThrow(/zz-7/)
+  })
 })

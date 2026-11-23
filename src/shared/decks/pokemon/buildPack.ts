@@ -29,7 +29,9 @@ const names = (xs?: { name: string }[]): string =>
 
 /** One rules identity: the name, its attacks and its abilities, so reprints share it. */
 export function cardKeyOf(c: PkmPackCard): string {
-  return `${normalCardName(c.name)}|${names(c.attacks)}|${names(c.abilities)}`
+  const key = `${normalCardName(c.name)}|${names(c.attacks)}|${names(c.abilities)}`
+  // Old sets print a Special Energy under the basic one's name.
+  return c.category === 'Energy' ? `${key}|${c.energyType === 'Normal' ? 'basic' : 'special'}` : key
 }
 
 function flagsOf(c: PkmPackCard): number {

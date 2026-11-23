@@ -5,7 +5,8 @@ import { PKM_FLAG, PKM_LEGAL, type PkmRulesPack } from '../pack'
 import type { DeckCard, WireDeck } from '../types'
 import { keyIndex, keyOfCard, pkmKind } from './keys'
 
-const BASIC_ENERGY_NAME = /^(basic )?\w+ energy$/
+const BASIC_ENERGY_NAME =
+  /^(basic )?(grass|fire|water|lightning|psychic|fighting|darkness|metal|fairy) energy$/
 
 export function checkPkm(
   deck: Pick<WireDeck, 'format' | 'cards'>,
@@ -64,13 +65,10 @@ export function checkPkm(
     const name = f.card?.name ?? nameOf(f.id)
     const keyed = !f.unsure && f.keys.length === 1 && pack
     const norm = normalCardName(keyed ? pack.keys[f.keys[0]].n : name)
-    let basicEnergy: boolean
-    if (pack && f.keys.length > 0) {
-      basicEnergy = f.keys.every((k) => (pack.keys[k].f & PKM_FLAG.basicEnergy) !== 0)
-    } else {
-      basicEnergy =
-        !!f.card && pkmKind(f.card.type) === 'E' && BASIC_ENERGY_NAME.test(normalCardName(name))
-    }
+    const byName =
+      !!f.card && pkmKind(f.card.type) === 'E' && BASIC_ENERGY_NAME.test(normalCardName(name))
+    const basicEnergy =
+      byName || (!!pack && f.keys.some((k) => (pack.keys[k].f & PKM_FLAG.basicEnergy) !== 0))
     const g = groups.get(norm)
     if (g) {
       g.n += f.qty

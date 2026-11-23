@@ -19,6 +19,9 @@ const cards: PkmPackCard[] = [
   { id: 'r-2', name: 'Radiant Greninja', category: 'Pokemon', stage: 'Basic', legal: L },
   { id: 'old-1', name: 'Old Card', category: 'Trainer', legal: { expanded: true } },
   { id: 'ban-1', name: 'Lysandre Labs', category: 'Trainer', legal: L },
+  { id: 'm-1', name: 'Metal Energy', category: 'Energy', energyType: 'Normal', legal: L },
+  { id: 'm-2', name: 'Metal Energy', category: 'Energy', energyType: 'Special', legal: L },
+  { id: 'jet-1', name: 'Jet Energy', category: 'Energy', energyType: 'Special', legal: L },
   { id: 'j-1', name: 'Mew', category: 'Pokemon', stage: 'Basic', legal: L },
   {
     id: 'j-2',
@@ -68,6 +71,8 @@ const RAD1 = mk('Radiant Charizard', 'Pokémon', 'en/r-1')
 const RAD2 = mk('Radiant Greninja', 'Pokémon', 'en/r-2')
 const OLD = mk('Old Card', 'Trainer', 'en/old-1')
 const BAN = mk('Lysandre Labs', 'Trainer', 'en/ban-1')
+const JMETAL = mk('Metal Energy', 'エネルギー', 'ja/SV1-099')
+const JET = mk('Jet Energy', 'Energy', 'ja/SV1-098')
 const JMEW = mk('Mew', 'Pokémon', 'ja/SV1-001')
 
 const e = (card: number, qty = 1): DeckEntry => ({ section: 'main', card, qty })
@@ -158,10 +163,29 @@ describe('pkm checkDeck', () => {
   })
 })
 
+describe('pkm basic Energy found by name', () => {
+  it('a Japanese basic Metal Energy x8 has no copies error, with or without a pack', () => {
+    expect(keys(deck(60, [e(JMETAL, 8)]))).not.toContain('copies:metal energy')
+    expect(keys(deck(60, [e(JMETAL, 8)]), { state: 'missing' })).toEqual([])
+  })
+  it('5 Jet Energy with no pack is a copies error', () => {
+    expect(keys(deck(60, [e(JET, 5)]), { state: 'missing' })).toEqual(['copies:jet energy'])
+  })
+  it('2 of the same ACE SPEC is an ace error', () => {
+    expect(keys(deck(60, [e(ACE1, 2)]))).toEqual(['ace'])
+  })
+})
+
 describe('pkm sort', () => {
   it('Pokémon, Trainer, Energy, unknown', () => {
     const odd = mk('Aaa', 'Weird', null)
     const sorted = sortEntries('pkm', [e(FIRE), e(odd), e(BALL1), e(RAICHU), e(PIKA)], reg)
     expect(sorted.map((x) => x.card)).toEqual([PIKA, RAICHU, BALL1, FIRE, odd])
+  })
+  it('ranks localized types', () => {
+    const en = mk('Zed', 'エネルギー', null)
+    const tr = mk('Yan', 'Dresseur', null)
+    const po = mk('Xan', 'Pokémon', null)
+    expect(sortEntries('pkm', [e(en), e(tr), e(po)], reg).map((x) => x.card)).toEqual([po, tr, en])
   })
 })

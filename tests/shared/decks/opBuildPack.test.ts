@@ -27,4 +27,10 @@ describe('buildOpPack', () => {
   it('the shipped onepiece.json builds', () => {
     expect(() => buildOpPack(shipped as OpRulesFile, new Date())).not.toThrow()
   })
+  it('the shipped file exempts block icon X cards, which the catalog reads as no block', () => {
+    // Bandai prints Super Parallel Rare numbers from April 2026 with block icon "X" (always in
+    // Standard); the card list parser reads that as null, so they must be exempt, not unknown.
+    const exempt = (shipped as OpRulesFile).formats.standard.exempt
+    expect(exempt).toEqual(expect.arrayContaining(['OP18-031', 'OP18-065', 'OP17-118']))
+  })
 })

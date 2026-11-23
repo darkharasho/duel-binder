@@ -34,9 +34,9 @@ const VERDICT_STATUSES: readonly VerdictStatus[] = [
 ]
 /** The languages whose printings price a deck built for the Asian (OCG) region. */
 const REGION_LANGUAGES = "('ja', 'ko', 'zh-hans', 'zh-hant', 'ae', 'ja-asia')"
-/** An id or pkey list bound as one JSON array, never one parameter per item (the DO caps them). */
 /** A basic Energy's whole name, normalised. */
 const BASIC_ENERGY = /^(?:grass|fire|water|lightning|psychic|fighting|darkness|metal|fairy) energy$/
+/** An id or pkey list bound as one JSON array, never one parameter per item (the DO caps them). */
 const IN_LIST = '(SELECT value FROM json_each(?))'
 
 /** frameType lets the importer place a card (an Extra Deck monster in Extra) when the list didn't. */

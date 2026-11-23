@@ -1,6 +1,6 @@
 {
   "asOf": "2026-11-22",
-  "source": "https://en.onepiece-cardgame.com/news/restriction.html (bans and pairs; details: news/restriction-2611.html, news/restriction-261001.html, news/restriction-260501.html, topics/019.php, topics/029.php); https://en.onepiece-cardgame.com/topics/013.php (Standard and Extra Regulation, block rotation); https://en.onepiece-cardgame.com/news/blockicon-card.html (block exemptions: Block ④ cards and every Super Parallel Rare number, which includes the cards Bandai prints with block icon X); https://en.onepiece-cardgame.com/cardlist/?series=569302 (PRB-02 card list)",
+  "source": "https://en.onepiece-cardgame.com/news/restriction.html (bans and pairs; details: news/restriction-2611.html, news/restriction-261001.html, news/restriction-260501.html, topics/019.php, topics/029.php); https://en.onepiece-cardgame.com/topics/013.php (Standard and Extra Regulation, block rotation); https://en.onepiece-cardgame.com/news/blockicon-card.html (block exemptions: Block ④ cards and every Super Parallel Rare number, which includes the cards Bandai prints with block icon X); https://en.onepiece-cardgame.com/cardlist/?series=569302 (PRB-02 card list); https://en.onepiece-cardgame.com/cardlist/ (free-word search \"any number of this card\" over every series, checked 2026-11-23: unlimited = OP01-075 Pacifista, OP08-072 Biscuit Warrior, OP16-042 Prisoner of Impel Down, OP18-093 Sleeptids, whose text says a deck may have any number of them). 2026-11-23: the Block ④ exempt numbers are legal only until 2029-03-31 and must be removed from exempt then; until the catalog keeps the block icon X, each new block X card number must be added to exempt by hand",
   "formats": {
     "standard": {
       "banned": [
@@ -149,5 +149,6 @@
       ]
     }
   },
-  "setBlocks": {}
+  "setBlocks": {},
+  "unlimited": ["OP01-075", "OP08-072", "OP16-042", "OP18-093"]
 }

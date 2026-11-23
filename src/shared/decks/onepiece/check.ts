@@ -4,6 +4,7 @@ import type { OpRulesPack } from '../pack'
 import type { DeckCard, DeckSection, WireDeck } from '../types'
 
 const LEADER = 'Leader'
+const DON = 'DON!!'
 
 /** "2026-11-27" → "Nov 27" */
 function shortDate(day: string): string {
@@ -31,6 +32,9 @@ export function checkOp(
   }
   const numOf = (c: DeckCard): string => c.opNumber ?? String(c.id)
   const isLeader = (c: DeckCard): boolean => c.opCardType === LEADER
+  const isDon = (c: DeckCard): boolean => c.opCardType === DON
+  /** Card facts not read yet (a card just added from search): no number, block or colours. */
+  const unread = (c: DeckCard): boolean => c.opNumber === null
 
   const perSection: Record<DeckSection, number> = { main: 0, extra: 0, side: 0, leader: 0 }
   /** card id → copies, per section, in deck order */
@@ -54,10 +58,24 @@ export function checkOp(
     })
   }
 
+  // A DON!! card never goes in the deck; it gets this one problem and no other.
+  for (const m of [inLeader, inMain]) {
+    for (const id of m.keys()) {
+      const c = cards[id]
+      if (c && isDon(c))
+        push({
+          key: `don:${id}`,
+          severity: 'error',
+          cardId: id,
+          message: `${c.name} is a DON!! card; it doesn't go in the deck`
+        })
+    }
+  }
+
   let leader: DeckCard | undefined
   for (const id of inLeader.keys()) {
     const c = cards[id]
-    if (!c) continue
+    if (!c || isDon(c)) continue
     if (isLeader(c)) leader ??= c
     else
       push({
@@ -85,14 +103,15 @@ export function checkOp(
   for (const m of [inLeader, inMain]) {
     for (const [id, qty] of m) {
       const c = cards[id]
-      if (!c) continue
+      if (!c || isDon(c)) continue
       const g = byNum.get(numOf(c))
       if (g) g.n += qty
       else byNum.set(numOf(c), { n: qty, name: c.name })
     }
   }
+  const unlimited = new Set(pack?.unlimited ?? [])
   for (const [num, g] of byNum) {
-    if (g.n > 4)
+    if (g.n > 4 && !unlimited.has(num))
       push({
         key: `copies:${num}`,
         severity: 'error',
@@ -104,7 +123,7 @@ export function checkOp(
     const colours = new Set(leader.opColors)
     for (const id of inMain.keys()) {
       const c = cards[id]
-      if (!c || isLeader(c) || c.opColors.length === 0) continue
+      if (!c || isLeader(c) || isDon(c) || c.opColors.length === 0) continue
       if (c.opColors.some((x) => colours.has(x))) continue
       push({
         key: `color:${id}`,
@@ -159,6 +178,7 @@ export function checkOp(
         })
     }
   }
+  // byNum keys a card with no number by its id, which never matches a rule's card number.
   for (const [num, k] of Object.entries(rules.restricted)) {
     const g = byNum.get(num)
     if (g && g.n > k)
@@ -177,7 +197,7 @@ export function checkOp(
     for (const m of [inLeader, inMain]) {
       for (const [id, qty] of m) {
         const c = cards[id]
-        if (!c || exempt.has(numOf(c))) continue
+        if (!c || isDon(c) || unread(c) || exempt.has(numOf(c))) continue
         const prefix = numOf(c).split('-')[0]
         const block =
           c.opBlock ??
@@ -198,7 +218,7 @@ export function checkOp(
       push({
         key: 'block',
         severity: 'warning',
-        message: `Couldn't check the block of ${unknown} cards`
+        message: `Couldn't check the block of ${unknown} ${unknown === 1 ? 'card' : 'cards'}`
       })
   }
   return out

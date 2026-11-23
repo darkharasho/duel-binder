@@ -49,6 +49,7 @@ function rank(key: string): number {
     'banned',
     'unsure',
     'place',
+    'don',
     'region',
     'stale'
   ]

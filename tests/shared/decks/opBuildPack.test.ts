@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseRulesPack } from '../../../src/shared/decks/pack'
 import { buildOpPack, type OpRulesFile } from '../../../src/shared/decks/onepiece/buildPack'
+import { OP_CODE } from '../../../src/shared/decks/onepiece/text'
 import shipped from '../../../src/shared/decks/rules/onepiece.json'
 
 const empty = { banned: [], restricted: {}, bannedPairs: [] }
@@ -32,5 +33,32 @@ describe('buildOpPack', () => {
     // Standard); the card list parser reads that as null, so they must be exempt, not unknown.
     const exempt = (shipped as OpRulesFile).formats.standard.exempt
     expect(exempt).toEqual(expect.arrayContaining(['OP18-031', 'OP18-065', 'OP17-118']))
+  })
+  it('every card number in the shipped file is an upper-case card number', () => {
+    const f = shipped as OpRulesFile
+    const whole = new RegExp(`^${OP_CODE.source}$`)
+    const numbers = [
+      ...(f.unlimited ?? []),
+      ...f.formats.standard.exempt,
+      ...[f.formats.standard, f.formats.extra].flatMap((r) => [
+        ...r.banned.map((b) => b.card),
+        ...Object.keys(r.restricted),
+        ...r.bannedPairs.flatMap((p) => [p.leader, ...p.cards])
+      ])
+    ]
+    expect(numbers.length).toBeGreaterThan(0)
+    for (const n of numbers) {
+      expect(n, n).toMatch(whole)
+      expect(n, n).toBe(n.toUpperCase())
+    }
+  })
+  it('the shipped file lists the cards whose text allows any number of copies', () => {
+    expect((shipped as OpRulesFile).unlimited).toEqual(
+      expect.arrayContaining(['OP01-075', 'OP08-072', 'OP16-042', 'OP18-093'])
+    )
+    expect(buildOpPack(shipped as OpRulesFile, new Date()).unlimited).toContain('OP01-075')
+  })
+  it('a file without unlimited builds a pack with none', () => {
+    expect(buildOpPack(file, new Date()).unlimited).toEqual([])
   })
 })

@@ -94,6 +94,13 @@ describe('parseRulesPack op', () => {
     expect(r.state).toBe('ready')
     if (r.state === 'ready') expect(r.pack.game).toBe('op')
   })
+  it('reads an op pack without unlimited (built before it existed) and one with it', () => {
+    expect('unlimited' in op).toBe(false)
+    expect(parseRulesPack(op).state).toBe('ready')
+    expect(parseRulesPack({ ...op, unlimited: ['OP01-075'] }).state).toBe('ready')
+    expect(parseRulesPack({ ...op, unlimited: 'OP01-075' })).toEqual({ state: 'missing' })
+    expect(parseRulesPack({ ...op, unlimited: [''] })).toEqual({ state: 'missing' })
+  })
   it('rejects an op pack with a bad date', () => {
     const bad = withStandard({
       bannedPairs: [{ leader: 'OP13-001', cards: ['EB05-001'], from: '27 Nov' }]

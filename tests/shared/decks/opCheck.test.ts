@@ -17,7 +17,8 @@ const file: OpRulesFile = {
   asOf: '2026-11-22',
   source: 'https://en.onepiece-cardgame.com/rules/',
   formats: { standard: { ...rules, rotatedBlocks: [1], exempt: ['OP01-016'] }, extra: rules },
-  setBlocks: { OP02: 1, OP10: 3 }
+  setBlocks: { OP02: 1, OP10: 3 },
+  unlimited: ['OP01-075']
 }
 const raw = buildOpPack(file, new Date('2026-11-22T03:00:00Z'))
 const pack: PackState = { state: 'ready', pack: raw }
@@ -74,6 +75,10 @@ const UNKNOWN = mk('Unknown Block', 'PRB09-001', 'Character', ['Red'], null)
 const QUASAR = mk('I Re-Quasar', 'EB04-061', 'Event', ['Red'], 3)
 const BORSALINO = mk('Borsalino', 'EB04-058', 'Character', ['Red'], 3)
 const UTA = mk('Uta', 'OP02-001', 'Leader', ['Green'], 3)
+const DON = mk('DON!!', 'DON!!', 'DON!!', [], null)
+const PACIFISTA = mk('Pacifista', 'OP01-075', 'Character', ['Red'], 2)
+/** A card just added from search: its facts aren't loaded yet. */
+const FRESH = mk('Fresh Card', null, 'Character', [], null)
 
 const e = (card: number, qty = 1, section: DeckSection = 'main'): DeckEntry => ({
   section,
@@ -237,8 +242,44 @@ describe('op checkDeck', () => {
       severity: 'warning',
       message: "Couldn't check the block of 2 cards"
     })
+    expect(check(deck(50, [e(UNKNOWN, 1)])).problems[0].message).toBe(
+      "Couldn't check the block of 1 card"
+    )
     expect(v.badge).toBe('Legal · 1 warning')
     expect(keys(deck(50, [e(UNKNOWN, 2)], 'extra'))).toEqual([])
+  })
+  it('a DON!! card in either section is don:', () => {
+    const p = check(deck(50, [e(DON, 2)], 'standard', [e(DON, 1, 'leader')])).problems
+    // One problem for the card wherever it is: not leader:, copies: or block.
+    expect(p.map((x) => x.key)).toEqual([`don:${DON}`])
+    expect(p.find((x) => x.key === `don:${DON}`)).toMatchObject({
+      severity: 'error',
+      cardId: DON,
+      message: "DON!! is a DON!! card; it doesn't go in the deck"
+    })
+    expect(keys(deck(50, [e(DON, 10)]))).toEqual([`don:${DON}`])
+    expect(keys(deck(50, [e(DON, 10)]), { state: 'missing' })).toEqual([`don:${DON}`])
+  })
+  it('a card whose facts are not loaded yet raises no number-based problem', () => {
+    // Added from search: no number, block or colours until the deck is read again.
+    expect(keys(deck(50, [e(FRESH, 1)]))).toEqual([])
+    expect(keys(deck(50, [e(FRESH, 1)]), pack, '2026-12-01')).toEqual([])
+    expect(keys(deck(50, [e(FRESH, 5)]))).toEqual([`copies:${FRESH}`])
+  })
+  it('an unlimited number takes any number of copies; other rules still apply', () => {
+    expect(keys(deck(50, [e(PACIFISTA, 6)]), pack)).toEqual([])
+    expect(keys(deck(50, [e(PACIFISTA, 6)], 'extra'))).toEqual([])
+    // With no pack the 4-copy rule can't know the card is unlimited.
+    expect(keys(deck(50, [e(PACIFISTA, 6)]), { state: 'missing' })).toEqual(['copies:OP01-075'])
+    const limited = {
+      ...file,
+      formats: {
+        ...file.formats,
+        standard: { ...file.formats.standard, restricted: { 'OP01-075': 2 } }
+      }
+    }
+    const pk: PackState = { state: 'ready', pack: buildOpPack(limited, new Date(today)) }
+    expect(keys(deck(50, [e(PACIFISTA, 6)]), pk)).toEqual(['limit:OP01-075'])
   })
   it('cards missing from the catalog are skipped', () => {
     expect(keys(deck(50, [e(99999, 5)]))).toEqual([])

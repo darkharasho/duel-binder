@@ -90,6 +90,11 @@ export interface OpRulesPack {
   }
   /** Number prefix ("OP01") → block, for cards the catalog has no block icon for */
   setBlocks: Record<string, number>
+  /**
+   * Card numbers whose text lets a deck hold any number of them: no 4-copy limit (bans and
+   * restrictions still apply). Absent in packs built before it existed; read as [].
+   */
+  unlimited?: string[]
 }
 
 export type RulesPack = YgoRulesPack | PkmRulesPack | OpRulesPack
@@ -161,6 +166,11 @@ function validOp(raw: Record<string, unknown>): boolean {
   if (!Array.isArray(std.exempt) || !std.exempt.every(isCardNo)) return false
   if (!isObj(raw.setBlocks)) return false
   for (const b of Object.values(raw.setBlocks)) if (!Number.isInteger(b)) return false
+  if (
+    raw.unlimited !== undefined &&
+    (!Array.isArray(raw.unlimited) || !raw.unlimited.every(isCardNo))
+  )
+    return false
   return true
 }
 

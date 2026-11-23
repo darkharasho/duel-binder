@@ -50,6 +50,17 @@ describe('parseOpText', () => {
     expect(p.lines.map((l) => l.line)).toEqual([1, 2, 3, 4, 5])
   })
 
+  it('reads a name after the count in the count-last form', () => {
+    const p = parseOpText('OP13-086 x4 Sabo\nOP13-086 x 2 - Sabo\nOP13-086 Xebec\nOP13-086 x4')
+    expect(p.skipped).toEqual([])
+    expect(p.lines.map((l) => [l.qty, l.ref])).toEqual([
+      [4, { opNumber: 'OP13-086', name: 'Sabo' }],
+      [2, { opNumber: 'OP13-086', name: 'Sabo' }],
+      [1, { opNumber: 'OP13-086', name: 'Xebec' }],
+      [4, { opNumber: 'OP13-086', name: '' }]
+    ])
+  })
+
   it('takes x, ×, * and · as separators', () => {
     for (const s of ['x', 'X', '×', '*', '·'])
       expect(parseOpText(`3${s}ST01-012`).lines[0]).toMatchObject({
@@ -91,5 +102,23 @@ describe('toOpText', () => {
       [3, { opNumber: 'OP01-004', name: '' }],
       [4, { opNumber: 'OP01-016', name: '' }]
     ])
+  })
+
+  it('merges English and Japanese twins into one line per number', () => {
+    const cards: Record<number, DeckCard> = {
+      1: op(1, 'Monkey.D.Luffy', 'Leader', 5, 'OP01-001'),
+      2: op(2, 'Nami', 'Character', 3, 'OP01-016'),
+      3: op(3, 'ナミ', 'Character', 3, 'OP01-016'),
+      4: op(4, 'No Number', 'Event', 1, null),
+      5: op(5, 'No Number', 'Event', 1, null)
+    }
+    const entries: DeckEntry[] = [
+      { section: 'leader', card: 1, qty: 1 },
+      { section: 'main', card: 2, qty: 2 },
+      { section: 'main', card: 3, qty: 2 },
+      { section: 'main', card: 4, qty: 1 },
+      { section: 'main', card: 5, qty: 1 }
+    ]
+    expect(toOpText(entries, cards)).toBe('1xOP01-001\n4xOP01-016\n1xNo Number\n1xNo Number')
   })
 })

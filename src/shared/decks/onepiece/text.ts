@@ -10,8 +10,8 @@ const SEP = '[xX×*·]'
 const CODE = `(${OP_CODE.source})`
 /** "4xOP13-086", "4x OP13-086 Sabo", "4 × OP13-086 - Sabo" */
 const QTY_FIRST = new RegExp(`^(\\d+)\\s*${SEP}\\s*${CODE}(?:\\s+(.*))?$`)
-/** "OP13-086 x4" */
-const QTY_LAST = new RegExp(`^${CODE}\\s*${SEP}\\s*(\\d+)$`)
+/** "OP13-086 x4", "OP13-086 x4 Sabo" */
+const QTY_LAST = new RegExp(`^${CODE}\\s*${SEP}\\s*(\\d+)(?:\\s+(.*))?$`)
 /** "OP13-086", one copy, maybe with a name after it */
 const BARE = new RegExp(`^${CODE}(?:\\s+(.*))?$`)
 const DON = /DON!!/i
@@ -35,7 +35,7 @@ export function parseOpText(text: string): ParsedList {
       const b = a ? null : QTY_LAST.exec(s)
       const c = a || b ? null : BARE.exec(s)
       if (a) [qty, code, name] = [Number(a[1]), a[2], nameOf(a[3])]
-      else if (b) [qty, code] = [Number(b[2]), b[1]]
+      else if (b) [qty, code, name] = [Number(b[2]), b[1], nameOf(b[3])]
       else if (c) [qty, code, name] = [1, c[1], nameOf(c[2])]
       if (qty <= 0) {
         out.skipped.push({ line: i + 1, raw: rawLine })
@@ -96,11 +96,15 @@ export function parseOpList(text: string): ParsedList {
   return parseOpText(text)
 }
 
-/** The Leader, then the Deck in sort order; a line per card, by number (else by name). */
+/**
+ * The Leader, then the Deck in sort order; a line per card number (twins in other languages share
+ * it), else per card, by name.
+ */
 export function toOpText(entries: DeckEntry[], cards: Record<number, DeckCard>): string {
   const merged = new Map<string, DeckEntry>()
   for (const e of entries) {
-    const key = `${e.section === 'leader' ? 'leader' : 'deck'} ${e.card}`
+    const num = cards[e.card]?.opNumber
+    const key = `${e.section === 'leader' ? 'leader' : 'deck'} ${num ? `n:${num}` : `id:${e.card}`}`
     const have = merged.get(key)
     if (have) have.qty += e.qty
     else merged.set(key, { section: e.section, card: e.card, qty: e.qty })

@@ -56,6 +56,16 @@ describe('checkDeckFields', () => {
     expect(r.cards[0].card).toBe(99999999)
   })
 
+  it('accepts a One Piece deck with a Leader entry, and no Leader on Yu-Gi-Oh!', () => {
+    const cards = [
+      { section: 'leader', card: 501, qty: 1 },
+      { section: 'main', card: 502, qty: 4 }
+    ]
+    const r = checkDeckFields({ ...base, format: 'standard', cards }, 'op')
+    expect(r.cards).toEqual(cards)
+    bad({ cards: [{ section: 'leader', card: 501, qty: 1 }] })
+  })
+
   it('decksAvailable is true for ygo, pkm and op', () => {
     expect(decksAvailable('ygo')).toBe(true)
     expect(decksAvailable('pkm')).toBe(true)

@@ -177,6 +177,16 @@ describe('decks repo', () => {
     })
   })
 
+  it('saves and reads back an op deck with a Leader entry', () => {
+    const op = localScope("'op'")
+    const cards: DeckEntry[] = [
+      { section: 'leader', card: 9111, qty: 1 },
+      { section: 'main', card: 9112, qty: 4 }
+    ]
+    const uid = saveDeck(db, draft({ format: 'standard', cards }), T1, op)
+    expect(getDeck(db, uid, op)!.cards).toEqual(cards)
+  })
+
   it('migration 53 is desktop-only', () => {
     expect(MIGRATIONS.find((m) => m.version === 53)).toMatchObject({ server: false })
   })
@@ -590,6 +600,42 @@ describe('op deck line resolution', () => {
     expect(res[2]).toMatchObject({ status: 'matched', card: 9304, name: 'Japan Only' })
     expect(res[3]).toMatchObject({ status: 'matched', card: 9305, name: 'Sabo' })
     expect(res[4]).toEqual({ status: 'unmatched' })
+  })
+
+  it('drops an art suffix (_p1) from the card number before matching', async () => {
+    const db = await seededDb()
+    const op = localScope("'op'")
+    const card = (id: number, number: string, lang: string): void => {
+      db.prepare(
+        `INSERT INTO cards (id, game, name, type, frame_type, race, "desc", updated_at)
+         VALUES (?, 'op', 'Nami', 'Character', 'op', '', '', '2026-11-22')`
+      ).run(id)
+      db.prepare(
+        `INSERT INTO onepiece_cards (card_id, number, colors, card_type, cost)
+         VALUES (?, ?, '["Red"]', 'Character', 2)`
+      ).run(id, number)
+      db.prepare(
+        `INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity)
+         VALUES ('op', ?, ?, 'Set', ?, 'Common')`
+      ).run(id, lang, number)
+    }
+    card(9311, 'OP01-016', 'ja')
+    card(9312, 'OP01-016', 'en')
+    card(9313, 'P-100', 'en')
+    const res = resolveDeckLines(
+      db,
+      [
+        { opNumber: 'OP01-016_p1', name: '' },
+        { opNumber: 'OP01-016_P2', name: '' },
+        { opNumber: 'P-100_P1', name: '' },
+        // A name-less ref (an OPlay code line) passes the line checks.
+        { opNumber: 'OP01-016' }
+      ],
+      op
+    )
+    expect(res.map((r) => (r.status === 'matched' ? r.card : null))).toEqual([
+      9312, 9312, 9313, 9312
+    ])
   })
 
   it('a resolved op Leader carries its card type, by number or by name', async () => {

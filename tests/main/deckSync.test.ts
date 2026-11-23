@@ -225,6 +225,18 @@ describe('decks sync', () => {
     expect(server()).toHaveLength(1)
   })
 
+  it('a One Piece deck with a Leader entry passes the push checks', () => {
+    const cards = [
+      { section: 'leader', card: 501, qty: 1 },
+      { section: 'main', card: 502, qty: 4 }
+    ]
+    const [deck] = checkDecksPush(
+      { entries: [wire('op-1', cards, { game: 'op', format: 'standard' })] },
+      NOW()
+    )
+    expect(deck).toMatchObject({ game: 'op', format: 'standard', cards })
+  })
+
   it('a malformed push is a 400', async () => {
     const many = Array.from({ length: 301 }, (_, i) => ({ section: 'main', card: i + 1, qty: 1 }))
     expect(() => checkDecksPush({ entries: [wire('d-1', many)] }, NOW())).toThrow(CollectionError)

@@ -615,11 +615,11 @@ export function resolveDeckLines(db: SqlDb, refs: unknown, scope: Scope = LOCAL)
   }
 
   // One Piece card numbers, case ignored: the lowest id with an English printing, else the lowest.
+  // An art suffix ("OP01-016_p1", from image names) is dropped: the catalog keeps the base number.
+  const opKey = (n: string): string => n.toUpperCase().replace(/_.*$/, '')
   const byOpNumber = new Map<string, number>()
   const opNumbers = [
-    ...new Set(
-      lines.flatMap((r) => ('opNumber' in r && r.opNumber ? [r.opNumber.toUpperCase()] : []))
-    )
+    ...new Set(lines.flatMap((r) => ('opNumber' in r && r.opNumber ? [opKey(r.opNumber)] : [])))
   ]
   const opScope = opGame && lines.some((r) => 'opNumber' in r)
   if (opScope && opNumbers.length > 0) {
@@ -642,7 +642,7 @@ export function resolveDeckLines(db: SqlDb, refs: unknown, scope: Scope = LOCAL)
     for (const [k, v] of best) byOpNumber.set(k, v.id)
   }
   const opHit = (r: DeckLineRef): number | undefined =>
-    opScope && 'opNumber' in r ? byOpNumber.get(r.opNumber.toUpperCase()) : undefined
+    opScope && 'opNumber' in r ? byOpNumber.get(opKey(r.opNumber)) : undefined
 
   const setHit = (r: DeckLineRef): boolean => 'set' in r && bySetNumber.has(setKey(r.set, r.number))
 

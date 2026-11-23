@@ -2,7 +2,7 @@ import type { SqlDb } from '../db/sql'
 import type { BrowseCard, BrowseFacets, BrowseFilters, BrowsePage } from '../../shared/types'
 import { isLanguage, LANGUAGES, type Language } from '../../shared/languages'
 import { byGame, type GameId } from '../../shared/games'
-import { buildFtsQuery, escapeLike, printingArtImageId } from './cards'
+import { buildFtsQuery, escapeLike, parseTypes, printingArtImageId } from './cards'
 import { queryPrintingIds } from './queryPrintings'
 import { shownPrinting } from './shownPrinting'
 import { LOCAL, favouriteSql, scopeGame, type Scope } from './scope'
@@ -449,17 +449,26 @@ interface FocusRow {
 function magicExtras(
   db: SqlDb,
   ids: number[]
-): Map<number, Pick<BrowseCard, 'language' | 'localName' | 'mtgTypeLine'>> {
+): Map<
+  number,
+  Pick<
+    BrowseCard,
+    'language' | 'localName' | 'mtgTypeLine' | 'mtgColorIdentity' | 'mtgManaValue' | 'mtgLayout'
+  >
+> {
   if (!ids.length) return new Map()
   const rows = db
     .prepare(
-      `SELECT card_id, lang, local_name, type_line FROM mtg_cards WHERE card_id IN (SELECT value FROM json_each(?))`
+      `SELECT card_id, lang, local_name, type_line, color_identity, mana_value, layout FROM mtg_cards WHERE card_id IN (SELECT value FROM json_each(?))`
     )
     .all(JSON.stringify(ids)) as {
     card_id: number
     lang: string | null
     local_name: string | null
     type_line: string | null
+    color_identity: string | null
+    mana_value: number | null
+    layout: string | null
   }[]
   return new Map(
     rows.map((r) => [
@@ -467,7 +476,10 @@ function magicExtras(
       {
         ...(isLanguage(r.lang) ? { language: r.lang } : {}),
         ...(r.local_name ? { localName: r.local_name } : {}),
-        ...(r.type_line ? { mtgTypeLine: r.type_line } : {})
+        ...(r.type_line ? { mtgTypeLine: r.type_line } : {}),
+        mtgColorIdentity: parseTypes(r.color_identity),
+        mtgManaValue: r.mana_value,
+        ...(r.layout ? { mtgLayout: r.layout } : {})
       }
     ])
   )

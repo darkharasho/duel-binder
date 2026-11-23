@@ -74,6 +74,8 @@ export interface CardDbRow {
   mtg_defense?: string | null
   mtg_artist?: string | null
   mtg_local_name?: string | null
+  mtg_color_identity?: string | null
+  mtg_layout?: string | null
 }
 
 /** The pokemon_cards columns rowToCard reads, from a `LEFT JOIN pokemon_cards pc ON pc.card_id = c.id`. */
@@ -91,7 +93,8 @@ const NO_ONEPIECE = { cols: '', join: '' }
 export const MTG_COLS = `mc.oracle_id AS mtg_oracle_id, mc.type_line AS mtg_type_line, mc.types AS mtg_types,
   mc.mana_cost AS mtg_mana_cost, mc.mana_value AS mtg_mana_value, mc.colors AS mtg_colors,
   mc.oracle_text AS mtg_oracle_text, mc.power AS mtg_power, mc.toughness AS mtg_toughness,
-  mc.loyalty AS mtg_loyalty, mc.defense AS mtg_defense, mc.local_name AS mtg_local_name`
+  mc.loyalty AS mtg_loyalty, mc.defense AS mtg_defense, mc.local_name AS mtg_local_name,
+  mc.color_identity AS mtg_color_identity, mc.layout AS mtg_layout`
 
 /**
  * What a card query adds to read a game's own facts: `, ONEPIECE_COLS` (One Piece) or `, MTG_COLS`
@@ -158,6 +161,8 @@ function magicFacts(row: CardDbRow): MagicFacts | undefined {
     loyalty: row.mtg_loyalty ?? null,
     defense: row.mtg_defense ?? null,
     localName: row.mtg_local_name ?? null,
+    colorIdentity: parseTypes(row.mtg_color_identity),
+    layout: row.mtg_layout ?? 'normal',
     // Only the details read fills the artist (see getCardDetail); list rows leave it out.
     ...(row.mtg_artist !== undefined ? { artist: row.mtg_artist } : {})
   }

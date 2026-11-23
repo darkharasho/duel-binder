@@ -13,6 +13,19 @@ const HEADER_SECTION: Record<string, DeckSection | undefined> = {
   companion: 'side'
 }
 
+/**
+ * Sets Arena knows by a different code than Scryfall (and the catalog): Arena calls Dominaria DAR.
+ * Upper case on both sides.
+ */
+const ARENA_SET_OF: Record<string, string> = { DOM: 'DAR' }
+const SCRYFALL_SET_OF: Record<string, string> = Object.fromEntries(
+  Object.entries(ARENA_SET_OF).map(([scryfall, arena]) => [arena, scryfall])
+)
+/** The code Arena writes for a catalog set. */
+export const toArenaSet = (set: string): string => ARENA_SET_OF[set.toUpperCase()] ?? set
+/** The catalog's code for a set an Arena list names. */
+export const fromArenaSet = (set: string): string => SCRYFALL_SET_OF[set.toUpperCase()] ?? set
+
 /** MTGO writes a split card as "Fire/Ice"; Scryfall and the catalog write "Fire // Ice". */
 function faceName(name: string): string {
   if (name.includes('//')) return name.replace(/\s*\/\/\s*/g, ' // ')
@@ -100,7 +113,7 @@ export function toArenaText(
   const line = (e: DeckEntry): string => {
     const pin = e.printing ? pins[e.printing] : undefined
     const name = nameOf(cards[e.card], e.card, (full) => full)
-    return `${e.qty} ${name}${pin ? ` (${pin.set}) ${pin.number}` : ''}`
+    return `${e.qty} ${name}${pin ? ` (${toArenaSet(pin.set)}) ${pin.number}` : ''}`
   }
   const sorted = sortEntries('mtg', entries, cards)
   const block = (header: string, section: DeckSection): string[] => {

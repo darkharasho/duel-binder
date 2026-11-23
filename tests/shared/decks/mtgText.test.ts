@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest'
 import {
   guessMtgFormat,
   parseMtgText,
+  fromArenaSet,
+  toArenaSet,
   toArenaText,
   toMtgoText
 } from '../../../src/shared/decks/magic/text'
@@ -147,6 +149,23 @@ describe('export', () => {
     { section: 'side', card: 1, qty: 1 }
   ]
   const pins = { 'en|1|2X2 117|Uncommon': { set: '2X2', number: '117' } }
+
+  it("writes Arena's own code for a set it names differently", () => {
+    const text = toArenaText([{ section: 'main', card: 1, printing: 'p', qty: 1 }], cards, {
+      p: { set: 'DOM', number: '168' }
+    })
+    expect(text).toBe('Deck\n1 Lightning Bolt (DAR) 168')
+    expect(fromArenaSet('dar')).toBe('DOM')
+    expect(toArenaSet('2X2')).toBe('2X2')
+  })
+
+  it("reads The List's hyphenated number", () => {
+    expect(parseMtgText('1 Lightning Bolt (PLST) INV-100').lines[0].ref).toEqual({
+      set: 'PLST',
+      number: 'INV-100',
+      name: 'Lightning Bolt'
+    })
+  })
 
   it('writes Arena names, a pin, and the sections', () => {
     const text = toArenaText(entries, cards, pins)

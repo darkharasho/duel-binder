@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { DECK_FORMATS, formatOf } from '@shared/decks/formats'
 import { MAX_DECK_NAME } from '@shared/decks/fields'
+import { mtgPackOf } from '@shared/decks/pack'
 import type { DeckCard, DeckEntry } from '@shared/decks/types'
 import { OplayError } from '@shared/decks/onepiece/oplay'
 import { parseOpList } from '@shared/decks/onepiece/text'
@@ -38,6 +39,7 @@ import {
 } from './deckImport'
 import { DeckSearch } from './DeckSearch'
 import { FormatSelect } from './FormatSelect'
+import { useRulesPack } from './useRulesPack'
 
 const MTGO_DEK_MESSAGE = 'Export as text from MTGO instead'
 
@@ -84,6 +86,8 @@ export function ImportDialog({
   const [confirming, setConfirming] = useState(false)
   const file = useRef<HTMLInputElement>(null)
   const formats = DECK_FORMATS[game]
+  // Magic: tells a headerless list's commander.
+  const pack = useRulesPack(game)
 
   /** `guess`: whether the list may set the format (it may not once one is picked by hand). */
   const read = async (
@@ -128,7 +132,8 @@ export function ImportDialog({
             resolutions,
             pkm || op || mtg ? 'text' : detectYgoList(source),
             game,
-            intoFormat
+            intoFormat,
+            mtgPackOf(pack)
           )
         )
     } catch (e) {

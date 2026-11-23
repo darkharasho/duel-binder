@@ -45,9 +45,9 @@ async function factOf(cardId: number, known: DeckCard | undefined): Promise<Deck
     opBlock: op?.blockIcon ?? null,
     mtgName: null,
     mtgTypeLine: c.magic?.typeLine ?? null,
-    mtgColorIdentity: [],
-    mtgManaValue: null,
-    mtgLayout: null
+    mtgColorIdentity: c.magic?.colorIdentity ?? [],
+    mtgManaValue: c.magic?.manaValue ?? null,
+    mtgLayout: c.magic?.layout ?? null
   }
 }
 

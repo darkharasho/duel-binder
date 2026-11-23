@@ -149,9 +149,9 @@ export function deckCardOf(c: BrowseCard): DeckCard {
     mtgName: null,
     // A Magic card's type is only its first card type; the type line rides beside it.
     mtgTypeLine: c.frameType === 'mtg' ? (c.mtgTypeLine ?? null) : null,
-    mtgColorIdentity: [],
-    mtgManaValue: null,
-    mtgLayout: null
+    mtgColorIdentity: c.mtgColorIdentity ?? [],
+    mtgManaValue: c.mtgManaValue ?? null,
+    mtgLayout: c.mtgLayout ?? null
   }
 }
 

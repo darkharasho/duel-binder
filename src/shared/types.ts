@@ -62,6 +62,10 @@ export interface MagicFacts {
   defense: string | null
   /** The printed name in the card's language (face names joined with ' // '); null on English. */
   localName: string | null
+  /** The colour identity's letters ("W", "U", …), as Commander reads it. */
+  colorIdentity?: string[]
+  /** Scryfall's layout ('normal', 'split', 'transform', …). */
+  layout?: string
   /** The artist(s) of the card's art, joined with ', '. Only the card details fill it. */
   artist?: string | null
 }
@@ -326,6 +330,10 @@ export interface BrowseCard {
   localName?: string
   /** A Magic card's whole type line ("Legendary Creature — Goblin"); `type` is its first type. */
   mtgTypeLine?: string
+  /** A Magic card's colour identity letters, mana value and layout, for a deck add. */
+  mtgColorIdentity?: string[]
+  mtgManaValue?: number | null
+  mtgLayout?: string
   /** Set on a version tile: the printing the search words named ("trainer gallery charizard"). */
   focusPrintingId?: number
   /** That printing's set code without its subset tag ("LOR TG03/30"). */

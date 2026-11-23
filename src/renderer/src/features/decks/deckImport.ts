@@ -2,6 +2,7 @@ import { MAX_ENTRY_QTY } from '@shared/decks/fields'
 import { defaultSection } from '@shared/decks/formats'
 import type { GameId } from '@shared/games'
 import type { ParsedLine, ParsedList } from '@shared/decks/ygo/lists'
+import type { MtgRulesPack } from '@shared/decks/pack'
 import type { DeckCard, DeckEntry, DeckSection } from '@shared/decks/types'
 import type { Api } from '@shared/ipc'
 
@@ -72,7 +73,8 @@ export function buildPreview(
   resolutions: Resolution[],
   kind: 'ydk' | 'ydke' | 'text',
   game: GameId = 'ygo',
-  format?: string
+  format?: string,
+  pack?: MtgRulesPack | null
 ): ImportPreview {
   const out: ImportPreview = {
     sectioned: parsed.sectioned,
@@ -91,8 +93,28 @@ export function buildPreview(
     sideCards >= 1 &&
     sideCards <= 2 &&
     !parsed.lines.some((l) => l.section === 'commander')
+  // A list with no sections at all (no headers, no blank line): a Commander deck's list leads with
+  // its commander, when that first card is one copy of a card that can be a commander.
+  const first = resolutions[0]
+  const firstLeads =
+    game === 'mtg' &&
+    format === 'commander' &&
+    !parsed.sectioned &&
+    parsed.lines[0]?.qty === 1 &&
+    first?.status === 'matched' &&
+    defaultSection(
+      'mtg',
+      {
+        frameType: first.frameType,
+        opCardType: null,
+        name: first.name,
+        mtgTypeLine: first.mtgTypeLine
+      },
+      { format: 'commander', commanders: 0, pack }
+    ) === 'commander'
   parsed.lines.forEach((l, i) => {
     const r = resolutions[i]
+    if (firstLeads && i === 0) l = { ...l, section: 'commander' }
     if (r?.status === 'matched' && isDon(r)) return
     if (sideIsCommanders && l.section === 'side') l = { ...l, section: 'commander' }
     // A Commander header's cards, in a 60-card deck, are just cards of the deck.
@@ -124,7 +146,8 @@ export function buildPreview(
     else if (r?.status === 'matched')
       out.matched.push({
         ...item,
-        section: placeOf(game, parsed.sectioned, l.section, r),
+        section:
+          firstLeads && i === 0 ? 'commander' : placeOf(game, parsed.sectioned, l.section, r),
         card: r.card,
         ...(r.printing ? { printing: r.printing } : {})
       })

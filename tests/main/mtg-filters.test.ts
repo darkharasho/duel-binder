@@ -386,8 +386,8 @@ describe('Magic filters, facets, stats and details', () => {
        VALUES (?, 'mtg', 'Krenko, Mob Boss', 'Creature', 'mtg', '', '', '2026-11-09')`
     ).run(krenko)
     db.prepare(
-      `INSERT INTO mtg_cards (card_id, oracle_id, layout, type_line, lang)
-       VALUES (?, 'krenko-oracle', 'normal', 'Legendary Creature — Goblin Warrior', 'en')`
+      `INSERT INTO mtg_cards (card_id, oracle_id, layout, type_line, lang, color_identity, mana_value)
+       VALUES (?, 'krenko-oracle', 'normal', 'Legendary Creature — Goblin Warrior', 'en', '["R"]', 4)`
     ).run(krenko)
     db.prepare(
       `INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity)
@@ -399,6 +399,8 @@ describe('Magic filters, facets, stats and details', () => {
     )
     expect(tile?.type).toBe('Creature')
     expect(tile?.mtgTypeLine).toBe('Legendary Creature — Goblin Warrior')
+    // A deck add reads these off the tile, so its colour checks are right before a reload.
+    expect(tile).toMatchObject({ mtgColorIdentity: ['R'], mtgManaValue: 4, mtgLayout: 'normal' })
   })
 
   it('gives artists in a fixed order, only on the details read', () => {

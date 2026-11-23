@@ -792,8 +792,11 @@ describe('mtg deck line resolution', () => {
     card(9304, 'en', 'Fire // Ice', 'fireice')
     card(9305, 'en', 'Lim-Dûl the Necromancer', 'limdul')
     card(9306, 'ja', 'Lightning Bolt', 'bolt')
+    card(9307, 'en', 'Llanowar Elves', 'elves')
     printing(9301, 'en', '2X2 117')
     printing(9302, 'ja', '2X2 117')
+    printing(9301, 'en', 'PLST INV-100')
+    printing(9307, 'en', 'DOM 168')
     db.exec("INSERT INTO cards_fts(cards_fts) VALUES('rebuild')")
     return db
   }
@@ -836,12 +839,50 @@ describe('mtg deck line resolution', () => {
 
   it('pins the printing a set and number name', async () => {
     const db = await mtgDb()
-    const [res] = resolveDeckLines(db, [{ set: '2x2', number: '117', name: 'Whatever' }], mtg)
+    const [res] = resolveDeckLines(db, [{ set: '2x2', number: '117', name: 'lightning bolt' }], mtg)
     expect(res).toMatchObject({
       status: 'matched',
       card: 9301,
       printing: 'en|9301|2X2 117|Uncommon'
     })
+  })
+
+  it("pins only the named card: a set and number of another card falls back to the line's name", async () => {
+    const db = await mtgDb()
+    const [res] = resolveDeckLines(
+      db,
+      [{ set: '2X2', number: '117', name: 'Delver of Secrets' }],
+      mtg
+    )
+    expect(res).toMatchObject({ status: 'matched', card: 9303 })
+    expect(res).not.toHaveProperty('printing')
+  })
+
+  it("pins The List's hyphenated numbers and Arena's DAR for Dominaria", async () => {
+    const db = await mtgDb()
+    const res = resolveDeckLines(
+      db,
+      [
+        { set: 'PLST', number: 'INV-100', name: 'Lightning Bolt' },
+        { set: 'DAR', number: '168', name: 'Llanowar Elves' }
+      ],
+      mtg
+    )
+    expect(res).toMatchObject([
+      { status: 'matched', card: 9301, printing: 'en|9301|PLST INV-100|Uncommon' },
+      { status: 'matched', card: 9307, printing: 'en|9307|DOM 168|Uncommon' }
+    ])
+  })
+
+  it('gives a matched line its type line', async () => {
+    const db = await mtgDb()
+    db.prepare("UPDATE mtg_cards SET type_line = 'Instant' WHERE card_id = 9301").run()
+    const res = resolveDeckLines(
+      db,
+      [{ name: 'Lightning Bolt' }, { set: '2X2', number: '117', name: 'Lightning Bolt' }],
+      mtg
+    )
+    expect(res).toMatchObject([{ mtgTypeLine: 'Instant' }, { mtgTypeLine: 'Instant' }])
   })
 
   it('falls back to the name, unpinned, for an unknown set and number', async () => {

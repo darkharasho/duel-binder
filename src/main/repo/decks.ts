@@ -15,6 +15,7 @@ import type {
 import type { DeckLineRef } from '../../shared/decks/lists'
 import { normalCardName as normalName } from '../../shared/decks/names'
 import { magicNameSearchKey } from '../../shared/games/magic'
+import { fromArenaSet } from '../../shared/decks/magic/text'
 import { checkObject } from './args'
 import { printingArtImageId, type PrintingDbRow } from './cards'
 import { CollectionError } from './collection'
@@ -55,6 +56,8 @@ export type DeckResolution =
       opCardType?: string | null
       /** Magic only: the pkey of the printing a set and number line named, when the catalog has it. */
       printing?: string
+      /** Magic only: the card's whole type line, so an import can tell a commander. */
+      mtgTypeLine?: string
     }
   | {
       status: 'ambiguous'
@@ -577,7 +580,8 @@ function checkRefs(v: unknown): DeckLineRef[] {
         typeof o.set === 'string' &&
         typeof o.number === 'string' &&
         /^[A-Za-z0-9][A-Za-z0-9-]{1,7}$/.test(o.set) &&
-        /^[A-Za-z]*\d+[A-Za-z★†]?$/.test(o.number)
+        // The List's numbers carry their first set's code: "(PLST) INV-100".
+        /^(?:[A-Za-z0-9]{2,5}-)?[A-Za-z]*\d+[A-Za-z★†]?$/.test(o.number)
       )
         return { set: o.set, number: o.number, name: o.name }
       return { name: o.name }
@@ -586,7 +590,7 @@ function checkRefs(v: unknown): DeckLineRef[] {
   })
 }
 
-type MtgFact = { id: number; name: string; frame_type: string }
+type MtgFact = { id: number; name: string; frame_type: string; type_line: string }
 
 /**
  * Magic deck lines. A set and number finds that printing (its English one first) and pins it, else
@@ -596,28 +600,33 @@ type MtgFact = { id: number; name: string; frame_type: string }
  */
 function resolveMtgLines(db: SqlDb, lines: DeckLineRef[], scope: Scope): DeckResolution[] {
   const english = db.prepare(
-    `SELECT c.id, c.name, c.frame_type FROM cards c JOIN mtg_cards m ON m.card_id = c.id
+    `SELECT c.id, c.name, c.frame_type, m.type_line FROM cards c JOIN mtg_cards m ON m.card_id = c.id
      WHERE c.name = ? COLLATE NOCASE AND +c.game = ${scope.game} AND m.lang = 'en'
      ORDER BY c.id`
   )
   const frontFace = db.prepare(
-    `SELECT c.id, c.name, c.frame_type FROM cards c JOIN mtg_cards m ON m.card_id = c.id
+    `SELECT c.id, c.name, c.frame_type, m.type_line FROM cards c JOIN mtg_cards m ON m.card_id = c.id
      WHERE c.name COLLATE NOCASE >= ? AND c.name COLLATE NOCASE < ?
        AND +c.game = ${scope.game} AND m.lang = 'en'
      ORDER BY c.id`
   )
   const searched = db.prepare(
-    `SELECT c.id, c.name, c.frame_type, m.lang FROM cards_fts JOIN cards c ON c.id = cards_fts.rowid
+    `SELECT c.id, c.name, c.frame_type, m.type_line, m.lang FROM cards_fts JOIN cards c ON c.id = cards_fts.rowid
      JOIN mtg_cards m ON m.card_id = c.id
      WHERE cards_fts MATCH ? AND +c.game = ${scope.game}
      ORDER BY length(c.name), c.id LIMIT ${NAME_HITS}`
   )
   const printed = db.prepare(
-    `SELECT p.card_id, p.pkey, c.name, c.frame_type FROM card_printings p JOIN cards c ON c.id = p.card_id
+    `SELECT p.card_id, p.pkey, c.name, c.frame_type, m.type_line FROM card_printings p
+     JOIN cards c ON c.id = p.card_id JOIN mtg_cards m ON m.card_id = c.id
      WHERE p.set_code = ? COLLATE NOCASE AND +p.game = ${scope.game} AND +c.game = ${scope.game}
      ORDER BY (p.language = 'en') DESC, p.id LIMIT 1`
   )
   const front = (name: string): string => name.split(' // ')[0]
+  const namesCard = (typed: string, name: string): boolean => {
+    const want = magicNameSearchKey(typed.trim().replace(/\s+/g, ' '))
+    return magicNameSearchKey(name) === want || magicNameSearchKey(front(name)) === want
+  }
 
   const byName = (name: string): MtgFact | null => {
     const trimmed = name.trim().replace(/\s+/g, ' ')
@@ -642,20 +651,29 @@ function resolveMtgLines(db: SqlDb, lines: DeckLineRef[], scope: Scope): DeckRes
   return lines.map((r): DeckResolution => {
     if (!('name' in r)) return { status: 'unmatched' }
     if ('set' in r) {
-      const p = printed.get(`${r.set.toUpperCase()} ${r.number}`) as
-        { card_id: number; pkey: string; name: string; frame_type: string } | undefined
-      if (p)
+      const p = printed.get(`${fromArenaSet(r.set).toUpperCase()} ${r.number}`) as
+        | { card_id: number; pkey: string; name: string; frame_type: string; type_line: string }
+        | undefined
+      // The printing pins only when it is the named card; a wrong number falls back to the name.
+      if (p && namesCard(r.name, p.name))
         return {
           status: 'matched',
           card: p.card_id,
           name: p.name,
           frameType: p.frame_type,
+          mtgTypeLine: p.type_line,
           printing: p.pkey
         }
     }
     const hit = byName(r.name)
     return hit
-      ? { status: 'matched', card: hit.id, name: hit.name, frameType: hit.frame_type }
+      ? {
+          status: 'matched',
+          card: hit.id,
+          name: hit.name,
+          frameType: hit.frame_type,
+          mtgTypeLine: hit.type_line
+        }
       : { status: 'unmatched' }
   })
 }

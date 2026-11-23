@@ -10,7 +10,12 @@ import { AddToDeck } from '@/features/decks/AddToDeck'
 import { FriendBinder } from '@/features/friends/FriendBinder'
 import { DecksPage } from '@/features/decks/DecksPage'
 import { buildPreview, keptEntries } from '@/features/decks/deckImport'
-import { changeSummary, entriesForFormat, moveEntry } from '@/features/decks/deckEntries'
+import {
+  changeSummary,
+  deckCardOf,
+  entriesForFormat,
+  moveEntry
+} from '@/features/decks/deckEntries'
 import { parseYgoList } from '@shared/decks/ygo/lists'
 import { parseMtgText, toMtgoText } from '@shared/decks/magic/text'
 import { pinsOf } from '@/features/decks/deckExport'
@@ -2104,5 +2109,57 @@ describe('Magic on the deck screens', () => {
       { status: 'matched', card: 1, name: 'Krenko', frameType: 'mtg' }
     ]
     expect(buildPreview(parsed, res, 'text', 'mtg', 'commander').notFound).toHaveLength(1)
+  })
+
+  it('a Commander list with no headers or blank line leads with its commander', () => {
+    const parsed = parseMtgText('1 Krenko, Mob Boss\n1 Goblin Guide\n98 Mountain')
+    const res: DeckResolution[] = [
+      {
+        status: 'matched',
+        card: 1,
+        name: 'Krenko, Mob Boss',
+        frameType: 'mtg',
+        mtgTypeLine: 'Legendary Creature — Goblin Warrior'
+      },
+      {
+        status: 'matched',
+        card: 2,
+        name: 'Goblin Guide',
+        frameType: 'mtg',
+        mtgTypeLine: 'Creature — Goblin Scout'
+      },
+      { status: 'matched', card: 3, name: 'Mountain', frameType: 'mtg', mtgTypeLine: 'Basic Land' }
+    ]
+    const sections = (format: string, r = res): string[] =>
+      keptEntries(buildPreview(parsed, r, 'text', 'mtg', format), {}).map((e) => e.section)
+    expect(sections('commander')).toEqual(['commander', 'main', 'main'])
+    // Not in a 60-card deck, and not when the first card can't lead.
+    expect(sections('modern')).toEqual(['main', 'main', 'main'])
+    expect(sections('commander', [res[1], res[0], res[2]])).toEqual(['main', 'main', 'main'])
+  })
+
+  it('a card added from search carries its colour identity, mana value and layout', () => {
+    const c = deckCardOf({
+      id: 1,
+      name: 'Fire // Ice',
+      type: 'Instant',
+      frameType: 'mtg',
+      attribute: null,
+      race: '',
+      level: null,
+      linkval: null,
+      atk: null,
+      def: null,
+      imageId: 1,
+      price: null,
+      releasedAt: null,
+      owned: 0,
+      defaultPrintingId: null,
+      mtgTypeLine: 'Instant // Instant',
+      mtgColorIdentity: ['U', 'R'],
+      mtgManaValue: 4,
+      mtgLayout: 'split'
+    })
+    expect(c).toMatchObject({ mtgColorIdentity: ['U', 'R'], mtgManaValue: 4, mtgLayout: 'split' })
   })
 })

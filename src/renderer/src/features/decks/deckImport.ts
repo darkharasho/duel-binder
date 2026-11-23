@@ -16,6 +16,9 @@ export type Option = {
 /** A One Piece DON!! card: never part of a deck list, so an import ignores it. */
 const isDon = (c: { opCardType?: string | null }): boolean => c.opCardType === 'DON!!'
 
+/** A Magic list's Sideboard or Companion line has nowhere to go in a Commander deck. */
+export const COMMANDER_NO_SIDEBOARD = 'Commander decks here have no sideboard'
+
 /** One line of an import, as the owner sees it. `key` is stable for the preview's life. */
 export interface ImportItem {
   key: string
@@ -24,11 +27,13 @@ export interface ImportItem {
   section: DeckSection
   /** More copies than an entry holds: it can only be dropped, never cut down silently. */
   tooMany?: boolean
+  /** Why a line can't go in this deck (it is shown, and can only be dropped). */
+  leftOut?: string
 }
 export interface ImportPreview {
   /** The list named its sections; otherwise a card goes where defaultSection puts it. */
   sectioned: boolean
-  matched: (ImportItem & { card: number })[]
+  matched: (ImportItem & { card: number; printing?: string })[]
   ambiguous: (ImportItem & { options: Option[] })[]
   /** Lines that matched no card, and lines the parser couldn't read. */
   notFound: ImportItem[]
@@ -66,7 +71,8 @@ export function buildPreview(
   parsed: ParsedList,
   resolutions: Resolution[],
   kind: 'ydk' | 'ydke' | 'text',
-  game: GameId = 'ygo'
+  game: GameId = 'ygo',
+  format?: string
 ): ImportPreview {
   const out: ImportPreview = {
     sectioned: parsed.sectioned,
@@ -83,7 +89,13 @@ export function buildPreview(
       qty: l.qty,
       section: l.section
     }
-    if (l.qty > MAX_ENTRY_QTY)
+    if (game === 'mtg' && format === 'commander' && l.section === 'side')
+      out.notFound.push({
+        ...item,
+        text: `${item.text} (${COMMANDER_NO_SIDEBOARD})`,
+        leftOut: COMMANDER_NO_SIDEBOARD
+      })
+    else if (l.qty > MAX_ENTRY_QTY)
       out.notFound.push({
         ...item,
         text: `${kind === 'text' ? l.raw.trim() : item.text} (more than ${MAX_ENTRY_QTY} copies)`,
@@ -93,7 +105,8 @@ export function buildPreview(
       out.matched.push({
         ...item,
         section: placeOf(game, parsed.sectioned, l.section, r),
-        card: r.card
+        card: r.card,
+        ...(r.printing ? { printing: r.printing } : {})
       })
     else if (r?.status === 'ambiguous') {
       const options = r.options.filter((o) => !isDon(o))
@@ -122,12 +135,20 @@ export function unresolvedCount(p: ImportPreview, picks: Record<string, Pick>): 
 /** The deck's entries: every matched line and every picked one, copies of one card folded. */
 export function keptEntries(p: ImportPreview, picks: Record<string, Pick>): DeckEntry[] {
   const out: DeckEntry[] = []
-  const add = (section: DeckSection, card: number, qty: number): void => {
-    const have = out.find((e) => e.section === section && e.card === card)
+  const add = (section: DeckSection, card: number, qty: number, printing?: string): void => {
+    const have = out.find(
+      (e) => e.section === section && e.card === card && e.printing === printing
+    )
     if (have) have.qty = Math.min(MAX_ENTRY_QTY, have.qty + qty)
-    else out.push({ section, card, qty: Math.min(MAX_ENTRY_QTY, qty) })
+    else
+      out.push({
+        section,
+        card,
+        ...(printing ? { printing } : {}),
+        qty: Math.min(MAX_ENTRY_QTY, qty)
+      })
   }
-  for (const m of p.matched) add(m.section, m.card, m.qty)
+  for (const m of p.matched) add(m.section, m.card, m.qty, m.printing)
   for (const i of [...p.ambiguous, ...p.notFound]) {
     const pick = picks[i.key]
     if (pick && !pick.drop) add(pick.section, pick.card, i.qty)

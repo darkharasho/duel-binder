@@ -14,6 +14,7 @@ import type {
 } from '../../shared/decks/types'
 import type { DeckLineRef } from '../../shared/decks/lists'
 import { normalCardName as normalName } from '../../shared/decks/names'
+import { magicNameSearchKey } from '../../shared/games/magic'
 import { checkObject } from './args'
 import { printingArtImageId, type PrintingDbRow } from './cards'
 import { CollectionError } from './collection'
@@ -46,7 +47,15 @@ const IN_LIST = '(SELECT value FROM json_each(?))'
  * opCardType (One Piece only, set on that game's answers) sends a Leader to Leader.
  */
 export type DeckResolution =
-  | { status: 'matched'; card: number; name: string; frameType: string; opCardType?: string | null }
+  | {
+      status: 'matched'
+      card: number
+      name: string
+      frameType: string
+      opCardType?: string | null
+      /** Magic only: the pkey of the printing a set and number line named, when the catalog has it. */
+      printing?: string
+    }
   | {
       status: 'ambiguous'
       options: {
@@ -567,13 +576,87 @@ function checkRefs(v: unknown): DeckLineRef[] {
       if (
         typeof o.set === 'string' &&
         typeof o.number === 'string' &&
-        /^[A-Za-z][A-Za-z0-9-]{1,7}$/.test(o.set) &&
-        /^[A-Za-z]*\d+[A-Za-z]?$/.test(o.number)
+        /^[A-Za-z0-9][A-Za-z0-9-]{1,7}$/.test(o.set) &&
+        /^[A-Za-z]*\d+[A-Za-z★†]?$/.test(o.number)
       )
         return { set: o.set, number: o.number, name: o.name }
       return { name: o.name }
     }
     throw new CollectionError('A deck line needs a passcode, set code, card number or name')
+  })
+}
+
+type MtgFact = { id: number; name: string; frame_type: string }
+
+/**
+ * Magic deck lines. A set and number finds that printing (its English one first) and pins it, else
+ * the line falls back to its name. A name is the English card's whole name, else the front face of
+ * a two-faced or split card (Arena writes only that), else equal once case and accents are ignored.
+ * Several cards (one per language) give the English one, so a line is matched or unmatched.
+ */
+function resolveMtgLines(db: SqlDb, lines: DeckLineRef[], scope: Scope): DeckResolution[] {
+  const english = db.prepare(
+    `SELECT c.id, c.name, c.frame_type FROM cards c JOIN mtg_cards m ON m.card_id = c.id
+     WHERE c.name = ? COLLATE NOCASE AND +c.game = ${scope.game} AND m.lang = 'en'
+     ORDER BY c.id`
+  )
+  const frontFace = db.prepare(
+    `SELECT c.id, c.name, c.frame_type FROM cards c JOIN mtg_cards m ON m.card_id = c.id
+     WHERE c.name COLLATE NOCASE >= ? AND c.name COLLATE NOCASE < ?
+       AND +c.game = ${scope.game} AND m.lang = 'en'
+     ORDER BY c.id`
+  )
+  const searched = db.prepare(
+    `SELECT c.id, c.name, c.frame_type, m.lang FROM cards_fts JOIN cards c ON c.id = cards_fts.rowid
+     JOIN mtg_cards m ON m.card_id = c.id
+     WHERE cards_fts MATCH ? AND +c.game = ${scope.game}
+     ORDER BY length(c.name), c.id LIMIT ${NAME_HITS}`
+  )
+  const printed = db.prepare(
+    `SELECT p.card_id, p.pkey, c.name, c.frame_type FROM card_printings p JOIN cards c ON c.id = p.card_id
+     WHERE p.set_code = ? COLLATE NOCASE AND +p.game = ${scope.game} AND +c.game = ${scope.game}
+     ORDER BY (p.language = 'en') DESC, p.id LIMIT 1`
+  )
+  const front = (name: string): string => name.split(' // ')[0]
+
+  const byName = (name: string): MtgFact | null => {
+    const trimmed = name.trim().replace(/\s+/g, ' ')
+    const whole = english.all(trimmed) as MtgFact[]
+    if (whole.length > 0) return whole[0]
+    const prefix = `${trimmed} // `
+    const faces = frontFace.all(prefix, `${trimmed} //!`) as MtgFact[]
+    if (faces.length > 0) return faces[0]
+    const want = magicNameSearchKey(trimmed)
+    const tokens = want.split(/[^\p{L}\p{N}]+/u).filter(Boolean)
+    if (tokens.length === 0) return null
+    const hits = (
+      searched.all(tokens.map((t) => `"${t}"`).join(' ')) as (MtgFact & { lang: string })[]
+    ).filter((c) => {
+      const key = magicNameSearchKey(c.name)
+      return key === want || magicNameSearchKey(front(c.name)) === want
+    })
+    hits.sort((a, b) => Number(b.lang === 'en') - Number(a.lang === 'en') || a.id - b.id)
+    return hits[0] ?? null
+  }
+
+  return lines.map((r): DeckResolution => {
+    if (!('name' in r)) return { status: 'unmatched' }
+    if ('set' in r) {
+      const p = printed.get(`${r.set.toUpperCase()} ${r.number}`) as
+        { card_id: number; pkey: string; name: string; frame_type: string } | undefined
+      if (p)
+        return {
+          status: 'matched',
+          card: p.card_id,
+          name: p.name,
+          frameType: p.frame_type,
+          printing: p.pkey
+        }
+    }
+    const hit = byName(r.name)
+    return hit
+      ? { status: 'matched', card: hit.id, name: hit.name, frameType: hit.frame_type }
+      : { status: 'unmatched' }
   })
 }
 
@@ -586,6 +669,7 @@ function checkRefs(v: unknown): DeckLineRef[] {
  */
 export function resolveDeckLines(db: SqlDb, refs: unknown, scope: Scope = LOCAL): DeckResolution[] {
   const lines = checkRefs(refs)
+  if (scopeGame(db, scope) === 'mtg') return resolveMtgLines(db, lines, scope)
   const passcodes = [...new Set(lines.flatMap((r) => ('passcode' in r ? [r.passcode] : [])))]
   const codes = [
     ...new Set(lines.flatMap((r) => ('setCode' in r && r.setCode ? [r.setCode.toLowerCase()] : [])))

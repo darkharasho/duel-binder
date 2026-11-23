@@ -767,6 +767,99 @@ describe('op deck line resolution', () => {
   })
 })
 
+describe('mtg deck line resolution', () => {
+  async function mtgDb(): Promise<Database.Database> {
+    const db = await seededDb()
+    const card = (id: number, lang: string, name: string, oracle: string): void => {
+      db.prepare(
+        `INSERT INTO cards (id, game, name, type, frame_type, race, "desc", updated_at)
+         VALUES (?, 'mtg', ?, '', 'mtg', '', '', '2026-11-23')`
+      ).run(id, name)
+      db.prepare(
+        `INSERT INTO mtg_cards (card_id, oracle_id, lang, layout, type_line, color_identity, mana_value)
+         VALUES (?, ?, ?, 'normal', '', '[]', 1)`
+      ).run(id, oracle, lang)
+    }
+    const printing = (id: number, lang: string, code: string, rarity = 'Uncommon'): void => {
+      db.prepare(
+        `INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity)
+         VALUES ('mtg', ?, ?, 'Set', ?, ?)`
+      ).run(id, lang, code, rarity)
+    }
+    card(9301, 'en', 'Lightning Bolt', 'bolt')
+    card(9302, 'ja', '稲妻', 'bolt')
+    card(9303, 'en', 'Delver of Secrets // Insectile Aberration', 'delver')
+    card(9304, 'en', 'Fire // Ice', 'fireice')
+    card(9305, 'en', 'Lim-Dûl the Necromancer', 'limdul')
+    card(9306, 'ja', 'Lightning Bolt', 'bolt')
+    printing(9301, 'en', '2X2 117')
+    printing(9302, 'ja', '2X2 117')
+    db.exec("INSERT INTO cards_fts(cards_fts) VALUES('rebuild')")
+    return db
+  }
+  const mtg = localScope("'mtg'")
+
+  it('matches a front face to its two-faced card and a split card by either spelling', async () => {
+    const db = await mtgDb()
+    const res = resolveDeckLines(
+      db,
+      [{ name: 'Delver of Secrets' }, { name: 'Fire // Ice' }, { name: 'Fire' }, { name: 'Ice' }],
+      mtg
+    )
+    expect(res.map((r) => (r.status === 'matched' ? r.card : r.status))).toEqual([
+      9303,
+      9304,
+      9304,
+      'unmatched'
+    ])
+  })
+
+  it('matches by search key, ignoring case and accents', async () => {
+    const db = await mtgDb()
+    const res = resolveDeckLines(
+      db,
+      [
+        { name: 'lightning bolt' },
+        { name: 'LIM-DUL THE NECROMANCER' },
+        { name: 'delver of secrets' }
+      ],
+      mtg
+    )
+    expect(res.map((r) => (r.status === 'matched' ? r.card : r.status))).toEqual([9301, 9305, 9303])
+  })
+
+  it('picks the English card when a name has several languages', async () => {
+    const db = await mtgDb()
+    const [res] = resolveDeckLines(db, [{ name: 'Lightning Bolt' }], mtg)
+    expect(res).toMatchObject({ status: 'matched', card: 9301 })
+  })
+
+  it('pins the printing a set and number name', async () => {
+    const db = await mtgDb()
+    const [res] = resolveDeckLines(db, [{ set: '2x2', number: '117', name: 'Whatever' }], mtg)
+    expect(res).toMatchObject({
+      status: 'matched',
+      card: 9301,
+      printing: 'en|9301|2X2 117|Uncommon'
+    })
+  })
+
+  it('falls back to the name, unpinned, for an unknown set and number', async () => {
+    const db = await mtgDb()
+    const [res] = resolveDeckLines(db, [{ set: 'ZZZ', number: '9', name: 'Lightning Bolt' }], mtg)
+    expect(res).toMatchObject({ status: 'matched', card: 9301 })
+    expect(res).not.toHaveProperty('printing')
+  })
+
+  it('leaves a card the catalog lacks unmatched', async () => {
+    const db = await mtgDb()
+    expect(resolveDeckLines(db, [{ name: 'Nonexistent Card' }, { passcode: 4 }], mtg)).toEqual([
+      { status: 'unmatched' },
+      { status: 'unmatched' }
+    ])
+  })
+})
+
 describe('decks repo on the server', () => {
   it('saves, lists, marks and tombstones one user’s decks by seq', async () => {
     const db = await seededServerDb()

@@ -302,7 +302,7 @@ export function ImportDialog({
                         : row(
                             n,
                             <>
-                              {!n.tooMany && (
+                              {!n.tooMany && !n.leftOut && (
                                 <Button
                                   variant="outline"
                                   size="sm"

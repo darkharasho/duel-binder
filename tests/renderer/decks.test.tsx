@@ -12,6 +12,7 @@ import { DecksPage } from '@/features/decks/DecksPage'
 import { buildPreview, keptEntries } from '@/features/decks/deckImport'
 import { changeSummary, moveEntry } from '@/features/decks/deckEntries'
 import { parseYgoList } from '@shared/decks/ygo/lists'
+import { parseMtgText } from '@shared/decks/magic/text'
 import { parseOpText, toOpText } from '@shared/decks/onepiece/text'
 import { encodeOplayV2, oplayLink } from '@shared/decks/onepiece/oplay'
 import { OFFLINE_MESSAGE } from '@shared/friends'
@@ -1494,6 +1495,34 @@ describe('One Piece on the deck screens', () => {
       'That link points to a deck saved on OPlay. Open it there and copy its deck code or share link instead.'
     )
     expect(resolve).not.toHaveBeenCalled()
+  })
+
+  it('a Magic Companion or Sideboard line is left out of a Commander deck, a pin is kept', () => {
+    const parsed = parseMtgText(
+      'Commander\n1 Krenko\n\nCompanion\n1 Lurrus\n\nDeck\n1 Lightning Bolt (2X2) 117'
+    )
+    const res: DeckResolution[] = [
+      { status: 'matched', card: 1, name: 'Krenko', frameType: 'mtg' },
+      { status: 'matched', card: 2, name: 'Lurrus', frameType: 'mtg' },
+      {
+        status: 'matched',
+        card: 3,
+        name: 'Lightning Bolt',
+        frameType: 'mtg',
+        printing: 'en|3|2X2 117|U'
+      }
+    ]
+    const commander = buildPreview(parsed, res, 'text', 'mtg', 'commander')
+    expect(commander.notFound).toMatchObject([
+      { text: '1 Lurrus (Commander decks here have no sideboard)', leftOut: expect.any(String) }
+    ])
+    expect(keptEntries(commander, {})).toEqual([
+      { section: 'commander', card: 1, qty: 1 },
+      { section: 'main', card: 3, printing: 'en|3|2X2 117|U', qty: 1 }
+    ])
+    const modern = buildPreview(parsed, res, 'text', 'mtg', 'modern')
+    expect(modern.notFound).toEqual([])
+    expect(keptEntries(modern, {}).map((e) => e.section)).toEqual(['commander', 'side', 'main'])
   })
 
   it('the import ignores a DON!! card that matched by number', () => {

@@ -35,6 +35,8 @@ const VERDICT_STATUSES: readonly VerdictStatus[] = [
 /** The languages whose printings price a deck built for the Asian (OCG) region. */
 const REGION_LANGUAGES = "('ja', 'ko', 'zh-hans', 'zh-hant', 'ae', 'ja-asia')"
 /** An id or pkey list bound as one JSON array, never one parameter per item (the DO caps them). */
+/** A basic Energy's whole name, normalised. */
+const BASIC_ENERGY = /^(?:grass|fire|water|lightning|psychic|fighting|darkness|metal|fairy) energy$/
 const IN_LIST = '(SELECT value FROM json_each(?))'
 
 /** frameType lets the importer place a card (an Extra Deck monster in Extra) when the list didn't. */
@@ -538,6 +540,8 @@ export function resolveDeckLines(db: SqlDb, refs: unknown, scope: Scope = LOCAL)
       }
   }
 
+  const setHit = (r: DeckLineRef): boolean => 'set' in r && bySetNumber.has(setKey(r.set, r.number))
+
   const named = db.prepare(
     `SELECT c.id, c.name, c.frame_type FROM cards_fts JOIN cards c ON c.id = cards_fts.rowid
      WHERE cards_fts MATCH ? AND +c.game = ${scope.game} ${englishOnly}
@@ -546,7 +550,7 @@ export function resolveDeckLines(db: SqlDb, refs: unknown, scope: Scope = LOCAL)
   type Hit = { id: number; name: string; frame_type: string }
   const byName = new Map<string, Hit[]>()
   for (const r of lines) {
-    if (!('name' in r)) continue
+    if (!('name' in r) || setHit(r)) continue
     const want = normalName(r.name)
     if (byName.has(want)) continue
     const tokens = want.split(/[^\p{L}\p{N}]+/u).filter(Boolean)
@@ -614,10 +618,29 @@ export function resolveDeckLines(db: SqlDb, refs: unknown, scope: Scope = LOCAL)
     if ('setCode' in r)
       return resolve([...(byCode.get(r.setCode.toLowerCase()) ?? [])].sort((a, b) => a - b))
     const byNameIds = (): number[] => (byName.get(normalName(r.name)) ?? []).map((h) => h.id)
+    // Basic Energy is interchangeable: of several cards, take the SVE one, else the lowest id.
+    const byBasicName = (): DeckResolution => {
+      const ids = byNameIds()
+      if (pkm && ids.length > 1 && BASIC_ENERGY.test(normalName(r.name))) {
+        const sve = new Set(
+          (
+            db
+              .prepare(
+                `SELECT DISTINCT p.card_id FROM card_printings p
+                 WHERE p.card_id IN ${IN_LIST} AND +p.game = ${scope.game}
+                   AND p.language = 'en' AND p.set_code LIKE 'SVE %' COLLATE NOCASE`
+              )
+              .all(JSON.stringify(ids)) as { card_id: number }[]
+          ).map((x) => x.card_id)
+        )
+        return resolve([ids.find((id) => sve.has(id)) ?? ids[0]])
+      }
+      return resolve(ids)
+    }
     if ('set' in r) {
       const ids = [...(bySetNumber.get(setKey(r.set, r.number)) ?? [])].sort((a, b) => a - b)
-      return resolve(ids.length > 0 ? ids : byNameIds())
+      return ids.length > 0 ? resolve(ids) : byBasicName()
     }
-    return resolve(byNameIds())
+    return byBasicName()
   })
 }

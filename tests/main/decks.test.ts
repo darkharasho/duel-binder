@@ -461,6 +461,34 @@ describe('pkm deck line resolution', () => {
   })
 })
 
+describe('pkm basic Energy resolution', () => {
+  it('picks the SVE card for basic Energy lines', async () => {
+    const db = await seededDb()
+    const pkm = localScope("'pkm'")
+    for (const [id, code] of [
+      [9201, 'MEE 002/008'],
+      [9202, 'SVE 002/24']
+    ] as const) {
+      db.prepare(
+        `INSERT INTO cards (id, game, name, type, frame_type, race, "desc", updated_at)
+         VALUES (?, 'pkm', 'Fire Energy', 'Energy', '', '', '', '2026-11-22')`
+      ).run(id)
+      db.prepare(
+        `INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity)
+         VALUES ('pkm', ?, 'en', 'Set', ?, 'Common')`
+      ).run(id, code)
+    }
+    db.exec("INSERT INTO cards_fts(cards_fts) VALUES('rebuild')")
+    const res = resolveDeckLines(
+      db,
+      [{ set: 'SVE', number: '2', name: 'Fire Energy' }, { name: 'Fire Energy' }],
+      pkm
+    )
+    expect(res[0]).toMatchObject({ status: 'matched', card: 9202 })
+    expect(res[1]).toMatchObject({ status: 'matched', card: 9202 })
+  })
+})
+
 describe('decks repo on the server', () => {
   it('saves, lists, marks and tombstones one user’s decks by seq', async () => {
     const db = await seededServerDb()

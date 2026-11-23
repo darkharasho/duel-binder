@@ -27,8 +27,8 @@ function energyName(name: string): string {
   return name
 }
 
-const isBasicName = (name: string): boolean => /^Basic\s/i.test(name) || isBasicEnergy(name)
-const isBasicEnergy = (name: string): boolean => /^\w+ Energy$/.test(name) && !/^Basic /i.test(name)
+const BASIC_ENERGY = /^(?:Grass|Fire|Water|Lightning|Psychic|Fighting|Darkness|Metal|Fairy) Energy$/
+const isBasicEnergy = (name: string): boolean => BASIC_ENERGY.test(name)
 
 export function parsePtcgl(text: string): ParsedList {
   const out: ParsedList = { lines: [], skipped: [], sectioned: false }
@@ -39,23 +39,21 @@ export function parsePtcgl(text: string): ParsedList {
       const s = rawLine.replace(/[\u00A0\u2007\u202F]/g, ' ').trim()
       if (!s || HEADER.test(s)) return
       let line: ParsedLine | null = null
-      // "Basic Fire Energy Energy 2": the set column reads "Energy", which the set pattern can't.
+      // "Basic Fire Energy Energy 2": the set column reads "Energy", which the set pattern can't
+      // match; the literal "Energy" is no set, so only the name is kept.
       const bare = /^(\d+)\s+(.+?)\s+Energy\s+\d+$/.exec(s)
-      const m = bare && isBasicName(bare[2]) ? null : SET_LINE.exec(s)
+      const bareBasic = bare && isBasicEnergy(energyName(bare[2]))
+      const m = bareBasic ? null : SET_LINE.exec(s)
       if (m) {
-        const name = energyName(m[2])
-        const basic = name !== m[2] || isBasicEnergy(name)
-        const dropSet = basic && (m[3] === 'Energy' || m[3] === 'SVE')
         line = {
           line: i + 1,
           raw: rawLine,
           section: 'main',
           qty: Number(m[1]),
-          ref: dropSet ? { name } : { set: m[3], number: m[4], name }
+          ref: { set: m[3], number: m[4], name: energyName(m[2]) }
         }
       } else {
-        const n =
-          bare && isBasicName(bare[2]) ? ([s, bare[1], bare[2]] as const) : NAME_LINE.exec(s)
+        const n = bareBasic ? ([s, bare[1], bare[2]] as const) : NAME_LINE.exec(s)
         if (n) {
           line = {
             line: i + 1,
@@ -94,8 +92,13 @@ export function toPtcgl(entries: DeckEntry[], cards: Record<number, DeckCard>): 
   const counts = { P: 0, T: 0, E: 0 }
   for (const e of sortEntries('pkm', [...merged.values()], cards)) {
     const card = cards[e.card]
-    const kind = card ? pkmKind(card.type) : null
-    if (!card || !kind) continue
+    if (!card) {
+      groups.P.push(`${e.qty} #${e.card}`)
+      counts.P += e.qty
+      continue
+    }
+    const kind = pkmKind(card.type)
+    if (!kind) continue
     const code = exportCode(card.code)
     groups[kind].push(`${e.qty} ${card.name}${code ? ` ${code}` : ''}`)
     counts[kind] += e.qty

@@ -35,13 +35,16 @@ describe('parsePtcgl', () => {
     expect(p.skipped).toEqual([])
   })
 
-  it('normalizes basic Energy', () => {
-    for (const l of [
-      '2 Basic {R} Energy SVE 2',
-      '2 Fire Energy SVE 2',
-      '2 Basic Fire Energy Energy 2'
-    ])
-      expect(parsePtcgl(l).lines[0]).toMatchObject({ qty: 2, ref: { name: 'Fire Energy' } })
+  it('normalizes basic Energy and keeps real sets', () => {
+    for (const l of ['2 Basic {R} Energy SVE 2', '2 Fire Energy SVE 2'])
+      expect(parsePtcgl(l).lines[0]).toMatchObject({
+        qty: 2,
+        ref: { set: 'SVE', number: '2', name: 'Fire Energy' }
+      })
+    expect(parsePtcgl('2 Basic Fire Energy Energy 2').lines[0]).toMatchObject({
+      qty: 2,
+      ref: { name: 'Fire Energy' }
+    })
     expect(parsePtcgl('3 Basic {G} Energy').lines[0].ref).toEqual({ name: 'Grass Energy' })
   })
 
@@ -75,5 +78,16 @@ describe('toPtcgl', () => {
       [4, { set: 'PAL', number: '185', name: 'Iono' }],
       [5, { name: 'Fire Energy' }]
     ])
+  })
+
+  it('exports a card missing from the map as its id', () => {
+    const text = toPtcgl(
+      [
+        { section: 'main', card: 1, qty: 2 },
+        { section: 'main', card: 77, qty: 3 }
+      ],
+      { 1: card(1, 'Pikachu ex', 'Pokémon', 'SVI 057/198') }
+    )
+    expect(text).toBe('Pokémon: 5\n2 Pikachu ex SVI 57\n3 #77\n\nTotal Cards: 5')
   })
 })

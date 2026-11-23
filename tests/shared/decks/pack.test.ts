@@ -66,3 +66,61 @@ describe('parseRulesPack pkm', () => {
     expect(parseRulesPack({ ...pkm, schema: 2 })).toEqual({ state: 'tooNew' })
   })
 })
+
+describe('parseRulesPack op', () => {
+  const fmt = {
+    banned: [{ card: 'OP03-040' }, { card: 'OP14-020', from: '2026-10-12' }],
+    restricted: {} as Record<string, number>,
+    bannedPairs: [{ leader: 'OP13-001', cards: ['EB05-001'], from: '2026-11-27' }]
+  }
+  const op = {
+    schema: 1,
+    game: 'op',
+    version: '2026-11-22',
+    builtAt: '2026-11-22T03:00:00Z',
+    sources: [{ name: 'Bandai', fetchedAt: '2026-11-22' }],
+    formats: {
+      standard: { ...fmt, rotatedBlocks: [1], exempt: ['OP01-016'] },
+      extra: fmt
+    },
+    setBlocks: {}
+  }
+  const withStandard = (s: Record<string, unknown>) => ({
+    ...op,
+    formats: { ...op.formats, standard: { ...op.formats.standard, ...s } }
+  })
+  it('parses a valid op pack', () => {
+    const r = parseRulesPack(op)
+    expect(r.state).toBe('ready')
+    if (r.state === 'ready') expect(r.pack.game).toBe('op')
+  })
+  it('rejects an op pack with a bad date', () => {
+    const bad = withStandard({
+      bannedPairs: [{ leader: 'OP13-001', cards: ['EB05-001'], from: '27 Nov' }]
+    })
+    expect(parseRulesPack(bad)).toEqual({ state: 'missing' })
+    const badBan = withStandard({ banned: [{ card: 'OP14-020', from: '27 Nov' }] })
+    expect(parseRulesPack(badBan)).toEqual({ state: 'missing' })
+  })
+  it("rejects an op pack whose restricted count isn't 0–3", () => {
+    expect(parseRulesPack(withStandard({ restricted: { 'OP01-016': 5 } }))).toEqual({
+      state: 'missing'
+    })
+  })
+  it('rejects an op pack missing standard.rotatedBlocks', () => {
+    const { rotatedBlocks: _r, ...std } = op.formats.standard
+    expect(parseRulesPack({ ...op, formats: { ...op.formats, standard: std } })).toEqual({
+      state: 'missing'
+    })
+  })
+  it("rejects an op pack whose card numbers aren't non-empty strings", () => {
+    expect(parseRulesPack(withStandard({ banned: [{ card: '' }] }))).toEqual({ state: 'missing' })
+    expect(parseRulesPack(withStandard({ exempt: [16] }))).toEqual({ state: 'missing' })
+    expect(
+      parseRulesPack(withStandard({ bannedPairs: [{ leader: 'OP13-001', cards: [''] }] }))
+    ).toEqual({ state: 'missing' })
+    expect(
+      parseRulesPack(withStandard({ bannedPairs: [{ leader: 7, cards: ['EB05-001'] }] }))
+    ).toEqual({ state: 'missing' })
+  })
+})

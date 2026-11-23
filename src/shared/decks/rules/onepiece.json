@@ -1,0 +1,118 @@
+{
+  "asOf": "2026-11-22",
+  "source": "https://en.onepiece-cardgame.com/news/restriction.html (bans and pairs; details: news/restriction-2611.html, news/restriction-261001.html, news/restriction-260501.html, topics/019.php, topics/029.php); https://en.onepiece-cardgame.com/topics/013.php (Standard and Extra Regulation, block rotation); https://en.onepiece-cardgame.com/news/blockicon-card.html (block exemptions); https://en.onepiece-cardgame.com/cardlist/?series=569302 (PRB-02 card list)",
+  "formats": {
+    "standard": {
+      "banned": [
+        {
+          "card": "OP06-047"
+        },
+        {
+          "card": "OP03-040"
+        },
+        {
+          "card": "OP06-086"
+        },
+        {
+          "card": "ST10-001"
+        },
+        {
+          "card": "OP06-116"
+        },
+        {
+          "card": "OP14-020",
+          "from": "2026-10-12"
+        }
+      ],
+      "restricted": {},
+      "bannedPairs": [
+        {
+          "leader": "OP13-001",
+          "cards": ["EB05-001"],
+          "from": "2026-11-27"
+        },
+        {
+          "leader": "OP01-002",
+          "cards": ["EB05-001"],
+          "from": "2026-11-27"
+        },
+        {
+          "leader": "OP11-040",
+          "cards": ["OP11-067", "OP08-069"]
+        },
+        {
+          "leader": "OP07-115",
+          "cards": ["EB04-058"]
+        }
+      ],
+      "rotatedBlocks": [1],
+      "exempt": [
+        "OP01-016",
+        "OP01-039",
+        "OP01-055",
+        "OP01-120",
+        "OP02-005",
+        "OP02-013",
+        "OP02-068",
+        "OP03-008",
+        "OP03-044",
+        "OP03-048",
+        "OP03-072",
+        "OP03-097",
+        "OP03-122",
+        "OP04-016",
+        "OP04-077",
+        "OP04-083",
+        "OP04-096",
+        "ST01-011",
+        "ST02-007",
+        "ST06-008"
+      ]
+    },
+    "extra": {
+      "banned": [
+        {
+          "card": "OP06-047"
+        },
+        {
+          "card": "OP03-040"
+        },
+        {
+          "card": "OP06-086"
+        },
+        {
+          "card": "ST10-001"
+        },
+        {
+          "card": "OP06-116"
+        },
+        {
+          "card": "OP14-020",
+          "from": "2026-10-12"
+        }
+      ],
+      "restricted": {},
+      "bannedPairs": [
+        {
+          "leader": "OP13-001",
+          "cards": ["EB05-001"],
+          "from": "2026-11-27"
+        },
+        {
+          "leader": "OP01-002",
+          "cards": ["EB05-001"],
+          "from": "2026-11-27"
+        },
+        {
+          "leader": "OP11-040",
+          "cards": ["OP11-067", "OP08-069"]
+        },
+        {
+          "leader": "OP07-115",
+          "cards": ["EB04-058"]
+        }
+      ]
+    }
+  },
+  "setBlocks": {}
+}

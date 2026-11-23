@@ -55,7 +55,44 @@ export function packKeyOfId(pack: PkmRulesPack, id: string): number | undefined 
   return group && Object.prototype.hasOwnProperty.call(group, local) ? group[local] : undefined
 }
 
-export type RulesPack = YgoRulesPack | PkmRulesPack
+export interface OpBan {
+  /** Card number, "OP03-040" */
+  card: string
+  /** YYYY-MM-DD the ban starts; absent = in force */
+  from?: string
+}
+
+export interface OpPair {
+  /** The Leader's card number */
+  leader: string
+  /** Card numbers that can't be used with this Leader */
+  cards: string[]
+  /** YYYY-MM-DD the pair starts; absent = in force */
+  from?: string
+}
+
+export interface OpFormatRules {
+  banned: OpBan[]
+  /** card number → copies allowed */
+  restricted: Record<string, number>
+  bannedPairs: OpPair[]
+}
+
+export interface OpRulesPack {
+  schema: number
+  game: 'op'
+  version: string
+  builtAt: string
+  sources: { name: string; fetchedAt: string }[]
+  formats: {
+    standard: OpFormatRules & { rotatedBlocks: number[]; exempt: string[] }
+    extra: OpFormatRules
+  }
+  /** Number prefix ("OP01") → block, for cards the catalog has no block icon for */
+  setBlocks: Record<string, number>
+}
+
+export type RulesPack = YgoRulesPack | PkmRulesPack | OpRulesPack
 
 export type PackState =
   { state: 'ready'; pack: RulesPack } | { state: 'missing' } | { state: 'tooNew' }
@@ -92,12 +129,46 @@ function validPkm(raw: Record<string, unknown>): boolean {
   return true
 }
 
+const isCardNo = (v: unknown): v is string => typeof v === 'string' && v.trim() !== ''
+
+const isDay = (v: unknown): boolean =>
+  typeof v === 'string' &&
+  /^\d{4}-\d{2}-\d{2}$/.test(v) &&
+  new Date(`${v}T00:00:00Z`).toISOString().slice(0, 10) === v
+
+const validFrom = (o: Record<string, unknown>): boolean => o.from === undefined || isDay(o.from)
+
+function validOpRules(v: unknown): v is OpFormatRules {
+  if (!isObj(v) || !Array.isArray(v.banned) || !isObj(v.restricted)) return false
+  if (!Array.isArray(v.bannedPairs)) return false
+  for (const b of v.banned) if (!isObj(b) || !isCardNo(b.card) || !validFrom(b)) return false
+  for (const [card, n] of Object.entries(v.restricted))
+    if (!isCardNo(card) || !Number.isInteger(n) || (n as number) < 0 || (n as number) > 3)
+      return false
+  for (const p of v.bannedPairs) {
+    if (!isObj(p) || !isCardNo(p.leader) || !validFrom(p)) return false
+    if (!Array.isArray(p.cards) || p.cards.length === 0 || !p.cards.every(isCardNo)) return false
+  }
+  return true
+}
+
+function validOp(raw: Record<string, unknown>): boolean {
+  const fm = raw.formats
+  if (!isObj(fm) || !validOpRules(fm.standard) || !validOpRules(fm.extra)) return false
+  const std = fm.standard as unknown as Record<string, unknown>
+  if (!Array.isArray(std.rotatedBlocks) || !std.rotatedBlocks.every(Number.isInteger)) return false
+  if (!Array.isArray(std.exempt) || !std.exempt.every(isCardNo)) return false
+  if (!isObj(raw.setBlocks)) return false
+  for (const b of Object.values(raw.setBlocks)) if (!Number.isInteger(b)) return false
+  return true
+}
+
 /** Malformed → missing; a schema newer than this app reads → tooNew. */
 export function parseRulesPack(raw: unknown): PackState {
   if (!isObj(raw) || typeof raw.schema !== 'number') return { state: 'missing' }
   if (raw.schema > RULES_SCHEMA) return { state: 'tooNew' }
   if (
-    (raw.game !== 'ygo' && raw.game !== 'pkm') ||
+    (raw.game !== 'ygo' && raw.game !== 'pkm' && raw.game !== 'op') ||
     typeof raw.version !== 'string' ||
     typeof raw.builtAt !== 'string'
   )
@@ -106,6 +177,10 @@ export function parseRulesPack(raw: unknown): PackState {
   if (raw.game === 'pkm')
     return validPkm(raw)
       ? { state: 'ready', pack: raw as unknown as PkmRulesPack }
+      : { state: 'missing' }
+  if (raw.game === 'op')
+    return validOp(raw)
+      ? { state: 'ready', pack: raw as unknown as OpRulesPack }
       : { state: 'missing' }
   const fm = raw.formats
   if (!validRules(fm.advanced) || !validRules(fm.ocg)) return { state: 'missing' }

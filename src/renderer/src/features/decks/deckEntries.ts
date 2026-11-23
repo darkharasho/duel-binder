@@ -1,6 +1,7 @@
 import type { DeckProblem } from '@shared/decks/check'
 import { MAX_ENTRY_QTY } from '@shared/decks/fields'
 import type { DeckCard, DeckEntry, DeckSection } from '@shared/decks/types'
+import type { BrowseCard } from '@shared/types'
 
 /** The verdict badge's colour by status. */
 export const BADGE: Record<string, string> = {
@@ -102,3 +103,28 @@ export function shareOwned(
   }
   return out
 }
+
+/** What the deck needs of a search result, until the deck's own read brings the full facts. */
+export function deckCardOf(c: BrowseCard): DeckCard {
+  return {
+    id: c.id,
+    name: c.name,
+    type: c.type,
+    frameType: c.frameType,
+    imageId: c.imageId,
+    owned: c.owned,
+    price: c.price,
+    regionPrice: null
+  }
+}
+
+/** Drag data: a card from the adder's results (a DeckCard as JSON), or a deck entry (its entryKey). */
+export const DRAG_CARD = 'application/x-duel-binder-deck-card'
+export const DRAG_ENTRY = 'application/x-duel-binder-deck-entry'
+
+/** Mono uppercase, like the sidebar's group headings. */
+export const SECTION_HEADING = 'font-mono text-[10.5px] font-medium uppercase tracking-[1.5px]'
+
+/** A chip in the deck page's header rows: mono, rounded, on the wash. */
+export const CHIP =
+  'inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-chip px-3 font-mono text-xs'

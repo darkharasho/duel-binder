@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronLeftIcon } from 'lucide-react'
+import { ChevronLeftIcon, LayoutGridIcon, ListIcon, PlusIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { checkDeck, verdictMark, type DeckProblem } from '@shared/decks/check'
 import { deckCost } from '@shared/decks/cost'
@@ -8,15 +8,15 @@ import { MAX_DECK_NAME, MAX_DECK_NOTES } from '@shared/decks/fields'
 import { DECK_FORMATS, formatOf } from '@shared/decks/formats'
 import { sortEntries } from '@shared/decks/sort'
 import type { DeckCard, DeckDetail, DeckEntry, DeckFields } from '@shared/decks/types'
-import { PageHeader } from '@/components/PageHeader'
-import { PAGE_TITLE } from '@/components/pageHeaderContext'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { api, queryKeys } from '@/lib/api'
 import { useBackHandler } from '@/lib/backStack'
 import { errorMessage } from '@/lib/errorMessage'
+import { formatUsd } from '@/lib/format'
 import { isPhone } from '@/lib/platform'
 import { cn } from '@/lib/utils'
+import { DeckAdder, type AdderTab } from './DeckAdder'
 import {
   addEntry,
   changeQty,
@@ -27,16 +27,28 @@ import {
   removeEntry,
   shareOwned
 } from './deckEntries'
-import { DeckSearch } from './DeckSearch'
+import { DeckGrid } from './DeckGrid'
+import { DeckHeader, DeckStatChips } from './DeckHeader'
 import { DeckSectionList, type EntryActions } from './DeckSection'
-import { ExportMenu } from './ExportMenu'
-import { FeedbackPanel } from './FeedbackPanel'
-import { FormatSelect } from './FormatSelect'
 import { ImportDialog } from './ImportDialog'
+import { MissingList } from './MissingList'
+import { ProblemsBar } from './ProblemsBar'
 import { localToday, useRulesPack } from './useRulesPack'
 
 const SAVE_MS = 600
 const HIGHLIGHT_MS = 3000
+const VIEW_KEY = 'decks.view'
+/** From here up the adder sits beside the deck; below, it's a bottom sheet (as the filter panel). */
+const WIDE = '(min-width: 1024px)'
+
+type DeckView = 'grid' | 'list'
+function readView(): DeckView {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'grid'
+  } catch {
+    return 'grid'
+  }
+}
 
 const fieldsOf = (d: DeckDetail): DeckFields => ({
   format: d.format,
@@ -234,106 +246,160 @@ export function DeckPage({
           sections: format.sections
         }
       : undefined
+  const addCard = (card: DeckCard, section: DeckEntry['section']): void => {
+    setAdded((a) => ({ ...a, [card.id]: card }))
+    editCards((c) => addEntry(c, card.id, section))
+  }
   const phone = isPhone()
 
+  const [view, setView] = useState<DeckView>(readView)
+  const pickView = (v: DeckView): void => {
+    setView(v)
+    try {
+      localStorage.setItem(VIEW_KEY, v)
+    } catch {
+      // Kept for this visit only.
+    }
+  }
+  const [tab, setTab] = useState<AdderTab>('add')
+  // The bottom sheet (phones, narrow windows, read-only Missing): which tab it opened on.
+  const [sheet, setSheet] = useState<AdderTab | null>(null)
+  const [problemsOpen, setProblemsOpen] = useState(false)
+  const problemsRef = useRef<HTMLDivElement>(null)
+
+  const counts = useMemo(() => {
+    const out: Record<string, number> = {}
+    for (const s of sections) out[s.def.id] = s.entries.reduce((n, e) => n + e.qty, 0)
+    return out
+  }, [sections])
+  const inDeck = useMemo(() => {
+    const out = new Map<number, number>()
+    for (const e of fields?.cards ?? []) out.set(e.card, (out.get(e.card) ?? 0) + e.qty)
+    return out
+  }, [fields])
+  const flagged = useMemo(() => {
+    const out = new Map<number, 'error' | 'warning'>()
+    for (const p of verdict?.problems ?? [])
+      if (p.cardId !== undefined && out.get(p.cardId) !== 'error') out.set(p.cardId, p.severity)
+    return out
+  }, [verdict])
+  const totals = useMemo(() => {
+    const all = sections.flatMap((s) => s.entries)
+    const copies = all.reduce((n, e) => n + e.qty, 0)
+    const own = all.reduce((n, e) => n + (have.get(entryKey(e)) ?? 0), 0)
+    const region = format?.priceRegion ?? 'en'
+    let value = 0
+    for (const e of all) {
+      const c = facts[e.card]
+      const unit = (region === 'asia' ? c?.regionPrice : c?.price) ?? null
+      if (unit !== null) value += unit * e.qty
+    }
+    // Yu-Gi-Oh!: the Main Deck's monsters, spells and traps.
+    const kinds = { monsters: 0, spells: 0, traps: 0 }
+    if (game === 'ygo')
+      for (const e of all) {
+        if (e.section !== 'main') continue
+        const type = facts[e.card]?.type ?? ''
+        if (type.includes('Monster')) kinds.monsters += e.qty
+        else if (type.includes('Spell')) kinds.spells += e.qty
+        else if (type.includes('Trap')) kinds.traps += e.qty
+      }
+    return { copies, own, value, kinds }
+  }, [sections, have, facts, format, game])
+  const missingCopies = cost ? cost.missing.reduce((n, m) => n + m.copies, 0) : 0
+
+  const wide = (): boolean => !phone && (window.matchMedia?.(WIDE).matches ?? true)
+  const openMissing = (): void => {
+    if (editable && wide()) setTab('missing')
+    else setSheet('missing')
+  }
+  const openProblems = (): void => {
+    setProblemsOpen(true)
+    problemsRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' })
+  }
+
+  const missingNode =
+    cost && format && fields ? (
+      <MissingList cost={cost} cards={facts} priceRegion={format.priceRegion} />
+    ) : null
+  const notesNode = fields ? (
+    <textarea
+      aria-label="Notes"
+      placeholder="Plans, side choices, what to buy first…"
+      value={fields.notes}
+      maxLength={MAX_DECK_NOTES}
+      onChange={(e) => edit({ notes: e.target.value })}
+      className="min-h-40 w-full flex-1 resize-none rounded-md border bg-black/20 px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    />
+  ) : null
+  const adder = (className?: string): React.JSX.Element | null =>
+    format && fields ? (
+      <DeckAdder
+        game={game}
+        format={format}
+        inDeck={inDeck}
+        tab={sheet ?? tab}
+        onTab={(t) => (sheet ? setSheet(t) : setTab(t))}
+        missingCount={missingCopies}
+        missing={missingNode}
+        notes={notesNode}
+        onAdd={addCard}
+        className={className}
+      />
+    ) : null
+  const pane = 'rounded-xl border border-white/10 bg-black/25 backdrop-blur-sm'
+
   return (
-    <div className={cn('space-y-4 p-8 max-md:p-4', phone && 'pb-24')}>
-      <PageHeader>
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" className="-ml-2 shrink-0" onClick={onBack}>
+    <div
+      className={cn(
+        'flex flex-col gap-3 p-8 max-md:p-4',
+        phone ? 'pb-6' : 'lg:h-full lg:min-h-0 lg:pb-5'
+      )}
+    >
+      {q.isError || q.isPending || !fields || !format ? (
+        <>
+          <Button variant="ghost" size="sm" className="-ml-2 self-start" onClick={onBack}>
             <ChevronLeftIcon className="size-4" />
             Back
           </Button>
-          {!editable || !fields ? (
-            <h1 className={cn(PAGE_TITLE, 'min-w-0 truncate')}>{fields?.name ?? ''}</h1>
+          {q.isError ? (
+            <p className="text-sm text-destructive">Could not load the deck.</p>
+          ) : q.isPending ? (
+            <p className="text-sm text-muted-foreground">Loading the deck…</p>
           ) : (
-            <Input
-              aria-label="Deck name"
-              value={fields.name}
-              maxLength={MAX_DECK_NAME}
-              onChange={(e) => edit({ name: e.target.value })}
-              className={cn(
-                PAGE_TITLE,
-                'h-auto min-w-0 flex-1 border-transparent px-1 shadow-none'
-              )}
-            />
+            <p className="text-sm text-muted-foreground">{"This deck isn't here any more."}</p>
           )}
-        </div>
-      </PageHeader>
-      {q.isError ? (
-        <p className="text-sm text-destructive">Could not load the deck.</p>
-      ) : q.isPending ? (
-        <p className="text-sm text-muted-foreground">Loading the deck…</p>
-      ) : !fields || !format ? (
-        <p className="text-sm text-muted-foreground">{"This deck isn't here any more."}</p>
+        </>
       ) : (
         <>
+          <DeckHeader
+            game={game}
+            fields={fields}
+            facts={facts}
+            known={known}
+            editable={editable}
+            readOnly={readOnly}
+            verdict={verdict}
+            busy={busy}
+            confirmingDelete={confirmingDelete}
+            onBack={onBack}
+            onName={(name) => edit({ name })}
+            onFormat={(format) => edit({ format })}
+            onBadge={openProblems}
+            menu={{
+              onReplace: () => setImporting(true),
+              onDuplicate: () => void duplicate(),
+              onDelete: () => setConfirmingDelete(true),
+              onPrivate: (on) => edit({ private: on })
+            }}
+            onConfirmDelete={() => void remove()}
+            onKeep={() => setConfirmingDelete(false)}
+          />
           {!known && (
             <p role="status" className="text-sm text-muted-foreground">
               {"This deck's format needs a newer version of the app. Update to check or edit it."}
             </p>
           )}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-            {editable ? (
-              <FormatSelect
-                game={game}
-                size="sm"
-                value={fields.format}
-                onChange={(format) => edit({ format })}
-                className="w-auto"
-              />
-            ) : (
-              <span className="text-muted-foreground">{known?.label ?? fields.format}</span>
-            )}
-            <ExportMenu name={fields.name} cards={fields.cards} facts={facts} />
-            {editable && (
-              <>
-                <label className="flex items-center gap-1.5">
-                  <input
-                    type="checkbox"
-                    checked={fields.private}
-                    onChange={(e) => edit({ private: e.target.checked })}
-                  />
-                  Private
-                </label>
-                <Button variant="ghost" size="sm" onClick={() => setImporting(true)}>
-                  Replace from list
-                </Button>
-                <Button variant="ghost" size="sm" disabled={busy} onClick={() => void duplicate()}>
-                  Duplicate
-                </Button>
-              </>
-            )}
-            {!readOnly && (
-              <>
-                {confirmingDelete ? (
-                  <span className="flex items-center gap-2">
-                    <span>Delete this deck?</span>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      disabled={busy}
-                      onClick={() => void remove()}
-                    >
-                      Confirm delete
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => setConfirmingDelete(false)}>
-                      Keep
-                    </Button>
-                  </span>
-                ) : (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-destructive"
-                    onClick={() => setConfirmingDelete(true)}
-                  >
-                    Delete
-                  </Button>
-                )}
-              </>
-            )}
-          </div>
           {saveError && (
             <div
               role="alert"
@@ -352,55 +418,148 @@ export function DeckPage({
               </Button>
             </div>
           )}
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
-            <div className="min-w-0 space-y-6">
-              {editable && (
-                <DeckSearch
-                  game={game}
-                  format={format}
-                  onAdd={(card, section) => {
-                    setAdded((a) => ({ ...a, [card.id]: card }))
-                    editCards((c) => addEntry(c, card.id, section))
-                  }}
-                />
-              )}
-              {sections.map((s) => (
-                <DeckSectionList
-                  key={s.def.id}
-                  def={s.def}
-                  entries={s.entries}
-                  cards={facts}
-                  printingArt={detail?.printingArt ?? {}}
-                  have={have}
-                  cover={fields.cover}
-                  highlight={highlight}
-                  actions={actions}
-                />
-              ))}
-              {editable && (
-                <div className="space-y-1.5">
-                  <label htmlFor="deck-notes" className="text-sm font-medium">
-                    Notes
-                  </label>
-                  <textarea
-                    id="deck-notes"
-                    value={fields.notes}
-                    maxLength={MAX_DECK_NOTES}
-                    rows={4}
-                    onChange={(e) => edit({ notes: e.target.value })}
-                    className="w-full rounded-md border bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          <DeckStatChips
+            format={format}
+            counts={counts}
+            own={totals.own}
+            total={totals.copies}
+            missing={cost && cost.missing.length > 0 ? formatUsd(cost.total) : null}
+            onMissing={openMissing}
+          />
+          <div className="flex min-h-0 flex-1 gap-4">
+            {editable && !phone && (
+              <aside
+                aria-label="Add cards"
+                className={cn(pane, 'flex w-80 shrink-0 flex-col p-3 max-lg:hidden')}
+              >
+                {adder('flex-1')}
+              </aside>
+            )}
+            <div className={cn(pane, 'flex min-w-0 flex-1 flex-col')}>
+              <div
+                className={cn('flex-1 space-y-4 p-3', !phone && 'lg:min-h-0 lg:overflow-y-auto')}
+              >
+                <div ref={problemsRef}>
+                  <ProblemsBar
+                    verdict={verdict}
+                    expanded={problemsOpen}
+                    onExpanded={setProblemsOpen}
+                    onProblem={showProblem}
                   />
                 </div>
-              )}
+                {view === 'grid' ? (
+                  <DeckGrid
+                    sections={sections}
+                    cards={facts}
+                    printingArt={detail?.printingArt ?? {}}
+                    have={have}
+                    cover={fields.cover}
+                    highlight={highlight}
+                    flagged={flagged}
+                    phone={phone}
+                    actions={actions}
+                    onDropCard={editable ? addCard : undefined}
+                  />
+                ) : (
+                  <div className="space-y-6">
+                    {sections.map((s) => (
+                      <DeckSectionList
+                        key={s.def.id}
+                        def={s.def}
+                        entries={s.entries}
+                        cards={facts}
+                        printingArt={detail?.printingArt ?? {}}
+                        have={have}
+                        cover={fields.cover}
+                        highlight={highlight}
+                        actions={actions}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+              <footer className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-white/10 px-3 py-2 font-mono text-xs">
+                {game === 'ygo' && (
+                  <>
+                    <span>
+                      <span className="text-muted-foreground">Monsters </span>
+                      {totals.kinds.monsters}
+                    </span>
+                    <span>
+                      <span className="text-muted-foreground">Spells </span>
+                      {totals.kinds.spells}
+                    </span>
+                    <span>
+                      <span className="text-muted-foreground">Traps </span>
+                      {totals.kinds.traps}
+                    </span>
+                  </>
+                )}
+                <div
+                  role="group"
+                  aria-label="Deck view"
+                  className="ml-auto flex items-center rounded-full bg-chip p-0.5"
+                >
+                  {(
+                    [
+                      ['grid', 'Grid', LayoutGridIcon],
+                      ['list', 'List', ListIcon]
+                    ] as const
+                  ).map(([id, label, Icon]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      aria-pressed={view === id}
+                      onClick={() => pickView(id)}
+                      className={cn(
+                        'flex h-6 items-center gap-1 rounded-full px-2 outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                        view === id ? 'bg-chip-on text-chip-on-ink' : 'hover:bg-chip'
+                      )}
+                    >
+                      <Icon className="size-3" />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <span>
+                  <span className="text-muted-foreground">Deck value </span>
+                  <span className="font-semibold">{formatUsd(totals.value)}</span>
+                </span>
+              </footer>
             </div>
-            <FeedbackPanel
-              verdict={verdict}
-              cost={cost}
-              cards={facts}
-              priceRegion={format.priceRegion}
-              onProblem={showProblem}
-            />
           </div>
+          {editable && (
+            <div
+              className={cn(
+                'pointer-events-none sticky bottom-4 z-30 flex justify-end',
+                !phone && 'lg:hidden'
+              )}
+            >
+              <Button
+                size="lg"
+                className="pointer-events-auto shadow-lg"
+                onClick={() => setSheet('add')}
+              >
+                <PlusIcon />
+                Add
+              </Button>
+            </div>
+          )}
+          <Sheet open={sheet !== null} onOpenChange={(o) => !o && setSheet(null)}>
+            <SheetContent
+              side="bottom"
+              className="h-[85dvh] rounded-t-2xl border-0 bg-popover p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+            >
+              <SheetTitle className="sr-only">
+                {editable ? 'Add cards' : 'Missing cards'}
+              </SheetTitle>
+              {editable ? (
+                adder('min-h-0 flex-1')
+              ) : (
+                <div className="min-h-0 flex-1 overflow-y-auto pt-6">{missingNode}</div>
+              )}
+            </SheetContent>
+          </Sheet>
           {importing && (
             <ImportDialog
               game={game}

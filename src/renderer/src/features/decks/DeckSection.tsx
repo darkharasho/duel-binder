@@ -187,7 +187,7 @@ function EntryControls({
 }
 
 /** The card's printings to pin one (or any printing); sets the entry's `printing` to its pkey. */
-function PrintingPicker({
+export function PrintingPicker({
   entry,
   name,
   onPick,

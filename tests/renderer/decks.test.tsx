@@ -241,6 +241,15 @@ const pageApi = (d: DeckDetail, rules: PackState, o: DeepPartial<Api> = {}): Api
     }
   })
 const entry = (name: string): HTMLElement => screen.getByRole('listitem', { name })
+/** Opens a deck tile's controls (the grid's popover). */
+const openTile = async (name: string): Promise<void> => {
+  await userEvent.click(within(entry(name)).getByRole('button'))
+}
+/** Opens the deck's ⋯ menu and picks an action. */
+const deckMenu = async (item: string): Promise<void> => {
+  await userEvent.click(screen.getByRole('button', { name: 'More deck actions' }))
+  await userEvent.click(await screen.findByRole('menuitem', { name: item }))
+}
 const SAVE_WAIT = { timeout: 2500 }
 
 describe('the deck page', () => {
@@ -287,6 +296,7 @@ describe('the deck page', () => {
     const api = pageApi(detail(), pack('2026-11-22'))
     renderWithProviders(<DeckPage uid="d1" onBack={vi.fn()} />, { api })
     expect(await screen.findByText('Main Deck 42 / 40–60')).toBeInTheDocument()
+    await openTile('Filler 100')
     await userEvent.click(screen.getByRole('button', { name: 'Add a copy of Filler 100' }))
     expect(
       screen.getByRole('button', { name: /4 × Filler 100: at most 3 copies/ })
@@ -309,14 +319,17 @@ describe('the deck page', () => {
     const api = pageApi(detail(), pack('2026-11-22'), { decks: { save } })
     renderWithProviders(<DeckPage uid="d1" onBack={vi.fn()} />, { api })
     await screen.findByText('Main Deck 42 / 40–60')
+    await openTile('Pricey')
     await userEvent.click(screen.getByRole('button', { name: 'Add a copy of Pricey' }))
     expect(
       await screen.findByText(`Not saved: ${OFFLINE_MESSAGE}`, {}, SAVE_WAIT)
     ).toBeInTheDocument()
-    expect(within(entry('Pricey')).getByText('0/3')).toBeInTheDocument()
+    expect(within(entry('Pricey')).getByText('×3')).toBeInTheDocument()
+    expect(within(entry('Pricey')).getByText('need 3')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }))
     await waitFor(() => expect(save).toHaveBeenCalledTimes(2))
-    expect(within(entry('Pricey')).getByText('0/3')).toBeInTheDocument()
+    expect(within(entry('Pricey')).getByText('×3')).toBeInTheDocument()
+    expect(within(entry('Pricey')).getByText('need 3')).toBeInTheDocument()
   })
 
   it('a desktop save failure shows the reason without the IPC prefix', async () => {
@@ -328,6 +341,7 @@ describe('the deck page', () => {
     const api = pageApi(detail(), pack('2026-11-22'), { decks: { save } })
     renderWithProviders(<DeckPage uid="d1" onBack={vi.fn()} />, { api })
     await screen.findByText('Main Deck 42 / 40–60')
+    await openTile('Pricey')
     await userEvent.click(screen.getByRole('button', { name: 'Add a copy of Pricey' }))
     expect(
       await screen.findByText('Not saved: That deck is gone', {}, SAVE_WAIT)
@@ -373,6 +387,7 @@ describe('the deck page', () => {
         expect.objectContaining({ status: 'illegal', problems: [`limit:${POT}`] })
       )
     )
+    await openTile('Pot of Greed')
     await userEvent.click(screen.getByRole('button', { name: 'Remove a copy of Pot of Greed' }))
     await waitFor(() =>
       expect(api.decks.markSeen).toHaveBeenLastCalledWith('d1', {
@@ -428,16 +443,20 @@ describe('the deck page', () => {
     expect(screen.queryByText('Legal')).not.toBeInTheDocument()
     expect(screen.getByText('Main Deck 42 / 40–60')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Add a copy of/ })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument()
+    expect(within(entry('Pricey')).queryByRole('button')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Search cards')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'More deck actions' }))
+    expect(await screen.findByRole('menuitem', { name: 'Delete' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Duplicate' })).not.toBeInTheDocument()
   })
 
   it('moves an entry to another section from its menu', async () => {
     const api = pageApi(detail(), pack('2026-11-22'))
     renderWithProviders(<DeckPage uid="d1" onBack={vi.fn()} />, { api })
     await screen.findByText('Main Deck 42 / 40–60')
-    await userEvent.click(screen.getByRole('button', { name: 'More for Pricey' }))
-    expect(screen.queryByRole('menuitem', { name: 'Move to Main Deck' })).not.toBeInTheDocument()
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Move to Side Deck' }))
+    await openTile('Pricey')
+    expect(screen.queryByRole('button', { name: 'Move to Main Deck' })).not.toBeInTheDocument()
+    await userEvent.click(await screen.findByRole('button', { name: 'Move to Side Deck' }))
     const side = screen.getByRole('region', { name: 'Side Deck' })
     expect(within(side).getByText('Pricey')).toBeInTheDocument()
     expect(screen.getByText('Main Deck 40 / 40–60')).toBeInTheDocument()
@@ -458,10 +477,178 @@ describe('the deck page', () => {
     renderWithProviders(<DeckPage uid="d1" onBack={vi.fn()} />, { api })
     const side = await screen.findByRole('region', { name: 'Side Deck' })
     expect(within(side).getByText("Card #777 isn't in the catalog here yet")).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('tab', { name: /^Missing/ }))
     const missing = screen.getByRole('list', { name: 'Missing cards' })
     expect(
       within(missing).getByText("1 × Card #777 isn't in the catalog here yet")
     ).toBeInTheDocument()
+  })
+
+  const searchApi = (): Api => {
+    const browse = (id: number, name: string, type: string, frameType: string) => ({
+      id,
+      name,
+      type,
+      frameType,
+      attribute: null,
+      race: '',
+      level: null,
+      linkval: null,
+      atk: null,
+      def: null,
+      imageId: id,
+      price: 0.2,
+      releasedAt: null,
+      owned: 0,
+      defaultPrintingId: null
+    })
+    return pageApi(detail(), pack('2026-11-22'), {
+      cards: {
+        browse: vi.fn(async () => ({
+          cards: [
+            browse(50, 'Linkuriboh', 'Link Monster', 'link'),
+            browse(60, 'Raigeki', 'Spell Card', 'spell')
+          ],
+          total: 2
+        }))
+      }
+    })
+  }
+
+  it('a plain click on a result adds it where it goes: spells to Main, Link monsters to Extra', async () => {
+    const api = searchApi()
+    renderWithProviders(<DeckPage uid="d1" onBack={vi.fn()} />, { api })
+    await userEvent.click(await screen.findByRole('button', { name: 'Add Raigeki' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Add Linkuriboh' }))
+    expect(
+      within(screen.getByRole('region', { name: 'Main Deck' })).getByText('Raigeki')
+    ).toBeInTheDocument()
+    expect(screen.getByText('Main Deck 43 / 40–60')).toBeInTheDocument()
+    expect(screen.getByText('Extra Deck 1 / 0–15')).toBeInTheDocument()
+    expect(screen.getByText('Side Deck 0 / 0–15')).toBeInTheDocument()
+    await waitFor(
+      () =>
+        expect(api.decks.save).toHaveBeenCalledWith(
+          expect.objectContaining({
+            cards: expect.arrayContaining([
+              { section: 'main', card: 60, qty: 1 },
+              { section: 'extra', card: 50, qty: 1 }
+            ])
+          })
+        ),
+      SAVE_WAIT
+    )
+  })
+
+  it('shift-click on a result adds it to Side', async () => {
+    const api = searchApi()
+    renderWithProviders(<DeckPage uid="d1" onBack={vi.fn()} />, { api })
+    const result = await screen.findByRole('button', { name: 'Add Linkuriboh' })
+    const user = userEvent.setup()
+    await user.keyboard('{Shift>}')
+    await user.click(result)
+    await user.keyboard('{/Shift}')
+    const side = screen.getByRole('region', { name: 'Side Deck' })
+    expect(within(side).getByText('Linkuriboh')).toBeInTheDocument()
+    expect(screen.getByText('Side Deck 1 / 0–15')).toBeInTheDocument()
+    expect(screen.getByText('Extra Deck 0 / 0–15')).toBeInTheDocument()
+    // The result now counts the copy in the deck.
+    expect(
+      within(screen.getByRole('list', { name: 'Search results' })).getByText('1 in deck')
+    ).toBeInTheDocument()
+    await waitFor(
+      () =>
+        expect(api.decks.save).toHaveBeenCalledWith(
+          expect.objectContaining({
+            cards: expect.arrayContaining([{ section: 'side', card: 50, qty: 1 }])
+          })
+        ),
+      SAVE_WAIT
+    )
+  })
+
+  it("a tile's popover changes its copies", async () => {
+    const api = pageApi(detail(), pack('2026-11-22'))
+    renderWithProviders(<DeckPage uid="d1" onBack={vi.fn()} />, { api })
+    await screen.findByText('Main Deck 42 / 40–60')
+    expect(within(entry('Pricey')).getByText('×2')).toBeInTheDocument()
+    await openTile('Pricey')
+    const copies = screen.getByLabelText('Copies in this section')
+    expect(copies).toHaveTextContent('2')
+    expect(screen.getByText('own 0')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Add a copy of Pricey' }))
+    expect(copies).toHaveTextContent('3')
+    expect(within(entry('Pricey')).getByText('×3')).toBeInTheDocument()
+    expect(screen.getByText('Main Deck 43 / 40–60')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Remove a copy of Pricey' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Remove a copy of Pricey' }))
+    expect(copies).toHaveTextContent('1')
+    expect(within(entry('Pricey')).getByText('×1')).toBeInTheDocument()
+    await waitFor(
+      () =>
+        expect(api.decks.save).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            cards: expect.arrayContaining([{ section: 'main', card: 1, qty: 1 }])
+          })
+        ),
+      SAVE_WAIT
+    )
+  })
+
+  it('Delete in the deck menu asks first', async () => {
+    const onBack = vi.fn()
+    const api = pageApi(detail(), pack('2026-11-22'))
+    renderWithProviders(<DeckPage uid="d1" onBack={onBack} />, { api })
+    await screen.findByText('Main Deck 42 / 40–60')
+    await deckMenu('Delete')
+    expect(screen.getByText('Delete this deck?')).toBeInTheDocument()
+    expect(api.decks.remove).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Keep' }))
+    expect(screen.queryByText('Delete this deck?')).not.toBeInTheDocument()
+    await deckMenu('Delete')
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm delete' }))
+    await waitFor(() => expect(api.decks.remove).toHaveBeenCalledWith('d1'))
+    await waitFor(() => expect(onBack).toHaveBeenCalled())
+  })
+
+  it('the Missing tab lists the copies still to buy', async () => {
+    const api = pageApi(detail(), pack('2026-11-22'))
+    renderWithProviders(<DeckPage uid="d1" onBack={vi.fn()} />, { api })
+    await screen.findByText('Main Deck 42 / 40–60')
+    expect(screen.getByText('Own 39 of 42')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Missing $3.00' })).toBeInTheDocument()
+    expect(screen.queryByRole('list', { name: 'Missing cards' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('tab', { name: 'Missing · 3' }))
+    const missing = screen.getByRole('list', { name: 'Missing cards' })
+    expect(within(missing).getByText('2 × Pricey')).toBeInTheDocument()
+    expect(within(missing).getByText('1 × Mystery')).toBeInTheDocument()
+    expect(screen.getByText('Total $3.00 +1 unpriced')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Copy as list/ })).toBeInTheDocument()
+  })
+
+  it('the problems bar shows the first problem, expands to all and highlights one', async () => {
+    const cards: DeckEntry[] = [
+      ...fillers().map((e) => (e.card === 100 ? { ...e, qty: 4 } : e)),
+      { section: 'main', card: POT, qty: 3 }
+    ]
+    const api = pageApi(detail({ cards }), pack('2026-11-22'))
+    renderWithProviders(<DeckPage uid="d1" onBack={vi.fn()} />, { api })
+    const bar = await screen.findByRole('region', { name: 'Deck check' })
+    expect(within(bar).getByText('2 problems')).toBeInTheDocument()
+    expect(within(bar).getAllByRole('button', { name: /×/ })).toHaveLength(1)
+    expect(within(bar).queryByRole('list', { name: 'Problems' })).not.toBeInTheDocument()
+    await userEvent.click(within(bar).getByRole('button', { name: /Show all/ }))
+    const list = within(bar).getByRole('list', { name: 'Problems' })
+    expect(within(list).getAllByRole('button')).toHaveLength(2)
+    expect(entry('Filler 100')).not.toHaveAttribute('data-highlight')
+    await userEvent.click(within(list).getByRole('button', { name: /4 × Filler 100/ }))
+    expect(entry('Filler 100')).toHaveAttribute('data-highlight', 'true')
+    expect(entry('Pot of Greed')).not.toHaveAttribute('data-highlight')
+    // The legality chip opens it too.
+    await userEvent.click(within(bar).getByRole('button', { name: /Show less/ }))
+    expect(within(bar).queryByRole('list', { name: 'Problems' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByText('Not legal'))
+    expect(within(bar).getByRole('list', { name: 'Problems' })).toBeInTheDocument()
   })
 
   it('friend view hides edit controls and notes', async () => {
@@ -478,7 +665,9 @@ describe('the deck page', () => {
     expect(screen.queryByLabelText('Deck name')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Notes')).not.toBeInTheDocument()
     expect(screen.queryByText('Side for the mirror')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'More deck actions' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Delete' })).not.toBeInTheDocument()
+    expect(within(entry('Pricey')).queryByRole('button')).not.toBeInTheDocument()
     expect(api.decks.markSeen).not.toHaveBeenCalled()
   })
 })
@@ -632,7 +821,8 @@ describe('importing and exporting', () => {
       decks: { resolve: vi.fn(async () => [resolutions[0]]) }
     })
     renderWithProviders(<DeckPage uid="d1" onBack={vi.fn()} />, { api })
-    await userEvent.click(await screen.findByRole('button', { name: 'Replace from list' }))
+    await screen.findByText('Main Deck 42 / 40–60')
+    await deckMenu('Replace from list')
     const dialog = await screen.findByRole('dialog')
     await paste(dialog, '3 Pot of Greed')
     await within(dialog).findByText('Matched (1)')

@@ -4,7 +4,6 @@ import { PlusIcon } from 'lucide-react'
 import { defaultSection, type DeckFormat } from '@shared/decks/formats'
 import type { DeckCard, DeckSection } from '@shared/decks/types'
 import type { GameId } from '@shared/games'
-import type { BrowseCard } from '@shared/types'
 import { CardArt } from '@/components/CardArt'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -17,23 +16,10 @@ import {
   SelectValue
 } from '@/components/ui/select'
 import { api } from '@/lib/api'
+import { deckCardOf } from './deckEntries'
 
 const TYPE_MS = 250
 const RESULTS = 20
-
-/** What the deck needs of a search result, until the deck's own read brings the full facts. */
-function deckCardOf(c: BrowseCard): DeckCard {
-  return {
-    id: c.id,
-    name: c.name,
-    type: c.type,
-    frameType: c.frameType,
-    imageId: c.imageId,
-    owned: c.owned,
-    price: c.price,
-    regionPrice: null
-  }
-}
 
 /** Finds cards to add; each lands in the picked section, or by default where its frame goes. */
 export function DeckSearch({

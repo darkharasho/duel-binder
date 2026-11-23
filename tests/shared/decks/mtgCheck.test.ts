@@ -254,6 +254,18 @@ describe('checkMtg: Commander', () => {
     const bg = mk('Cool Background', 'Legendary Enchantment — Background')
     expect(run('commander', commanderDeck(bg)).map((x) => x.key)).toEqual([`commander:${bg}`])
   })
+  it('a commander the pack does not know is unsure, not commander: or pair', () => {
+    const fresh = mk('Brand New Legend', 'Legendary Creature — Elf')
+    const p = run('commander', commanderDeck(fresh))
+    expect(p.map((x) => x.key)).toEqual(['unsure'])
+    expect(p[0].message).toBe("Couldn't check 1 card")
+    const t = mk('Thrasios', 'Legendary Creature — Human')
+    expect(
+      run('commander', [e(t, 1, 'commander'), e(fresh, 1, 'commander'), ...fill(98, 1)]).map(
+        (x) => x.key
+      )
+    ).toEqual(['unsure'])
+  })
   const two = (a: string, b: string): string[] => {
     const A = mk(a, 'Legendary Creature — Human')
     const B = mk(b, 'Legendary Creature — Human')

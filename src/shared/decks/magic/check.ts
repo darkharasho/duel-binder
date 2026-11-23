@@ -188,15 +188,21 @@ export function checkMtg(
       message: `Couldn't check ${unsure} ${unsure === 1 ? 'card' : 'cards'}`
     })
 
-  // Commander eligibility and pairing.
+  // Commander eligibility and pairing. A commander the pack doesn't know at all (newer than the
+  // pack) is already counted in "Couldn't check", so it and its pairing are not judged.
   if (commander && resolved) {
     const kindOf = (c: DeckCard): string | null =>
       Object.prototype.hasOwnProperty.call(pack.commander, nameOf(c))
         ? pack.commander[nameOf(c)]
         : null
+    const known = (c: DeckCard): boolean => mtgLegality(pack, nameOf(c), fmt) !== null
     const lone = commanders.length === 1
     let allEligible = true
     for (const c of new Set(commanders)) {
+      if (!known(c)) {
+        allEligible = false
+        continue
+      }
       const kind = kindOf(c)
       if (kind !== null && !(lone && kind === 'background')) continue
       allEligible = false

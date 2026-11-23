@@ -1,5 +1,6 @@
 import { formatOf } from './formats'
 import type { PackState } from './pack'
+import { checkMtg } from './magic/check'
 import { checkOp } from './onepiece/check'
 import { checkPkm } from './pokemon/check'
 import { checkYgo } from './ygo/check'
@@ -36,6 +37,7 @@ function rank(key: string): number {
     'count',
     'copies',
     'limit',
+    'commander',
     'leader',
     'color',
     'pair',
@@ -103,6 +105,19 @@ export function checkDeck(
   } else if (deck.game === 'op') {
     const ready = pack.state === 'ready' && pack.pack.game === 'op' ? pack.pack : null
     problems.push(...checkOp(deck, format, cards, ready, today))
+    if (ready) {
+      packVersion = ready.version
+      if (daysBetween(ready.builtAt, today) > STALE_DAYS) {
+        problems.push({
+          key: 'stale',
+          severity: 'warning',
+          message: `The rules here are from ${ready.builtAt.slice(0, 10)} and may be out of date`
+        })
+      }
+    }
+  } else if (deck.game === 'mtg') {
+    const ready = pack.state === 'ready' && pack.pack.game === 'mtg' ? pack.pack : null
+    problems.push(...checkMtg(deck, format, cards, ready, today))
     if (ready) {
       packVersion = ready.version
       if (daysBetween(ready.builtAt, today) > STALE_DAYS) {

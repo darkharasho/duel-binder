@@ -1,0 +1,134 @@
+[
+  {
+    "name": "plain Leader + 50",
+    "code": "2gBAEbA3ghwR4K8GODPBrg7we4P8IOEPCNU",
+    "leader": "OP01-001",
+    "entries": [
+      {"code": "OP01-013", "qty": 4},
+      {"code": "OP01-016", "qty": 4},
+      {"code": "OP01-017", "qty": 4},
+      {"code": "OP01-021", "qty": 4},
+      {"code": "OP01-024", "qty": 4},
+      {"code": "OP01-025", "qty": 4},
+      {"code": "OP01-026", "qty": 4},
+      {"code": "OP01-029", "qty": 4},
+      {"code": "OP01-030", "qty": 4},
+      {"code": "OP01-031", "qty": 4},
+      {"code": "OP01-032", "qty": 4},
+      {"code": "OP01-033", "qty": 4},
+      {"code": "OP01-035", "qty": 2}
+    ]
+  },
+  {
+    "name": "ST and EB cards",
+    "code": "2iBAEaICAfAbgSgAghwZwBRFwgQC4CcBuBfAzgdwPwk",
+    "leader": "ST01-001",
+    "entries": [
+      {"code": "EB01-003", "qty": 4},
+      {"code": "EB01-006", "qty": 4},
+      {"code": "EB01-009", "qty": 2},
+      {"code": "OP01-016", "qty": 4},
+      {"code": "OP01-025", "qty": 4},
+      {"code": "OP05-069", "qty": 4},
+      {"code": "ST01-002", "qty": 4},
+      {"code": "ST01-004", "qty": 4},
+      {"code": "ST01-006", "qty": 4},
+      {"code": "ST01-011", "qty": 4},
+      {"code": "ST01-012", "qty": 4},
+      {"code": "ST01-014", "qty": 4},
+      {"code": "ST01-015", "qty": 4}
+    ]
+  },
+  {
+    "name": "a PRB card",
+    "code": "2gFDwbEPiLxG4lYAwkcScAcReI3EnAIEfiXjAgDwCQm",
+    "leader": "OP05-060",
+    "entries": [
+      {"code": "OP05-067", "qty": 4},
+      {"code": "OP05-069", "qty": 4},
+      {"code": "OP05-070", "qty": 4},
+      {"code": "OP05-074", "qty": 4},
+      {"code": "OP06-072", "qty": 4},
+      {"code": "OP06-073", "qty": 4},
+      {"code": "OP07-069", "qty": 4},
+      {"code": "OP07-070", "qty": 4},
+      {"code": "OP07-073", "qty": 4},
+      {"code": "OP08-071", "qty": 4},
+      {"code": "OP08-075", "qty": 4},
+      {"code": "PRB01-001", "qty": 4},
+      {"code": "PRB01-002", "qty": 2}
+    ]
+  },
+  {
+    "name": "a P promo",
+    "code": "2gCAEbATgRwN4H8EsAMA-BGAIAvArIAAFg7wjwgQMw9",
+    "leader": "OP02-001",
+    "entries": [
+      {"code": "OP02-004", "qty": 4},
+      {"code": "OP02-008", "qty": 4},
+      {"code": "OP02-013", "qty": 4},
+      {"code": "OP02-015", "qty": 4},
+      {"code": "OP02-018", "qty": 4},
+      {"code": "OP03-003", "qty": 4},
+      {"code": "OP03-008", "qty": 4},
+      {"code": "OP04-005", "qty": 4},
+      {"code": "OP04-010", "qty": 4},
+      {"code": "P-001", "qty": 2},
+      {"code": "P-029", "qty": 4},
+      {"code": "P-035", "qty": 4},
+      {"code": "ST01-012", "qty": 4}
+    ]
+  },
+  {
+    "name": "a qty-1 card after a same-set run",
+    "code": "2gJAEcIEAuASAXATgRwLACgE4CwBYA8CsAwBOBWAaAaEeAXATa",
+    "leader": "OP09-001",
+    "entries": [
+      {"code": "EB02-005", "qty": 4},
+      {"code": "OP09-002", "qty": 4},
+      {"code": "OP09-004", "qty": 4},
+      {"code": "OP09-008", "qty": 4},
+      {"code": "OP09-011", "qty": 1},
+      {"code": "OP10-004", "qty": 4},
+      {"code": "OP10-005", "qty": 3},
+      {"code": "OP11-001", "qty": 4},
+      {"code": "OP11-010", "qty": 4},
+      {"code": "OP12-004", "qty": 4},
+      {"code": "OP12-010", "qty": 4},
+      {"code": "OP13-003", "qty": 2},
+      {"code": "ST15-002", "qty": 4},
+      {"code": "ST15-004", "qty": 4}
+    ]
+  },
+  {
+    "name": "custom prefix",
+    "code": "2gBAEHBDdXxkGA7AgB",
+    "leader": "OP01-001",
+    "entries": [
+      {"code": "OP01-016", "qty": 4},
+      {"code": "XYZ03-007", "qty": 2},
+      {"code": "XYZ03-008", "qty": 1}
+    ]
+  },
+  {
+    "name": "raw forms",
+    "code": "2-egtYsGF-gxCgAghvPPoMGK1gxbhgAQZnroUoTBitYMGN-gxBBAgZgQ",
+    "leader": "P-100_P1",
+    "entries": [
+      {"code": "OP01-016", "qty": 4},
+      {"code": "OP01-017", "qty": 6},
+      {"code": "OP01-025", "qty": 3},
+      {"code": "PRB01-001_P1", "qty": 2},
+      {"code": "ST01-012", "qty": 4}
+    ]
+  },
+  {
+    "name": "no leader",
+    "code": "2AgAQQyAABAG",
+    "leader": null,
+    "entries": [
+      {"code": "OP01-016", "qty": 4},
+      {"code": "P-001", "qty": 1}
+    ]
+  }
+]

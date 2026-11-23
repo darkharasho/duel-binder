@@ -1,4 +1,5 @@
 import { sortEntries } from '../sort'
+import { decodeOplay, OplayError, type OplayDeck } from './oplay'
 import type { ParsedLine, ParsedList } from '../lists'
 import type { DeckCard, DeckEntry } from '../types'
 
@@ -50,6 +51,49 @@ export function parseOpText(text: string): ParsedList {
       out.lines.push(line)
     })
   return out
+}
+
+const SAVED_LINK = /[?&]deck=\d+/
+const SHARE_LINK = /[?&]d=([A-Za-z0-9_-]+)/
+
+/** A decoded OPlay deck as list lines: the Leader in 'leader', the rest in 'main'. */
+function linesOf(deck: OplayDeck): ParsedList {
+  const out: ParsedList = { lines: [], skipped: [], sectioned: true }
+  const add = (section: 'leader' | 'main', code: string, qty: number): void => {
+    out.lines.push({
+      line: 1,
+      raw: `${qty}x${code}`,
+      section,
+      qty,
+      ref: { opNumber: code, name: '' }
+    })
+  }
+  if (deck.leader) add('leader', deck.leader, 1)
+  for (const e of deck.entries) add('main', e.code, e.qty)
+  return out
+}
+
+/**
+ * Any One Piece list: an OPlay share link, an OPlay deck code, else a text list. A link to a deck
+ * saved on OPlay's server can't be read here, so it throws an OplayError that says what to copy instead.
+ */
+export function parseOpList(text: string): ParsedList {
+  const t = text.trim()
+  const token = t && !/\s/.test(t) ? t : null
+  if (token && SAVED_LINK.test(token))
+    throw new OplayError(
+      'That link points to a deck saved on OPlay. Open it there and copy its deck code or share link instead.'
+    )
+  const link = token ? SHARE_LINK.exec(token) : null
+  if (link) return linesOf(decodeOplay(link[1]))
+  if (token && /^[12]/.test(token)) {
+    try {
+      return linesOf(decodeOplay(token))
+    } catch (e) {
+      if (!(e instanceof OplayError)) throw e
+    }
+  }
+  return parseOpText(text)
 }
 
 /** The Leader, then the Deck in sort order; a line per card, by number (else by name). */

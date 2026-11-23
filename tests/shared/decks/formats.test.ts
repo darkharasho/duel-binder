@@ -92,7 +92,7 @@ describe('mtg formats', () => {
     const cmd = DECK_FORMATS.mtg.find((f) => f.id === 'commander')!
     expect(cmd.sections.map((s) => [s.id, s.min, s.max])).toEqual([
       ['commander', 1, 2],
-      ['main', 0, Infinity]
+      ['main', 98, 99]
     ])
     expect(DECK_FORMATS.mtg.every((f) => f.priceRegion === 'en')).toBe(true)
   })

@@ -37,7 +37,7 @@ const MTG_SECTIONS: SectionDef[] = [
 
 const MTG_COMMANDER_SECTIONS: SectionDef[] = [
   { id: 'commander', label: 'Commander', min: 1, max: 2 },
-  { id: 'main', label: 'Main', min: 0, max: Infinity }
+  { id: 'main', label: 'Main', min: 98, max: 99 }
 ]
 
 export const DECK_FORMATS: Record<GameId, readonly DeckFormat[]> = {

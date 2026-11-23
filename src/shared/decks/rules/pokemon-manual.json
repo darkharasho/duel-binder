@@ -1,0 +1,37 @@
+{
+  "asOf": "2026-11-22",
+  "source": "https://www.pokemon.com/us/play-pokemon/about/pokemon-tcg-banned-card-list",
+  "banned": {
+    "standard": [],
+    "expanded": [
+      "bw3-67",
+      "sm10-165",
+      "xy9-98",
+      "sm12-83",
+      "sm6-83",
+      "swsh2-22",
+      "xy7-74",
+      "bw9-101",
+      "xy7-75",
+      "sm12-194",
+      "sm115-58",
+      "sm10-178",
+      "xy4-99",
+      "sm3.5-45",
+      "xy5-133",
+      "swsh7-83",
+      "xy2-23",
+      "sm10-78",
+      "sm5-114",
+      "xy9-109",
+      "xy1-124",
+      "sm11-206",
+      "bw5-62",
+      "swsh2-165",
+      "xy6-77",
+      "sm8-90",
+      "sm8-91"
+    ]
+  },
+  "override": {}
+}

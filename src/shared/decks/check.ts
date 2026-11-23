@@ -48,7 +48,7 @@ export function checkDeck(
   const problems: DeckProblem[] = []
   let packVersion: string | null = null
   if (deck.game === 'ygo') {
-    const ready = pack.state === 'ready' ? pack.pack : null
+    const ready = pack.state === 'ready' && pack.pack.game === 'ygo' ? pack.pack : null
     const rules = ready
       ? deck.format === 'ocg'
         ? ready.formats.ocg

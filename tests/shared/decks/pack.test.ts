@@ -30,3 +30,36 @@ describe('parseRulesPack', () => {
     expect(r.state).toBe('ready')
   })
 })
+
+describe('parseRulesPack pkm', () => {
+  const pkm = {
+    schema: 1,
+    game: 'pkm',
+    version: '2026-11-22',
+    builtAt: '2026-11-22T03:00:00Z',
+    sources: [{ name: 'x', fetchedAt: '2026-11-22T02:00:00Z' }],
+    keys: [{ n: 'Ultra Ball', k: 'T', f: 0, l: 3 }],
+    ids: { 'sv01-196': 0 },
+    formats: { standard: { banned: [] as number[] }, expanded: { banned: [] as number[] } }
+  }
+  it('parses a valid pkm pack', () => {
+    const r = parseRulesPack(pkm)
+    expect(r.state).toBe('ready')
+    if (r.state === 'ready') expect(r.pack.game).toBe('pkm')
+  })
+  it('rejects a pkm pack whose ids point past keys', () => {
+    expect(parseRulesPack({ ...pkm, ids: { x: 5 } })).toEqual({ state: 'missing' })
+  })
+  it('rejects a pkm key with a bad kind', () => {
+    expect(parseRulesPack({ ...pkm, keys: [{ n: 'A', k: 'X', f: 0, l: 3 }] })).toEqual({
+      state: 'missing'
+    })
+  })
+  it('rejects a pkm banned index out of range', () => {
+    const bad = { ...pkm, formats: { ...pkm.formats, expanded: { banned: [3] } } }
+    expect(parseRulesPack(bad)).toEqual({ state: 'missing' })
+  })
+  it('a pkm pack of a newer schema is tooNew', () => {
+    expect(parseRulesPack({ ...pkm, schema: 2 })).toEqual({ state: 'tooNew' })
+  })
+})

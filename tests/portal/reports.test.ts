@@ -37,11 +37,11 @@ describe('user reports', () => {
       }),
       deps
     )
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const call = async (
     channel: string,
     args: unknown[],
     token = 'ta'
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ): Promise<{ status: number; body: any }> => {
     const res = await req(`/api/rpc/${channel}`, token, { args })
     return { status: res.status, body: await res.json() }

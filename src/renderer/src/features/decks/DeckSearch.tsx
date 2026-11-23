@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { PlusIcon } from 'lucide-react'
 import { defaultSection, type DeckFormat } from '@shared/decks/formats'
+import { mtgPackOf } from '@shared/decks/pack'
 import type { DeckCard, DeckSection } from '@shared/decks/types'
 import type { GameId } from '@shared/games'
 import { CardArt } from '@/components/CardArt'
@@ -17,6 +18,7 @@ import {
 } from '@/components/ui/select'
 import { api } from '@/lib/api'
 import { OP_DECK_TYPES, deckCardOf } from './deckEntries'
+import { useRulesPack } from './useRulesPack'
 
 const TYPE_MS = 250
 const RESULTS = 20
@@ -25,12 +27,16 @@ const RESULTS = 20
 export function DeckSearch({
   game,
   format,
+  commanders = 0,
   onAdd
 }: {
   game: GameId
   format: DeckFormat
+  /** Magic Commander: cards already in the Commander section; an empty one takes a commander. */
+  commanders?: number
   onAdd: (card: DeckCard, section: DeckSection) => void
 }): React.JSX.Element {
+  const mtgPack = mtgPackOf(useRulesPack(game))
   const [text, setText] = useState('')
   const [q, setQ] = useState('')
   const [target, setTarget] = useState<DeckSection | 'auto'>('auto')
@@ -119,7 +125,18 @@ export function DeckSearch({
                     size="icon-sm"
                     aria-label={`Add ${c.name}`}
                     onClick={() =>
-                      onAdd(card, target === 'auto' ? defaultSection(game, card) : target)
+                      onAdd(
+                        card,
+                        target === 'auto'
+                          ? defaultSection(
+                              game,
+                              card,
+                              game === 'mtg'
+                                ? { format: format.id, commanders, pack: mtgPack }
+                                : undefined
+                            )
+                          : target
+                      )
                     }
                   >
                     <PlusIcon />

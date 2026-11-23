@@ -146,6 +146,11 @@ export type RulesPack = YgoRulesPack | PkmRulesPack | OpRulesPack | MtgRulesPack
 export type PackState =
   { state: 'ready'; pack: RulesPack } | { state: 'missing' } | { state: 'tooNew' }
 
+/** The Magic pack in a pack state, when there is one. */
+export function mtgPackOf(state: PackState | null | undefined): MtgRulesPack | null {
+  return state?.state === 'ready' && state.pack.game === 'mtg' ? state.pack : null
+}
+
 const isObj = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)
 

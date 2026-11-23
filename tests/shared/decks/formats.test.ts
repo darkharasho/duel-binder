@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DECK_FORMATS, decksAvailable, defaultSection } from '../../../src/shared/decks/formats'
+import type { MtgRulesPack } from '../../../src/shared/decks/pack'
 import type { DeckCard } from '../../../src/shared/decks/types'
 
 const c = (frameType: string): DeckCard => ({
@@ -109,5 +110,40 @@ describe('mtg formats', () => {
       )
     ).toBe('main')
     expect(defaultSection('mtg', undefined)).toBe('main')
+  })
+  it('asks the rules pack whether a card can be a commander, by English name', () => {
+    const pack = {
+      legal: { 'Krenko, Mob Boss': 1, 'Grist, the Hunger Tide': 1, 'Cool Background': 1, Opt: 1 },
+      commander: {
+        'Krenko, Mob Boss': '',
+        'Grist, the Hunger Tide': '',
+        'Cool Background': 'background'
+      }
+    } as unknown as MtgRulesPack
+    const ctx = { format: 'commander', commanders: 0, pack }
+    // Search results carry the first card type only; the pack still knows.
+    const krenko = { ...c('mtg'), name: 'Krenko, Mob Boss', type: 'Creature' }
+    expect(defaultSection('mtg', krenko, ctx)).toBe('commander')
+    // A planeswalker that says it can be your commander.
+    const grist = {
+      ...c('mtg'),
+      name: 'Grist, the Hunger Tide',
+      mtgTypeLine: 'Legendary Planeswalker'
+    }
+    expect(defaultSection('mtg', grist, ctx)).toBe('commander')
+    // mtgName wins over a printed (non-English) name.
+    const ja = { ...c('mtg'), name: 'クレンコ', mtgName: 'Krenko, Mob Boss' }
+    expect(defaultSection('mtg', ja, ctx)).toBe('commander')
+    // A Background can't lead alone; a card the pack knows as no commander stays in Main even with
+    // a legendary creature type line.
+    const bg = { ...c('mtg'), name: 'Cool Background' }
+    expect(defaultSection('mtg', bg, ctx)).toBe('main')
+    const opt = { ...c('mtg'), name: 'Opt', mtgTypeLine: 'Legendary Creature — Liar' }
+    expect(defaultSection('mtg', opt, ctx)).toBe('main')
+    // A card the pack doesn't know falls back to its type line.
+    const fresh = { ...c('mtg'), name: 'Brand New', mtgTypeLine: 'Legendary Creature — Elf' }
+    expect(defaultSection('mtg', fresh, ctx)).toBe('commander')
+    expect(defaultSection('mtg', krenko, { ...ctx, commanders: 1 })).toBe('main')
+    expect(defaultSection('mtg', krenko, { ...ctx, format: 'modern' })).toBe('main')
   })
 })

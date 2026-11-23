@@ -165,6 +165,7 @@ export function ImportDialog({
         <DeckSearch
           game={game}
           format={formatOf(game, format) ?? formats[0]}
+          commanders={kept.filter((e) => e.section === 'commander').reduce((n, e) => n + e.qty, 0)}
           onAdd={(card, section) =>
             choose(i.key, { card: card.id, section, name: card.name, facts: card })
           }

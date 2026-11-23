@@ -1575,11 +1575,13 @@ describe('Magic on the deck screens', () => {
     mtgManaValue: 2,
     mtgLayout: 'normal'
   })
-  const browseCard = (id: number, name: string, type: string) =>
+  /** As browse gives a Magic card: `type` is its first card type, the whole line beside it. */
+  const browseCard = (id: number, name: string, type: string, mtgTypeLine?: string) =>
     ({
       id,
       name,
       type,
+      ...(mtgTypeLine ? { mtgTypeLine } : {}),
       frameType: 'mtg',
       attribute: null,
       race: '',
@@ -1676,7 +1678,7 @@ describe('Magic on the deck screens', () => {
       cards: {
         browse: vi.fn(async () => ({
           cards: [
-            browseCard(1, 'Krenko', 'Legendary Creature — Goblin'),
+            browseCard(1, 'Krenko', 'Creature', 'Legendary Creature — Goblin'),
             browseCard(2, 'Lightning Bolt', 'Instant')
           ],
           total: 2
@@ -1693,6 +1695,76 @@ describe('Magic on the deck screens', () => {
     renderWithProviders(adder({ format: commanderFormat, onAdd, commanders: 1 }), { api })
     await userEvent.click(await screen.findByRole('button', { name: 'Add Krenko' }))
     expect(onAdd).toHaveBeenLastCalledWith(expect.objectContaining({ id: 1 }), 'main')
+  })
+
+  const mtgPack = (commander: Record<string, string>): PackState => ({
+    state: 'ready',
+    pack: {
+      schema: 1,
+      game: 'mtg',
+      version: 'v1',
+      builtAt: new Date().toISOString(),
+      sources: [],
+      formats: ['standard', 'pioneer', 'modern', 'legacy', 'vintage', 'pauper', 'commander'],
+      legal: Object.fromEntries(Object.keys(commander).map((n) => [n, 1 << 12])),
+      anyNumber: {},
+      commander,
+      upcoming: {}
+    }
+  })
+
+  it('a card the rules pack says can be a commander goes to Commander from a bare search result', async () => {
+    const api = createMockApi({
+      cards: {
+        // The real result shape with no type line at all: only the pack can tell.
+        browse: vi.fn(async () => ({ cards: [browseCard(1, 'Krenko', 'Creature')], total: 1 }))
+      },
+      decks: { rules: vi.fn(async () => mtgPack({ Krenko: '' })) }
+    })
+    const onAdd = vi.fn()
+    renderWithProviders(adder({ format: commanderFormat, onAdd }), { api })
+    await waitFor(() => expect(api.decks.rules).toHaveBeenCalledWith('mtg'))
+    const add = await screen.findByRole('button', { name: 'Add Krenko' })
+    await waitFor(() => expect(add).toHaveAttribute('title', expect.stringContaining('Commander')))
+    await userEvent.click(add)
+    expect(onAdd).toHaveBeenLastCalledWith(expect.objectContaining({ id: 1 }), 'commander')
+  })
+
+  it("Add to deck puts a legendary creature in an empty Commander deck's Commander zone", async () => {
+    const KRENKO = 700
+    const cmdDeck = deck({ game: 'mtg', format: 'commander', name: 'Goblins', cards: [] })
+    const api = pageApi(
+      { ...detail(cmdDeck), cardFacts: {} },
+      { state: 'missing' },
+      {
+        cards: {
+          get: vi.fn(
+            async () =>
+              ({
+                card: {
+                  id: KRENKO,
+                  name: 'Krenko, Mob Boss',
+                  type: 'Creature',
+                  frameType: 'mtg',
+                  magic: { typeLine: 'Legendary Creature — Goblin Warrior' }
+                }
+              }) as CardDetail
+          )
+        },
+        decks: {
+          list: vi.fn(async () => ({ decks: [cmdDeck], cardFacts: {} })),
+          get: vi.fn(async () => ({ ...detail(cmdDeck), cardFacts: {} }))
+        }
+      }
+    )
+    renderWithProviders(<AddToDeck game="mtg" cardId={KRENKO} />, { api })
+    await userEvent.click(screen.getByRole('button', { name: 'Add to deck' }))
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Goblins' }))
+    await waitFor(() =>
+      expect(api.decks.save).toHaveBeenCalledWith(
+        expect.objectContaining({ cards: [{ section: 'commander', card: KRENKO, qty: 1 }] })
+      )
+    )
   })
 
   it('the export menu copies the Arena list, with a pinned printing, and the MTGO list', async () => {
@@ -1769,6 +1841,33 @@ describe('Magic on the deck screens', () => {
           { section: 'main', card: 2, qty: 1 }
         ]
       })
+    )
+  })
+
+  it("a card picked by search for a Commander import's line goes where the deck needs it", async () => {
+    const onApply = vi.fn()
+    const resolve = vi.fn(async () => [{ status: 'unmatched' as const }])
+    const browse = vi.fn(async () => ({
+      cards: [browseCard(1, 'Krenko', 'Creature', 'Legendary Creature — Goblin')],
+      total: 1
+    }))
+    renderWithProviders(
+      <ImportDialog
+        game="mtg"
+        format="commander"
+        busy={false}
+        onApply={onApply}
+        onClose={vi.fn()}
+      />,
+      { api: createMockApi({ decks: { resolve }, cards: { browse } }) }
+    )
+    const dialog = await paste('1 Krenko Mob Bos')
+    await userEvent.click(await within(dialog).findByRole('button', { name: /Search for/ }))
+    await userEvent.type(within(dialog).getByLabelText('Search cards'), 'Krenko')
+    await userEvent.click(await within(dialog).findByRole('button', { name: 'Add Krenko' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Import deck' }))
+    expect(onApply).toHaveBeenCalledWith(
+      expect.objectContaining({ cards: [{ section: 'commander', card: 1, qty: 1 }] })
     )
   })
 

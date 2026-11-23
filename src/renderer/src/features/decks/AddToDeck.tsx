@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { checkDeck } from '@shared/decks/check'
+import { mtgPackOf } from '@shared/decks/pack'
 import { defaultSection } from '@shared/decks/formats'
 import type { DeckCard, DeckDraft, DeckEntry, DeckList, DeckSummary } from '@shared/decks/types'
 import type { GameId } from '@shared/games'
@@ -43,7 +44,7 @@ async function factOf(cardId: number, known: DeckCard | undefined): Promise<Deck
     opCost: op?.cost ?? null,
     opBlock: op?.blockIcon ?? null,
     mtgName: null,
-    mtgTypeLine: null,
+    mtgTypeLine: c.magic?.typeLine ?? null,
     mtgColorIdentity: [],
     mtgManaValue: null,
     mtgLayout: null
@@ -88,7 +89,8 @@ export function AddToDeck({
       cardId,
       defaultSection(game, fact, {
         format: base.format,
-        commanders: base.cards.filter((e) => e.section === 'commander').length
+        commanders: base.cards.filter((e) => e.section === 'commander').length,
+        pack: mtgPackOf(pack)
       })
     )
     await api.decks.save({ ...base, cards })

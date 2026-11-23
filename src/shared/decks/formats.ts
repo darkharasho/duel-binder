@@ -1,4 +1,5 @@
 import type { GameId } from '../games'
+import type { MtgRulesPack } from './pack'
 import type { DeckCard, DeckSection } from './types'
 import { isExtraFrame } from './ygo/check'
 
@@ -73,25 +74,42 @@ export function decksAvailable(game: GameId): boolean {
 }
 
 /**
+ * Whether a Magic card can lead a Commander deck on its own. The rules pack decides by English
+ * name when it knows the card; otherwise (no pack, or a card newer than it) a legendary creature
+ * type line does.
+ */
+function mtgCanLead(
+  card: Partial<Pick<DeckCard, 'name' | 'mtgName' | 'mtgTypeLine'>> | undefined,
+  pack: MtgRulesPack | null | undefined
+): boolean {
+  const name = card?.mtgName ?? card?.name
+  const has = (o: Record<string, unknown>, k: string): boolean =>
+    Object.prototype.hasOwnProperty.call(o, k)
+  if (pack && name !== undefined) {
+    if (has(pack.commander, name)) return pack.commander[name] !== 'background'
+    if (has(pack.legal, name)) return false
+  }
+  const front = card?.mtgTypeLine?.split(' // ')[0] ?? ''
+  return front.includes('Legendary') && front.includes('Creature')
+}
+
+/**
  * Where a card goes when added without a section picked: Extra Deck monsters to Extra, a One Piece
- * Leader to Leader, a Magic Commander deck's first legendary creature to Commander, else Main.
+ * Leader to Leader, a Magic Commander deck's first card that can be a commander to Commander, else
+ * Main.
  */
 export function defaultSection(
   game: GameId,
   card:
-    | (Pick<DeckCard, 'frameType' | 'opCardType'> & Partial<Pick<DeckCard, 'mtgTypeLine'>>)
+    | (Pick<DeckCard, 'frameType' | 'opCardType'> &
+        Partial<Pick<DeckCard, 'name' | 'mtgName' | 'mtgTypeLine'>>)
     | undefined,
-  ctx?: { format: string; commanders: number }
+  ctx?: { format: string; commanders: number; pack?: MtgRulesPack | null }
 ): DeckSection {
-  if (game === 'mtg') {
-    const front = card?.mtgTypeLine?.split(' // ')[0] ?? ''
-    return ctx?.format === 'commander' &&
-      ctx.commanders === 0 &&
-      front.includes('Legendary') &&
-      front.includes('Creature')
+  if (game === 'mtg')
+    return ctx?.format === 'commander' && ctx.commanders === 0 && mtgCanLead(card, ctx.pack)
       ? 'commander'
       : 'main'
-  }
   if (game === 'op') return card?.opCardType === 'Leader' ? 'leader' : 'main'
   return game === 'ygo' && card && isExtraFrame(card.frameType) ? 'extra' : 'main'
 }

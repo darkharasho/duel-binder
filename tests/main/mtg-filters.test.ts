@@ -363,6 +363,28 @@ describe('Magic filters, facets, stats and details', () => {
     ])
   })
 
+  it('gives each Browse tile its type line, beside the first card type in type', () => {
+    const krenko = mtgCardId('en', 'krenko-oracle')
+    db.prepare(
+      `INSERT INTO cards (id, game, name, type, frame_type, race, "desc", updated_at)
+       VALUES (?, 'mtg', 'Krenko, Mob Boss', 'Creature', 'mtg', '', '', '2026-11-09')`
+    ).run(krenko)
+    db.prepare(
+      `INSERT INTO mtg_cards (card_id, oracle_id, layout, type_line, lang)
+       VALUES (?, 'krenko-oracle', 'normal', 'Legendary Creature — Goblin Warrior', 'en')`
+    ).run(krenko)
+    db.prepare(
+      `INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity)
+       VALUES ('mtg', ?, 'en', 'Magic 2015', 'M15 1', 'Rare')`
+    ).run(krenko)
+    db.exec(`INSERT INTO cards_fts(cards_fts) VALUES('rebuild')`)
+    const tile = browseCards(db, { sort: 'name', dir: 'asc', q: 'Krenko' }).cards.find(
+      (c) => c.id === krenko
+    )
+    expect(tile?.type).toBe('Creature')
+    expect(tile?.mtgTypeLine).toBe('Legendary Creature — Goblin Warrior')
+  })
+
   it('gives artists in a fixed order, only on the details read', () => {
     db.prepare("UPDATE mtg_images SET artist = 'Zed' WHERE image_id = ?").run(mtg.imageIds[0])
     db.prepare("UPDATE mtg_images SET artist = 'Abe' WHERE image_id = ?").run(mtg.imageIds[1])

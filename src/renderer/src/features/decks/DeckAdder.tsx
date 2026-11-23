@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { defaultSection, type DeckFormat } from '@shared/decks/formats'
+import { mtgPackOf } from '@shared/decks/pack'
 import type { DeckCard, DeckSection } from '@shared/decks/types'
 import { MTG_COLOR_NAMES } from '@shared/games/magic'
 import { pkmKind } from '@shared/decks/pokemon/keys'
@@ -13,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { api, queryKeys } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { DRAG_CARD, OP_DECK_TYPES, SECTION_HEADING, deckCardOf } from './deckEntries'
+import { useRulesPack } from './useRulesPack'
 
 const RESULTS = 60
 
@@ -197,6 +199,8 @@ function AdderSearch({
   const [colorPicks, setColorPicks] = useState<{ start: string; picks: string[] } | null>(null)
   const op = game === 'op'
   const mtg = game === 'mtg'
+  // Magic: the pack says which cards can be a commander (search results only carry their type).
+  const mtgPack = mtgPackOf(useRulesPack(game))
   // Magic: the chips start on the commanders' colours, and again whenever the commanders change.
   const start = mtg && identity ? identityChips(identity).join(',') : ''
   const mtgColors =
@@ -348,7 +352,7 @@ function AdderSearch({
               const home = defaultSection(
                 game,
                 card,
-                mtg ? { format: format.id, commanders } : undefined
+                mtg ? { format: format.id, commanders, pack: mtgPack } : undefined
               )
               const n = inDeck.get(c.id) ?? 0
               return (

@@ -320,6 +320,8 @@ export interface BrowseCard {
   language?: Language
   /** A Magic card's printed name in its language, when not English. */
   localName?: string
+  /** A Magic card's whole type line ("Legendary Creature — Goblin"); `type` is its first type. */
+  mtgTypeLine?: string
   /** Set on a version tile: the printing the search words named ("trainer gallery charizard"). */
   focusPrintingId?: number
   /** That printing's set code without its subset tag ("LOR TG03/30"). */

@@ -370,7 +370,7 @@ export function browseCards(db: SqlDb, f: BrowseFilters, scope: Scope = LOCAL): 
   }
   const magic =
     game === 'mtg'
-      ? magicLanguages(db, [...new Set([...focusCards.keys(), ...rows.map((r) => r.id)])])
+      ? magicExtras(db, [...new Set([...focusCards.keys(), ...rows.map((r) => r.id)])])
       : null
   const toCard = (r: BrowseRow): BrowseCard => ({
     id: r.id,
@@ -443,29 +443,31 @@ interface FocusRow {
 }
 
 /**
- * Each Magic card's language and printed name, so same-named tiles (one per language) can be told
- * apart in Browse with every language shown.
+ * Each Magic card's language, printed name and type line, so same-named tiles (one per language)
+ * can be told apart in Browse with every language shown, and a deck can tell a legendary creature.
  */
-function magicLanguages(
+function magicExtras(
   db: SqlDb,
   ids: number[]
-): Map<number, Pick<BrowseCard, 'language' | 'localName'>> {
+): Map<number, Pick<BrowseCard, 'language' | 'localName' | 'mtgTypeLine'>> {
   if (!ids.length) return new Map()
   const rows = db
     .prepare(
-      `SELECT card_id, lang, local_name FROM mtg_cards WHERE card_id IN (SELECT value FROM json_each(?))`
+      `SELECT card_id, lang, local_name, type_line FROM mtg_cards WHERE card_id IN (SELECT value FROM json_each(?))`
     )
     .all(JSON.stringify(ids)) as {
     card_id: number
     lang: string | null
     local_name: string | null
+    type_line: string | null
   }[]
   return new Map(
     rows.map((r) => [
       r.card_id,
       {
         ...(isLanguage(r.lang) ? { language: r.lang } : {}),
-        ...(r.local_name ? { localName: r.local_name } : {})
+        ...(r.local_name ? { localName: r.local_name } : {}),
+        ...(r.type_line ? { mtgTypeLine: r.type_line } : {})
       }
     ])
   )

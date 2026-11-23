@@ -122,6 +122,61 @@ describe('decks repo', () => {
     })
   })
 
+  it('deckCards gives an op card its number, type, colours, cost and block', () => {
+    const opCard = (id: number, block: number | null): void => {
+      db.prepare(
+        `INSERT INTO cards (id, game, name, type, frame_type, race, "desc", updated_at)
+         VALUES (?, 'op', 'Usopp', 'Character', 'op', '', '', '2026-11-22')`
+      ).run(id)
+      db.prepare(
+        `INSERT INTO onepiece_cards (card_id, number, colors, card_type, cost, block_icon)
+         VALUES (?, 'OP01-016', '["Red"]', 'Character', 2, ?)`
+      ).run(id, block)
+    }
+    opCard(9101, 1)
+    opCard(9102, null)
+    const op = localScope("'op'")
+    const uid = saveDeck(
+      db,
+      draft({
+        format: 'standard',
+        cards: [
+          { section: 'main', card: 9101, qty: 1 },
+          { section: 'main', card: 9102, qty: 1 }
+        ]
+      }),
+      T1,
+      op
+    )
+    const facts = getDeck(db, uid, op)!.cardFacts
+    for (const id of [9101, 9102])
+      expect(facts[id]).toMatchObject({
+        opNumber: 'OP01-016',
+        opCardType: 'Character',
+        opColors: ['Red'],
+        opCost: 2,
+        opBlock: 1
+      })
+    db.prepare(
+      `INSERT INTO cards (id, game, name, type, frame_type, race, "desc", updated_at)
+       VALUES (9001, 'pkm', 'Pikachu', 'Pokémon', '', '', '', '2026-11-22')`
+    ).run()
+    const pkm = localScope("'pkm'")
+    const p = saveDeck(
+      db,
+      draft({ format: 'standard', cards: [{ section: 'main', card: 9001, qty: 1 }] }),
+      T1,
+      pkm
+    )
+    expect(getDeck(db, p, pkm)!.cardFacts[9001]).toMatchObject({
+      opNumber: null,
+      opCardType: null,
+      opColors: [],
+      opCost: null,
+      opBlock: null
+    })
+  })
+
   it('migration 53 is desktop-only', () => {
     expect(MIGRATIONS.find((m) => m.version === 53)).toMatchObject({ server: false })
   })

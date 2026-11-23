@@ -77,6 +77,16 @@ function parseCards(json: string): DeckEntry[] {
   }
 }
 
+/** onepiece_cards.colors (a JSON array) as strings; [] when it doesn't read as one. */
+function colorsOf(json: string): string[] {
+  try {
+    const v = JSON.parse(json) as unknown
+    return Array.isArray(v) ? v.filter((c): c is string => typeof c === 'string') : []
+  } catch {
+    return []
+  }
+}
+
 /** A stored verdict mark, or null when there is none or it doesn't read as one. */
 function parseMark(json: string | null): DeckVerdictMark | null {
   if (json === null) return null
@@ -192,7 +202,13 @@ function deckCards(
   )
   const sourceIds = new Map<number, string>()
   const codes = new Map<number, string>()
-  if (scopeGame(db, scope) === 'pkm') {
+  const opFacts = new Map<
+    number,
+    { number: string; card_type: string; colors: string; cost: number | null }
+  >()
+  const opBlocks = new Map<number, number>()
+  const game = scopeGame(db, scope)
+  if (game === 'pkm') {
     const ids2 = cards.map((c) => c.id)
     const l2 = JSON.stringify(ids2)
     for (const r of db
@@ -207,10 +223,36 @@ function deckCards(
       )
       .all(l2) as { card_id: number; code: string }[])
       codes.set(r.card_id, r.code)
+  } else if (game === 'op') {
+    const l2 = JSON.stringify(cards.map((c) => c.id))
+    for (const r of db
+      .prepare(
+        `SELECT card_id, number, card_type, colors, cost FROM onepiece_cards
+         WHERE card_id IN ${IN_LIST}`
+      )
+      .all(l2) as {
+      card_id: number
+      number: string
+      card_type: string
+      colors: string
+      cost: number | null
+    }[])
+      opFacts.set(r.card_id, r)
+    // A twin with no block icon takes the one its card number has elsewhere.
+    for (const r of db
+      .prepare(
+        `SELECT o.card_id, MAX(t.block_icon) AS block FROM onepiece_cards o
+         JOIN onepiece_cards t ON t.number = o.number
+         WHERE o.card_id IN ${IN_LIST}
+         GROUP BY o.card_id`
+      )
+      .all(l2) as { card_id: number; block: number | null }[])
+      if (r.block !== null) opBlocks.set(r.card_id, r.block)
   }
   for (const c of cards) {
     const p = prices.get(c.id)
     const price = p ? (p.en ?? p.anyp) : null
+    const o = opFacts.get(c.id)
     facts[c.id] = {
       id: c.id,
       name: c.name,
@@ -221,7 +263,12 @@ function deckCards(
       price,
       regionPrice: p?.region ?? price,
       sourceId: sourceIds.get(c.id) ?? null,
-      code: codes.get(c.id) ?? null
+      code: codes.get(c.id) ?? null,
+      opNumber: o?.number ?? null,
+      opCardType: o?.card_type ?? null,
+      opColors: o ? colorsOf(o.colors) : [],
+      opCost: o?.cost ?? null,
+      opBlock: opBlocks.get(c.id) ?? null
     }
   }
   return facts

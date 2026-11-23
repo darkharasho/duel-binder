@@ -116,7 +116,12 @@ export function deckCardOf(c: BrowseCard): DeckCard {
     price: c.price,
     regionPrice: null,
     sourceId: null,
-    code: null
+    code: null,
+    opNumber: null,
+    opCardType: null,
+    opColors: [],
+    opCost: null,
+    opBlock: null
   }
 }
 

@@ -47,7 +47,12 @@ const card = (
   price,
   regionPrice: price,
   sourceId: null,
-  code: null
+  code: null,
+  opNumber: null,
+  opCardType: null,
+  opColors: [],
+  opCost: null,
+  opBlock: null
 })
 const facts: Record<number, DeckCard> = {
   [POT]: card(POT, 'Pot of Greed', 3, 1, 'spell'),
@@ -1025,7 +1030,12 @@ describe('Pokémon on the deck screens', () => {
     price: null,
     regionPrice: null,
     sourceId: null,
-    code: null
+    code: null,
+    opNumber: null,
+    opCardType: null,
+    opColors: [],
+    opCost: null,
+    opBlock: null
   })
   const browseCard = (id: number, name: string, type: string) =>
     ({

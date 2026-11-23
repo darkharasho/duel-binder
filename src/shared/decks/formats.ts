@@ -25,6 +25,11 @@ const YGO_SECTIONS: SectionDef[] = [
 
 const PKM_SECTIONS: SectionDef[] = [{ id: 'main', label: 'Deck', min: 60, max: 60 }]
 
+const OP_SECTIONS: SectionDef[] = [
+  { id: 'leader', label: 'Leader', min: 1, max: 1 },
+  { id: 'main', label: 'Deck', min: 50, max: 50 }
+]
+
 export const DECK_FORMATS: Record<GameId, readonly DeckFormat[]> = {
   ygo: [
     { id: 'advanced', label: 'Advanced (TCG)', sections: YGO_SECTIONS, priceRegion: 'en' },
@@ -34,7 +39,10 @@ export const DECK_FORMATS: Record<GameId, readonly DeckFormat[]> = {
     { id: 'standard', label: 'Standard', sections: PKM_SECTIONS, priceRegion: 'en' },
     { id: 'expanded', label: 'Expanded', sections: PKM_SECTIONS, priceRegion: 'en' }
   ],
-  op: [],
+  op: [
+    { id: 'standard', label: 'Standard', sections: OP_SECTIONS, priceRegion: 'en' },
+    { id: 'extra', label: 'Extra Regulation', sections: OP_SECTIONS, priceRegion: 'en' }
+  ],
   mtg: []
 }
 
@@ -46,10 +54,14 @@ export function decksAvailable(game: GameId): boolean {
   return DECK_FORMATS[game].length > 0
 }
 
-/** Where a card goes when added without a section picked: Extra Deck monsters to Extra, else Main. */
+/**
+ * Where a card goes when added without a section picked: Extra Deck monsters to Extra, a One Piece
+ * Leader to Leader, else Main.
+ */
 export function defaultSection(
   game: GameId,
-  card: Pick<DeckCard, 'frameType'> | undefined
+  card: Pick<DeckCard, 'frameType' | 'opCardType'> | undefined
 ): DeckSection {
+  if (game === 'op') return card?.opCardType === 'Leader' ? 'leader' : 'main'
   return game === 'ygo' && card && isExtraFrame(card.frameType) ? 'extra' : 'main'
 }

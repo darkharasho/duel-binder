@@ -10,7 +10,14 @@ const c = (frameType: string): DeckCard => ({
   imageId: null,
   owned: 0,
   price: null,
-  regionPrice: null
+  regionPrice: null,
+  sourceId: null,
+  code: null,
+  opNumber: null,
+  opCardType: null,
+  opColors: [],
+  opCost: null,
+  opBlock: null
 })
 
 describe('defaultSection', () => {
@@ -39,5 +46,24 @@ describe('pkm formats', () => {
     for (const f of DECK_FORMATS.pkm)
       expect(f.sections).toEqual([{ id: 'main', label: 'Deck', min: 60, max: 60 }])
     expect(decksAvailable('pkm')).toBe(true)
+  })
+})
+
+describe('op formats', () => {
+  it('has Standard and Extra Regulation with a Leader and a 50-card Deck, in that order', () => {
+    expect(DECK_FORMATS.op.map((f) => [f.id, f.label, f.priceRegion])).toEqual([
+      ['standard', 'Standard', 'en'],
+      ['extra', 'Extra Regulation', 'en']
+    ])
+    for (const f of DECK_FORMATS.op)
+      expect(f.sections).toEqual([
+        { id: 'leader', label: 'Leader', min: 1, max: 1 },
+        { id: 'main', label: 'Deck', min: 50, max: 50 }
+      ])
+    expect(decksAvailable('op')).toBe(true)
+  })
+  it('puts a Leader in Leader and a Character in the Deck', () => {
+    expect(defaultSection('op', { frameType: 'op', opCardType: 'Leader' })).toBe('leader')
+    expect(defaultSection('op', { frameType: 'op', opCardType: 'Character' })).toBe('main')
   })
 })

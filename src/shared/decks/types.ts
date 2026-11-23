@@ -1,7 +1,7 @@
 import type { GameId } from '../games'
 
 /** Where a deck entry sits; later games widen this union. */
-export type DeckSection = 'main' | 'extra' | 'side'
+export type DeckSection = 'main' | 'extra' | 'side' | 'leader'
 
 export interface DeckEntry {
   section: DeckSection
@@ -41,6 +41,12 @@ export interface DeckCard {
   sourceId: string | null
   /** A Pokémon card's lowest English printing set code, else null */
   code: string | null
+  /** One Piece only, else null / []: the card number, its card_type, colours, cost and block */
+  opNumber: string | null
+  opCardType: string | null
+  opColors: string[]
+  opCost: number | null
+  opBlock: number | null
 }
 
 export type VerdictStatus = 'legal' | 'warnings' | 'illegal' | 'unknown' | 'update'

@@ -56,9 +56,10 @@ describe('checkDeckFields', () => {
     expect(r.cards[0].card).toBe(99999999)
   })
 
-  it('decksAvailable is true for ygo and pkm', () => {
+  it('decksAvailable is true for ygo, pkm and op', () => {
     expect(decksAvailable('ygo')).toBe(true)
     expect(decksAvailable('pkm')).toBe(true)
-    for (const g of ['op', 'mtg'] as const) expect(decksAvailable(g)).toBe(false)
+    expect(decksAvailable('op')).toBe(true)
+    expect(decksAvailable('mtg')).toBe(false)
   })
 })

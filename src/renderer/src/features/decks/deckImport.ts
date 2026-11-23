@@ -43,9 +43,11 @@ export function placeOf(
   game: GameId,
   sectioned: boolean,
   section: DeckSection,
-  card: { frameType: string }
+  card: { frameType: string; opCardType?: string | null }
 ): DeckSection {
-  return sectioned ? section : defaultSection(game, card)
+  return sectioned
+    ? section
+    : defaultSection(game, { frameType: card.frameType, opCardType: card.opCardType ?? null })
 }
 
 /**

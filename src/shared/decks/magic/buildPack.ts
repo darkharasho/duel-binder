@@ -20,8 +20,6 @@ export interface MtgPackCard {
   legalities: Record<string, string>
   released_at: string
   reprint?: boolean
-  digital?: boolean
-  games?: string[]
   card_faces?: {
     name: string
     type_line?: string
@@ -132,7 +130,9 @@ export function buildMtgPack(
     upcoming: {}
   }
   for (const c of cards) {
-    if (c.digital || !c.games?.includes('paper') || c.name.startsWith('A-')) continue
+    // Not filtered on paper: Scryfall's oracle printing can be MTGO-only (Black Lotus, Tundra), and
+    // the format legalities are the card's whatever the printing. Alchemy rebalances are "A-" cards.
+    if (c.name.startsWith('A-')) continue
     const bits = legalBits(c)
     if (bits === 0) continue
     pack.legal[c.name] = bits

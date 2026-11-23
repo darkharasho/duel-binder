@@ -11,7 +11,6 @@ const card = (o: Partial<MtgPackCard> & { name: string }): MtgPackCard => ({
   layout: 'normal',
   legalities: { commander: 'legal' },
   released_at: '2020-01-01',
-  games: ['paper'],
   ...o
 })
 const builtAt = new Date('2026-11-23T10:00:00Z')
@@ -133,15 +132,14 @@ describe('buildMtgPack', () => {
     ])
     expect(pack.upcoming).toEqual({ Newbie: '2026-12-05' })
   })
-  it('skips digital, Alchemy and unlegal cards, and the pack parses', () => {
+  it('skips Alchemy and unlegal cards, keeps paper cards whose oracle printing is MTGO-only, and the pack parses', () => {
     const pack = build([
       card({ name: 'Paper' }),
-      card({ name: 'Digital', digital: true }),
-      card({ name: 'MTGO only', games: ['mtgo'] }),
+      card({ name: 'Black Lotus' }),
       card({ name: 'A-Rebalanced' }),
       card({ name: 'Nowhere', legalities: { commander: 'not_legal' } })
     ])
-    expect(Object.keys(pack.legal)).toEqual(['Paper'])
+    expect(Object.keys(pack.legal)).toEqual(['Paper', 'Black Lotus'])
     expect(parseRulesPack(pack).state).toBe('ready')
     expect(pack.sources).toEqual([{ name: 'Scryfall', fetchedAt: '2026-11-23T09:00:00+00:00' }])
   })

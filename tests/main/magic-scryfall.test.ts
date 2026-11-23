@@ -196,6 +196,53 @@ describe('createScryfall', () => {
     expect(await collect(s.cards('https://x/default.json'))).toEqual(OBJECTS.map(slimCard))
   })
 
+  it('bulkInfo(oracle_cards) picks the oracle_cards entry', async () => {
+    const fake = (async () =>
+      jsonRes({
+        data: [
+          { type: 'oracle_cards', download_uri: 'https://x/oracle.json', updated_at: 'o' },
+          { type: 'all_cards', download_uri: 'https://x/all.json', updated_at: 'a' }
+        ]
+      })) as unknown as typeof fetch
+    const s = createScryfall({ version: 'x', fetch: fake, gapMs: 0 })
+    expect(await s.bulkInfo('oracle_cards')).toEqual({
+      downloadUri: 'https://x/oracle.json',
+      updatedAt: 'o'
+    })
+    await expect(s.bulkInfo()).resolves.toMatchObject({ downloadUri: 'https://x/all.json' })
+  })
+
+  it('rawObjects keeps legalities, power and toughness inside card_faces', async () => {
+    const body =
+      JSON.stringify({
+        name: 'Bolt',
+        legalities: { commander: 'legal', vintage: 'restricted' },
+        power: '2',
+        toughness: '3'
+      }) +
+      '\n' +
+      JSON.stringify({
+        name: 'Two // Faces',
+        legalities: { modern: 'banned' },
+        card_faces: [{ name: 'Two', power: '4', toughness: '5' }, { name: 'Faces' }]
+      }) +
+      '\n'
+    const fake = (async () =>
+      new Response(gzipSync(Buffer.from(body)), { status: 200 })) as unknown as typeof fetch
+    const s = createScryfall({ version: 'x', fetch: fake, gapMs: 0 })
+    const got = (await collect(s.rawObjects('https://x/oracle.json'))) as Record<string, unknown>[]
+    expect(got).toHaveLength(2)
+    expect(got[0]).toMatchObject({
+      legalities: { commander: 'legal', vintage: 'restricted' },
+      power: '2',
+      toughness: '3'
+    })
+    expect(got[1]).toMatchObject({
+      legalities: { modern: 'banned' },
+      card_faces: [{ power: '4', toughness: '5' }, { name: 'Faces' }]
+    })
+  })
+
   it('sets() follows next_page', async () => {
     const urls: string[] = []
     const fake = (async (url: string) => {

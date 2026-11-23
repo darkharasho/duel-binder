@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { readEnglishCards } from '../../../scripts/catalog/rules'
+import { readEnglishCards, toMtgPackCard } from '../../../scripts/catalog/rules'
 
 let dir = ''
 afterEach(() => {
@@ -85,5 +85,35 @@ describe('readEnglishCards', () => {
     expect(cards.map((c) => c.id)).toEqual(['dp6-136'])
     expect(cards[0].attacks).toEqual([{ name: 'Plasma' }])
     expect(cards[0].abilities).toEqual([])
+  })
+})
+
+describe('toMtgPackCard', () => {
+  it('keeps legalities, power and toughness, on the card and on each face, and drops the rest', () => {
+    const card = toMtgPackCard({
+      name: "Smuggler's Copter",
+      layout: 'normal',
+      type_line: 'Legendary Artifact — Vehicle',
+      power: '3',
+      toughness: '3',
+      legalities: { commander: 'legal' },
+      released_at: '2016-09-30',
+      reprint: true,
+      games: ['paper'],
+      prices: { usd: '1' },
+      card_faces: [
+        { name: 'A', type_line: 'Creature', power: '1', toughness: '2', mana_cost: '{R}' },
+        { name: 'B' }
+      ]
+    })
+    expect(card).toMatchObject({
+      power: '3',
+      toughness: '3',
+      legalities: { commander: 'legal' },
+      reprint: true,
+      card_faces: [{ name: 'A', power: '1', toughness: '2' }, { name: 'B' }]
+    })
+    expect(card).not.toHaveProperty('prices')
+    expect(card.card_faces![0]).not.toHaveProperty('mana_cost')
   })
 })

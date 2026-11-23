@@ -12,13 +12,17 @@
  *                                        The One Piece pack, from the hand-kept
  *                                        src/shared/decks/rules/onepiece.json (no cache, no network)
  *
+ *   npm run catalog:rules -- --game mtg [--dry-run]
+ *                                        The Magic pack, from Scryfall's oracle_cards bulk file
+ *                                        (about 160 MB, streamed; no cache)
+ *
  * Exits 1 on any failure.
  */
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { gzipSync } from 'node:zlib'
 import Database from 'better-sqlite3'
-import { parseRulesPack, type RulesPack } from '../../src/shared/decks/pack'
+import { parseRulesPack, type MtgRulesPack, type RulesPack } from '../../src/shared/decks/pack'
 import opRules from '../../src/shared/decks/rules/onepiece.json'
 import manual from '../../src/shared/decks/rules/pokemon-manual.json'
 import {
@@ -27,6 +31,8 @@ import {
   type PkmPackCard
 } from '../../src/shared/decks/pokemon/buildPack'
 import { buildOpPack, type OpRulesFile } from '../../src/shared/decks/onepiece/buildPack'
+import { buildMtgPack, type MtgPackCard } from '../../src/shared/decks/magic/buildPack'
+import { createScryfall } from './magic/scryfall'
 import { buildYgoPack, type YgoPackCard } from '../../src/shared/decks/ygo/buildPack'
 
 const CARD_INFO_URL = 'https://db.ygoprodeck.com/api/v7/cardinfo.php?misc=yes'
@@ -73,7 +79,7 @@ export function readEnglishCards(cachePath: string): PkmPackCard[] {
   }
 }
 
-async function publish(game: 'ygo' | 'pkm' | 'op', pack: RulesPack): Promise<void> {
+async function publish(game: 'ygo' | 'pkm' | 'op' | 'mtg', pack: RulesPack): Promise<void> {
   const dryRun = process.argv.includes('--dry-run')
   const portalUrl = process.env['PORTAL_URL']
   const token = process.env['PORTAL_ADMIN_TOKEN']
@@ -102,6 +108,41 @@ async function publish(game: 'ygo' | 'pkm' | 'op', pack: RulesPack): Promise<voi
   console.log(`rules pack ${pack.version} uploaded: ${bytes} bytes, ${gz} bytes gzipped`)
 }
 
+/** The fields buildMtgPack reads from one Scryfall oracle object, nothing more (faces included). */
+export function toMtgPackCard(raw: unknown): MtgPackCard {
+  const c = raw as MtgPackCard
+  const face = (
+    f: NonNullable<MtgPackCard['card_faces']>[number]
+  ): NonNullable<MtgPackCard['card_faces']>[number] => ({
+    name: f.name,
+    type_line: f.type_line,
+    oracle_text: f.oracle_text,
+    power: f.power,
+    toughness: f.toughness
+  })
+  return {
+    name: c.name,
+    layout: c.layout,
+    type_line: c.type_line,
+    oracle_text: c.oracle_text,
+    keywords: c.keywords,
+    power: c.power,
+    toughness: c.toughness,
+    legalities: c.legalities,
+    released_at: c.released_at,
+    reprint: c.reprint,
+    card_faces: c.card_faces?.map(face)
+  }
+}
+
+async function buildMtg(): Promise<MtgRulesPack> {
+  const scry = createScryfall({ version: 'rules' })
+  const info = await scry.bulkInfo('oracle_cards')
+  const cards: MtgPackCard[] = []
+  for await (const raw of scry.rawObjects(info.downloadUri)) cards.push(toMtgPackCard(raw))
+  return buildMtgPack(cards, { version: info.updatedAt, builtAt: new Date() })
+}
+
 function argValue(name: string): string | undefined {
   const i = process.argv.indexOf(name)
   return i >= 0 ? process.argv[i + 1] : undefined
@@ -114,10 +155,12 @@ async function main(): Promise<void> {
     await publish('pkm', buildPkmPack(readEnglishCards(cache), manual as PkmManual, new Date()))
   } else if (game === 'op') {
     await publish('op', buildOpPack(opRules as OpRulesFile, new Date()))
+  } else if (game === 'mtg') {
+    await publish('mtg', await buildMtg())
   } else if (game === 'ygo') {
     await publish('ygo', buildYgoPack(await fetchCards(), new Date()))
   } else {
-    throw new Error(`Unknown --game ${game}; expected ygo, pkm or op`)
+    throw new Error(`Unknown --game ${game}; expected ygo, pkm, op or mtg`)
   }
 }
 

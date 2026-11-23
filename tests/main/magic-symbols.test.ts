@@ -282,6 +282,9 @@ describe('runMagicStep and symbols', () => {
     async *cards() {
       yield* OBJECTS
     },
+    async *rawObjects() {
+      yield* []
+    },
     sets: async () => sets,
     symbolSvg: svg
   })

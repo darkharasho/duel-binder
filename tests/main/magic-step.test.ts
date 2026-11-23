@@ -46,6 +46,9 @@ const source = (objects: ScryCard[], sets: ScrySet[] = SETS): ScryfallSource => 
   async *cards() {
     yield* objects
   },
+  async *rawObjects() {
+    yield* []
+  },
   sets: async () => sets,
   symbolSvg: async () => {
     throw new Error('no symbols in this test')

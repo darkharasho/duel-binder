@@ -66,9 +66,12 @@ export interface ScrySet {
 }
 
 export interface ScryfallSource {
-  bulkInfo(): Promise<{ downloadUri: string; updatedAt: string }>
+  /** The bulk-data entry of that type: `all_cards` (the catalog) or `oracle_cards` (the deck rules pack). */
+  bulkInfo(type?: 'all_cards' | 'oracle_cards'): Promise<{ downloadUri: string; updatedAt: string }>
   /** Every object in the bulk file, unfiltered, slimmed (see `slimCard`). */
   cards(downloadUri: string): AsyncIterable<ScryCard>
+  /** Every object in the bulk file as parsed, unslimmed (`slimCard` drops `legalities`). */
+  rawObjects(downloadUri: string): AsyncIterable<unknown>
   sets(): Promise<ScrySet[]>
   /** A set symbol's SVG text, from svgs.scryfall.io (see symbols.ts). */
   symbolSvg(url: string): Promise<string>

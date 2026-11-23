@@ -289,8 +289,21 @@ export function createScryfall(o: {
   }) as typeof fetch
   const api = <T>(url: string): Promise<T> => getJson<T>(url, { fetch: paced, userAgent, limiter })
 
+  /** The bulk file's objects as parsed, gunzipped when the body is gzip. */
+  async function* bulkObjects(downloadUri: string): AsyncIterable<ScryCard> {
+    const res = await f(downloadUri, { headers: { 'User-Agent': userAgent, Accept: '*/*' } })
+    if (!res.ok || !res.body) throw new Error(`GET ${downloadUri} returned ${res.status}`)
+    const src = Readable.fromWeb(res.body as never)
+    const head = await peek(src)
+    const body: Transform =
+      head && head[0] === 0x1f && head[1] === 0x8b ? createGunzip() : new PassThrough()
+    // pipeline destroys `body` with the source's error, so a dropped download rejects the iteration.
+    pipeline(src, body, () => {})
+    yield* parseBulkLines(splitLines(body))
+  }
+
   return {
-    async bulkInfo() {
+    async bulkInfo(type = 'all_cards') {
       const list = await api<{
         data: {
           type: string
@@ -299,24 +312,19 @@ export function createScryfall(o: {
           updated_at: string
         }[]
       }>(`${API}/bulk-data`)
-      const e = list.data.find((d) => d.type === 'all_cards')
-      if (!e) throw new Error('Scryfall bulk-data has no all_cards entry')
+      const e = list.data.find((d) => d.type === type)
+      if (!e) throw new Error(`Scryfall bulk-data has no ${type} entry`)
       // Scryfall's live entry carries only `jsonl_download_uri` (one object per line, gzipped) now;
       // parseBulkLines reads both layouts.
       const downloadUri = e.download_uri ?? e.jsonl_download_uri
-      if (!downloadUri) throw new Error('Scryfall all_cards entry has no download link')
+      if (!downloadUri) throw new Error(`Scryfall ${type} entry has no download link`)
       return { downloadUri, updatedAt: e.updated_at }
     },
     async *cards(downloadUri) {
-      const res = await f(downloadUri, { headers: { 'User-Agent': userAgent, Accept: '*/*' } })
-      if (!res.ok || !res.body) throw new Error(`GET ${downloadUri} returned ${res.status}`)
-      const src = Readable.fromWeb(res.body as never)
-      const head = await peek(src)
-      const body: Transform =
-        head && head[0] === 0x1f && head[1] === 0x8b ? createGunzip() : new PassThrough()
-      // pipeline destroys `body` with the source's error, so a dropped download rejects the iteration.
-      pipeline(src, body, () => {})
-      for await (const c of parseBulkLines(splitLines(body))) yield slimCard(c)
+      for await (const c of bulkObjects(downloadUri)) yield slimCard(c)
+    },
+    async *rawObjects(downloadUri) {
+      for await (const c of bulkObjects(downloadUri)) yield c as unknown
     },
     async sets() {
       const out: ScrySet[] = []

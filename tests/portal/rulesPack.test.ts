@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { rulesPackRoute } from '../../workers/portal/src/rulesPack'
+import { buildMtgPack } from '../../src/shared/decks/magic/buildPack'
 import { buildOpPack, type OpRulesFile } from '../../src/shared/decks/onepiece/buildPack'
 import onepieceRules from '../../src/shared/decks/rules/onepiece.json'
 import type { SnapshotBucket } from '../../workers/portal/src/catalogSnapshot'
@@ -105,6 +106,33 @@ describe('rulesPackRoute', () => {
 
   it('PUT a pkm pack to /op is 400 bad-pack', async () => {
     const res = (await put(bucket(), '/api/admin/rules/op', pack('pkm')))!
+    expect(res.status).toBe(400)
+    expect(await res.text()).toContain('bad-pack')
+  })
+
+  it('PUT /api/admin/rules/mtg accepts an mtg pack and GET serves it', async () => {
+    const b = bucket()
+    const mtg = buildMtgPack(
+      [
+        {
+          name: 'Lightning Bolt',
+          layout: 'normal',
+          type_line: 'Instant',
+          legalities: { modern: 'legal', commander: 'legal' },
+          released_at: '1993-08-05'
+        }
+      ],
+      { version: '2026-11-23T09:00:00Z', builtAt: new Date('2026-11-23T10:00:00Z') }
+    )
+    expect((await put(b, '/api/admin/rules/mtg', mtg))!.status).toBe(200)
+    const res = (await call(b, '/api/rules/mtg'))!
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual(mtg)
+  })
+
+  it('PUT an op pack to /mtg is 400 bad-pack', async () => {
+    const op = buildOpPack(onepieceRules as OpRulesFile, new Date('2026-11-23T03:00:00Z'))
+    const res = (await put(bucket(), '/api/admin/rules/mtg', op))!
     expect(res.status).toBe(400)
     expect(await res.text()).toContain('bad-pack')
   })

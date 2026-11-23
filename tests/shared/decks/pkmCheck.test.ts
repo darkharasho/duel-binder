@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { checkDeck } from '../../../src/shared/decks/check'
 import { buildPkmPack, type PkmPackCard } from '../../../src/shared/decks/pokemon/buildPack'
+import { keyIndex, keyOfCard } from '../../../src/shared/decks/pokemon/keys'
 import { sortEntries } from '../../../src/shared/decks/sort'
 import type { PackState, PkmRulesPack } from '../../../src/shared/decks/pack'
 import type { DeckCard, DeckEntry } from '../../../src/shared/decks/types'
@@ -22,6 +23,7 @@ const cards: PkmPackCard[] = [
   { id: 'm-1', name: 'Metal Energy', category: 'Energy', energyType: 'Normal', legal: L },
   { id: 'm-2', name: 'Metal Energy', category: 'Energy', energyType: 'Special', legal: L },
   { id: 'jet-1', name: 'Jet Energy', category: 'Energy', energyType: 'Special', legal: L },
+  { id: 'dk-1', name: 'Darkness Energy', category: 'Energy', energyType: 'Special', legal: L },
   { id: 'j-1', name: 'Mew', category: 'Pokemon', stage: 'Basic', legal: L },
   {
     id: 'j-2',
@@ -72,6 +74,7 @@ const RAD2 = mk('Radiant Greninja', 'Pokémon', 'en/r-2')
 const OLD = mk('Old Card', 'Trainer', 'en/old-1')
 const BAN = mk('Lysandre Labs', 'Trainer', 'en/ban-1')
 const JMETAL = mk('Metal Energy', 'エネルギー', 'ja/SV1-099')
+const OLDDARK = mk('Darkness Energy', 'Energy', 'en/dk-1')
 const JET = mk('Jet Energy', 'Energy', 'ja/SV1-098')
 const JMEW = mk('Mew', 'Pokémon', 'ja/SV1-001')
 
@@ -164,6 +167,13 @@ describe('pkm checkDeck', () => {
 })
 
 describe('pkm basic Energy found by name', () => {
+  it('an English Special Darkness Energy x5 is a copies error', () => {
+    expect(keys(deck(60, [e(OLDDARK, 5)]))).toEqual(['copies:darkness energy'])
+  })
+  it('the Japanese Metal Energy is unsure over both keys', () => {
+    const hit = keyOfCard(reg[JMETAL], raw, keyIndex(raw))
+    expect('unsure' in hit && hit.unsure.map((i) => raw.keys[i].f & 8).sort()).toEqual([0, 8])
+  })
   it('a Japanese basic Metal Energy x8 has no copies error, with or without a pack', () => {
     expect(keys(deck(60, [e(JMETAL, 8)]))).not.toContain('copies:metal energy')
     expect(keys(deck(60, [e(JMETAL, 8)]), { state: 'missing' })).toEqual([])

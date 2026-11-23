@@ -68,7 +68,9 @@ export function checkPkm(
     const byName =
       !!f.card && pkmKind(f.card.type) === 'E' && BASIC_ENERGY_NAME.test(normalCardName(name))
     const basicEnergy =
-      byName || (!!pack && f.keys.some((k) => (pack.keys[k].f & PKM_FLAG.basicEnergy) !== 0))
+      pack && f.keys.length > 0
+        ? f.keys.some((k) => (pack.keys[k].f & PKM_FLAG.basicEnergy) !== 0)
+        : byName
     const g = groups.get(norm)
     if (g) {
       g.n += f.qty

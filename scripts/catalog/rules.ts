@@ -5,13 +5,19 @@
  *
  *   npm run catalog:rules                Env: PORTAL_URL, PORTAL_ADMIN_TOKEN
  *   npm run catalog:rules -- --dry-run   Writes out/rules-ygo.json, prints its sizes, no upload
+ *   npm run catalog:rules -- --game pkm [--cache <path>] [--dry-run]
+ *                                        The Pokémon pack, from the catalog stage's card cache
+ *                                        (default catalog-work/pokemon-src.sqlite)
  *
  * Exits 1 on any failure.
  */
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { gzipSync } from 'node:zlib'
-import { parseRulesPack } from '../../src/shared/decks/pack'
+import Database from 'better-sqlite3'
+import { parseRulesPack, type RulesPack } from '../../src/shared/decks/pack'
+import manual from '../../src/shared/decks/rules/pokemon-manual.json'
+import { buildPkmPack, type PkmManual, type PkmPackCard } from '../../src/shared/decks/pokemon/buildPack'
 import { buildYgoPack, type YgoPackCard } from '../../src/shared/decks/ygo/buildPack'
 
 const CARD_INFO_URL = 'https://db.ygoprodeck.com/api/v7/cardinfo.php?misc=yes'
@@ -25,14 +31,36 @@ async function fetchCards(): Promise<YgoPackCard[]> {
   return body.data as YgoPackCard[]
 }
 
-async function main(): Promise<void> {
+/** The English cards in the Pokémon stage's cache, as the pack builder reads them. */
+export function readEnglishCards(cachePath: string): PkmPackCard[] {
+  const db = new Database(cachePath, { readonly: true })
+  try {
+    const rows = db.prepare("SELECT json FROM td_cards WHERE lang = 'en'").all() as { json: string }[]
+    return rows.map(({ json }) => {
+      const c = JSON.parse(json) as PkmPackCard & { attacks?: { name: string }[] }
+      return {
+        id: c.id,
+        name: c.name,
+        category: c.category,
+        stage: c.stage,
+        rarity: c.rarity,
+        energyType: c.energyType,
+        legal: c.legal,
+        attacks: c.attacks?.map((a) => ({ name: a.name })),
+        abilities: c.abilities?.map((a) => ({ name: a.name }))
+      }
+    })
+  } finally {
+    db.close()
+  }
+}
+
+async function publish(game: 'ygo' | 'pkm', pack: RulesPack): Promise<void> {
   const dryRun = process.argv.includes('--dry-run')
   const portalUrl = process.env['PORTAL_URL']
   const token = process.env['PORTAL_ADMIN_TOKEN']
   if (!dryRun && (!portalUrl || !token))
     throw new Error('PORTAL_URL and PORTAL_ADMIN_TOKEN must both be set')
-
-  const pack = buildYgoPack(await fetchCards(), new Date())
   if (parseRulesPack(pack).state !== 'ready') throw new Error('The built rules pack is not valid')
   const json = JSON.stringify(pack)
   const bytes = Buffer.byteLength(json)
@@ -40,13 +68,13 @@ async function main(): Promise<void> {
 
   if (dryRun) {
     mkdirSync('out', { recursive: true })
-    writeFileSync('out/rules-ygo.json', json)
+    writeFileSync(`out/rules-${game}.json`, json)
     console.log(
       `rules pack ${pack.version}: ${bytes} bytes, ${gz} bytes gzipped (dry run, not uploaded)`
     )
     return
   }
-  const res = await fetch(`${portalUrl}/api/admin/rules/ygo`, {
+  const res = await fetch(`${portalUrl}/api/admin/rules/${game}`, {
     method: 'PUT',
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
     body: json,
@@ -54,6 +82,23 @@ async function main(): Promise<void> {
   })
   if (!res.ok) throw new Error(`Portal refused the rules pack: ${res.status} ${await res.text()}`)
   console.log(`rules pack ${pack.version} uploaded: ${bytes} bytes, ${gz} bytes gzipped`)
+}
+
+function argValue(name: string): string | undefined {
+  const i = process.argv.indexOf(name)
+  return i >= 0 ? process.argv[i + 1] : undefined
+}
+
+async function main(): Promise<void> {
+  const game = argValue('--game') ?? 'ygo'
+  if (game === 'pkm') {
+    const cache = argValue('--cache') ?? 'catalog-work/pokemon-src.sqlite'
+    await publish('pkm', buildPkmPack(readEnglishCards(cache), manual as PkmManual, new Date()))
+  } else if (game === 'ygo') {
+    await publish('ygo', buildYgoPack(await fetchCards(), new Date()))
+  } else {
+    throw new Error(`Unknown --game ${game}; expected ygo or pkm`)
+  }
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {

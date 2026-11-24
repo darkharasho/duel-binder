@@ -6,6 +6,7 @@ import { CardSheet } from '@/components/CardSheet'
 import { FilterOptionChip } from '@/components/FilterChip'
 import { PageHeader } from '@/components/PageHeader'
 import { PAGE_TITLE } from '@/components/pageHeaderContext'
+import { SearchInput } from '@/components/SearchInput'
 import { CardPanel } from '@/features/card/CardPanel'
 import { api, queryKeys } from '@/lib/api'
 import { DexBar, PokedexGrid } from './PokedexGrid'
@@ -37,12 +38,20 @@ export function PokedexPage(): React.JSX.Element {
   const tiles = useMemo(() => dexTiles(summary.data ?? EMPTY), [summary.data])
   const [filter, setFilter] = useState<DexFilter>('all')
   const [gen, setGen] = useState<number | null>(null)
-  const visible = useMemo(() => visibleTiles(tiles, filter, gen), [tiles, filter, gen])
+  const [query, setQuery] = useState('')
+  const visible = useMemo(
+    () => visibleTiles(tiles, filter, gen, query),
+    [tiles, filter, gen, query]
+  )
   const total = progress(tiles)
-  const [open, setOpen] = useState<{ dexNo: number; cardId?: number } | null>(null)
+  // `card`: the species' card opened from its panel, `entryId` the copy picked there since.
+  const [open, setOpen] = useState<{
+    dexNo: number
+    card?: { cardId: number; printingId?: number; entryId?: number }
+  } | null>(null)
   // Stable, so opening a panel doesn't re-render the 1025 tiles.
   const [openSpecies] = useState(() => (dexNo: number) => setOpen({ dexNo }))
-  const close = (): void => setOpen((o) => (o?.cardId !== undefined ? { dexNo: o.dexNo } : null))
+  const close = (): void => setOpen((o) => (o?.card ? { dexNo: o.dexNo } : null))
 
   return (
     <div className="space-y-5 p-8 max-md:p-4">
@@ -60,31 +69,45 @@ export function PokedexPage(): React.JSX.Element {
           </div>
           <DexBar caught={total.caught} total={total.total} className="h-1.5 max-w-md" />
         </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          {FILTERS.map((f) => (
-            <FilterOptionChip
-              key={f.value}
-              label={f.label}
-              selected={filter === f.value}
-              onClick={() => setFilter(f.value)}
-            />
-          ))}
-          <span aria-hidden className="mx-1 h-4 w-px bg-white/10" />
-          {GENERATIONS.map((g) => (
-            <FilterOptionChip
-              key={g.gen}
-              label={g.label}
-              selected={gen === g.gen}
-              onClick={() => setGen((cur) => (cur === g.gen ? null : g.gen))}
-            />
-          ))}
+        {/* Pinned on desktop, so search and filters stay in reach down the dex. */}
+        <div data-pin className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <SearchInput
+            label="Search Pokédex"
+            placeholder="Name or number"
+            value={query}
+            onChange={setQuery}
+            className="w-full max-w-xs"
+          />
+          <div className="flex flex-wrap items-center gap-1.5">
+            {FILTERS.map((f) => (
+              <FilterOptionChip
+                key={f.value}
+                label={f.label}
+                selected={filter === f.value}
+                onClick={() => setFilter(f.value)}
+              />
+            ))}
+            <span aria-hidden className="mx-1 h-4 w-px bg-white/10" />
+            {GENERATIONS.map((g) => (
+              <FilterOptionChip
+                key={g.gen}
+                label={g.label}
+                selected={gen === g.gen}
+                onClick={() => setGen((cur) => (cur === g.gen ? null : g.gen))}
+              />
+            ))}
+          </div>
         </div>
       </PageHeader>
 
       {summary.isSuccess &&
         (visible.length === 0 ? (
           <p className="py-16 text-lg font-medium">
-            {filter === 'caught' ? 'None caught yet' : 'All caught'}
+            {query.trim() !== ''
+              ? `No Pokémon match “${query.trim()}”`
+              : filter === 'caught'
+                ? 'None caught yet'
+                : 'All caught'}
           </p>
         ) : (
           <PokedexGrid all={tiles} tiles={visible} onOpen={openSpecies} />
@@ -96,13 +119,26 @@ export function PokedexPage(): React.JSX.Element {
 
       {open && (
         <CardSheet onClose={close}>
-          {open.cardId !== undefined ? (
-            <CardPanel key={open.cardId} cardId={open.cardId} onClose={close} />
+          {open.card ? (
+            // Opens on the printing (and owned copy) the tile showed; with neither the panel has
+            // nothing picked and draws no card.
+            <CardPanel
+              key={open.card.cardId}
+              cardId={open.card.cardId}
+              entryId={open.card.entryId}
+              printingId={open.card.printingId}
+              onSelectEntry={(entryId) =>
+                setOpen((o) => (o?.card ? { ...o, card: { ...o.card, entryId } } : o))
+              }
+              onClose={close}
+            />
           ) : (
             <PokedexPanel
               key={open.dexNo}
               dexNo={open.dexNo}
-              onOpenCard={(cardId) => setOpen({ dexNo: open.dexNo, cardId })}
+              onOpenCard={({ cardId, printingId, entryId }) =>
+                setOpen({ dexNo: open.dexNo, card: { cardId, printingId, entryId } })
+              }
             />
           )}
         </CardSheet>

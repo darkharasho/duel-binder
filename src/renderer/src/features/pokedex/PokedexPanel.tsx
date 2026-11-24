@@ -22,14 +22,14 @@ function CardTile({
 }: {
   card: PokedexCard
   missing: boolean
-  onOpen: (cardId: number) => void
+  onOpen: (card: PokedexCard) => void
 }): React.JSX.Element {
   const art = 'w-full rounded-[4px] shadow-[0_6px_16px_rgb(0_0_0/0.4)]'
   return (
     <li>
       <button
         type="button"
-        onClick={() => onOpen(card.cardId)}
+        onClick={() => onOpen(card)}
         className="group w-full rounded-md p-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <span
@@ -75,7 +75,7 @@ function CardGroup({
   title: string
   cards: PokedexCard[]
   missing: boolean
-  onOpen: (cardId: number) => void
+  onOpen: (card: PokedexCard) => void
 }): React.JSX.Element {
   const [all, setAll] = useState(false)
   const shown = missing && !all ? cards.slice(0, FIRST_MISSING) : cards
@@ -107,7 +107,7 @@ export function PokedexPanel({
   onOpenCard
 }: {
   dexNo: number
-  onOpenCard: (cardId: number) => void
+  onOpenCard: (card: PokedexCard) => void
 }): React.JSX.Element {
   const name = speciesName(dexNo) ?? dexNumber(dexNo)
   const species = useQuery({

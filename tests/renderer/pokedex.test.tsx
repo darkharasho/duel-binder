@@ -1,8 +1,20 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import type { PokedexCard, PokedexSpecies, PokedexSummary } from '@shared/types'
+import type {
+  CardDetail,
+  PokedexCard,
+  PokedexSpecies,
+  PokedexSummary,
+  Printing
+} from '@shared/types'
 import { PokedexPage } from '@/features/pokedex/PokedexPage'
-import { dexTiles, percentText, progress, visibleTiles } from '@/features/pokedex/pokedexView'
+import {
+  dexTiles,
+  matchesQuery,
+  percentText,
+  progress,
+  visibleTiles
+} from '@/features/pokedex/pokedexView'
 import { invalidateAfterEdit, mutationInvalidationKeys } from '@/lib/api'
 import { createMockApi, renderWithProviders } from './mockApi'
 
@@ -67,6 +79,21 @@ describe('pokedexView', () => {
     expect(visibleTiles(tiles, 'all', 2)).toHaveLength(100)
   })
 
+  it('searches by name (no accents or punctuation needed) or by dex number', () => {
+    const tiles = dexTiles(summary)
+    const names = (q: string): string[] => visibleTiles(tiles, 'all', null, q).map((t) => t.name)
+    expect(names('pika')).toEqual(['Pikachu'])
+    expect(names('MIME')).toEqual(['Mr. Mime', 'Mime Jr.'])
+    expect(names('mr mime')).toEqual(['Mr. Mime'])
+    expect(names('farfetchd')).toEqual(["Farfetch'd"])
+    expect(names('flabebe')).toEqual(['Flabébé'])
+    expect(names('25')).toEqual(['Pikachu'])
+    expect(names('#006')).toEqual(['Charizard'])
+    expect(names('  ')).toHaveLength(1025)
+    expect(visibleTiles(tiles, 'caught', null, 'char').map((t) => t.name)).toEqual(['Charizard'])
+    expect(matchesQuery(tiles[0], 'zzz')).toBe(false)
+  })
+
   it('counts progress overall and per generation', () => {
     const tiles = dexTiles({ caught: [...summary.caught, { dexNo: 152, copies: 1 }] })
     expect(progress(tiles)).toEqual({ caught: 3, total: 1025 })
@@ -93,7 +120,9 @@ describe('the Pokédex page', () => {
     expect(await screen.findByText('2 / 1025 caught · 0.2%')).toBeInTheDocument()
     expect(screen.getByText('Generation I · Kanto')).toBeInTheDocument()
     // The list's end arrives a few steps after the first screenful.
-    expect(await screen.findByText('Generation IX · Paldea', {}, { timeout: 5000 })).toBeInTheDocument()
+    expect(
+      await screen.findByText('Generation IX · Paldea', {}, { timeout: 5000 })
+    ).toBeInTheDocument()
     expect(within(tile('Charizard')).getByText('×4')).toBeInTheDocument()
     expect(within(tile('Charizard')).getByText('#006')).toBeInTheDocument()
     // One copy: no badge.
@@ -133,6 +162,20 @@ describe('the Pokédex page', () => {
     expect(tile('Bulbasaur')).toBeInTheDocument()
   })
 
+  it('the search box narrows the tiles and says when nothing matches', async () => {
+    renderWithProviders(<PokedexPage />, { api: dexApi() })
+    await screen.findByText(/2 \/ 1025 caught/)
+    const box = screen.getByRole('searchbox', { name: 'Search Pokédex' })
+    await userEvent.type(box, 'bulba')
+    await waitFor(() =>
+      expect(screen.queryByText('Charizard', { selector: '[data-dex-name]' })).toBeNull()
+    )
+    expect(tile('Bulbasaur')).toBeInTheDocument()
+    await userEvent.clear(box)
+    await userEvent.type(box, 'zzz')
+    expect(await screen.findByText('No Pokémon match “zzz”')).toBeInTheDocument()
+  })
+
   it('a generation chip shows only that generation', async () => {
     renderWithProviders(<PokedexPage />, { api: dexApi() })
     await screen.findByText(/2 \/ 1025 caught/)
@@ -170,6 +213,45 @@ describe('the Pokédex page', () => {
     const panel = await screen.findByRole('dialog')
     await userEvent.click(await within(panel).findByRole('button', { name: /Dark Charizard/ }))
     await waitFor(() => expect(api.cards.get).toHaveBeenCalledWith(2))
+  })
+
+  it("a missing card opens on the printing its tile shows, with that printing's art", async () => {
+    const printing = (id: number, setName: string, artImageId: number): Printing => ({
+      id,
+      cardId: 100,
+      setName,
+      setCode: `S-${id}`,
+      setRarity: 'Rare',
+      setRarityCode: '',
+      language: 'en',
+      setPrice: null,
+      missingFromApi: false,
+      artImageId
+    })
+    const detail: CardDetail = {
+      card: { id: 100, name: 'Charizard V1', type: 'Pokémon' } as CardDetail['card'],
+      printings: [printing(899, 'Older Set', 444), printing(900, 'Set 100', 555)],
+      images: [{ imageId: 444, cardId: 100, sortOrder: 0 }]
+    }
+    const species: PokedexSpecies = {
+      dexNo: 6,
+      owned: [],
+      missing: [{ ...card(100, 'Charizard V1', 0), printingId: 900 }]
+    }
+    renderWithProviders(<PokedexPage />, {
+      api: createMockApi({
+        pokedex: { summary: vi.fn(async () => summary), species: vi.fn(async () => species) },
+        cards: { get: vi.fn(async () => detail) },
+        collection: { forCard: vi.fn(async () => []) }
+      })
+    })
+    await screen.findByText(/2 \/ 1025 caught/)
+    await userEvent.click(tile('Charizard'))
+    const panel = await screen.findByRole('dialog')
+    await userEvent.click(await within(panel).findByRole('button', { name: /Charizard V1/ }))
+    await waitFor(async () =>
+      expect((await screen.findByAltText('Charizard V1')).getAttribute('src')).toContain('full/555')
+    )
   })
 
   it('a card with no image shows the placeholder and asks for no image', async () => {

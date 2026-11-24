@@ -765,6 +765,13 @@ export interface PokedexSummary {
 
 export interface PokedexCard {
   cardId: number
+  /**
+   * The printing the tile shows, so the card panel opens on it. Missing from a portal older than
+   * this field: the panel then opens on the card with nothing picked.
+   */
+  printingId?: number
+  /** Owned only: the copy the tile shows. */
+  entryId?: number
   imageId: number
   name: string
   setName: string

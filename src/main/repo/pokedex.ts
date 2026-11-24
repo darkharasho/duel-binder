@@ -56,6 +56,8 @@ function speciesCardIds(db: SqlDb, dexNo: number, scope: Scope): number[] {
 
 interface Pick {
   cardId: number
+  printingId: number
+  entryId?: number
   imageId: number
   name: string
   setName: string
@@ -70,6 +72,8 @@ const newestFirst = (a: Pick, b: Pick): number =>
 
 const toCard = (p: Pick): PokedexCard => ({
   cardId: p.cardId,
+  printingId: p.printingId,
+  ...(p.entryId !== undefined && { entryId: p.entryId }),
   imageId: p.imageId,
   name: p.name,
   setName: p.setName,
@@ -85,7 +89,8 @@ export function pokedexSpecies(db: SqlDb, dexNo: number, scope: Scope = LOCAL): 
   // Owned: one row per live entry, folded to one pick per card (copies summed, newest set shown).
   const entries = db
     .prepare(
-      `SELECT c.id AS card_id, c.name, e.image_id, e.quantity, p.set_name, p.language,
+      `SELECT c.id AS card_id, c.name, e.id AS entry_id, e.printing_id, e.image_id, e.quantity,
+              p.set_name, p.language,
               COALESCE(${SET_DATE}, '') AS date
        FROM collection_entries e
        JOIN card_printings p ON p.id = e.printing_id AND +p.game = ${scope.game}
@@ -96,6 +101,8 @@ export function pokedexSpecies(db: SqlDb, dexNo: number, scope: Scope = LOCAL): 
     .all(json) as {
     card_id: number
     name: string
+    entry_id: number
+    printing_id: number
     image_id: number
     quantity: number
     set_name: string
@@ -106,6 +113,8 @@ export function pokedexSpecies(db: SqlDb, dexNo: number, scope: Scope = LOCAL): 
   for (const r of entries) {
     const pick: Pick = {
       cardId: r.card_id,
+      printingId: r.printing_id,
+      entryId: r.entry_id,
       imageId: r.image_id,
       name: r.name,
       setName: r.set_name,
@@ -126,7 +135,8 @@ export function pokedexSpecies(db: SqlDb, dexNo: number, scope: Scope = LOCAL): 
   // Printings of every card of the species: whether any is English decides the fallback, owned or not.
   const allPrintings = db
     .prepare(
-      `SELECT c.id AS card_id, c.name, p.set_name, p.language, COALESCE(${SET_DATE}, '') AS date
+      `SELECT c.id AS card_id, p.id AS printing_id, c.name, p.set_name, p.language,
+                    COALESCE(${SET_DATE}, '') AS date
              FROM card_printings p
              JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
              ${SET_JOINS}
@@ -134,6 +144,7 @@ export function pokedexSpecies(db: SqlDb, dexNo: number, scope: Scope = LOCAL): 
     )
     .all(json) as {
     card_id: number
+    printing_id: number
     name: string
     set_name: string
     language: string
@@ -153,6 +164,7 @@ export function pokedexSpecies(db: SqlDb, dexNo: number, scope: Scope = LOCAL): 
   }
   const toPick = (r: (typeof printings)[number]): Pick => ({
     cardId: r.card_id,
+    printingId: r.printing_id,
     imageId: images.get(r.card_id) ?? 0,
     name: r.name,
     setName: r.set_name,

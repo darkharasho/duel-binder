@@ -48,11 +48,15 @@ function card(
   return { cardId: id, printingId: Number(p.lastInsertRowid) }
 }
 
-function own(printingId: number, cardId: number, quantity = 1, deleted = false): void {
-  db.prepare(
-    `INSERT INTO collection_entries (uid, owner_id, game, printing_id, image_id, quantity, created_at, updated_at, deleted_at)
+/** Adds a copy; returns its entry id. */
+function own(printingId: number, cardId: number, quantity = 1, deleted = false): number {
+  const r = db
+    .prepare(
+      `INSERT INTO collection_entries (uid, owner_id, game, printing_id, image_id, quantity, created_at, updated_at, deleted_at)
      VALUES (?, 0, 'pkm', ?, ?, ?, ?, ?, ?)`
-  ).run(crypto.randomUUID(), printingId, cardId + 1000, quantity, NOW, NOW, deleted ? NOW : null)
+    )
+    .run(crypto.randomUUID(), printingId, cardId + 1000, quantity, NOW, NOW, deleted ? NOW : null)
+  return Number(r.lastInsertRowid)
 }
 
 beforeEach(() => {
@@ -97,7 +101,7 @@ describe('pokedexSummary', () => {
 describe('pokedexSpecies', () => {
   it('lists owned cards with copies and unowned English cards as missing, not unowned Japanese ones', () => {
     const a = card('Charizard', 6, { date: '2023-01-01' })
-    own(a.printingId, a.cardId, 2)
+    const entryId = own(a.printingId, a.cardId, 2)
     const en = card('Charizard ex', 6, { setName: 'Set B', date: '2024-01-01' })
     card('リザードン', 6, { language: 'ja', setName: 'JP Set', date: '2024-06-01' })
     const r = pokedexSpecies(db, 6, PKM)
@@ -105,6 +109,8 @@ describe('pokedexSpecies', () => {
     expect(r.owned).toEqual([
       {
         cardId: a.cardId,
+        printingId: a.printingId,
+        entryId,
         imageId: a.cardId + 1000,
         name: 'Charizard',
         setName: 'Set A',
@@ -115,6 +121,7 @@ describe('pokedexSpecies', () => {
     expect(r.missing).toEqual([
       {
         cardId: en.cardId,
+        printingId: en.printingId,
         imageId: en.cardId + 1000,
         name: 'Charizard ex',
         setName: 'Set B',

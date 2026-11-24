@@ -23,12 +23,39 @@ export function dexTiles(summary: PokedexSummary): DexTile[] {
 const inGen = (dexNo: number, gen: number | null): boolean =>
   gen === null || generationOf(dexNo) === gen
 
-/** The tiles the filter and generation (null: every one) keep. */
-export function visibleTiles(tiles: DexTile[], filter: DexFilter, gen: number | null): DexTile[] {
+/** A name as searched: no accents, punctuation or spaces, lowercase ("Mr. Mime" → "mrmime"). */
+const folded = (s: string): string =>
+  s
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]/gu, '')
+
+/**
+ * Whether a tile matches what was typed: a number ("25", "#025") is that dex number, anything else
+ * is part of the name, so "mime" finds Mr. Mime and Mime Jr., "flabebe" finds Flabébé.
+ */
+export function matchesQuery(tile: DexTile, query: string): boolean {
+  const q = query.trim()
+  if (q === '') return true
+  const num = /^#?(\d+)$/.exec(q)
+  if (num) return tile.dexNo === Number(num[1])
+  const want = folded(q)
+  return want === '' || folded(tile.name).includes(want)
+}
+
+/** The tiles the filter, generation (null: every one) and search keep. */
+export function visibleTiles(
+  tiles: DexTile[],
+  filter: DexFilter,
+  gen: number | null,
+  query = ''
+): DexTile[] {
   return tiles.filter(
     (t) =>
       inGen(t.dexNo, gen) &&
-      (filter === 'all' || (filter === 'caught' ? t.copies > 0 : t.copies === 0))
+      (filter === 'all' || (filter === 'caught' ? t.copies > 0 : t.copies === 0)) &&
+      matchesQuery(t, query)
   )
 }
 

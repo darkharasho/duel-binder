@@ -9,7 +9,7 @@ export const AFFILIATE = {
   /** eBay Partner Network campaign id ("campid"). */
   ebayCampaignId: '5339251706',
   /** The Impact tracking link TCGplayer gives an affiliate; the target goes in its `u` parameter. */
-  tcgplayerImpactBase: ''
+  tcgplayerImpactBase: 'https://partner.tcgplayer.com/aNgLPj'
 }
 export type AffiliateIds = typeof AFFILIATE
 

@@ -60,3 +60,23 @@ export function printedLanguage(filter: LanguageFilter): Language | null {
 export function matchesLanguage(filter: LanguageFilter, language: Language): boolean {
   return filter === 'all' || filter === language
 }
+
+interface InLanguage {
+  setName: string
+  language: Language
+}
+
+/**
+ * Which of these sets (or printings) the filter lists. English also takes the Asian-English sets
+ * that never came out in English, such as Essential Selection 01: their cards are printed in
+ * English. An Asian-English set sharing an English set's name is that set's Asian printing, so it
+ * stays under Asian-English alone.
+ */
+export function setLanguageMatcher(
+  filter: LanguageFilter,
+  sets: readonly InLanguage[]
+): (s: InLanguage) => boolean {
+  if (filter !== 'en') return (s) => matchesLanguage(filter, s.language)
+  const english = new Set(sets.filter((s) => s.language === 'en').map((s) => s.setName))
+  return (s) => s.language === 'en' || (s.language === 'ae' && !english.has(s.setName))
+}

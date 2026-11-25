@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { api, queryKeys } from '@/lib/api'
 import { matchesSetSearch } from '@/lib/filters'
 import { friendsErrorMessage } from '@/lib/friends'
-import { matchesLanguage, useLanguageFilter } from '@/lib/languageFilter'
+import { setLanguageMatcher, useLanguageFilter } from '@/lib/languageFilter'
 import { isPhone } from '@/lib/platform'
 import { SetChecklist } from '../sets/SetChecklist'
 import { SetsList } from '../sets/SetsList'
@@ -34,13 +34,13 @@ export function FriendSets({
     queryFn: () => api.friends.sets(friend.id),
     retry: false
   })
-  const started = useMemo(
-    () =>
-      (sets.data ?? [])
-        .filter((s) => s.ownedCards > 0 && matchesLanguage(language, s.language))
-        .sort((a, b) => share(b) - share(a) || b.ownedCards - a.ownedCards),
-    [sets.data, language]
-  )
+  const started = useMemo(() => {
+    const all = sets.data ?? []
+    const inLanguage = setLanguageMatcher(language, all)
+    return all
+      .filter((s) => s.ownedCards > 0 && inLanguage(s))
+      .sort((a, b) => share(b) - share(a) || b.ownedCards - a.ownedCards)
+  }, [sets.data, language])
 
   const shown = useMemo(() => started.filter((s) => matchesSetSearch(s, q)), [started, q])
 

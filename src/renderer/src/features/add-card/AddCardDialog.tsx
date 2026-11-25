@@ -22,7 +22,7 @@ import { useReverseLook } from '@/components/useReverseLook'
 import { LanguageSelect } from '@/components/LanguageSelect'
 import { LanguageTag } from '@/components/LanguageTag'
 import { PrintingLabel } from '@/components/PrintingLabel'
-import { matchesLanguage, useLanguageFilter } from '@/lib/languageFilter'
+import { setLanguageMatcher, useLanguageFilter } from '@/lib/languageFilter'
 import { useGame } from '@/lib/game'
 import { isPhone } from '@/lib/platform'
 import { useSyncStatus } from '@/components/useSyncStatus'
@@ -157,7 +157,7 @@ export function AddCardDialog({
   )
   const languageLabel =
     languageFilter === 'all' ? '' : (LANGUAGES.find((l) => l.code === languageFilter)?.label ?? '')
-  const shownPrintings = printings.filter((p) => matchesLanguage(languageFilter, p.language))
+  const shownPrintings = printings.filter(setLanguageMatcher(languageFilter, printings))
   const highlighted = highlight ?? (preferred ? printingValue(preferred) : undefined)
   const qty = Number(quantity)
   const qtyValid = quantity.trim() !== '' && Number.isInteger(qty) && qty >= 1
@@ -240,7 +240,9 @@ export function AddCardDialog({
   const downloading = sync?.cardCount === 0
   // On the phone the dialog fills the screen, so its lists can grow to the space left.
   const phone = isPhone()
-  const listClass = phone ? 'max-h-none flex-1' : 'max-h-[min(26rem,calc(100dvh-18dvh-9rem))] min-h-0'
+  const listClass = phone
+    ? 'max-h-none flex-1'
+    : 'max-h-[min(26rem,calc(100dvh-18dvh-9rem))] min-h-0'
   const commandClass = phone ? 'min-h-0 flex-1 rounded-none' : 'rounded-none'
   // The search underline: Bricolage at 22 px, italic placeholder (the Input primitive's field).
   const inputWrapClass =
@@ -251,9 +253,7 @@ export function AddCardDialog({
     'gap-4 rounded-full px-3 py-2 text-base data-[selected=true]:bg-chip data-[selected=true]:text-foreground'
   const emptyClass = 'py-8 text-center text-base text-foreground'
   const gameLabel = (
-    <p className="font-mono text-[11px] tracking-[0.14em] text-foreground uppercase">
-      {def.name}
-    </p>
+    <p className="font-mono text-[11px] tracking-[0.14em] text-foreground uppercase">{def.name}</p>
   )
 
   return (
@@ -460,7 +460,11 @@ export function AddCardDialog({
                 className="w-28 font-mono text-xl tabular-nums"
               />
             </label>
-            <Button type="submit" className="rounded-full px-6" disabled={!qtyValid || add.isPending}>
+            <Button
+              type="submit"
+              className="rounded-full px-6"
+              disabled={!qtyValid || add.isPending}
+            >
               Save
             </Button>
           </form>

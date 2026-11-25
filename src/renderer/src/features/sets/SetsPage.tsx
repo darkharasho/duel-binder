@@ -17,7 +17,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { api, queryKeys } from '@/lib/api'
 import { languageChip, type ActiveChip, type SortOption } from '@/lib/filters'
 import { useGame } from '@/lib/game'
-import { DEFAULT_LANGUAGE, matchesLanguage, useLanguageFilter } from '@/lib/languageFilter'
+import { DEFAULT_LANGUAGE, setLanguageMatcher, useLanguageFilter } from '@/lib/languageFilter'
 import { isPhone } from '@/lib/platform'
 import { useFilterPanel } from '@/lib/useFilterPanel'
 import { SetChecklist } from './SetChecklist'
@@ -150,10 +150,7 @@ export function SetsPage({
 
   const sets = useQuery({ queryKey: queryKeys.setsList, queryFn: () => api.sets.list() })
   const all = useMemo(() => sets.data ?? [], [sets.data])
-  const inLanguage = useMemo(
-    () => all.filter((s) => matchesLanguage(language, s.language)),
-    [all, language]
-  )
+  const inLanguage = useMemo(() => all.filter(setLanguageMatcher(language, all)), [all, language])
   const available = useMemo(() => [...new Set(all.map((s) => s.language))], [all])
   const header = setsHeader(inLanguage, mode)
   // Sets more than a month out (and not started) wait under the upcoming banner.

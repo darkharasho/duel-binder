@@ -14,7 +14,7 @@ import {
 } from '@shared/scanWindow'
 import { api, queryKeys } from '@/lib/api'
 import { useGame } from '@/lib/game'
-import { matchesLanguage, useLanguageFilter } from '@/lib/languageFilter'
+import { matchesLanguage, setLanguageMatcher, useLanguageFilter } from '@/lib/languageFilter'
 import { setLabel } from '@/lib/setLabels'
 import { useScanHub } from './ScanHub'
 import type { PickerOption } from './SearchPicker'
@@ -34,18 +34,20 @@ function pickedLabel(s: PickedSet & { setCode?: string }, withTag: boolean): str
 
 /**
  * The language the scanner is set to, which narrows each scanned row's printing dropdown: the
- * Language picked on the Scan page, or under "All languages" the picked sets' language; null
- * under "All languages" with any set, or with sets of more than one language, when every
- * language is listed.
+ * Language picked on the Scan page, or under "All languages" (and English, which also lists
+ * Asian-English sets) the picked sets' language; null under "All languages" with any set, or
+ * with sets of more than one language, when every language is listed.
  */
 export function useScanLanguage(): Language | null {
   const { settings } = useScanHub()
   const [language] = useLanguageFilter()
   const { game } = useGame()
   if (game === 'pkm') return liveLanguage(settings)
-  if (language !== 'all') return language
   const languages = new Set(settings.sets.map((s) => s.language))
-  return languages.size === 1 ? [...languages][0] : null
+  if (language !== 'all' && language !== 'en') return language
+  // English also lists Asian-English sets (setLanguageMatcher): picked ones scan as theirs.
+  if (languages.size === 1) return [...languages][0]
+  return language === 'en' && languages.size === 0 ? 'en' : null
 }
 
 /** One SearchPicker's value, options and pick handler. */
@@ -99,8 +101,9 @@ export function useScanPickers(): {
   const setOptions = useMemo(() => {
     const order = new Map(LANGUAGES.map((l, i) => [l.code, i]))
     const byName = new Intl.Collator('en').compare
-    const sorted = (sets.data ?? [])
-      .filter((s) => matchesLanguage(language, s.language))
+    const all = sets.data ?? []
+    const sorted = all
+      .filter(setLanguageMatcher(language, all))
       .sort(
         (a, b) =>
           byName(englishSetName(a.setName), englishSetName(b.setName)) ||
@@ -110,7 +113,8 @@ export function useScanPickers(): {
     const byKey = new Map<string, PickedSet>()
     for (const s of sorted) {
       const key = setKeyOf(s)
-      const label = pickedLabel(s, withTag)
+      // An Asian-English set listed under English says so.
+      const label = pickedLabel(s, withTag || s.language !== language)
       byKey.set(key, { setName: s.setName, language: s.language })
       options.push({
         key,
@@ -118,7 +122,7 @@ export function useScanPickers(): {
         search: `${label} ${s.setName}`.toLowerCase(),
         badge: s.setCode ? setPrefix(s.setCode) : undefined,
         title: setNameTooltip(s.setName, s.setCode),
-        note: withTag ? languageInfo(s.language).tag : undefined
+        note: withTag || s.language !== language ? languageInfo(s.language).tag : undefined
       })
     }
     return { options, byKey }
@@ -186,13 +190,13 @@ export function useScanPickers(): {
       } else {
         setLanguage(key)
       }
-      if (!picked.length || key === 'all' || picked.every((p) => p.language === key)) return
+      const listed = setLanguageMatcher(key, sets.data ?? [])
+      if (!picked.length || key === 'all' || picked.every((p) => listed(p))) return
       const moved: PickedSet[] = []
       for (const p of picked) {
-        const same =
-          p.language === key
-            ? p
-            : (sets.data ?? []).find((s) => s.language === key && s.setName === p.setName)
+        const same = listed(p)
+          ? p
+          : (sets.data ?? []).find((s) => s.language === key && s.setName === p.setName)
         const next = same && { setName: same.setName, language: same.language }
         if (next && !moved.some((m) => setKeyOf(m) === setKeyOf(next))) moved.push(next)
       }
@@ -230,6 +234,10 @@ export function useScanPickers(): {
       onClear: clearSets
     },
     rarity: { value: settings.defaultRarity ?? AUTO, options: RARITY_OPTIONS, onPick: pickRarity },
-    finish: { value: settings.finishLock ?? 'auto', options: FINISH_LOCK_OPTIONS, onPick: pickFinish }
+    finish: {
+      value: settings.finishLock ?? 'auto',
+      options: FINISH_LOCK_OPTIONS,
+      onPick: pickFinish
+    }
   }
 }

@@ -4,7 +4,7 @@ import { setType, type SetType } from '@shared/setTypes'
 import { englishSetName } from '@shared/setNames'
 import { rarityRank } from '@shared/scan/rarity'
 import { HIDDEN_SORTS, matchesSetSearch, sortOptions, type SortOption } from '@/lib/filters'
-import { matchesLanguage } from '@/lib/languageFilter'
+import { setLanguageMatcher } from '@/lib/languageFilter'
 import type {
   ChecklistCard,
   ChecklistRarity,
@@ -105,8 +105,9 @@ export function filterSets(
     game?: GameId
   }
 ): SetSummary[] {
+  const inLanguage = setLanguageMatcher(o.language, sets)
   return sets.filter((s) => {
-    if (!matchesLanguage(o.language, s.language)) return false
+    if (!inLanguage(s)) return false
     if (!passesProgress(s, o.filter, o.mode)) return false
     if (o.types.length > 0 && !o.types.includes(setType(s, o.game))) return false
     return matchesSetSearch(s, o.q)
@@ -119,8 +120,9 @@ export function typeCounts(
   o: { filter: SetFilter; mode: CountMode; language: LanguageFilter; game?: GameId }
 ): Record<SetType, number> {
   const counts: Record<SetType, number> = { booster: 0, deck: 0, tin: 0, collection: 0, promo: 0 }
+  const inLanguage = setLanguageMatcher(o.language, sets)
   for (const s of sets) {
-    if (!matchesLanguage(o.language, s.language)) continue
+    if (!inLanguage(s)) continue
     if (!passesProgress(s, o.filter, o.mode)) continue
     counts[setType(s, o.game)]++
   }

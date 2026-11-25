@@ -10,7 +10,7 @@ import { SetArt } from '@/features/sets/SetArt'
 import { progressFor, readCountMode } from '@/features/sets/setsView'
 import { api, queryKeys } from '@/lib/api'
 import { pageInGame, useGame } from '@/lib/game'
-import { matchesLanguage, useLanguageFilter } from '@/lib/languageFilter'
+import { setLanguageMatcher, useLanguageFilter } from '@/lib/languageFilter'
 import { isMac, isWeb } from '@/lib/platform'
 
 /** How many recent sets the row offers. */
@@ -31,8 +31,8 @@ export function recentSets(
   const released = sets.filter(
     (s) => s.tcgDate !== null && s.tcgDate <= today && s.totalCards >= MIN_SET_SIZE
   )
-  const inLanguage = released.filter((s) =>
-    language === 'all' ? s.language === 'en' : matchesLanguage(language, s.language)
+  const inLanguage = released.filter(
+    setLanguageMatcher(language === 'all' ? 'en' : language, released)
   )
   const pool = inLanguage.length > 0 ? inLanguage : released
   const hasArt = (s: SetSummary): number =>

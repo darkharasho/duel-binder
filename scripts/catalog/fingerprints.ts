@@ -1,5 +1,4 @@
 import Database from 'better-sqlite3'
-import { decode } from 'jpeg-js'
 import type { GameId } from '../../src/shared/games'
 import { imageUrl, opBandaiArtUrl, opTcgArtUrl, scryfallArtUrl } from '../../src/shared/imageSources'
 import { scanProfile, type ScanProfile } from '../../src/shared/scan/profiles'
@@ -112,10 +111,9 @@ async function hashImage(
     const res = await fetchFn(url)
     if (res.ok) {
       const bytes = new Uint8Array(await res.arrayBuffer())
-      // Bandai's One Piece art is PNG; every other source is JPEG.
-      const img = url.endsWith('.png')
-        ? decodeImage(bytes)
-        : decode(bytes, { useTArray: true, formatAsRGBA: true })
+      // Read by its bytes, not its URL: Bandai's One Piece art is PNG, and YGOPRODeck serves some
+      // cards' art (Cyber Dragon, the Luminous Mech Dragon) as PNG under a .jpg name.
+      const img = decodeImage(bytes)
       if (!img) throw new Error('unreadable image')
       return artHash(fingerprintSource(upright(img), frameType, profile))
     }

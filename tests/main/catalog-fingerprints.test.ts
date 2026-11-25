@@ -140,6 +140,21 @@ describe('buildFingerprints', () => {
     expect(second.bytes).toEqual(first.bytes)
   })
 
+  it('hashes a PNG served under a .jpg URL (YGOPRODeck does this for some cards)', async () => {
+    const png = new PNG({ width: 32, height: 32 })
+    png.data.set(decode(IMAGES['1'], { useTArray: true, formatAsRGBA: true }).data)
+    const fetchFn = (async (input: string | URL | Request) => {
+      const id = /\/(\d+)\.jpg$/.exec(String(input))![1]
+      return id === '1'
+        ? new Response(new Uint8Array(PNG.sync.write(png)) as BodyInit)
+        : new Response('', { status: 404 })
+    }) as typeof fetch
+    const out = await buildFingerprints({ work, cachePath: join(dir, 'fp.sqlite'), fetch: fetchFn })
+    expect(out).toMatchObject({ count: 1, fetched: 1, failed: 2 })
+    const expected = artHash(decode(IMAGES['1'], { useTArray: true, formatAsRGBA: true }))
+    expect(decodeFingerprints(out.bytes).nearest(expected, 1)[0]).toEqual({ imageId: 1, distance: 0 })
+  })
+
   it('leaves out ids that are no longer in card_images', async () => {
     const cachePath = join(dir, 'fingerprints.sqlite')
     await buildFingerprints({ work, cachePath, fetch: imageFetch() })

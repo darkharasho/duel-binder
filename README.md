@@ -13,7 +13,7 @@ Duel Binder is unofficial Fan Content permitted under the Fan Content Policy. No
 Release builds are not code-signed by a paid certificate, so the OS warns on first launch:
 
 - **macOS:** the app is ad-hoc signed. Right-click the app and choose Open, or go to System Settings → Privacy & Security and click Open Anyway. Alternatively run `xattr -dr com.apple.quarantine "/Applications/Duel Binder.app"`. The mac build does not auto-update; it shows a notice with a link to the new release.
-- **Windows:** the installer is signed (Azure Artifact Signing, publisher Michael Stephens). Older unsigned releases may make SmartScreen say "Windows protected your PC"; click More info → Run anyway.
+- **Windows:** the installer is signed (Azure Artifact Signing). Older unsigned releases may make SmartScreen say "Windows protected your PC"; click More info → Run anyway.
 
 ## Run
 

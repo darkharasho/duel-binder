@@ -42,7 +42,7 @@ describe('wantsReference', () => {
     expect(wantsReference('Ultra Rare', null, 'Starter Deck: Joey')).toBe(false)
   })
 
-  it("takes every printing of Battles of Legend: Glorious Gallery, whose art is all chibi", () => {
+  it('takes every printing of Battles of Legend: Glorious Gallery, whose art is all chibi', () => {
     // BLGG-EN007's Starlight scan is a red link on Yugipedia; its Secret Rare, of the same art, isn't.
     expect(wantsReference('Secret Rare', null, 'Battles of Legend: Glorious Gallery')).toBe(true)
     expect(wantsReference('Secret Rare', null, 'Battles of Legend: Monster Mayhem')).toBe(false)
@@ -170,20 +170,26 @@ describe('token cards', () => {
   const FILE = 'Token-TKN5-EN-SR-1E-Nash.png'
 
   beforeEach(() => {
-    work.prepare(
-      `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at)
+    work
+      .prepare(
+        `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at)
        VALUES (?, 'Token (Nash)', 'Token', 'token', 'Token', '', 'now')`
-    ).run(TOKEN)
-    work.prepare('INSERT INTO card_images (image_id, card_id, sort_order) VALUES (?, ?, 0)').run(IMAGE, TOKEN)
-    work.prepare(
-      `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, language)
+      )
+      .run(TOKEN)
+    work
+      .prepare('INSERT INTO card_images (image_id, card_id, sort_order) VALUES (?, ?, 0)')
+      .run(IMAGE, TOKEN)
+    work
+      .prepare(
+        `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, language)
        VALUES (?, 'Beyond the Brave', 'TKN5-EN055', 'Super Rare', 'en')`
-    ).run(TOKEN)
+      )
+      .run(TOKEN)
   })
 
   const art = {
-    imageUrlsByPageId: vi.fn(async (ids: number[]) =>
-      new Map(ids.map((id) => [id, `https://ms.yugipedia.com/a/${FILE}`]))
+    imageUrlsByPageId: vi.fn(
+      async (ids: number[]) => new Map(ids.map((id) => [id, `https://ms.yugipedia.com/a/${FILE}`]))
     )
   }
 
@@ -509,6 +515,55 @@ describe('buildReferences', () => {
     expect(yugipedia.listPageImages).toHaveBeenCalledTimes(1)
 
     now = new Date('2026-01-05T00:00:00Z')
+    await run()
+    expect(yugipedia.listPageImages).toHaveBeenCalledTimes(2)
+  })
+
+  it("chooses an overframe's scan again when it fell back to the plain one, as MAMS-EN004's was", async () => {
+    // STOR-EN041 comes as a plain Ultra Rare too. Day one the gallery has only the plain Ultra
+    // Rare scan; the overframe's goes up later.
+    work.prepare(`DELETE FROM card_printings WHERE set_code = 'BLGG-EN007'`).run()
+    work
+      .prepare(
+        `UPDATE card_printings SET set_rarity = 'Ultra Rare (Overframe)', variant = NULL
+         WHERE set_code = 'STOR-EN041'`
+      )
+      .run()
+    work
+      .prepare(
+        `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_rarity_code, language)
+         VALUES (1, 'Storm of Ragnarok', 'STOR-EN041', 'Ultra Rare', '', 'en')`
+      )
+      .run()
+    const plain = 'ShiEn-STOR-EN-UR-1E.png'
+    const overframe = 'ShiEn-STOR-EN-UR-1E-EA.png'
+    const files = [plain]
+    const yugipedia = {
+      listPageImages: vi.fn(
+        async (titles: string[]) => new Map(titles.map((t) => [t, [...files]]))
+      ),
+      fetchImageUrls: fakeYugipedia().fetchImageUrls
+    }
+    const fetch = scans({ [plain]: png(SCAN), [overframe]: png(SCAN) })
+    let now = new Date('2026-01-01T00:00:00Z')
+    const run = (): ReturnType<typeof buildReferences> =>
+      buildReferences({ work, cache, yugipedia, fetch, userAgent: 'test', now: () => now })
+    const overframeKey = 'en|1|STOR-EN041|Ultra Rare (Overframe)'
+    const named = (r: Awaited<ReturnType<typeof run>>): string[] =>
+      r.entries.flatMap((e) => e.printings)
+    expect(named(await run())).not.toContain(overframeKey)
+
+    files.push(overframe)
+    now = new Date('2026-01-03T00:00:00Z')
+    expect(named(await run())).not.toContain(overframeKey)
+    expect(yugipedia.listPageImages).toHaveBeenCalledTimes(1)
+
+    now = new Date('2026-01-05T00:00:00Z')
+    expect(named(await run())).toContain(overframeKey)
+    expect(yugipedia.listPageImages).toHaveBeenCalledTimes(2)
+
+    // Once it has its own scan it is left alone.
+    now = new Date('2026-01-09T00:00:00Z')
     await run()
     expect(yugipedia.listPageImages).toHaveBeenCalledTimes(2)
   })

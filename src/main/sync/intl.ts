@@ -5,6 +5,7 @@ import { yugipediaImageKey } from '../images/cache'
 import { getMeta, setMeta } from '../db/meta'
 import type { YugipediaClient } from '../yugipedia/client'
 import { cardPasswords } from './cardPasswords'
+import { ensureListVariants } from './listVariants'
 import {
   listTitleParts,
   MANGA_STYLE,
@@ -279,6 +280,29 @@ function englishFill(db: Database.Database): {
     RETURNING id`)
   const written = new Set<string>()
   const seen = new Set<number>()
+  ensureListVariants(db)
+  const clearListed = db.prepare('DELETE FROM list_variants WHERE set_code = ?')
+  const saveListed = db.prepare(
+    'INSERT OR REPLACE INTO list_variants (card_id, set_code, set_rarity, variant) VALUES (?, ?, ?, ?)'
+  )
+  const labelHeld = db.prepare(
+    `UPDATE card_printings SET variant = ? WHERE game = 'ygo' AND language = 'en' AND card_id = ?
+       AND set_code = ? COLLATE NOCASE AND set_rarity = ? AND yugipedia = 0 AND variant IS NULL`
+  )
+  /**
+   * A rarity the list prints only in an overframe or alternate art, under a code that holds just
+   * this card: MAMS-EN001's Starlight Rare, which YGOPRODeck and TCGplayer name plainly. Its held
+   * printing takes the variant, and list_variants keeps it for the TCGplayer sync (listVariants).
+   */
+  const onlyInVariant = (p: IntlPrinting, code: string): boolean => {
+    const cards = codeCards.get(code)
+    return (
+      p.variant !== null &&
+      /^(Overframe|Alternate Art)$/.test(p.variant) &&
+      cards?.size === 1 &&
+      cards.has(p.cardId)
+    )
+  }
   /**
    * An overframe or alternate art the list prints beside a plain rarity YGOPRODeck holds for the
    * same card and code, when nothing holds an art variant of that rarity yet: "Ultra Rare
@@ -301,9 +325,16 @@ function englishFill(db: Database.Database): {
   return {
     save(setName, matched) {
       const printings = listPrintings(matched.filter((m) => !tokens.has(m.cardId)))
+      for (const code of new Set(printings.map((p) => p.setCode.toUpperCase())))
+        clearListed.run(code)
       for (const p of printings) {
         const code = p.setCode.toUpperCase()
         if (code === '' || code.includes('?')) continue
+        if (taken.has(code) && onlyInVariant(p, code)) {
+          saveListed.run(p.cardId, code, p.setRarity, p.variant)
+          labelHeld.run(p.variant, p.cardId, code, p.setRarity)
+          continue
+        }
         if (taken.has(code) && !besideHeld(p, code)) continue
         if ((holders.get(code) ?? p.cardId) !== p.cardId) continue
         const once = `${p.cardId}\u0000${code}\u0000${p.setRarity}`

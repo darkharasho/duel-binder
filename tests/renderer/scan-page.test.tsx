@@ -1527,6 +1527,29 @@ describe('Scan page', () => {
     expect(screen.queryByText('Check rarity')).not.toBeInTheDocument()
   })
 
+  it('a version changed on the list goes to the open scan window to show', async () => {
+    localStorage.setItem(SESSION_KEY, JSON.stringify([row()]))
+    await renderScan()
+    await openWindow()
+    const u = user()
+    await u.click(screen.getByRole('combobox', { name: 'Rarity for Dark Magician' }))
+    await u.click(
+      screen.getByRole('option', { name: 'LOB-EN005 Legend of Blue Eyes White Dragon - Rare' })
+    )
+    const corrected = bridge.sent.filter((m) => m.kind === 'corrected')
+    expect(corrected).toHaveLength(1)
+    expect(corrected[0]).toMatchObject({
+      kind: 'corrected',
+      key: row().key,
+      draft: { printingId: 102, rarity: 'Rare', flag: null },
+      scanned: 1
+    })
+    // Only the scan's own fields: none of the list row's.
+    const sent = corrected[0] as unknown as { draft: Record<string, unknown> }
+    expect(sent.draft).not.toHaveProperty('quantity')
+    expect(sent.draft).not.toHaveProperty('key')
+  })
+
   it("a picked printing keeps the card's other printings to choose from", async () => {
     localStorage.setItem('language.filter', 'all')
     const options = [

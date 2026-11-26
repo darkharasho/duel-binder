@@ -211,7 +211,28 @@ const HubContext = createContext<ScanHub | null>(null)
  */
 export function ScanHubProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
   const game = useActiveGame()
-  const session = useScanSession(game)
+  const listSession = useScanSession(game)
+  // A version changed on the list shows on stream at once, so viewers never keep the wrong one's
+  // name and price. Main drops it while no scan window is open.
+  const { setPrinting: setListPrinting, copiesOf: listCopiesOf } = listSession
+  const setPrinting = useCallback(
+    (key: string, printingId: number) => {
+      const row = setListPrinting(key, printingId)
+      if (row) {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the list's own fields stay home
+        const { key: _key, quantity, addedAt, error, ...draft } = row
+        window.api.scanWindow.send({
+          kind: 'corrected',
+          key,
+          draft,
+          scanned: listCopiesOf(draft)
+        })
+      }
+      return row
+    },
+    [setListPrinting, listCopiesOf]
+  )
+  const session = useMemo(() => ({ ...listSession, setPrinting }), [listSession, setPrinting])
   const gameRef = useRef<GameId>('ygo')
   const [settings, setSettingsState] = useState<ScanWindowSettings>(initialSettings)
   const settingsRef = useRef(settings)

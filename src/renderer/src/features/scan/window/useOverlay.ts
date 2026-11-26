@@ -1,11 +1,25 @@
 import { useCallback, useEffect, useState } from 'react'
-import { NO_OVERLAY, pushPull, tickOverlay, type OverlayState, type Pull } from './overlay'
+import {
+  NO_OVERLAY,
+  pushPull,
+  showPull,
+  tickOverlay,
+  type OverlayState,
+  type Pull
+} from './overlay'
 
 /** What the overlay shows now: pushes and expiry go through the rules in overlay.ts. */
-export function useOverlay(): { overlay: Pull | null; push: (p: Pull) => void; clear: () => void } {
+export function useOverlay(): {
+  overlay: Pull | null
+  push: (p: Pull) => void
+  /** Shows a corrected pull at once (showPull). */
+  show: (p: Pull) => void
+  clear: () => void
+} {
   const [state, setState] = useState<OverlayState>(NO_OVERLAY)
 
   const push = useCallback((p: Pull) => setState((s) => pushPull(s, p, Date.now())), [])
+  const show = useCallback((p: Pull) => setState((s) => showPull(s, p, Date.now())), [])
   const clear = useCallback(() => setState(NO_OVERLAY), [])
 
   useEffect(() => {
@@ -18,5 +32,5 @@ export function useOverlay(): { overlay: Pull | null; push: (p: Pull) => void; c
     return () => clearTimeout(timer)
   }, [state])
 
-  return { overlay: state.showing, push, clear }
+  return { overlay: state.showing, push, show, clear }
 }

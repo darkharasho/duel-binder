@@ -5,6 +5,7 @@ import type { ApiCard } from '../../src/main/ygo/mapCard'
 import { migrateServer } from '../../workers/portal/src/migrate'
 import type { ImageBucket } from '../../workers/portal/src/images'
 import type { TrainingBucket } from '../../workers/portal/src/training'
+import type { TraceBucket } from '../../workers/portal/src/traces'
 import type { PrintingArtResolver } from '../../src/main/yugipedia/artResolver'
 import type { PriceQueue } from '../../workers/portal/src/prices'
 import type { EmailMessage, EmailSender } from '../../workers/portal/src/emailSend'
@@ -40,7 +41,8 @@ export function addUser(db: Database.Database, discordId: string, username: stri
 
 /** In-memory stand-in for the R2 bucket; `store` is exposed so tests can look inside. */
 export function memoryBucket(): ImageBucket &
-  TrainingBucket & { store: Map<string, { bytes: ArrayBuffer; contentType: string; etag: string }> } {
+  TrainingBucket &
+  TraceBucket & { store: Map<string, { bytes: ArrayBuffer; contentType: string; etag: string }> } {
   const store = new Map<string, { bytes: ArrayBuffer; contentType: string; etag: string }>()
   let writes = 0
   return {
@@ -55,6 +57,18 @@ export function memoryBucket(): ImageBucket &
     },
     async delete(keys) {
       for (const key of typeof keys === 'string' ? [keys] : keys) store.delete(key)
+    },
+    // Two keys a page, so callers' paging is exercised.
+    async list({ prefix, cursor }) {
+      const keys = [...store.keys()].filter((k) => k.startsWith(prefix)).sort()
+      const from = cursor ? Number(cursor) : 0
+      const page = keys.slice(from, from + 2)
+      const truncated = from + 2 < keys.length
+      return {
+        objects: page.map((key) => ({ key, size: store.get(key)!.bytes.byteLength })),
+        truncated,
+        ...(truncated && { cursor: String(from + 2) })
+      }
     }
   }
 }

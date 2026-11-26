@@ -1,4 +1,5 @@
 import type { SqlDb } from '../../../src/main/db/sql'
+import { deleteTraceFiles } from './traces'
 import type { AppDeps } from './app'
 import { revokeAppleToken } from './apple'
 import { clearSessionCookie, currentUser, fromPublicOrigin } from './auth'
@@ -21,8 +22,8 @@ const json = (body: unknown, status: number): Response =>
  * - deleting the `users` row cascades to sessions, desktop_codes, friendships,
  *   friend_request_log, friend_blocks, printing_contributions, price_request_log, wishlist_entries,
  *   binders, binder_edits, scan_sessions, favourites, graded_copies, decks, sign_ins, apple_tokens, account_change_log, merge_tickets, the user_reports about them
- *   and training_photos (foreign keys are always on in a Durable Object); deleteAccountRoute
- *   deletes the training photos' R2 objects.
+ *   training_photos and scan_traces (foreign keys are always on in a Durable Object);
+ *   deleteAccountRoute deletes the training photos' and traces' R2 objects.
  * The waitlist entries and invites under the account's emails, and the invite it signed up with,
  * have no foreign key, so they're deleted here too. Reports they sent stay, without their id.
  * One statement per table: Durable Object SQLite rejects large compound queries. `account_merges`
@@ -84,6 +85,11 @@ export async function deleteAccountRoute(req: Request, deps: AppDeps): Promise<R
   const photoKeys = [userId, ...held].flatMap((id) =>
     (photoKey.all(id) as { r2_key: string }[]).map((r) => r.r2_key)
   )
+  // Donated scan traces likewise: their rows cascade, their files in R2 go after.
+  const traceId = deps.db.prepare('SELECT id FROM scan_traces WHERE user_id = ?')
+  const traceIds = [userId, ...held].flatMap((id) =>
+    (traceId.all(id) as { id: number }[]).map((r) => r.id)
+  )
   deps.db.transaction(() => {
     const dropMerge = deps.db.prepare('DELETE FROM account_merges WHERE closed_id = ?')
     for (const id of held) {
@@ -104,6 +110,12 @@ export async function deleteAccountRoute(req: Request, deps: AppDeps): Promise<R
     if (failed > 0)
       console.warn(
         `${failed} training photo(s) not deleted for deleted account(s) ${[userId, ...held].join(', ')}`
+      )
+  }
+  if (deps.traces) {
+    for (const id of traceIds)
+      await deleteTraceFiles(deps.traces, id).catch(() =>
+        console.warn(`Scan trace ${id}'s files not deleted for a deleted account`)
       )
   }
   if (apple) {

@@ -21,6 +21,7 @@ import { appBundlesRoute } from './appBundles'
 import { rulesPackRoute } from './rulesPack'
 import { catalogSnapshotRoute } from './catalogSnapshot'
 import { thumbsRoute } from './thumbs'
+import { traceUploadRoute } from './traces'
 import { alarmQueue, priceClientFor, runPriceAlarm, type PriceQueue } from './prices'
 import { sweepClientFor } from './sweep'
 import { gradedClientFor } from './gradedPrices'
@@ -117,6 +118,7 @@ export class Store extends DurableObject<WorkerEnv> {
       assets: this.env.ASSETS,
       images: this.env.IMAGES,
       training: this.env.IMAGES,
+      traces: this.env.IMAGES,
       imageQuota: this.imageQuota,
       anonImageQuota: this.anonImageQuota,
       anonMisses: this.anonMisses,
@@ -174,6 +176,9 @@ export default {
       )
     const store = (r: Request): Promise<Response> =>
       env.STORE.get(env.STORE.idFromName('main')).fetch(r)
+    // A donated trace's files go straight to R2, checked by their upload token alone.
+    const traceFile = await traceUploadRoute(req, env.IMAGES, env.ADMIN_TOKEN, Date.now())
+    if (traceFile) return traceFile
     const snapshot = await catalogSnapshotRoute(req, env.IMAGES, env.ADMIN_TOKEN)
     if (snapshot) return snapshot
     const bundles = await appBundlesRoute(req, env.IMAGES, env.ADMIN_TOKEN, edgeCache())

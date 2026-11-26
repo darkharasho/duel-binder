@@ -14,7 +14,7 @@ import type {
 import { MAX_DEX_ROWS, type DexRow } from '@shared/dex/parse'
 import { checkPlaceholderRequest } from '@shared/placeholders'
 import type { GradedCopy } from '@shared/graded'
-import type { UserReportInput } from '@shared/friends'
+import { FRIENDS_SIGNED_OUT, type UserReportInput } from '@shared/friends'
 import type { ScanSession } from '@shared/scanSessions'
 import {
   friendBinder,
@@ -61,11 +61,12 @@ import { savePlaceholders } from '../placeholders'
 import { scanRefs } from '../repo/scanRefs'
 import { recordSnapshot } from '../repo/stats'
 import { cardLanguage } from '@shared/scan/cardLanguage'
-import type { AccountService } from '../cloud/account'
+import { SERVER_SIGNED_OUT, type AccountService } from '../cloud/account'
 import type { MainErrorReports } from '../errorReports'
 import type { CatalogService } from '../catalog/service'
 import { saveDebugFrame } from '../scan/debugFrames'
 import { describeArt, type ScanTraceWriter } from '../scan/scanTrace'
+import { createTraceSender } from '../scan/traceSend'
 
 export interface WindowDeps {
   minimize(): void
@@ -188,6 +189,19 @@ export function createHandlers({
   const mustBeAdmin = (): void => {
     if (!account.status().user?.admin) throw new Error('Not found')
   }
+  // Admins and trace testers trace their scans; only trace testers' (and admins') may be sent.
+  const mustTrace = (): void => {
+    const user = account.status().user
+    if (!user?.admin && !user?.traceTester) throw new Error('Not found')
+  }
+  const traceSender = createTraceSender({
+    root: scanTrace.root,
+    latest: () => scanTrace.latest(),
+    appVersion: app.version(),
+    asAccount: (call) => account.traces(call),
+    isSignedOut: (e) =>
+      e instanceof Error && (e.message === FRIENDS_SIGNED_OUT || e.message === SERVER_SIGNED_OUT)
+  })
   const local = (serverIds: number[]): LocalPrintings => localPrintings(db, serverIds)
   return {
     ...createDataHandlers({
@@ -312,7 +326,7 @@ export function createHandlers({
       await saveDebugFrame(jpeg, note)
     },
     'scan:trace': async (session: unknown, line: unknown, jpeg: unknown) => {
-      mustBeAdmin()
+      mustTrace()
       if (typeof session !== 'string' || typeof line !== 'string' || line.length > 8192)
         throw new Error('Bad trace line')
       if (jpeg !== undefined && !(jpeg instanceof ArrayBuffer)) throw new Error('Bad trace frame')
@@ -344,6 +358,24 @@ export function createHandlers({
     'scan:traceDir': async () => {
       mustBeAdmin()
       return scanTrace.root
+    },
+    'scan:sendTrace': async (note: unknown) => {
+      mustTrace()
+      if (typeof note !== 'string') throw new Error('Bad trace note')
+      return traceSender.send(note)
+    },
+    'scan:traceSendState': async () => {
+      mustTrace()
+      return traceSender.state()
+    },
+    'scan:sentTraces': async () => {
+      mustTrace()
+      return account.traces((c) => c.traces())
+    },
+    'scan:deleteTrace': async (id: unknown) => {
+      mustTrace()
+      if (typeof id !== 'number' || !Number.isSafeInteger(id)) throw new Error('Bad trace id')
+      await account.traces((c) => c.traceDelete(id))
     },
     'scan:openTraceDir': async () => {
       mustBeAdmin()
@@ -434,7 +466,7 @@ export function createHandlers({
     },
     'account:openAdmin': async (tab?: unknown) =>
       app.openAdmin(adminTabUrl(await account.adminLink(), tab)),
-    ...adminHandlers(account, adminRuns, ripCapture),
+    ...adminHandlers(account, adminRuns, ripCapture, scanTrace.root),
     'account:signIns': async () => account.portal('account:signIns', []),
     'account:setUsername': async (name: string) => {
       const me = await account.portal<Me>('account:setUsername', [name])

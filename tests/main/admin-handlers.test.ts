@@ -20,10 +20,13 @@ function make(isAdmin = true) {
   }
   const status = () => ({ user: isAdmin ? { admin: true } : {} })
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const h = adminHandlers({ admin: admin as any, status: status as any }, runs, capture) as Record<
-    string,
-    (...a: unknown[]) => Promise<unknown>
-  >
+  const h = adminHandlers(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    { admin: admin as any, status: status as any, traces: vi.fn() },
+    runs,
+    capture,
+    '/tmp/scan-trace'
+  ) as Record<string, (...a: unknown[]) => Promise<unknown>>
   return { h, admin, runs, capture }
 }
 

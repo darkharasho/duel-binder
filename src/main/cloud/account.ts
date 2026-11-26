@@ -102,6 +102,8 @@ export interface AccountService {
   adminLink(): Promise<string>
   /** An /admin/* JSON route as the signed-in admin (`CloudClient.admin`); rejects like `portal`. */
   admin<T>(path: `/admin/${string}`, body?: unknown): Promise<T>
+  /** A scan trace call as the signed-in account; rejects like `portal`. */
+  traces<T>(call: (client: CloudClient) => Promise<T>): Promise<T>
   /**
    * Stores the signed-in account's `me` as the portal just returned it (a new username, a dismissed
    * hint) and emits the new status. A `me` of another account, or signed out, changes nothing.
@@ -575,6 +577,9 @@ export function createAccountService(deps: AccountDeps): AccountService {
 
     adminLink(): Promise<string> {
       return asAccount((client) => client.adminLink())
+    },
+    traces<T>(call: (client: CloudClient) => Promise<T>): Promise<T> {
+      return asAccount(call)
     },
     admin<T>(path: `/admin/${string}`, body?: unknown): Promise<T> {
       return asAccount((client) => client.admin<T>(path, body))

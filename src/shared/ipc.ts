@@ -90,6 +90,7 @@ import type { DeckDetail, DeckDraft, DeckList, DeckVerdictMark } from './decks/t
 import type { DeckLineRef } from './decks/ygo/lists'
 import type { DeckResolution } from '../main/repo/decks'
 import type { TermNote, TermStatus } from './search/terms'
+import type { AdminTrace, AdminTraceTester, TraceRow, TraceSendState } from './traces'
 
 /** The API exposed to the renderer as `window.api`. */
 export interface Api {
@@ -292,6 +293,17 @@ export interface Api {
     /** Admin: opens the scan trace folder. */
     openTraceDir(): Promise<void>
     /**
+     * Trace tester or admin: starts sending the newest scan trace session to the owner, in the
+     * background, with what went wrong; a send already going is left to finish.
+     */
+    sendTrace(note: string): Promise<TraceSendState>
+    /** How the last send went, or is going. */
+    traceSendState(): Promise<TraceSendState>
+    /** This account's sent traces, newest first. */
+    sentTraces(): Promise<TraceRow[]>
+    /** Deletes one of this account's sent traces from the portal, files and all. */
+    deleteTrace(id: number): Promise<void>
+    /**
      * The card text on each band as model reads it, unjudged: a Pokémon card's language is told
      * from one read per model (pokemonLanguageOfReads), never from the reads run together.
      */
@@ -406,6 +418,14 @@ export interface Api {
     undoMerge(closedId: number): Promise<AdminSkippedSignIn[]>
     supporters(): Promise<AdminSupporters>
     testers(): Promise<AdminTester[]>
+    /** Donated scan traces, newest first, and the accounts on the trace tester list. */
+    traces(): Promise<{ traces: AdminTrace[]; testers: AdminTraceTester[] }>
+    addTraceTester(username: string): Promise<void>
+    removeTraceTester(userId: number): Promise<void>
+    /** Deletes a donated trace from the portal, files and all. */
+    removeTrace(id: number): Promise<void>
+    /** Downloads a donated trace beside this computer's own traces; the folder it went to. */
+    pullTrace(id: number): Promise<string>
     addTester(game: GameId, by: AdminTesterBy, name: string): Promise<void>
     removeTester(id: number): Promise<void>
     admins(): Promise<AdminList>
@@ -640,6 +660,10 @@ export const INVOKE_CHANNELS = [
   'scan:trace',
   'scan:traceDir',
   'scan:openTraceDir',
+  'scan:sendTrace',
+  'scan:traceSendState',
+  'scan:sentTraces',
+  'scan:deleteTrace',
   'scan:readText',
   'scanWindow:open',
   'scanWindow:isOpen',
@@ -713,6 +737,11 @@ export const INVOKE_CHANNELS = [
   'admin:testers',
   'admin:addTester',
   'admin:removeTester',
+  'admin:traces',
+  'admin:addTraceTester',
+  'admin:removeTraceTester',
+  'admin:removeTrace',
+  'admin:pullTrace',
   'admin:admins',
   'admin:addAdmin',
   'admin:removeAdmin',

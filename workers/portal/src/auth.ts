@@ -984,8 +984,11 @@ export async function me(req: Request, deps: AppDeps): Promise<Response> {
     200,
     [],
     { 'content-type': 'application/json' },
-    JSON.stringify(
-      isAdminUser(deps, user.id) ? { ...loadMe(deps, user.id), admin: true } : loadMe(deps, user.id)
-    )
+    JSON.stringify({
+      ...loadMe(deps, user.id),
+      ...(isAdminUser(deps, user.id) && { admin: true }),
+      ...(deps.db.prepare('SELECT 1 FROM trace_testers WHERE user_id = ?').get(user.id) !==
+        undefined && { traceTester: true })
+    })
   )
 }

@@ -75,6 +75,11 @@ function adminApi(): NonNullable<Api['admin']> {
     ]),
     addTester: vi.fn(async () => {}),
     removeTester: vi.fn(async () => {}),
+    traces: vi.fn(async () => ({ traces: [], testers: [] })),
+    addTraceTester: vi.fn(async () => {}),
+    removeTraceTester: vi.fn(async () => {}),
+    removeTrace: vi.fn(async () => {}),
+    pullTrace: vi.fn(async () => '/home/me/.config/duel-binder/scan-trace/x'),
     admins: vi.fn(async () => ({ admins: [], you: 1 })),
     addAdmin: vi.fn(async () => {}),
     removeAdmin: vi.fn(async () => {}),
@@ -262,6 +267,47 @@ describe('desktop admin pages', () => {
     const dialog = await screen.findByRole('dialog')
     await userEvent.click(within(dialog).getByRole('button', { name: 'Remove' }))
     await waitFor(() => expect(admin.removeTester).toHaveBeenCalledExactlyOnceWith(4))
+  })
+
+  it('lists donated traces, downloads one and manages trace testers', async () => {
+    const admin = adminApi()
+    admin.traces = vi.fn(async () => ({
+      traces: [
+        {
+          id: 12,
+          userId: 2,
+          username: 'kaiba',
+          game: 'pkm' as const,
+          session: '2026-11-25T10-00-00-000Z',
+          note: 'Missed a reverse holo',
+          appVersion: '0.122.0',
+          files: 81,
+          bytes: 30e6,
+          createdAt: '2026-11-25T10:30:00.000Z',
+          doneAt: '2026-11-25T10:31:00.000Z'
+        }
+      ],
+      testers: [{ userId: 2, username: 'kaiba', displayName: null, addedAt: '2026-11-25' }]
+    }))
+    const api = createMockApi({
+      window: { platform: 'linux' },
+      account: { status: vi.fn(async () => status(true)) }
+    })
+    api.admin = admin
+    renderWithProviders(<App />, { api })
+    const group = await screen.findByRole('group', { name: 'Admin' })
+    await userEvent.click(within(group).getByRole('button', { name: 'Admin' }))
+    await userEvent.click(await screen.findByRole('radio', { name: 'Traces' }))
+    expect(await screen.findByText('Missed a reverse holo')).toBeInTheDocument()
+    expect(screen.getByText('81 files · 30.0 MB')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Download' }))
+    await waitFor(() => expect(admin.pullTrace).toHaveBeenCalledExactlyOnceWith(12))
+    await userEvent.type(
+      screen.getByRole('textbox', { name: "Trace tester's app username" }),
+      'yugi'
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Add trace tester' }))
+    await waitFor(() => expect(admin.addTraceTester).toHaveBeenCalledExactlyOnceWith('yugi'))
   })
 
   it('works through phone beta requests', async () => {

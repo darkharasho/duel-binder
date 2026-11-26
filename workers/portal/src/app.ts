@@ -46,6 +46,7 @@ import { stripeWebhookRoute } from './stripe'
 import { supporterThanksPage } from './supporterThanks'
 import { adminSupportersRoute, supporterNamesRoute } from './supporters'
 import { adminTrainingRoute, trainingRoute, type TrainingBucket } from './training'
+import { adminTracesRoute, tracesRoute, type TraceBucket } from './traces'
 
 /** Vars and secrets the request handlers read. */
 export interface Env extends AppleSignInEnv, TestFlightEnv {
@@ -88,6 +89,8 @@ export interface AppDeps {
   images: ImageBucket
   /** Where testers' training photos go (the IMAGES bucket, under training/); absent means uploads answer 503. */
   training?: TrainingBucket
+  /** Where donated scan traces go (the IMAGES bucket, under traces/); absent means they answer 503. */
+  traces?: TraceBucket
   /** Caps upstream image fetches per user; absent means unlimited. */
   imageQuota?: ImageQuota
   /** Caps signed-out upstream card-image fetches per client address; absent means unlimited. */
@@ -157,6 +160,9 @@ async function route(req: Request, deps: AppDeps): Promise<Response> {
     return supporterThanksPage(req, deps.env.SITE_URL, deps.env.PUBLIC_URL)
   if (req.method === 'GET' && url.pathname === '/api/supporters/names')
     return supporterNamesRoute(deps)
+  if (url.pathname === '/api/traces') return tracesRoute(req, deps, '')
+  if (url.pathname.startsWith('/api/traces/'))
+    return tracesRoute(req, deps, url.pathname.slice('/api/traces/'.length))
   if (url.pathname.startsWith('/api/training/'))
     return trainingRoute(req, deps, url.pathname.slice('/api/training/'.length))
   if (url.pathname.startsWith('/api/rpc/')) {
@@ -203,6 +209,13 @@ async function route(req: Request, deps: AppDeps): Promise<Response> {
   if (url.pathname === '/admin/training' || url.pathname.startsWith('/admin/training/'))
     return adminTrainingRoute(req, deps)
   if (url.pathname === '/admin/supporters') return adminSupportersRoute(req, deps)
+  if (
+    url.pathname === '/admin/traces' ||
+    url.pathname.startsWith('/admin/traces/') ||
+    url.pathname === '/admin/trace-testers' ||
+    url.pathname === '/admin/trace-testers/remove'
+  )
+    return adminTracesRoute(req, deps)
   if (url.pathname.startsWith('/admin/')) return adminRoute(req, deps)
   return json({ error: 'Not found' }, 404)
 }

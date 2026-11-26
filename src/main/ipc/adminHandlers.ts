@@ -23,6 +23,8 @@ import type { AdminRuns } from '../adminRuns'
 import type { AccountService } from '../cloud/account'
 import { CloudOfflineError } from '../cloud/client'
 import type { RipCapture } from '../ripCapture'
+import { pullTrace } from '../scan/tracePull'
+import type { AdminTrace, AdminTraceTester } from '@shared/traces'
 
 const isId = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v > 0
 
@@ -95,9 +97,11 @@ async function termWrite(call: () => Promise<unknown>): Promise<void> {
  * so the renderer can only reach these routes with these shapes.
  */
 export function adminHandlers(
-  account: Pick<AccountService, 'admin' | 'status'>,
+  account: Pick<AccountService, 'admin' | 'status' | 'traces'>,
   runs: AdminRuns,
-  capture: RipCapture
+  capture: RipCapture,
+  /** Where pulled traces go: beside the owner's own, so trace-summary reads them the same. */
+  traceRoot: string
 ): Record<
   Extract<InvokeChannel, `admin:${string}`>,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- as Handlers types them
@@ -132,6 +136,31 @@ export function adminHandlers(
     },
     'admin:removeTester': async (testerId: unknown) => {
       await account.admin('/admin/testers/remove', { id: id(testerId) })
+    },
+    'admin:traces': async () => {
+      const [traces, testers] = await Promise.all([
+        account.admin<{ traces: AdminTrace[] }>('/admin/traces'),
+        account.admin<{ testers: AdminTraceTester[] }>('/admin/trace-testers')
+      ])
+      return { traces: traces.traces, testers: testers.testers }
+    },
+    'admin:addTraceTester': async (username: unknown) => {
+      await account.admin('/admin/trace-testers', { username: name(username) })
+    },
+    'admin:removeTraceTester': async (userId: unknown) => {
+      await account.admin('/admin/trace-testers/remove', { userId: id(userId) })
+    },
+    'admin:removeTrace': async (traceId: unknown) => {
+      await account.admin('/admin/traces/remove', { id: id(traceId) })
+    },
+    'admin:pullTrace': async (traceId: unknown) => {
+      const wanted = id(traceId)
+      const { traces } = await account.admin<{ traces: AdminTrace[] }>('/admin/traces')
+      const trace = traces.find((t) => t.id === wanted)
+      if (!trace) throw new Error('No such trace')
+      return pullTrace(trace, traceRoot, (path) =>
+        account.traces((c) => c.adminBytes(path as `/admin/${string}`))
+      )
     },
     'admin:admins': () => account.admin<AdminList>('/admin/admins'),
     'admin:addAdmin': async (username: unknown) => {

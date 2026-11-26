@@ -40,6 +40,19 @@ describe('Store Durable Object SQLite', () => {
     expect(names).toContain('desktop-12')
     expect(names).toContain('server-1')
     expect(names).toContain('server-2')
+    expect(names).toContain('server-55')
+  })
+
+  it('scan trace ids count up (AUTOINCREMENT) on DO SQLite', async () => {
+    const ids = await inStore('trace-ids', (db) => {
+      const add = db.prepare(
+        "INSERT INTO scan_traces (game, session, created_at) VALUES ('ygo', 's', 'now')"
+      )
+      const first = Number(add.run().lastInsertRowid)
+      db.prepare('DELETE FROM scan_traces WHERE id = ?').run(first)
+      return [first, Number(add.run().lastInsertRowid)]
+    })
+    expect(ids[1]).toBeGreaterThan(ids[0]!)
   })
 
   it('FTS5 works', async () => {

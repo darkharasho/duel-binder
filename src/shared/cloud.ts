@@ -51,6 +51,8 @@ export interface Me {
   avatarUrl: string | null
   /** Set only by `GET /api/me`, and only for the ADMIN_DISCORD_ID account. */
   admin?: true
+  /** On the trace tester list: scans are traced, and the traces may be sent to the owner. */
+  traceTester?: true
   /** The games this account may use. Old servers leave it out, which means `['ygo']`. */
   games?: GameId[]
   /** False while the username is one the server picked (from Discord or generated). Old servers leave it out. */

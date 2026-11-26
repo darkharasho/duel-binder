@@ -37,6 +37,7 @@ import { MultiSearchPicker, SearchPicker } from './SearchPicker'
 import { ScanFinishPicker } from './FinishPicker'
 import { AssumeSlabToggle } from './AssumeSlabToggle'
 import { AddByHand } from './AddByHand'
+import { SendTrace } from './SendTrace'
 import { PhotoButton } from './PhotoButton'
 import { useScanPickers } from './pickerOptions'
 import { useGame } from '@/lib/game'
@@ -279,6 +280,7 @@ export function ScanPage({
           </>
         )}
         <AddByHand />
+        <SendTrace />
         <span className="ml-auto flex items-center gap-2">
           {newScansAs}
           <ScanFinishPicker />

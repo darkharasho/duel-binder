@@ -1,6 +1,5 @@
 import { isGameId } from '../../../src/shared/games'
 import {
-  MAX_TRACE_FILES,
   MAX_TRACE_FRAME_BYTES,
   MAX_TRACE_LOG_BYTES,
   MAX_TRACE_NOTE,
@@ -196,7 +195,6 @@ export async function traceUploadRoute(
   const name = m[2]!
   if (!TRACE_FILE_RE.test(name)) return json({ error: 'bad-name' }, 400)
   const frame = name.endsWith('.jpg')
-  if (frame && Number(name.slice(0, -4)) >= MAX_TRACE_FILES) return json({ error: 'bad-name' }, 400)
   const cap = frame ? MAX_TRACE_FRAME_BYTES : MAX_TRACE_LOG_BYTES
   if (Number(req.headers.get('content-length') ?? 0) > cap) return json({ error: 'too-big' }, 413)
   const body = await readCapped(req, cap)

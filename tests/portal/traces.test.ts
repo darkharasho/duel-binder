@@ -97,7 +97,7 @@ describe('donated scan traces', () => {
       new Request(`${BASE}/api/traces/${id}/files/${name}`, {
         method: 'PUT',
         headers: { 'x-trace-token': token },
-        body
+        body: body as Uint8Array<ArrayBuffer>
       }),
       bucket,
       'admin',

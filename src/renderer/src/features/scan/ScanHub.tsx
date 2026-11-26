@@ -23,6 +23,8 @@ import { useScanSession } from './session'
 import type { SlabRead } from '@shared/scan/slabLabel'
 import { sessionSummary } from './window/summary'
 import { rememberedCamera } from './useCamera'
+import { setScanTraceOn } from './scanTrace'
+import { useAccountStatus } from '@/lib/account'
 
 /**
  * Yu-Gi-Oh!'s keeps the key it always had, so an existing pick survives. Each holds the game's
@@ -216,6 +218,11 @@ const HubContext = createContext<ScanHub | null>(null)
  */
 export function ScanHubProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
   const game = useActiveGame()
+  // A trace tester's scans are always traced, so a trace is there to send when something goes wrong.
+  const traceTester = !!useAccountStatus()?.user?.traceTester
+  useEffect(() => {
+    if (traceTester) setScanTraceOn(true)
+  }, [traceTester])
   const listSession = useScanSession(game)
   // A version changed on the list shows on stream at once, so viewers never keep the wrong one's
   // name and price. Main drops it while no scan window is open.

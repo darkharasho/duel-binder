@@ -90,6 +90,7 @@ import type { DeckDetail, DeckDraft, DeckList, DeckVerdictMark } from './decks/t
 import type { DeckLineRef } from './decks/ygo/lists'
 import type { DeckResolution } from '../main/repo/decks'
 import type { TermNote, TermStatus } from './search/terms'
+import type { TraceRow, TraceSendState } from './traces'
 
 /** The API exposed to the renderer as `window.api`. */
 export interface Api {
@@ -291,6 +292,17 @@ export interface Api {
     traceDir(): Promise<string>
     /** Admin: opens the scan trace folder. */
     openTraceDir(): Promise<void>
+    /**
+     * Trace tester or admin: starts sending the newest scan trace session to the owner, in the
+     * background, with what went wrong; a send already going is left to finish.
+     */
+    sendTrace(note: string): Promise<TraceSendState>
+    /** How the last send went, or is going. */
+    traceSendState(): Promise<TraceSendState>
+    /** This account's sent traces, newest first. */
+    sentTraces(): Promise<TraceRow[]>
+    /** Deletes one of this account's sent traces from the portal, files and all. */
+    deleteTrace(id: number): Promise<void>
     /**
      * The card text on each band as model reads it, unjudged: a Pokémon card's language is told
      * from one read per model (pokemonLanguageOfReads), never from the reads run together.
@@ -640,6 +652,10 @@ export const INVOKE_CHANNELS = [
   'scan:trace',
   'scan:traceDir',
   'scan:openTraceDir',
+  'scan:sendTrace',
+  'scan:traceSendState',
+  'scan:sentTraces',
+  'scan:deleteTrace',
   'scan:readText',
   'scanWindow:open',
   'scanWindow:isOpen',

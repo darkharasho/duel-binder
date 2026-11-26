@@ -13,8 +13,6 @@ export const TRACE_DAILY_CAP = 3
 export const MAX_TRACE_LOG_BYTES = 32 * MB
 /** One kept frame, at most (main keeps none over 4 MB). */
 export const MAX_TRACE_FRAME_BYTES = 8 * MB
-/** Files one trace may hold: its log and its frames. */
-export const MAX_TRACE_FILES = 1001
 /** A trace's note, at most. */
 export const MAX_TRACE_NOTE = 1000
 /** How long a trace's upload token lasts. */
@@ -22,7 +20,7 @@ export const TRACE_UPLOAD_MS = 6 * 60 * 60 * 1000
 
 /** A trace session: its ISO start time with `:` and `.` made `-` (main's TRACE_SESSION). */
 export const TRACE_SESSION_RE = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z$/
-/** The files a trace holds: `trace.jsonl` and its frames, `NNNN.jpg` and up. */
+/** The files a trace holds: `trace.jsonl` and its frames, `NNNN.jpg` on (a long stream's run past 9999). */
 export const TRACE_FILE_RE = /^(trace\.jsonl|\d{4,6}\.jpg)$/
 
 /** The R2 key of a donated trace's file. */

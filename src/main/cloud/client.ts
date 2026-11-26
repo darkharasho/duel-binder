@@ -55,6 +55,7 @@ import {
   type TrainingLabel,
   type TrainingSend
 } from '../../shared/training'
+import type { TraceRow, TraceStart, TraceStarted } from '../../shared/traces'
 
 /** The portal answered 401: the desktop token is unknown, expired or revoked. */
 export class CloudAuthError extends Error {
@@ -169,6 +170,16 @@ export interface CloudClient {
   trainingDelete(clientId: string): Promise<TrainingSend>
   /** This account's training photo counts for `game`. Never throws. */
   trainingSummary(game: GameId): Promise<TrainingSend>
+  /** This trace tester's sent scan traces, newest first. */
+  traces(): Promise<TraceRow[]>
+  /** Starts sending a scan trace; its id and the token its files go up with. 429 rejects 'daily-cap'. */
+  traceStart(start: TraceStart): Promise<TraceStarted>
+  /** Puts one of a started trace's files. */
+  traceFile(id: number, name: string, token: string, bytes: ArrayBuffer): Promise<void>
+  /** Every file of the trace is in. */
+  traceDone(id: number): Promise<{ id: number; files: number; bytes: number }>
+  /** Deletes one of this account's sent traces, files and all. */
+  traceDelete(id: number): Promise<void>
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000
@@ -179,6 +190,8 @@ const TRAINING_UPLOAD_TIMEOUT_MS = 60_000
 /** A whole snapshot download (Magic's is tens of MB); a cut-off one resumes next time. */
 const SNAPSHOT_TIMEOUT_MS = 30 * 60_000
 const TRAINING_TIMEOUT_MS = 15_000
+/** A trace's frame is up to 4 MB and its log up to 32 MB. */
+const TRACE_FILE_TIMEOUT_MS = 120_000
 
 /** The portal API as the desktop calls it, with its desktop token as a Bearer token. */
 export function createCloudClient(opts: {
@@ -279,7 +292,43 @@ export function createCloudClient(opts: {
     }
   }
 
+  async function traceFile(
+    id: number,
+    name: string,
+    token: string,
+    bytes: ArrayBuffer
+  ): Promise<void> {
+    const signals = [
+      AbortSignal.timeout(TRACE_FILE_TIMEOUT_MS),
+      ...(opts.signal ? [opts.signal] : [])
+    ]
+    let res: Response
+    try {
+      res = await doFetch(`${base}/api/traces/${id}/files/${encodeURIComponent(name)}`, {
+        method: 'PUT',
+        // The trace's own token, never the account's: the Worker checks it without the database.
+        headers: {
+          'x-trace-token': token,
+          'content-type': name.endsWith('.jpg') ? 'image/jpeg' : 'application/x-ndjson'
+        },
+        body: bytes,
+        redirect: 'error',
+        signal: AbortSignal.any(signals)
+      })
+    } catch (e) {
+      throw new CloudOfflineError((e as Error | undefined)?.message || undefined)
+    }
+    if (res.status >= 500) throw new CloudOfflineError(`The portal failed (${res.status})`)
+    if (res.status >= 400) throw new Error(`Trace file refused (${res.status})`)
+  }
+
   return {
+    traces: async () => (await call<{ traces: TraceRow[] }>('/api/traces', 'GET')).traces,
+    traceStart: (start) => call<TraceStarted>('/api/traces', 'POST', start),
+    traceFile,
+    traceDone: (id) =>
+      call<{ id: number; files: number; bytes: number }>(`/api/traces/${id}/done`, 'POST'),
+    traceDelete: (id) => call<void>(`/api/traces/${id}`, 'DELETE', undefined, false),
     trainingUpload: (clientId, label, jpeg) =>
       training(
         `photos/${encodeURIComponent(clientId)}?${labelParams(label)}`,

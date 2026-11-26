@@ -28,16 +28,35 @@ describe('scan trace writer', () => {
     expect(existsSync(join(root, S1, '0000.jpg'))).toBe(true)
   })
 
-  it('stops keeping frames past maxFrames', async () => {
+  it('keeps the newest maxFrames frames, the oldest going as new ones come', async () => {
     const root = mkdtempSync(join(tmpdir(), 'trace-'))
     const w = createScanTrace({ root, maxFrames: 2 })
     await w.write(S1, { seq: 1 }, jpeg())
     await w.write(S1, { seq: 2 }, jpeg())
-    await expect(w.write(S1, { seq: 3 }, jpeg())).resolves.toBeNull()
+    await expect(w.write(S1, { seq: 3 }, jpeg())).resolves.toBe('0002.jpg')
     const ls = lines(root, S1)
-    expect(ls).toHaveLength(3)
-    expect(ls[2]).toEqual({ seq: 3 })
-    expect(readdirSync(join(root, S1)).filter((f) => f.endsWith('.jpg'))).toHaveLength(2)
+    expect(ls.map((l) => l.frame)).toEqual(['0000.jpg', '0001.jpg', '0002.jpg'])
+    expect(
+      readdirSync(join(root, S1))
+        .filter((f) => f.endsWith('.jpg'))
+        .sort()
+    ).toEqual(['0001.jpg', '0002.jpg'])
+    // A writer opening the session again goes on numbering after its newest frame.
+    const again = createScanTrace({ root, maxFrames: 2 })
+    await expect(again.write(S1, { seq: 4 }, jpeg())).resolves.toBe('0003.jpg')
+    expect(
+      readdirSync(join(root, S1))
+        .filter((f) => f.endsWith('.jpg'))
+        .sort()
+    ).toEqual(['0002.jpg', '0003.jpg'])
+  })
+
+  it('names the newest session', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'trace-'))
+    const w = createScanTrace({ root })
+    await expect(w.latest()).resolves.toBeNull()
+    for (const h of ['03', '01', '02']) await w.write(`2026-11-13T${h}-00-00-000Z`, { h })
+    await expect(w.latest()).resolves.toBe('2026-11-13T03-00-00-000Z')
   })
 
   it('prunes the oldest sessions', async () => {

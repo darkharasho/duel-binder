@@ -54,7 +54,8 @@ const fakeAccount = (signedIn = false): FakeAccount => ({
   requestPrices: vi.fn(async () => {}),
   reportUsage: vi.fn(async () => {}),
   reportError: vi.fn(async () => {}),
-  training: vi.fn(async () => ({ ok: true as const, summary: null }))
+  training: vi.fn(async () => ({ ok: true as const, summary: null })),
+  traces: vi.fn()
 })
 
 async function makeHandlers(
@@ -609,6 +610,26 @@ describe('scan trace handlers', () => {
     await expect(handlers['scan:trace'](SESSION, 'x'.repeat(8193))).rejects.toThrow()
     await expect(handlers['scan:trace'](SESSION, '{not json')).rejects.toThrow()
     await expect(handlers['scan:trace'](SESSION, '{}', 'nope')).rejects.toThrow()
+  })
+
+  it('scan:trace writes for a trace tester, and they may send and list traces', async () => {
+    const { handlers, account, scanTrace } = await makeHandlers({ signedIn: true })
+    account.status.mockReturnValue({ user: { traceTester: true } } as unknown as AccountStatus)
+    await handlers['scan:trace'](SESSION, '{"seq":1}')
+    expect(existsSync(join(scanTrace.root, SESSION, 'trace.jsonl'))).toBe(true)
+    account.traces.mockResolvedValue([])
+    await expect(handlers['scan:sentTraces']()).resolves.toEqual([])
+    await expect(handlers['scan:traceSendState']()).resolves.toEqual({ kind: 'idle' })
+    // Still not the admin's folder.
+    await expect(handlers['scan:traceDir']()).rejects.toThrow('Not found')
+  })
+
+  it('trace sending is refused to an account that is neither', async () => {
+    const { handlers, account } = await makeHandlers({ signedIn: true })
+    asUser(account, false)
+    await expect(handlers['scan:sendTrace']('broke')).rejects.toThrow('Not found')
+    await expect(handlers['scan:sentTraces']()).rejects.toThrow('Not found')
+    await expect(handlers['scan:deleteTrace'](1)).rejects.toThrow('Not found')
   })
 
   it('scan:traceDir and scan:openTraceDir are admin only', async () => {

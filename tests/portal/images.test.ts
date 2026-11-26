@@ -190,7 +190,7 @@ describe('image route', () => {
   let deps: AppDeps
   let imageId: number
   let printingUrl: string | null
-  const printingArt = { url: vi.fn(async () => printingUrl) }
+  const printingArt = { url: vi.fn(async (_id: number): Promise<string | null> => printingUrl) }
 
   beforeEach(async () => {
     db = await seededServerDb()
@@ -1048,6 +1048,62 @@ describe('image route', () => {
       expect(bucket.store.has(`printing/${p.id}-v38`)).toBe(true)
       expect((await get(`printing/${plain}`)).status).toBe(200)
       expect(bucket.store.has(`printing/${plain}`)).toBe(true)
+    })
+
+    describe("an overframe with no scan of its own (MAMS-EN005's Starlight Rare)", () => {
+      const add = (rarity: string, variant: string | null, code = 'MAMS-EN005'): number =>
+        (
+          db
+            .prepare(
+              `INSERT INTO card_printings (card_id, language, set_name, set_code, set_rarity, set_rarity_code, variant)
+               SELECT card_id, 'en', 'Magnificent Maestros', ?, ?, '', ? FROM card_printings LIMIT 1 RETURNING id`
+            )
+            .get(code, rarity, variant) as { id: number }
+        ).id
+      let starlight: number
+      let urOverframe: number
+      let plainUr: number
+      const TWIN_URL = `${YUGIPEDIA_IMAGE_PREFIX}a/ab/Card-MAMS-EN-UR-1E-EA.png`
+      beforeEach(() => {
+        starlight = add('Starlight Rare', 'Overframe')
+        urOverframe = add('Ultra Rare (Overframe)', null)
+        plainUr = add('Ultra Rare', null)
+        printingArt.url.mockImplementation(async (id: number) =>
+          id === urOverframe ? TWIN_URL : null
+        )
+      })
+      afterEach(() => printingArt.url.mockImplementation(async () => printingUrl))
+
+      it("shows the same art's overframe photo, kept as the twin's and briefly", async () => {
+        const res = await get(`printing/${starlight}`)
+        expect(res.status).toBe(200)
+        expect(res.headers.get('x-photo-stand-in')).toBe('1')
+        expect(res.headers.get('cache-control')).toBe('public, max-age=3600')
+        expect(upstream.mock.calls[0][0]).toContain('Card-MAMS-EN-UR-1E-EA.png')
+        // Its own key stays free for its own scan, once Yugipedia has it.
+        expect(bucket.store.has(`printing/${starlight}-v38`)).toBe(false)
+        expect(bucket.store.has(`printing/${urOverframe}-v38`)).toBe(true)
+        // Again: from R2, no second fetch.
+        expect((await get(`printing/${starlight}`)).status).toBe(200)
+        expect(upstream).toHaveBeenCalledTimes(1)
+      })
+
+      it('its own scan wins once there is one', async () => {
+        printingArt.url.mockImplementation(async (id: number) =>
+          id === starlight ? `${YUGIPEDIA_IMAGE_PREFIX}a/ab/Card-MAMS-EN-StR-1E.png` : TWIN_URL
+        )
+        const res = await get(`printing/${starlight}`)
+        expect(res.status).toBe(200)
+        expect(res.headers.get('x-photo-stand-in')).toBeNull()
+        expect(bucket.store.has(`printing/${starlight}-v38`)).toBe(true)
+      })
+
+      it("a plain printing never borrows, and an overframe never borrows another code's", async () => {
+        expect((await get(`printing/${plainUr}`)).status).toBe(404)
+        const other = add('Starlight Rare', 'Overframe', 'MAMS-EN006')
+        expect((await get(`printing/${other}`)).status).toBe(404)
+        expect(upstream).not.toHaveBeenCalled()
+      })
     })
 
     it('a Yugipedia photo is fetched with a User-Agent', async () => {

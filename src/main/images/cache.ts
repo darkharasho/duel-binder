@@ -79,13 +79,22 @@ export function parseSmallPrintingImageUrl(url: string): number | null {
 export const SMALL_RETRY_MS = 24 * 60 * 60 * 1000
 
 /**
- * Magic art the portal serves without `immutable` (English art a printing borrows until Scryfall
- * has its own scan) is kept with a `.brief` marker beside it and asked for again after this.
+ * Art that stands in for an image's own until there is one is kept with a `.brief` marker beside
+ * it and asked for again after this: Magic art the portal serves without `immutable` (English art
+ * a printing borrows until Scryfall has its own scan), and a printing photo marked
+ * `x-photo-stand-in` (an overframe's twin until Yugipedia has the printing's own scan).
  */
 export const BRIEF_ART_RECHECK_MS = 24 * 60 * 60 * 1000
 
 /** A served file last used longer ago than this gets its mtime (its last use) set to now. */
 export const TOUCH_AFTER_MS = 24 * 60 * 60 * 1000
+
+/** A marker for art that may be short-lived, and which answers make it so (see BRIEF_ART_RECHECK_MS). */
+interface Brief {
+  path: string
+  short: (headers: Headers) => boolean
+}
+const notImmutable = (h: Headers): boolean => !/\bimmutable\b/.test(h.get('cache-control') ?? '')
 
 /** In-flight keys' folders: `set/abc` is downloading to `sets/abc.jpg`, and so on. */
 const KEY_DIRS: [string, string][] = [
@@ -231,7 +240,7 @@ export function createImageCache(opts: {
     finalPath: string | ((contentType: string) => string | null),
     prepare?: (file: string) => Promise<void>,
     notFound?: () => void,
-    brief?: string
+    brief?: Brief
   ): Promise<string | null> {
     const tmpBase =
       typeof finalPath === 'string'
@@ -261,9 +270,8 @@ export function createImageCache(opts: {
       await fs.rename(tmpPath, target)
       opts.onDownloaded?.(bytes)
       if (brief !== undefined) {
-        if (/\bimmutable\b/.test(res.headers.get('cache-control') ?? ''))
-          await fs.rm(brief, { force: true })
-        else await fs.writeFile(brief, '')
+        if (brief.short(res.headers)) await fs.writeFile(brief.path, '')
+        else await fs.rm(brief.path, { force: true })
       }
       return target
     } catch {
@@ -279,7 +287,7 @@ export function createImageCache(opts: {
     prepare?: (file: string) => Promise<void>,
     notFound?: () => void,
     priority = false,
-    brief?: string
+    brief?: Brief
   ): Promise<string | null> {
     let pending = inFlight.get(key)
     if (!pending) {
@@ -302,6 +310,12 @@ export function createImageCache(opts: {
     return pending
   }
 
+  /** Whether short-lived art marked by `brief` is due a re-check (false when unmarked). */
+  const briefDue = async (brief: string | undefined): Promise<boolean> => {
+    const marked = brief === undefined ? null : await fs.stat(brief).catch(() => null)
+    return !!marked && now() - marked.mtimeMs >= BRIEF_ART_RECHECK_MS
+  }
+
   const fromSource = async (
     source: () => ImageSource | null,
     key: string,
@@ -313,8 +327,7 @@ export function createImageCache(opts: {
   ): Promise<string | null> => {
     let kept = false
     if (await exists(finalPath)) {
-      const marked = brief === undefined ? null : await fs.stat(brief).catch(() => null)
-      if (!marked || now() - marked.mtimeMs < BRIEF_ART_RECHECK_MS) return finalPath
+      if (!(await briefDue(brief))) return finalPath
       kept = true // short-lived art due a re-check: asked again, kept if that fails
     }
     let src: ImageSource | null
@@ -324,7 +337,15 @@ export function createImageCache(opts: {
       return kept ? finalPath : null // e.g. the database is closed or busy; never reject the protocol handler
     }
     if (src === null) return kept ? finalPath : null
-    const got = await cached(key, src, finalPath, prepare, undefined, priority, brief)
+    const got = await cached(
+      key,
+      src,
+      finalPath,
+      prepare,
+      undefined,
+      priority,
+      brief === undefined ? undefined : { path: brief, short: notImmutable }
+    )
     return got ?? (kept ? finalPath : null)
   }
 
@@ -344,11 +365,14 @@ export function createImageCache(opts: {
     }
     if (src === null || !src.key) return null
     const key = src.key
-    const onDisk = await printingOnDisk(key)
-    if (onDisk) return onDisk
-    if (missingPrintings.has(key)) return null
     const base = path.join(opts.dir, 'printings', key)
-    return cached(
+    // Another printing's photo the portal stood in with (an overframe Starlight Rare's twin, until
+    // Yugipedia has its own scan) is marked, and asked for again a day on.
+    const brief = `${base}.brief`
+    const onDisk = await printingOnDisk(key)
+    if (onDisk && !(await briefDue(brief))) return onDisk
+    if (!onDisk && missingPrintings.has(key)) return null
+    const got = await cached(
       `printing/${key}`,
       src,
       (ct) => {
@@ -356,8 +380,14 @@ export function createImageCache(opts: {
         return ext ? `${base}.${ext}` : null
       },
       undefined,
-      () => missingPrintings.add(key)
+      () => missingPrintings.add(key),
+      false,
+      { path: brief, short: (h) => h.get('x-photo-stand-in') === '1' }
     )
+    if (got === null) return onDisk
+    // The photo that replaced the stand-in may have come in another format: drop the old file.
+    if (onDisk && onDisk !== got) await fs.rm(onDisk, { force: true }).catch(() => undefined)
+    return got
   }
 
   return {

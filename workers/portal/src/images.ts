@@ -23,7 +23,11 @@ import { POKEDEX_SIZE } from '../../../src/shared/pokedex'
 import { uprightJpeg } from '../../../src/shared/upright'
 import { findPokemonSetArtUrl, findSetImageUrl } from '../../../src/main/repo/sets'
 import { TCGPLAYER_IMAGE_PREFIX } from '../../../src/main/tcgplayer/catalog'
-import { printingPhotoSuffix } from '../../../src/main/yugipedia/printingArt'
+import {
+  needsOwnScan,
+  printingPhotoSuffix,
+  printingVariant
+} from '../../../src/main/yugipedia/printingArt'
 import type { AppDeps } from './app'
 import { currentUser } from './auth'
 
@@ -246,10 +250,22 @@ function locked(res: Response): Response {
   return res
 }
 
+/** Where a target's image comes from upstream. */
+interface Source {
+  url: string
+  headers?: Record<string, string>
+  /**
+   * Another printing's photo of the same art, shown until the printing has its own (an overframe
+   * Starlight Rare whose scan Yugipedia hasn't uploaded): kept in R2 under that printing's key,
+   * never this one's, and served for an hour, marked `x-photo-stand-in`.
+   */
+  standInKey?: string
+}
+
 interface Target {
   key: string
   /** The upstream URL and any request headers it needs, looked up only on an R2 miss; null when there is none. */
-  source: () => Promise<{ url: string; headers?: Record<string, string> } | null>
+  source: () => Promise<Source | null>
   cache: string
   /** Spend the quota before `source` runs, because resolving it already calls upstream. */
   meterFirst?: boolean
@@ -428,6 +444,42 @@ export async function edgeImage(
     return keep(out)
   }
   return keep(await forward(req))
+}
+
+interface PhotoPrinting {
+  card_id: number
+  language: string
+  set_name: string
+  set_code: string
+  rarity: string
+  variant: string | null
+  game: string
+}
+
+/**
+ * A Yu-Gi-Oh! art-variant printing's twins: the same card's printings under the same code with the
+ * same art variant in another rarity (MAMS-EN005's Ultra Rare (Overframe) for its overframe
+ * Starlight Rare), whose photo shows its art. None for a plain printing or a foil-only variant.
+ */
+function artTwins(
+  deps: AppDeps,
+  id: number,
+  p: PhotoPrinting
+): { id: number; rarity: string; variant: string | null }[] {
+  if (p.game !== 'ygo' || p.set_code === '' || !needsOwnScan(p)) return []
+  const variant = printingVariant(p).variant?.trim().toLowerCase()
+  const rows = deps.db
+    .prepare(
+      `SELECT id, set_rarity AS rarity, variant FROM card_printings
+       WHERE card_id = ? AND language = ? AND set_name = ? AND set_code = ? AND id <> ?
+       ORDER BY id`
+    )
+    .all(p.card_id, p.language, p.set_name, p.set_code, id) as {
+    id: number
+    rarity: string
+    variant: string | null
+  }[]
+  return rows.filter((r) => printingVariant(r).variant?.trim().toLowerCase() === variant)
 }
 
 /** Where a request's artwork comes from and how long browsers may keep it; null when the path names nothing servable. */
@@ -636,8 +688,18 @@ function resolve(deps: AppDeps, path: string): Target | null {
     const n = Number(id)
     if (!Number.isSafeInteger(n) || n <= 0) return null
     const printing = deps.db
-      .prepare('SELECT set_rarity AS rarity, variant, game FROM card_printings WHERE id = ?')
-      .get(n) as { rarity: string; variant: string | null; game: string } | undefined
+      .prepare(
+        `SELECT card_id, language, set_name, set_code, set_rarity AS rarity, variant, game
+         FROM card_printings WHERE id = ?`
+      )
+      .get(n) as PhotoPrinting | undefined
+    const photoUrl = async (printingId: number): Promise<Source | null> => {
+      const url = await deps.printingArt.url(printingId).catch(() => null)
+      if (url === null) return null
+      if (url.startsWith(YUGIPEDIA_IMAGE_PREFIX))
+        return { url, headers: { 'User-Agent': USER_AGENT } }
+      return url.startsWith(TCGPLAYER_IMAGE_PREFIX) ? { url } : null
+    }
     return {
       key: `printing/${n}${printing ? printingPhotoSuffix(printing) : ''}`,
       cache: SET_CACHE,
@@ -645,18 +707,22 @@ function resolve(deps: AppDeps, path: string): Target | null {
       // signed out too, metered per address before the lookup, as card art is.
       anonymous: printing !== undefined,
       meterFirst: true,
-      source: async () => {
-        // One Piece and Magic have no printing photos to look up.
-        if (printing?.game === 'op' || printing?.game === 'mtg') return null
-        const url = await withTimeout(
-          deps.printingArt.url(n).catch(() => null),
+      source: () =>
+        withTimeout(
+          (async (): Promise<Source | null> => {
+            // One Piece and Magic have no printing photos to look up.
+            if (printing?.game === 'op' || printing?.game === 'mtg') return null
+            const own = await photoUrl(n)
+            if (own || !printing) return own
+            for (const twin of artTwins(deps, n, printing)) {
+              const src = await photoUrl(twin.id)
+              if (src)
+                return { ...src, standInKey: `printing/${twin.id}${printingPhotoSuffix(twin)}` }
+            }
+            return null
+          })().catch(() => null),
           IMAGE_TIMEOUT_MS
         )
-        if (url === null) return null
-        if (url.startsWith(YUGIPEDIA_IMAGE_PREFIX))
-          return { url, headers: { 'User-Agent': USER_AGENT } }
-        return url.startsWith(TCGPLAYER_IMAGE_PREFIX) ? { url } : null
-      }
     }
   }
   return null
@@ -721,6 +787,8 @@ async function serve(req: Request, deps: AppDeps, path: string): Promise<Respons
   if (early) return early
   const source = await target.source()
   if (!source) return notFound()
+  if (source.standInKey !== undefined)
+    return standIn(req, deps, target, { ...source, standInKey: source.standInKey }, overQuota)
   // Otherwise the quota is spent only once an upstream fetch is certain.
   const late = target.meterFirst ? null : overQuota()
   if (late) return late
@@ -738,6 +806,40 @@ async function serve(req: Request, deps: AppDeps, path: string): Promise<Respons
     if (target.anonymous) deps.anonMisses?.add(target.key)
     return notFound()
   }
+  return reply(got.bytes, got.contentType)
+}
+
+/**
+ * Serves another printing's photo in a printing's place (see Source.standInKey): from R2 under that
+ * printing's key, else fetched and kept there. Browsers and the edge keep it an hour, and the
+ * desktop asks again a day later, so the printing's own scan shows once there is one.
+ */
+async function standIn(
+  req: Request,
+  deps: AppDeps,
+  target: Target,
+  source: Source & { standInKey: string },
+  overQuota: () => Response | null
+): Promise<Response> {
+  const reply = (body: BodyInit | null, contentType: string): Response =>
+    new Response(req.method === 'HEAD' ? null : body, {
+      headers: {
+        'content-type': contentType,
+        'cache-control': FALLBACK_CACHE,
+        'x-photo-stand-in': '1'
+      }
+    })
+  const stored = await deps.images.get(source.standInKey).catch(() => null)
+  if (stored) return reply(stored.body, stored.httpMetadata?.contentType ?? 'image/jpeg')
+  const late = target.meterFirst ? null : overQuota()
+  if (late) return late
+  const got = await fetchAndStore(deps, { ...target, key: source.standInKey }, source)
+  if (got === 'busy')
+    return new Response('Try again shortly', {
+      status: 503,
+      headers: { 'retry-after': '30', 'cache-control': 'no-store' }
+    })
+  if (!got || got === 'oversized') return notFound()
   return reply(got.bytes, got.contentType)
 }
 

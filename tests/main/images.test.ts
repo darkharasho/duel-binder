@@ -682,6 +682,60 @@ describe('Magic art the portal marks as short-lived (borrowed English art)', () 
   })
 })
 
+describe("a printing photo the portal marks as a stand-in (an overframe's twin)", () => {
+  type Fetch = (url: string, init?: RequestInit) => Promise<Response>
+  const photo = (body: string, type: string, standIn: boolean): Response =>
+    new Response(body, {
+      status: 200,
+      headers: { 'content-type': type, ...(standIn && { 'x-photo-stand-in': '1' }) }
+    })
+  const setup = (fetchFn: Fetch, now: () => number): ReturnType<typeof createImageCache> =>
+    createImageCache({
+      dir,
+      now,
+      fetchFn: fetchFn as unknown as typeof fetch,
+      limit: noLimit,
+      sources: portalImageSources({ portal: PORTAL, token: () => 'tok', remoteId: () => 77 })
+    })
+  const png = path.join('printings', 'srv-77.png')
+  const jpg = path.join('printings', 'srv-77.jpg')
+
+  it('is asked for again a day on, and its own scan then stays for good', async () => {
+    let t = Date.now()
+    const fetchFn = vi.fn<Fetch>(async () => photo('twin', 'image/png', true))
+    expect(await setup(fetchFn, () => t).getPrinting(5)).toBe(path.join(dir, png))
+    t = (await fs.stat(path.join(dir, 'printings', 'srv-77.brief'))).mtimeMs
+    expect(await setup(fetchFn, () => t + BRIEF_ART_RECHECK_MS - 1).getPrinting(5)).toBe(path.join(dir, png))
+    expect(fetchFn).toHaveBeenCalledTimes(1)
+    // A day on, Yugipedia has the Starlight's own scan, in another format.
+    t += BRIEF_ART_RECHECK_MS
+    fetchFn.mockImplementation(async () => photo('own', 'image/jpeg', false))
+    expect(await setup(fetchFn, () => t).getPrinting(5)).toBe(path.join(dir, jpg))
+    await expect(fs.stat(path.join(dir, png))).rejects.toThrow()
+    t += 10 * BRIEF_ART_RECHECK_MS
+    expect(await setup(fetchFn, () => t).getPrinting(5)).toBe(path.join(dir, jpg))
+    expect(fetchFn).toHaveBeenCalledTimes(2)
+  })
+
+  it('a failed re-check keeps showing the stand-in', async () => {
+    let t = Date.now()
+    const fetchFn = vi.fn<Fetch>(async () => photo('twin', 'image/png', true))
+    await setup(fetchFn, () => t).getPrinting(5)
+    t += BRIEF_ART_RECHECK_MS + 1
+    fetchFn.mockImplementation(async () => new Response('Not found', { status: 404 }))
+    expect(await setup(fetchFn, () => t).getPrinting(5)).toBe(path.join(dir, png))
+  })
+
+  it("a printing's own photo is never asked for again", async () => {
+    let t = Date.now()
+    const fetchFn = vi.fn<Fetch>(async () => photo('own', 'image/png', false))
+    await setup(fetchFn, () => t).getPrinting(5)
+    t += 10 * BRIEF_ART_RECHECK_MS
+    await setup(fetchFn, () => t).getPrinting(5)
+    expect(fetchFn).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('image cache last use and downloads', () => {
   it('touches a served file older than a day', async () => {
     const fetchFn = vi.fn(async () => okResponse())

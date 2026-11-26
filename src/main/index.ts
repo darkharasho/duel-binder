@@ -255,11 +255,13 @@ function createWindow(): void {
     autoHideMenuBar: true,
     backgroundColor: '#111113',
     // The renderer draws the title bar (TitleBar.tsx): macOS keeps its traffic lights, Windows keeps
-    // native caption buttons as an overlay, Linux gets drawn buttons.
+    // native caption buttons as an overlay, Linux gets drawn buttons. The overlay is transparent so
+    // the page's wash shows behind the buttons instead of a near-black block; on a dark base Windows
+    // still gives min/max a faint white hover and close its red one.
     titleBarStyle: 'hidden',
     ...(process.platform === 'darwin' ? { trafficLightPosition: { x: 14, y: 12 } } : {}),
     ...(process.platform === 'win32'
-      ? { titleBarOverlay: { color: '#111113', symbolColor: '#ecebe8', height: 36 } }
+      ? { titleBarOverlay: { color: '#00000000', symbolColor: '#ffffff', height: 36 } }
       : {}),
     ...(process.platform === 'linux' ? { icon, frame: false } : {}),
     webPreferences: {

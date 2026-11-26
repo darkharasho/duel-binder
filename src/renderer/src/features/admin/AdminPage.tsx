@@ -6,7 +6,15 @@ import { Button } from '@/components/ui/button'
 import { UnderlineTabs } from '@/components/UnderlineTabs'
 import { api } from '@/lib/api'
 import { ADMIN_PAGE_TABS, ADMIN_QUERY, adminKeys, type AdminPageTab } from './adminTabs'
-import { AdminsTab, BetaTab, ErrorsTab, MergesTab, PhotosTab, TestersTab } from './ListTabs'
+import {
+  AdminsTab,
+  BetaTab,
+  ErrorsTab,
+  MergesTab,
+  PhotosTab,
+  TestersTab,
+  TracesTab
+} from './ListTabs'
 import { SeatsTab } from './SeatsTab'
 import { Failed } from './parts'
 import { CostsTab } from './CostsTab'
@@ -98,6 +106,12 @@ export function AdminPage({
     enabled: tab === 'seats',
     ...ADMIN_QUERY
   })
+  const traces = useQuery({
+    queryKey: adminKeys.traces,
+    queryFn: () => admin().traces(),
+    enabled: tab === 'traces',
+    ...ADMIN_QUERY
+  })
   const admins = useQuery({
     queryKey: adminKeys.admins,
     queryFn: () => admin().admins(),
@@ -186,6 +200,7 @@ export function AdminPage({
       {tab === 'errors' && <Show q={errors} show={(g) => <ErrorsTab groups={g} />} />}
       {tab === 'merges' && <Show q={merges} show={(m) => <MergesTab merges={m} />} />}
       {tab === 'testers' && <Show q={testers} show={(t) => <TestersTab testers={t} />} />}
+      {tab === 'traces' && <Show q={traces} show={(d) => <TracesTab data={d} />} />}
       {tab === 'beta' && <Show q={beta} show={(b) => <BetaTab beta={b} />} />}
       {tab === 'seats' && <Show q={seats} show={(s) => <SeatsTab seats={s} />} />}
       {tab === 'admins' && (

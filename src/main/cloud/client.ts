@@ -170,6 +170,8 @@ export interface CloudClient {
   trainingDelete(clientId: string): Promise<TrainingSend>
   /** This account's training photo counts for `game`. Never throws. */
   trainingSummary(game: GameId): Promise<TrainingSend>
+  /** An /admin/* GET's raw body as the signed-in admin (a donated trace's file, say). */
+  adminBytes(path: `/admin/${string}`): Promise<ArrayBuffer>
   /** This trace tester's sent scan traces, newest first. */
   traces(): Promise<TraceRow[]>
   /** Starts sending a scan trace; its id and the token its files go up with. 429 rejects 'daily-cap'. */
@@ -322,7 +324,30 @@ export function createCloudClient(opts: {
     if (res.status >= 400) throw new Error(`Trace file refused (${res.status})`)
   }
 
+  async function adminBytes(path: string): Promise<ArrayBuffer> {
+    const signals = [
+      AbortSignal.timeout(TRACE_FILE_TIMEOUT_MS),
+      ...(opts.signal ? [opts.signal] : [])
+    ]
+    let res: Response
+    try {
+      res = await doFetch(base + path, {
+        headers: { authorization: `Bearer ${opts.token}` },
+        redirect: 'error',
+        signal: AbortSignal.any(signals)
+      })
+    } catch (e) {
+      throw new CloudOfflineError((e as Error | undefined)?.message || undefined)
+    }
+    if (res.status === 401) throw new CloudAuthError()
+    if (res.status === 404) throw new CloudNotFoundError('Not found')
+    if (res.status >= 500) throw new CloudOfflineError(`The portal failed (${res.status})`)
+    if (res.status >= 400) throw new Error(`Request failed (${res.status})`)
+    return res.arrayBuffer()
+  }
+
   return {
+    adminBytes,
     traces: async () => (await call<{ traces: TraceRow[] }>('/api/traces', 'GET')).traces,
     traceStart: (start) => call<TraceStarted>('/api/traces', 'POST', start),
     traceFile,

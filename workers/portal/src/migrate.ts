@@ -1032,12 +1032,13 @@ CREATE INDEX ix_user_reports_reported ON user_reports(reported_id);
 `
   },
   // Trace testers and the scan traces they send (portal only; the files are in R2 under traces/).
+  // AUTOINCREMENT so a deleted trace's id, which an upload token still names, is never reused.
   {
     name: 'server-55',
     sql: `
 CREATE TABLE trace_testers (user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   added_at TEXT NOT NULL);
-CREATE TABLE scan_traces (id INTEGER PRIMARY KEY,
+CREATE TABLE scan_traces (id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, game TEXT NOT NULL, session TEXT NOT NULL,
   note TEXT NOT NULL DEFAULT '', app_version TEXT NOT NULL DEFAULT '',
   files INTEGER NOT NULL DEFAULT 0, bytes INTEGER NOT NULL DEFAULT 0,

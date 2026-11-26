@@ -24,7 +24,8 @@ import {
   SelectValue
 } from '@/components/ui/select'
 import { api } from '@/lib/api'
-import { adminKeys, errorText, n, shortWhen } from './adminTabs'
+import { adminKeys, bytes, errorText, n, shortWhen } from './adminTabs'
+import type { AdminTrace, AdminTraceTester } from '@shared/traces'
 import { ConfirmButton, Grid, Note, Panel } from './parts'
 
 /** The games only listed testers see. */
@@ -458,6 +459,117 @@ export function PhotosTab({ photos: s }: { photos: AdminPhotos }): React.JSX.Ele
           </div>
         </Panel>
       ))}
+    </div>
+  )
+}
+
+/**
+ * Donated scan traces and who may send them. Download puts a trace beside this computer's own
+ * traces, so `scripts/scan/trace-summary.ts` reads it the same way.
+ */
+export function TracesTab({
+  data
+}: {
+  data: { traces: AdminTrace[]; testers: AdminTraceTester[] }
+}): React.JSX.Element {
+  const qc = useQueryClient()
+  const [name, setName] = useState('')
+  const reload = (): Promise<void> => qc.invalidateQueries({ queryKey: adminKeys.traces })
+  const pull = useMutation({
+    mutationFn: (id: number) => admin().pullTrace(id),
+    onSuccess: (dir) =>
+      toast.success('Trace downloaded', {
+        description: dir,
+        action: { label: 'Open folder', onClick: () => void api.scan.openTraceDir() }
+      }),
+    onError: (e) => toast.error(errorText(e))
+  })
+  return (
+    <div className="grid gap-4">
+      <Panel title="Traces">
+        {data.traces.length === 0 ? (
+          <Note>No traces sent yet.</Note>
+        ) : (
+          <Grid
+            heads={['Sent', 'From', 'Game', 'What went wrong', 'Size', '']}
+            left={4}
+            rows={data.traces.map((t) => ({
+              key: t.id,
+              cells: [
+                shortWhen(t.createdAt),
+                t.username ? `@${t.username}` : '(deleted)',
+                GAMES[t.game]?.name ?? t.game,
+                t.note || '–',
+                t.doneAt ? `${t.files} files · ${bytes(t.bytes)}` : 'Not finished',
+                <span key="actions" className="flex justify-end gap-1">
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    disabled={pull.isPending}
+                    onClick={() => pull.mutate(t.id)}
+                  >
+                    {pull.isPending && pull.variables === t.id ? 'Downloading…' : 'Download'}
+                  </Button>
+                  <ConfirmButton
+                    label="Delete"
+                    title="Delete this trace?"
+                    description="Its log and frames go from the portal for good."
+                    action={async () => {
+                      await admin().removeTrace(t.id)
+                      await reload()
+                    }}
+                  />
+                </span>
+              ]
+            }))}
+          />
+        )}
+      </Panel>
+      <Panel title="Trace testers">
+        <div className="mb-3">
+          <Note>
+            Trace testers&apos; scans are always traced, and they can send a session&apos;s trace
+            from the Scan page. Admins can too.
+          </Note>
+        </div>
+        <Grid
+          heads={['Account', 'Added', '']}
+          left={2}
+          rows={data.testers.map((t) => ({
+            key: t.userId,
+            cells: [
+              `@${t.username}`,
+              new Date(t.addedAt).toLocaleDateString(),
+              <ConfirmButton
+                key="remove"
+                label="Remove"
+                title={`Remove @${t.username} from trace testers?`}
+                action={async () => {
+                  await admin().removeTraceTester(t.userId)
+                  await reload()
+                }}
+              />
+            ]
+          }))}
+        />
+        <Adder
+          label="Add trace tester"
+          disabled={name.trim() === ''}
+          onAdd={async () => {
+            await admin().addTraceTester(name)
+            setName('')
+            await reload()
+          }}
+        >
+          <Input
+            aria-label="Trace tester's app username"
+            placeholder="app username"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="h-8 w-48"
+          />
+        </Adder>
+      </Panel>
     </div>
   )
 }

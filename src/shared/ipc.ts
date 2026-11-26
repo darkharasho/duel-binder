@@ -90,7 +90,7 @@ import type { DeckDetail, DeckDraft, DeckList, DeckVerdictMark } from './decks/t
 import type { DeckLineRef } from './decks/ygo/lists'
 import type { DeckResolution } from '../main/repo/decks'
 import type { TermNote, TermStatus } from './search/terms'
-import type { TraceRow, TraceSendState } from './traces'
+import type { AdminTrace, AdminTraceTester, TraceRow, TraceSendState } from './traces'
 
 /** The API exposed to the renderer as `window.api`. */
 export interface Api {
@@ -418,6 +418,14 @@ export interface Api {
     undoMerge(closedId: number): Promise<AdminSkippedSignIn[]>
     supporters(): Promise<AdminSupporters>
     testers(): Promise<AdminTester[]>
+    /** Donated scan traces, newest first, and the accounts on the trace tester list. */
+    traces(): Promise<{ traces: AdminTrace[]; testers: AdminTraceTester[] }>
+    addTraceTester(username: string): Promise<void>
+    removeTraceTester(userId: number): Promise<void>
+    /** Deletes a donated trace from the portal, files and all. */
+    removeTrace(id: number): Promise<void>
+    /** Downloads a donated trace beside this computer's own traces; the folder it went to. */
+    pullTrace(id: number): Promise<string>
     addTester(game: GameId, by: AdminTesterBy, name: string): Promise<void>
     removeTester(id: number): Promise<void>
     admins(): Promise<AdminList>
@@ -729,6 +737,11 @@ export const INVOKE_CHANNELS = [
   'admin:testers',
   'admin:addTester',
   'admin:removeTester',
+  'admin:traces',
+  'admin:addTraceTester',
+  'admin:removeTraceTester',
+  'admin:removeTrace',
+  'admin:pullTrace',
   'admin:admins',
   'admin:addAdmin',
   'admin:removeAdmin',

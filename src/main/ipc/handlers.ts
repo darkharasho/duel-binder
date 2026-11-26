@@ -466,7 +466,7 @@ export function createHandlers({
     },
     'account:openAdmin': async (tab?: unknown) =>
       app.openAdmin(adminTabUrl(await account.adminLink(), tab)),
-    ...adminHandlers(account, adminRuns, ripCapture),
+    ...adminHandlers(account, adminRuns, ripCapture, scanTrace.root),
     'account:signIns': async () => account.portal('account:signIns', []),
     'account:setUsername': async (name: string) => {
       const me = await account.portal<Me>('account:setUsername', [name])

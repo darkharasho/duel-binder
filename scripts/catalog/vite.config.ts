@@ -37,6 +37,7 @@ export default defineConfig({
         'terms-harvest': `${root}scripts/terms/harvest.ts`,
         'terms-post': `${root}scripts/terms/post.ts`,
         'pull-training': `${root}scripts/scan/pull-training.ts`,
+        'pull-trace': `${root}scripts/scan/pull-trace.ts`,
         'op-number-replay': `${root}scripts/scan/op-number-replay.ts`,
         'code-replay': `${root}scripts/scan/code-replay.ts`,
         'rip-picker-replay': `${root}scripts/scan/rip-picker-replay.ts`,

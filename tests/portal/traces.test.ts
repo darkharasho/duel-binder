@@ -154,6 +154,13 @@ describe('donated scan traces', () => {
     expect((await put(1, '0000.jpg', forged))!.status).toBe(403)
   })
 
+  it("never gives a deleted trace's id to a new one, so its old token can't reach it", async () => {
+    const first = (await (await start()).json()) as { id: number; token: string }
+    await call(`/api/traces/${first.id}`, 'tess', { method: 'DELETE' })
+    const second = (await (await start('owner')).json()) as { id: number }
+    expect(second.id).not.toBe(first.id)
+  })
+
   it(`starts at most ${TRACE_DAILY_CAP} traces a day`, async () => {
     for (let i = 0; i < TRACE_DAILY_CAP; i++) expect((await start()).status).toBe(200)
     expect((await start()).status).toBe(429)

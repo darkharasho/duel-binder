@@ -34,9 +34,11 @@ const RETRY_MS = 30 * DAY_MS
 const RETRY_DELAYS_MS = [1000, 2000]
 /**
  * Bump when choosePrintingFile picks differently, so each printing's scan is chosen again. "2":
- * alternate arts take their "-AA" scans, and rarities stored abbreviated ("PlScR") their own.
+ * alternate arts take their "-AA" scans, and rarities stored abbreviated ("PlScR") their own. "3":
+ * overframes that fell back to their plain scan before Yugipedia's galleries had the "-EA" ones
+ * (MAMS-EN001–018, 2026-11) look again now rather than after NO_SCAN_RETRY_MS.
  */
-const REF_CHOICE_VERSION = '2'
+const REF_CHOICE_VERSION = '3'
 /** Width over height of a card; a file far from it is art or a photo, not a scan of the card. */
 const CARD_RATIO = 59 / 86
 const RATIO_TOLERANCE = 0.05

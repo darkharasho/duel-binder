@@ -81,6 +81,14 @@ export function pushPull(s: OverlayState, p: Pull, now: number): OverlayState {
 }
 
 /**
+ * A pull corrected on the list shows at once, even over a hit (most often the very pull it
+ * corrects); a normal pull waiting behind that hit still waits its turn.
+ */
+export function showPull(s: OverlayState, p: Pull, now: number): OverlayState {
+  return { showing: p, until: now + (p.hit ? HIT_MS : NORMAL_MS), pending: s.pending }
+}
+
+/**
  * Expires what's showing at `until`. A hit with a normal pull waiting first shows nothing for
  * FADE_MS (so it fades out); the waiting pull then shows for NORMAL_MS from that moment.
  */

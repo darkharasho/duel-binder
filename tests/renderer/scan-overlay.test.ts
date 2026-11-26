@@ -6,6 +6,7 @@ import {
   NO_OVERLAY,
   pullOf,
   pushPull,
+  showPull,
   tickOverlay,
   type Pull
 } from '@/features/scan/window/overlay'
@@ -223,6 +224,17 @@ describe('overlay state', () => {
     expect(tickOverlay(gap, HIT_MS + FADE_MS)).toEqual({
       showing: pull(2),
       until: HIT_MS + FADE_MS + NORMAL_MS,
+      pending: null
+    })
+  })
+
+  it('shows a corrected pull at once, even over a hit, and keeps the pull waiting behind it', () => {
+    const waiting = pushPull(pushPull(NO_OVERLAY, pull(1, true), 0), pull(2), 1000)
+    const s = showPull(waiting, pull(1), 2000)
+    expect(s).toEqual({ showing: pull(1), until: 2000 + NORMAL_MS, pending: pull(2) })
+    expect(showPull(NO_OVERLAY, pull(3, true), 0)).toEqual({
+      showing: pull(3, true),
+      until: HIT_MS,
       pending: null
     })
   })

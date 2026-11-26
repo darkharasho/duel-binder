@@ -109,7 +109,8 @@ export function useScanSession(game: GameId = 'ygo'): {
    * it didn't apply.
    */
   applyRead(key: string, next: ScanDraft): boolean
-  setPrinting(key: string, printingId: number): void
+  /** Changes a row's version; returns the row as it now is, or null when nothing changed. */
+  setPrinting(key: string, printingId: number): ScanRow | null
   setQuantity(key: string, q: number): void
   /**
    * Marks a row as a graded slab or not. A slab row is held out of Add (a slab is a graded copy,
@@ -177,7 +178,8 @@ export function useScanSession(game: GameId = 'ygo'): {
   const copiesOf = useCallback((d: ScanDraft) => copiesOnList(ref.current, d), [])
 
   const setPrinting = useCallback(
-    (key: string, printingId: number): void =>
+    (key: string, printingId: number): ScanRow | null => {
+      let changed: ScanRow | null = null
       update((list) => {
         const row = list.find((r) => r.key === key)
         const opt = row?.options.find((o) => o.printingId === printingId)
@@ -199,8 +201,11 @@ export function useScanSession(game: GameId = 'ygo'): {
         }
         // Choosing is looking at it, so a guess is one no longer.
         delete next.guess
+        changed = next
         return list.map((r) => (r.key === key ? next : r))
-      }),
+      })
+      return changed
+    },
     [update]
   )
 

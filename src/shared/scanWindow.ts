@@ -155,6 +155,11 @@ export interface ScanSummary {
   unpriced: number
   /** The dearest card known to be in hand; a best guess can't be it. */
   hit: ScanSummaryCard | null
+  /**
+   * The session's top pulls, up to three, dearest first: the hit, then the dearest priced cards
+   * known to be in hand after it. Left out by a main window from before there was a podium.
+   */
+  top?: ScanSummaryCard[]
   /** Every row, dearest first, the ones with no price last. */
   list: ScanSummaryCard[]
 }
@@ -173,6 +178,16 @@ export type ToScanWindow =
   | { kind: 'rarityAck'; id: string }
   /** Shows the summary screen with these numbers, or takes it away. */
   | { kind: 'summary'; summary: ScanSummary | null }
+  /**
+   * The user changed a row's version on the list: the row as it is now, and the copies of its
+   * card on the list, for the window to show at once in place of what it showed.
+   */
+  | { kind: 'corrected'; key: string; draft: ScanDraft; scanned: number }
+  /**
+   * The user added a card by hand on the Scan page: the row it became, and the copies of its card
+   * on the list, for the window to show as it shows a card it scanned.
+   */
+  | { kind: 'byHand'; key: string; draft: ScanDraft; scanned: number }
 
 export type FromScanWindow =
   | { kind: 'ready' }
@@ -199,7 +214,9 @@ const TO: readonly string[] = [
   'takePhoto',
   'ack',
   'rarityAck',
-  'summary'
+  'summary',
+  'corrected',
+  'byHand'
 ]
 const FROM: readonly string[] = ['ready', 'state', 'draft', 'rarity', 'slab']
 

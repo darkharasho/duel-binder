@@ -61,6 +61,11 @@ export interface ScanHub {
   setSettings(patch: Partial<ScanWindowSettings>): void
   /** Counts a pull onto the list and highlights its row; the one path for both scanners. */
   count(draft: ScanDraft): string
+  /**
+   * Counts a card the user picked by hand, as a scan counts it, and has the open scan window show
+   * it as it shows a card it scanned.
+   */
+  addByHand(draft: ScanDraft): string
   /** Takes a background rarity read onto a row the user hasn't touched, and flashes it. */
   reread(key: string, next: ScanDraft): void
   /** Notes what a counted slab's label was read as (useScanLoop's onSlabRead). */
@@ -211,7 +216,28 @@ const HubContext = createContext<ScanHub | null>(null)
  */
 export function ScanHubProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
   const game = useActiveGame()
-  const session = useScanSession(game)
+  const listSession = useScanSession(game)
+  // A version changed on the list shows on stream at once, so viewers never keep the wrong one's
+  // name and price. Main drops it while no scan window is open.
+  const { setPrinting: setListPrinting, copiesOf: listCopiesOf } = listSession
+  const setPrinting = useCallback(
+    (key: string, printingId: number) => {
+      const row = setListPrinting(key, printingId)
+      if (row) {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the list's own fields stay home
+        const { key: _key, quantity, addedAt, error, ...draft } = row
+        window.api.scanWindow.send({
+          kind: 'corrected',
+          key,
+          draft,
+          scanned: listCopiesOf(draft)
+        })
+      }
+      return row
+    },
+    [setListPrinting, listCopiesOf]
+  )
+  const session = useMemo(() => ({ ...listSession, setPrinting }), [listSession, setPrinting])
   const gameRef = useRef<GameId>('ygo')
   const [settings, setSettingsState] = useState<ScanWindowSettings>(initialSettings)
   const settingsRef = useRef(settings)
@@ -261,6 +287,16 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
       return key
     },
     [add]
+  )
+
+  const addByHand = useCallback(
+    (draft: ScanDraft): string => {
+      const key = count(draft)
+      // Main drops it while no scan window is open.
+      window.api.scanWindow.send({ kind: 'byHand', key, draft, scanned: listCopiesOf(draft) })
+      return key
+    },
+    [count, listCopiesOf]
   )
 
   const reread = useCallback(
@@ -413,6 +449,7 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
       settings,
       setSettings,
       count,
+      addByHand,
       reread,
       slabRead: setSlabRead,
       onSaved: session.onSaved,
@@ -433,6 +470,7 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
       settings,
       setSettings,
       count,
+      addByHand,
       reread,
       setSlabRead,
       summaryOn

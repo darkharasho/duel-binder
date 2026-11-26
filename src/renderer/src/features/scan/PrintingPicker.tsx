@@ -91,7 +91,7 @@ export const PrintingPicker = memo(function PrintingPicker({
 const ROW =
   'flex w-full cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-hidden select-none'
 
-function PrintingPanel({
+export function PrintingPanel({
   groups,
   value,
   searchPlaceholder,

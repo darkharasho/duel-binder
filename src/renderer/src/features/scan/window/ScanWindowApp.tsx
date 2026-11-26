@@ -88,7 +88,7 @@ function Scanner({
   const videoRef = useRef<HTMLVideoElement>(null)
   const { game } = useGame()
   const camera = useCamera(settings.deviceId, undefined, { frameRate: settings.frameRate })
-  const { overlay, push, clear } = useOverlay()
+  const { overlay, push, show, clear } = useOverlay()
   const [scanned, setScanned] = useState<Readonly<Record<string, number>>>({})
   const pulls = useRef(0)
   const hitPrice = useRef(settings.hitPrice)
@@ -165,11 +165,22 @@ function Scanner({
       window.api.scanWindow.onMessage((m) => {
         if (!isToScanWindow(m)) return
         if (m.kind === 'ack') setScanned((s) => ({ ...s, [m.id]: m.scanned }))
-        else if (m.kind === 'retryCamera') retryCamera()
+        else if (m.kind === 'corrected') {
+          // Under an id of its own, so its copies show at once and no later ack counts them.
+          const id = `corrected:${m.key}:${pulls.current}`
+          setScanned((s) => ({ ...s, [id]: m.scanned }))
+          show({ ...pullOf(m.draft, hitPrice.current, pulls.current++), id })
+        } else if (m.kind === 'byHand') {
+          // Shown as a scanned pull is (in its turn, with the ping), but already on the list.
+          const id = `byHand:${m.key}`
+          setScanned((s) => ({ ...s, [id]: m.scanned }))
+          push({ ...pullOf(m.draft, hitPrice.current, pulls.current++), id })
+          playScanPing()
+        } else if (m.kind === 'retryCamera') retryCamera()
         else if (m.kind === 'retryScan') retryScan()
         else if (m.kind === 'takePhoto') takePhoto()
       }),
-    [retryCamera, retryScan, takePhoto]
+    [retryCamera, retryScan, takePhoto, show, push]
   )
 
   useEffect(() => {

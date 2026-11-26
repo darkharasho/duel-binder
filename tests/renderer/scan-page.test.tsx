@@ -1527,6 +1527,99 @@ describe('Scan page', () => {
     expect(screen.queryByText('Check rarity')).not.toBeInTheDocument()
   })
 
+  it('a version changed on the list goes to the open scan window to show', async () => {
+    localStorage.setItem(SESSION_KEY, JSON.stringify([row()]))
+    await renderScan()
+    await openWindow()
+    const u = user()
+    await u.click(screen.getByRole('combobox', { name: 'Rarity for Dark Magician' }))
+    await u.click(
+      screen.getByRole('option', { name: 'LOB-EN005 Legend of Blue Eyes White Dragon - Rare' })
+    )
+    const corrected = bridge.sent.filter((m) => m.kind === 'corrected')
+    expect(corrected).toHaveLength(1)
+    expect(corrected[0]).toMatchObject({
+      kind: 'corrected',
+      key: row().key,
+      draft: { printingId: 102, rarity: 'Rare', flag: null },
+      scanned: 1
+    })
+    // Only the scan's own fields: none of the list row's.
+    const sent = corrected[0] as unknown as { draft: Record<string, unknown> }
+    expect(sent.draft).not.toHaveProperty('quantity')
+    expect(sent.draft).not.toHaveProperty('key')
+  })
+
+  describe('add by hand', () => {
+    const card = {
+      id: 1,
+      name: 'Dark Magician',
+      type: 'Normal Monster',
+      defaultImageId: 46986414,
+      matchedSetCode: null
+    }
+    const twoPrintings = [
+      printing({ rarity: 'Common' }),
+      printing({ printingId: 102, rarity: 'Rare', price: 3 })
+    ]
+    const search = async (text: string): Promise<void> => {
+      const u = user()
+      await u.click(screen.getByRole('button', { name: 'Add by hand' }))
+      await u.type(screen.getByPlaceholderText('Search cards by name or code…'), text)
+      await run(300)
+      // The search's answer, after its wait.
+      await run()
+    }
+
+    it('a card picked with its version goes on the list and pops up on the open scan window', async () => {
+      await renderScan({
+        cards: { search: vi.fn(async () => [card]) },
+        scan: { printingsForCards: vi.fn(async () => twoPrintings) }
+      })
+      await openWindow()
+      await search('dark mag')
+      await user().click(screen.getByRole('option', { name: /Dark Magician/ }))
+      await run()
+      expect(screen.getByText('Which Dark Magician?')).toBeInTheDocument()
+      await user().click(
+        screen.getByRole('option', { name: 'LOB-EN005 Legend of Blue Eyes White Dragon - Rare' })
+      )
+      await run()
+      const saved = JSON.parse(localStorage.getItem(SESSION_KEY)!) as ScanRow[]
+      expect(saved).toHaveLength(1)
+      expect(saved[0]).toMatchObject({ printingId: 102, rarity: 'Rare', flag: null, quantity: 1 })
+      const byHand = bridge.sent.filter((m) => m.kind === 'byHand')
+      expect(byHand).toHaveLength(1)
+      expect(byHand[0]).toMatchObject({
+        key: saved[0].key,
+        draft: { printingId: 102, rarity: 'Rare', flag: null, via: 'name' },
+        scanned: 1
+      })
+      expect(screen.queryByText('Which Dark Magician?')).not.toBeInTheDocument()
+    })
+
+    it('a version found by its code is added at once, with no version to pick', async () => {
+      await renderScan({
+        cards: {
+          search: vi.fn(async () => [{ ...card, matchedSetCode: 'SDK-001' }])
+        },
+        scan: {
+          printingsForCards: vi.fn(async () => [
+            ...twoPrintings,
+            printing({ printingId: 103, setCode: 'SDK-001', rarity: 'Ultra Rare' })
+          ])
+        }
+      })
+      await openWindow()
+      await search('SDK-001')
+      await user().click(screen.getByRole('option', { name: /Dark Magician/ }))
+      await run()
+      const saved = JSON.parse(localStorage.getItem(SESSION_KEY)!) as ScanRow[]
+      expect(saved).toMatchObject([{ printingId: 103, setCode: 'SDK-001' }])
+      expect(bridge.sent.filter((m) => m.kind === 'byHand')).toHaveLength(1)
+    })
+  })
+
   it("a picked printing keeps the card's other printings to choose from", async () => {
     localStorage.setItem('language.filter', 'all')
     const options = [

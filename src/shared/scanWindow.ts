@@ -155,6 +155,11 @@ export interface ScanSummary {
   unpriced: number
   /** The dearest card known to be in hand; a best guess can't be it. */
   hit: ScanSummaryCard | null
+  /**
+   * The session's top pulls, up to three, dearest first: the hit, then the dearest priced cards
+   * known to be in hand after it. Left out by a main window from before there was a podium.
+   */
+  top?: ScanSummaryCard[]
   /** Every row, dearest first, the ones with no price last. */
   list: ScanSummaryCard[]
 }

@@ -42,6 +42,13 @@ describe('sessionSummary', () => {
     expect(s.value).toBe(31.5)
   })
 
+  it('stands up the top three pulls, dearest first, with no guess or unpriced card among them', () => {
+    const rows = [row(4), row(30), row(null), row(90, { guess: true }), row(12), row(50), row(8)]
+    expect(sessionSummary(rows, 20).top?.map((c) => c.price)).toEqual([50, 30, 12])
+    expect(sessionSummary([row(5)], 20).top?.map((c) => c.price)).toEqual([5])
+    expect(sessionSummary([], 20).top).toEqual([])
+  })
+
   it('counts hit copies, but never a best guess', () => {
     const s = sessionSummary([row(25, { quantity: 2 }), row(90, { guess: true }), row(19.99)], 20)
     expect(s.hits).toBe(2)
@@ -114,6 +121,29 @@ describe('SummaryScreen', () => {
     const list = within(screen.getByRole('region', { name: 'Every card' }))
     expect(list.getByText('×3')).toBeInTheDocument()
     expect(list.getByText('$6.00')).toBeInTheDocument()
+  })
+
+  it('puts the 2nd pull left of the hit and the 3rd right of it', () => {
+    window.api = createMockApi() as typeof window.api
+    const rows = [row(5, { name: 'Third' }), row(40, { name: 'First' }), row(9, { name: 'Second' })]
+    renderWithProviders(<SummaryScreen summary={sessionSummary(rows, 20)} />)
+    const podium = within(screen.getByRole('group', { name: 'Top pulls' }))
+    expect(podium.getAllByRole('region').map((r) => r.getAttribute('aria-label'))).toEqual([
+      '2nd pull',
+      'Hit of the session',
+      '3rd pull'
+    ])
+    expect(podium.getByRole('region', { name: 'Hit of the session' })).toHaveTextContent('$40.00')
+    expect(podium.getByRole('region', { name: '2nd pull' })).toHaveTextContent('Second')
+    expect(podium.getByRole('region', { name: '3rd pull' })).toHaveTextContent('Third')
+  })
+
+  it('a summary from before the podium still shows its hit', () => {
+    window.api = createMockApi() as typeof window.api
+    const { top: _top, ...old } = sessionSummary([row(40, { name: 'First' }), row(9)], 20)
+    renderWithProviders(<SummaryScreen summary={old} />)
+    expect(screen.getByRole('region', { name: 'Hit of the session' })).toHaveTextContent('First')
+    expect(screen.queryByRole('region', { name: '2nd pull' })).not.toBeInTheDocument()
   })
 
   it('a row and a hit with no price say so instead of $0', () => {

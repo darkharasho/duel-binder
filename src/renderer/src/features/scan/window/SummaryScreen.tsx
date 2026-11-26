@@ -33,15 +33,29 @@ function usePage(pages: number): number {
   return page % pages
 }
 
-function Hit({ card }: { card: ScanSummaryCard }): React.JSX.Element {
+const PLACES = ['1st', '2nd', '3rd']
+
+/** One pull on the podium: the hit (the biggest, in the middle) or a runner-up beside it. */
+function Pulled({ card, place }: { card: ScanSummaryCard; place: number }): React.JSX.Element {
   const reverse = useReverseLook(card, card.rarity, card.setCode)
+  const first = place === 0
   return (
     <section
-      aria-label="Hit of the session"
-      className="flex w-[min(30vw,40vh)] shrink-0 flex-col portrait:w-[min(30vw,13vh)] portrait:self-center animate-in fade-in slide-in-from-bottom-[3vh] zoom-in-95 duration-700 motion-reduce:animate-none"
+      aria-label={first ? 'Hit of the session' : `${PLACES[place]} pull`}
+      className={cn(
+        'flex min-w-0 flex-col animate-in fade-in slide-in-from-bottom-[3vh] zoom-in-95 duration-700 motion-reduce:animate-none',
+        first ? 'z-10 flex-[1.3]' : 'flex-1 pt-[6vh] delay-150 fill-mode-backwards'
+      )}
     >
-      <p className="mb-[1vh] text-[clamp(0.8rem,1.4vw,1.3rem)] font-semibold tracking-wide text-amber-300">
-        Hit of the session
+      <p
+        className={cn(
+          'mb-[1vh] truncate font-semibold tracking-wide',
+          first
+            ? 'text-[clamp(0.8rem,1.4vw,1.3rem)] text-amber-300'
+            : 'text-[clamp(0.65rem,1.1vw,1rem)] text-white/60'
+        )}
+      >
+        {first ? 'Hit of the session' : PLACES[place]}
       </p>
       <CardArt
         imageId={card.imageId}
@@ -49,9 +63,19 @@ function Hit({ card }: { card: ScanSummaryCard }): React.JSX.Element {
         reverse={reverse}
         size="full"
         alt=""
-        className="w-full rounded-[clamp(0.4rem,0.9vw,0.8rem)] bg-transparent shadow-none drop-shadow-[0_0_2vw_rgba(251,191,36,0.35)]"
+        className={cn(
+          'w-full rounded-[clamp(0.4rem,0.9vw,0.8rem)] bg-transparent shadow-none',
+          first
+            ? 'drop-shadow-[0_0_2vw_rgba(251,191,36,0.35)]'
+            : 'drop-shadow-[0_0_1vw_rgba(255,255,255,0.12)]'
+        )}
       />
-      <p className="mt-[1vh] truncate text-[clamp(0.9rem,1.8vw,1.7rem)] font-semibold">
+      <p
+        className={cn(
+          'mt-[1vh] truncate font-semibold',
+          first ? 'text-[clamp(0.9rem,1.8vw,1.7rem)]' : 'text-[clamp(0.7rem,1.3vw,1.2rem)]'
+        )}
+      >
         {card.name}
       </p>
       {card.guess && (
@@ -60,12 +84,44 @@ function Hit({ card }: { card: ScanSummaryCard }): React.JSX.Element {
       {card.price == null ? (
         <p className="text-[clamp(1.1rem,2.6vw,2.4rem)] text-white/60">No price</p>
       ) : (
-        <p className="flex items-baseline gap-[0.5vw] text-[clamp(1.1rem,2.6vw,2.4rem)] font-bold text-emerald-400 tabular-nums">
+        <p
+          className={cn(
+            'flex items-baseline gap-[0.5vw] font-bold text-emerald-400 tabular-nums',
+            first ? 'text-[clamp(1.1rem,2.6vw,2.4rem)]' : 'text-[clamp(0.85rem,1.8vw,1.6rem)]'
+          )}
+        >
           {formatUsd(card.price)}
           {card.raw && <span className="text-[0.6em] font-normal text-emerald-200/80">Raw</span>}
         </p>
       )}
     </section>
+  )
+}
+
+/**
+ * The session's top pulls, as the highlights picture stands them: the hit in the middle, the
+ * 2nd to its left and the 3rd to its right. A lone hit stands as it always did.
+ */
+function Podium({ top }: { top: ScanSummaryCard[] }): React.JSX.Element {
+  // Left to right: 2nd, 1st, 3rd.
+  const order = top.length === 1 ? [0] : top.length === 2 ? [1, 0] : [1, 0, 2]
+  return (
+    <div
+      role="group"
+      aria-label="Top pulls"
+      className={cn(
+        'flex shrink-0 items-start gap-[1.2vw] portrait:self-center',
+        top.length === 1
+          ? 'w-[min(30vw,40vh)] portrait:w-[min(30vw,13vh)]'
+          : top.length === 2
+            ? 'w-[min(44vw,60vh)] portrait:w-[min(60vw,26vh)]'
+            : 'w-[min(54vw,74vh)] portrait:w-[min(80vw,34vh)]'
+      )}
+    >
+      {order.map((i) => (
+        <Pulled key={top[i].key} card={top[i]} place={i} />
+      ))}
+    </div>
   )
 }
 
@@ -110,7 +166,7 @@ function Row({ card }: { card: ScanSummaryCard }): React.JSX.Element {
   )
 }
 
-/** The session so far, over the camera blurred behind it: the hit, then every card and price. */
+/** The session so far, over the camera blurred behind it: its top pulls, then every card and price. */
 export function SummaryScreen({
   summary,
   leaving = false,
@@ -125,6 +181,8 @@ export function SummaryScreen({
   className?: string
 }): React.JSX.Element {
   const { value, cards, hits, unpriced, hit, list } = summary
+  // A main window from before the podium sends the hit alone.
+  const top = summary.top ?? (hit ? [hit] : [])
   const pages = Math.max(1, Math.ceil(list.length / pageRows))
   const page = usePage(pages)
   return (
@@ -158,7 +216,7 @@ export function SummaryScreen({
             <Stat value={hits} label={hits === 1 ? 'hit' : 'hits'} />
           </div>
           <div className="mt-[2.5vh] flex min-h-0 flex-1 gap-[3vw] portrait:flex-col portrait:gap-[2vh]">
-            {hit && <Hit card={hit} />}
+            {top.length > 0 && <Podium top={top} />}
             <section
               aria-label="Every card"
               className="min-w-0 flex-1 animate-in fade-in slide-in-from-right-[2vw] duration-700 motion-reduce:animate-none"

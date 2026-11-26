@@ -2,6 +2,9 @@ import type { ScanSummary, ScanSummaryCard } from '@shared/scanWindow'
 import { listValue, priceOf, shownPhoto } from '../scanLook'
 import type { ScanRow } from '../session'
 
+/** How many pulls the summary's podium stands up. */
+export const TOP_PULLS = 3
+
 const card = (row: ScanRow): ScanSummaryCard => ({
   key: row.key,
   cardId: row.cardId,
@@ -21,11 +24,18 @@ const card = (row: ScanRow): ScanSummaryCard => ({
  * The list as the summary screen shows it. Value and unpriced copies are the Review list's own, so
  * the two never disagree. A best guess counts towards the value as it does there, but like a pull
  * it never counts as a hit. The summary always has a hit though: the dearest card known to be in
- * hand, or with none of those priced a known card, or failing that the best guess.
+ * hand, or with none of those priced a known card, or failing that the best guess. Its top
+ * pulls are the hit and the dearest priced known cards after it, up to TOP_PULLS.
  */
 export function sessionSummary(rows: ScanRow[], hitPrice: number): ScanSummary {
   const { value, unpriced } = listValue(rows)
   const list = rows.map(card).sort((a, b) => (b.price ?? -1) - (a.price ?? -1))
+  const hit =
+    list.find((c) => !c.guess && c.price != null) ?? list.find((c) => !c.guess) ?? list[0] ?? null
+  // The hit, then the next dearest priced cards known to be in hand: a guess never stands on it.
+  const top = hit
+    ? [hit, ...list.filter((c) => c !== hit && !c.guess && c.price != null)].slice(0, TOP_PULLS)
+    : []
   return {
     value,
     unpriced,
@@ -34,11 +44,8 @@ export function sessionSummary(rows: ScanRow[], hitPrice: number): ScanSummary {
       (n, c) => n + (!c.guess && c.price != null && c.price >= hitPrice ? c.quantity : 0),
       0
     ),
-    hit:
-      list.find((c) => !c.guess && c.price != null) ??
-      list.find((c) => !c.guess) ??
-      list[0] ??
-      null,
+    hit,
+    top,
     list
   }
 }

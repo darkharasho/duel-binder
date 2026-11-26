@@ -5,6 +5,7 @@ import { getMeta, setMeta } from '../db/meta'
 import { canonRarity, isJunkRarity } from '../ygo/rarity'
 import { createLimiter } from '../images/limiter'
 import { needsOwnScan, printingVariant } from '../yugipedia/printingArt'
+import { listVariantKey, listVariants } from '../sync/listVariants'
 
 /**
  * TCGplayer's Yu-Gi-Oh catalog, read from TCGCSV (a free daily public copy of it). Used only to
@@ -314,17 +315,28 @@ export function saveTcgVariants(db: Database.Database): { saved: number; added: 
       }
     }
     const labelled = db.prepare('UPDATE card_printings SET variant = ? WHERE id = ?')
+    const listed = listVariants(db)
     const plain = db
       .prepare(
-        `SELECT id, set_code, set_rarity, variant FROM card_printings
+        `SELECT id, card_id, set_code, set_rarity, variant FROM card_printings
        WHERE game = 'ygo' AND language = 'en' AND tcg_product_id IS NULL AND set_code <> ''
          AND yugipedia = 0 AND card_id < ${TOKEN_ID_MIN}` // the token sync names these from their scans
       )
-      .all() as { id: number; set_code: string; set_rarity: string; variant: string | null }[]
+      .all() as {
+      id: number
+      card_id: number
+      set_code: string
+      set_rarity: string
+      variant: string | null
+    }[]
     for (const p of plain) {
       const own = sameRarity(products.all(p.set_code) as ProductRow[], p.set_rarity)[0]
       const label = own ? variantLabel(own.name, own.rarity) : ''
-      const variant = label && label.split(', ').every((n) => ART_NOTE.test(n)) ? label : null
+      // TCGplayer's label, else the one Yugipedia's list prints the rarity in (listVariants).
+      const variant =
+        (label && label.split(', ').every((n) => ART_NOTE.test(n)) ? label : null) ??
+        listed.get(listVariantKey(p.card_id, p.set_code, p.set_rarity)) ??
+        null
       if (variant !== p.variant) labelled.run(variant, p.id)
     }
     const stale = (

@@ -13,6 +13,7 @@ import { yugipediaImageKey } from '../../src/main/images/cache'
 import { RARITY_LABEL } from '../../src/main/db/schema'
 import { YugipediaError, type YugipediaClient } from '../../src/main/yugipedia/client'
 import { runSync } from '../../src/main/sync/sync'
+import { saveTcgVariants } from '../../src/main/tcgplayer/catalog'
 import type { YgoClient } from '../../src/main/ygo/client'
 import type { ApiCard } from '../../src/main/ygo/mapCard'
 import fixture from '../fixtures/cardinfo.sample.json'
@@ -967,6 +968,38 @@ describe('English printings from the TCG-EN lists', () => {
         .filter((r) => r.set_code === 'LOB-EN005')
         .map((r) => r.set_rarity)
     ).toEqual(['Ultra Rare', 'Ultra Rare (Overframe)'])
+  })
+
+  it("marks a rarity the list prints only overframe, as MAMS-EN001's Starlight Rare, and the TCGplayer sync keeps it", async () => {
+    // YGOPRODeck has LOB-EN005's Ultra Rare and Starlight Rare; the list prints the Starlight
+    // only on the extended-art row.
+    await ygoSync([
+      {
+        set_name: 'Legend of Blue Eyes White Dragon',
+        set_code: 'LOB-EN005',
+        set_rarity: 'Starlight Rare',
+        set_rarity_code: '(StR)'
+      }
+    ])
+    const f = fake({
+      [LOB]: listPage([
+        'LOB-EN005; Dark Magician; UR',
+        'LOB-EN005; Dark Magician; UR, StR // description::(extended art)'
+      ])
+    })
+    await refreshIntlSets(db, f.client, NOW)
+    const lob = (): [string, string | null][] =>
+      enRows()
+        .filter((r) => r.set_code === 'LOB-EN005')
+        .map((r) => [r.set_rarity, r.variant])
+    expect(lob()).toEqual([
+      ['Starlight Rare', 'Overframe'],
+      ['Ultra Rare', null],
+      ['Ultra Rare (Overframe)', null]
+    ])
+    // TCGplayer names the Starlight plainly; its sync keeps the list's variant.
+    saveTcgVariants(db)
+    expect(lob()).toContainEqual(['Starlight Rare', 'Overframe'])
   })
 
   it('adds no art variant of a rarity that already has one, nor of another card', async () => {

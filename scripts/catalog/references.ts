@@ -9,9 +9,14 @@ import { ART_FAR_DISTANCE } from '../../src/shared/scan/thresholds'
 import type { RgbaImage } from '../../src/shared/scan/types'
 import { isTokenId } from '../../src/shared/games/ids'
 import { isLanguage } from '../../src/shared/languages'
+import type { PrintingKey } from '../../src/main/yugipedia/printingArt'
 import type { YugipediaClient } from '../../src/main/yugipedia/client'
 import { listCardGalleries } from '../../src/main/yugipedia/cardGallery'
-import { choosePrintingFile, fileShowsVariant } from '../../src/main/yugipedia/printingArt'
+import {
+  choosePrintingFile,
+  fileShowsVariant,
+  needsOwnScan
+} from '../../src/main/yugipedia/printingArt'
 
 /** Scans downloaded per run; the rest wait for the next night. */
 const DEFAULT_MAX_DOWNLOADS = 600
@@ -19,8 +24,9 @@ const DEFAULT_MAX_DOWNLOADS = 600
 const GALLERY_BATCH = 50
 const DAY_MS = 24 * 60 * 60 * 1000
 /**
- * A printing whose gallery had no scan for it is looked up again after this long: a new set's
- * scans go up on Yugipedia in the weeks after it comes out.
+ * A printing whose gallery had no scan for it, or only one of another art (an overframe whose
+ * scan wasn't up yet, MAMS-EN004's), is looked up again after this long: a new set's scans go up
+ * on Yugipedia in the weeks after it comes out.
  */
 const NO_SCAN_RETRY_MS = 3 * DAY_MS
 /** A scan that failed to download is tried again after this long. */
@@ -263,9 +269,38 @@ export async function buildReferences(opts: ReferenceOptions): Promise<Reference
       }[]
     ).map((r) => [r.printing_id, r])
   )
+  const keyOf = (p: PrintingRow): PrintingKey | null =>
+    isLanguage(p.language)
+      ? {
+          setCode: p.set_code,
+          language: p.language,
+          rarity: p.set_rarity,
+          rarityCode: p.set_rarity_code,
+          variant: p.variant
+        }
+      : null
+  /** Whether a scan shows a printing's art variant (fileShowsVariant). */
+  const showsVariant = (p: PrintingRow, file: string): boolean => {
+    const key = keyOf(p)
+    return (
+      !!key &&
+      fileShowsVariant(
+        file,
+        key,
+        !plainRarities.has(`${p.language}|${p.set_code}|${rarityFamily(p.set_rarity)}`)
+      )
+    )
+  }
+  /** Whether a printing's scan shows its art: false for a plain one its art variant fell back to. */
+  const showsOwnArt = (p: PrintingRow, file: string): boolean => {
+    const key = keyOf(p)
+    return !key || !needsOwnScan(key) || showsVariant(p, file)
+  }
   const lookUp = printings.filter((p) => {
     const row = known.get(p.id)
-    return !row || (row.file === null && row.checked_at < lookUpBefore)
+    if (!row) return true
+    if (row.checked_at >= lookUpBefore) return false
+    return row.file === null || !showsOwnArt(p, row.file)
   })
   const saveFile = cache.prepare(
     'INSERT OR REPLACE INTO ref_printing (printing_id, file, checked_at) VALUES (?, ?, ?)'
@@ -386,20 +421,7 @@ export async function buildReferences(opts: ReferenceOptions): Promise<Reference
       .get(file)!
       .filter(
         (q) =>
-          q.card_id === p.card_id &&
-          isArtVariant(q.set_rarity, q.variant) &&
-          isLanguage(q.language) &&
-          fileShowsVariant(
-            file,
-            {
-              setCode: q.set_code,
-              language: q.language,
-              rarity: q.set_rarity,
-              rarityCode: q.set_rarity_code,
-              variant: q.variant
-            },
-            !plainRarities.has(`${q.language}|${q.set_code}|${rarityFamily(q.set_rarity)}`)
-          )
+          q.card_id === p.card_id && isArtVariant(q.set_rarity, q.variant) && showsVariant(q, file)
       )
       .map((q) => q.pkey)
     entries.push({ imageId: best, hash, printings: [...new Set(keys)] })

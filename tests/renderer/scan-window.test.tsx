@@ -723,6 +723,36 @@ describe('Scan window', () => {
     expect(screen.getByLabelText('Hit')).toHaveTextContent('$40.00')
   })
 
+  it('a card added by hand pops up as a scanned one does, with its copies', async () => {
+    stubCamera()
+    await renderWindow(fakeEngine())
+    act(() =>
+      bridge.emit({
+        kind: 'byHand',
+        key: 'row-1',
+        draft: {
+          cardId: 1,
+          name: 'Dark Magician',
+          imageId: 46986414,
+          printingId: 101,
+          setCode: 'LOB-EN005',
+          rarity: 'Ultra Rare',
+          options: [printing({ price: 12.5 })],
+          flag: null,
+          via: 'name'
+        },
+        scanned: 1
+      })
+    )
+    await run(0)
+    const bar = screen.getByRole('status', { name: 'Pull' })
+    expect(bar).toHaveTextContent('Dark Magician')
+    expect(bar).toHaveTextContent('$12.50')
+    expect(bar).toHaveTextContent('New card')
+    // Already on the list: nothing goes back to be counted.
+    expect(drafts()).toHaveLength(0)
+  })
+
   it('a hit price changed in settings applies to the next pull', async () => {
     stubCamera()
     let card = true

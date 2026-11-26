@@ -170,11 +170,17 @@ function Scanner({
           const id = `corrected:${m.key}:${pulls.current}`
           setScanned((s) => ({ ...s, [id]: m.scanned }))
           show({ ...pullOf(m.draft, hitPrice.current, pulls.current++), id })
+        } else if (m.kind === 'byHand') {
+          // Shown as a scanned pull is (in its turn, with the ping), but already on the list.
+          const id = `byHand:${m.key}`
+          setScanned((s) => ({ ...s, [id]: m.scanned }))
+          push({ ...pullOf(m.draft, hitPrice.current, pulls.current++), id })
+          playScanPing()
         } else if (m.kind === 'retryCamera') retryCamera()
         else if (m.kind === 'retryScan') retryScan()
         else if (m.kind === 'takePhoto') takePhoto()
       }),
-    [retryCamera, retryScan, takePhoto, show]
+    [retryCamera, retryScan, takePhoto, show, push]
   )
 
   useEffect(() => {

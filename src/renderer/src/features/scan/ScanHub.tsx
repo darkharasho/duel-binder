@@ -61,6 +61,11 @@ export interface ScanHub {
   setSettings(patch: Partial<ScanWindowSettings>): void
   /** Counts a pull onto the list and highlights its row; the one path for both scanners. */
   count(draft: ScanDraft): string
+  /**
+   * Counts a card the user picked by hand, as a scan counts it, and has the open scan window show
+   * it as it shows a card it scanned.
+   */
+  addByHand(draft: ScanDraft): string
   /** Takes a background rarity read onto a row the user hasn't touched, and flashes it. */
   reread(key: string, next: ScanDraft): void
   /** Notes what a counted slab's label was read as (useScanLoop's onSlabRead). */
@@ -284,6 +289,16 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
     [add]
   )
 
+  const addByHand = useCallback(
+    (draft: ScanDraft): string => {
+      const key = count(draft)
+      // Main drops it while no scan window is open.
+      window.api.scanWindow.send({ kind: 'byHand', key, draft, scanned: listCopiesOf(draft) })
+      return key
+    },
+    [count, listCopiesOf]
+  )
+
   const reread = useCallback(
     (key: string, next: ScanDraft): void => {
       if (!applyRead(key, next)) return
@@ -434,6 +449,7 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
       settings,
       setSettings,
       count,
+      addByHand,
       reread,
       slabRead: setSlabRead,
       onSaved: session.onSaved,
@@ -454,6 +470,7 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
       settings,
       setSettings,
       count,
+      addByHand,
       reread,
       setSlabRead,
       summaryOn

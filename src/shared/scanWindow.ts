@@ -178,6 +178,11 @@ export type ToScanWindow =
    * card on the list, for the window to show at once in place of what it showed.
    */
   | { kind: 'corrected'; key: string; draft: ScanDraft; scanned: number }
+  /**
+   * The user added a card by hand on the Scan page: the row it became, and the copies of its card
+   * on the list, for the window to show as it shows a card it scanned.
+   */
+  | { kind: 'byHand'; key: string; draft: ScanDraft; scanned: number }
 
 export type FromScanWindow =
   | { kind: 'ready' }
@@ -205,7 +210,8 @@ const TO: readonly string[] = [
   'ack',
   'rarityAck',
   'summary',
-  'corrected'
+  'corrected',
+  'byHand'
 ]
 const FROM: readonly string[] = ['ready', 'state', 'draft', 'rarity', 'slab']
 
